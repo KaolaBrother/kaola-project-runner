@@ -12,8 +12,8 @@
   "truncated": false,
   "cursor_gap": false,
   "messages": [
-    {"role": "user", "text": "Fix the login redirect loop.", "messageId": null, "cursor": 12},
-    {"role": "assistant", "text": "I'll start by reading the auth middleware.", "messageId": "m1", "cursor": 40}
+    {"role": "user", "text": "Fix the login redirect loop.", "messageId": null, "cursor": 12, "received_at": null},
+    {"role": "assistant", "text": "I'll start by reading the auth middleware.", "messageId": "m1", "cursor": 40, "received_at": 1759630930.204}
   ],
   "thinking": {"chars": 1532, "text_tail": "…the cookie is cleared before redirect.", "messageId": "m1"},
   "tools": [
@@ -44,9 +44,27 @@
       ]
     }
   ],
+  "answered_permissions": [
+    {
+      "request_id": "41",
+      "title": "Read src/auth/middleware.ts?",
+      "tool_call_id": "call_6",
+      "options": [
+        {"optionId": "allow_once", "name": "Allow once", "kind": "allow_once"},
+        {"optionId": "reject_once", "name": "Reject", "kind": "reject_once"}
+      ],
+      "chosen_option": {"optionId": "allow_once", "name": "Allow once", "kind": "allow_once"},
+      "outcome": "approved",
+      "answered_at": 1759630921.482,
+      "cursor": 31
+    }
+  ],
   "mode": {"current": "plan", "available": [{"id": "plan", "name": "Plan"}, {"id": "yolo", "name": "Yolo"}]},
   "commands": null,
   "usage": {"used": 38211, "size": 262144},
-  "turn": {"mutation_status": "clean", "outcome": null, "stop_reason": null, "active": true},
+  "turn": {"mutation_status": "clean", "outcome": null, "stop_reason": null, "active": true, "started_at": 1759630905.117, "ended_at": null},
+  "turns": [
+    {"started_at": 1759630905.117, "ended_at": null, "outcome": null, "stop_reason": null, "start_cursor": 12, "end_cursor": null}
+  ],
   "unparsed_update_count": 0
 }

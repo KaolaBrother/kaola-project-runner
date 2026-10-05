@@ -136,15 +136,17 @@ Kaola Terminal 可直接读 list 行（本仓库不改 Terminal）：
 | `event_cursor` | int，单调 |
 | `truncated` | bool；任一 cap 生效或 `cursor_gap` 时为 true |
 | `cursor_gap` | bool；`--since` 低于仍保留的最老 cursor |
-| `messages` | **数组**，按时间序：`{role: "user"\|"assistant", text: string, messageId: string\|null, cursor: int}`；同 `messageId` 的 chunk 已拼接成一条 |
+| `messages` | **数组**，按时间序：`{role: "user"\|"assistant", text: string, messageId: string\|null, cursor: int, received_at: float\|null}`；同 `messageId` 的 chunk 已拼接成一条。`received_at` 是首个 chunk 的 holder 收到时间（Unix 秒，毫秒精度），与该 chunk 在 `events.jsonl` 的 `ts` 相同；holder 自己写出的 `prompt` 消息没有事件日志行，为 `null`（其时间见所属回合的 `started_at`） |
 | `thinking` | `{chars: int, text_tail: string, messageId: string\|null}`；L0 仍只见 `thinking_chars` |
 | `tools` | **数组**，按首次出现序，`toolCallId` 唯一：`{toolCallId: string, title: string\|null, kind: string\|null, status: string\|null, locations: [{path: string, line: int\|null}], content: [ContentItem], truncated: bool}` |
 | `plan` | `{entries: [{content: string, priority: string\|null, status: string\|null}]}` \| `null`；每次 `sessionUpdate: plan` **整表替换**，禁止合并；从未发过 plan 则 `null` |
 | `pending_permissions` | 数组：`{request_id: string, title: string\|null, tool_call_id: string\|null, options: [{optionId: string, name: string, kind: string\|null}]}` |
+| `answered_permissions` | 数组，按应答序，最多 200 条：Runner 已经写给 agent 的许可应答（`permit`，以及 `cancel`/`stop` 对挂起许可写出的 cancelled）。`{request_id, title, tool_call_id, options}` 同 `pending_permissions`，另有 `chosen_option: {optionId: string, name: string\|null, kind: string\|null}\|null`（cancelled 为 `null`；agent 未提供的 id 只填 `optionId`）、`outcome: "approved"\|"denied"\|"cancelled"\|"unknown"`（按所选项 ACP `kind`：`allow_*` 为 approved，`reject_*` 为 denied，其余为 unknown）、`answered_at: float`（holder 写出应答的时间；`permit` 时等于 `permission_answered` 事件的 `ts`）、`cursor: int`（应答写出时最新的事件 cursor）。agent 自己撤回（`$/cancel_request`）或 agent 退出清掉的请求不是 Runner 应答，不列入 |
 | `mode` | `{current: string\|null, available: [{id: string, name: string}]}` \| `null` |
 | `commands` | `[{name: string, description: string\|null}]` \| `null` |
 | `usage` | `{used: int, size: int}` \| `null`（Grok 常不报） |
-| `turn` | `{mutation_status: string, outcome: string\|null, stop_reason: string\|null, active: bool}` |
+| `turn` | `{mutation_status: string, outcome: string\|null, stop_reason: string\|null, active: bool, started_at: float\|null, ended_at: float\|null}`；`started_at` 是 holder 写出 `session/prompt` 帧的时间（record 的 `last_prompt.written_at`），`ended_at` 是 `turn_ended`（或 agent 退出时的 `process_exited`）事件的 `ts`；进行中为 `null` |
+| `turns` | 数组，按开始序，最多 200 条：本 holder 进程内每个已写出的 prompt 回合 `{started_at: float, ended_at: float\|null, outcome: string\|null, stop_reason: string\|null, start_cursor: int, end_cursor: int\|null}`。时间同 `turn`；`start_cursor` 等于该回合 prompt 消息的 `cursor`，`end_cursor` 是结束事件的 cursor。`cursor` 落在 `[start_cursor, end_cursor]` 内的消息属于该回合，客户端可据此显示每回合耗时 |
 | `unparsed_update_count` | int；未知 `session/update` 变体计数，不当控件 |
 
 `ContentItem` 三选一：
@@ -172,8 +174,8 @@ Kaola Terminal 可直接读 list 行（本仓库不改 Terminal）：
   "truncated": false,
   "cursor_gap": false,
   "messages": [
-    {"role": "user", "text": "Fix the login redirect loop.", "messageId": null, "cursor": 12},
-    {"role": "assistant", "text": "I'll start by reading the auth middleware.", "messageId": "m1", "cursor": 40}
+    {"role": "user", "text": "Fix the login redirect loop.", "messageId": null, "cursor": 12, "received_at": null},
+    {"role": "assistant", "text": "I'll start by reading the auth middleware.", "messageId": "m1", "cursor": 40, "received_at": 1759630930.204}
   ],
   "thinking": {"chars": 1532, "text_tail": "…the cookie is cleared before redirect.", "messageId": "m1"},
   "tools": [
@@ -204,17 +206,35 @@ Kaola Terminal 可直接读 list 行（本仓库不改 Terminal）：
       ]
     }
   ],
+  "answered_permissions": [
+    {
+      "request_id": "41",
+      "title": "Read src/auth/middleware.ts?",
+      "tool_call_id": "call_6",
+      "options": [
+        {"optionId": "allow_once", "name": "Allow once", "kind": "allow_once"},
+        {"optionId": "reject_once", "name": "Reject", "kind": "reject_once"}
+      ],
+      "chosen_option": {"optionId": "allow_once", "name": "Allow once", "kind": "allow_once"},
+      "outcome": "approved",
+      "answered_at": 1759630921.482,
+      "cursor": 31
+    }
+  ],
   "mode": {"current": "plan", "available": [{"id": "plan", "name": "Plan"}, {"id": "yolo", "name": "Yolo"}]},
   "commands": null,
   "usage": {"used": 38211, "size": 262144},
-  "turn": {"mutation_status": "clean", "outcome": null, "stop_reason": null, "active": true},
+  "turn": {"mutation_status": "clean", "outcome": null, "stop_reason": null, "active": true, "started_at": 1759630905.117, "ended_at": null},
+  "turns": [
+    {"started_at": 1759630905.117, "ended_at": null, "outcome": null, "stop_reason": null, "start_cursor": 12, "end_cursor": null}
+  ],
   "unparsed_update_count": 0
 }
 ```
 
 该样例以文件形式冻结在 `tests/contract/fixtures/kaola-acp-view-1.sample.json`，合同测试必须断言真实 `view` 输出与样例**键集合与类型**一致；Kaola Terminal 把同一文件拷进测试 bundle 作为解码 fixture。
 
-上限（超限置 `truncated=true` 并**实际裁剪**，不报错）：thinking 只保留 8KiB 尾巴；单工具 content 裁到 32KiB（整项保留，首个溢出项截断 text/newText）；timeline 只保留最近 200 条；整 view 超过 256KiB 时先丢最旧的工具卡，再丢最旧的消息。没有 `messageId` 的 chunk（Grok 实测全部如此）按同角色连续拼接，直到 tool_call、新 prompt 或回合结束为止。
+上限（超限置 `truncated=true` 并**实际裁剪**，不报错）：thinking 只保留 8KiB 尾巴；单工具 content 裁到 32KiB（整项保留，首个溢出项截断 text/newText）；timeline、`turns`、`answered_permissions` 各只保留最近 200 条；整 view 超过 256KiB 时依次丢最旧的工具卡、消息、许可应答、回合。时间字段只来自 holder 自己的时钟（ACP 不带时间戳），投影只存在于 holder 进程内存，holder 重启后从空开始。没有 `messageId` 的 chunk（Grok 实测全部如此）按同角色连续拼接，直到 tool_call、新 prompt 或回合结束为止。
 
 ### `--since` 语义
 

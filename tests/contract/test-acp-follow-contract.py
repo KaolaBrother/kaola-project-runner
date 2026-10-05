@@ -592,7 +592,10 @@ class AcpFollowContractTests(unittest.TestCase):
             self.assertIsNotNone(payload, collector.snapshot()[1])
             assert payload is not None
             self.assertEqual(payload.get("schema"), "kaola-acp-view/1", payload)
-            assert_shape(self, self.sample, payload, "follow.view")
+            # Nothing is answered yet; test-acp-watch-contract pins that entry's shape.
+            sample = {k: v for k, v in self.sample.items() if k != "answered_permissions"}
+            assert_shape(self, sample, payload, "follow.view")
+            self.assertEqual(payload.get("answered_permissions"), [], payload)
 
     def test_follow_fd_prompt_permit_is_error_without_agent_stdin(self) -> None:
         session, repo, started = self.start("grok", scenario="watch_projection")

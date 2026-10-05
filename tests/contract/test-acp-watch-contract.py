@@ -104,6 +104,11 @@ def assert_shape(test: unittest.TestCase, sample: Any, actual: Any, path: str) -
                 assert_shape(test, sample[0], item, f"{path}[{index}]")
 
 
+def sample_before_answers(sample: dict) -> dict:
+    """The sample for a stream whose permissions are all still pending."""
+    return {key: value for key, value in sample.items() if key != "answered_permissions"}
+
+
 def flag_value(tokens: list[str], flag: str) -> str | None:
     for index in range(len(tokens) - 1):
         if tokens[index] == flag:
@@ -396,7 +401,10 @@ class AcpWatchContractTests(unittest.TestCase):
         )
         view = self.run_view("grok", session, repo)
         self.assertEqual(view.get("schema"), "kaola-acp-view/1")
-        assert_shape(self, self.sample, view, "view")
+        # No permission is answered yet in this stream; the answered entry's
+        # shape is pinned by test_view_turn_timing_and_answered_permissions.
+        assert_shape(self, sample_before_answers(self.sample), view, "view")
+        self.assertEqual(view["answered_permissions"], [])
 
         roles = {message["role"] for message in view["messages"]}
         self.assertIn("user", roles)
@@ -462,6 +470,140 @@ class AcpWatchContractTests(unittest.TestCase):
         gapped = self.run_view("grok", session, repo, "--since", "0")
         self.assertTrue(gapped["cursor_gap"], gapped)
         self.assertTrue(gapped["truncated"], gapped)
+
+    def read_events(self, platform: str, session: str, repo: Path) -> list[dict]:
+        live = self.record_dir(platform, session, repo) / "events.jsonl"
+        return [
+            json.loads(line)
+            for line in live.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+
+    def wait_view(self, platform: str, session: str, repo: Path, predicate) -> dict:
+        view = wait_for(
+            lambda: (
+                payload
+                if predicate(payload := self.run_view(platform, session, repo))
+                else None
+            ),
+            10,
+        )
+        self.assertTrue(view, f"view never satisfied the predicate for {session}")
+        return view
+
+    def test_view_turn_timing_and_answered_permissions(self) -> None:
+        """Issue #257: per-turn start/end, message first-received time, and
+        the outcome of each permission the Runner answered, all equal to the
+        holder's own event-log facts."""
+        session, repo, _ = self.start("grok", scenario="watch_projection")
+        self.run_cli(
+            "grok", "send", "--text", "Fix the login redirect loop.", "--no-wait",
+            session=session, repo=repo, scenario="watch_projection",
+        )
+        view = self.wait_view("grok", session, repo, lambda v: v.get("pending_permissions"))
+        turn = view["turn"]
+        self.assertTrue(turn["active"], turn)
+        self.assertIsInstance(turn["started_at"], float)
+        self.assertIsNone(turn["ended_at"])
+        self.assertEqual(len(view["turns"]), 1, view["turns"])
+        current = view["turns"][0]
+        assert_shape(self, self.sample["turns"][0], current, "view.turns[0]")
+        self.assertEqual(current["started_at"], turn["started_at"])
+        self.assertIsNone(current["ended_at"])
+        prompt = next(m for m in view["messages"] if m["role"] == "user")
+        self.assertIsNone(prompt["received_at"], "the holder's own prompt has no event-log line")
+        self.assertEqual(current["start_cursor"], prompt["cursor"])
+
+        events = self.read_events("grok", session, repo)
+        first_m1 = next(
+            event for event in events
+            if event.get("kind") == "session_update"
+            and (event.get("update") or {}).get("sessionUpdate") == "agent_message_chunk"
+            and (event.get("update") or {}).get("messageId") == "m1"
+        )
+        assistant = next(m for m in view["messages"] if m.get("messageId") == "m1")
+        self.assertEqual(assistant["received_at"], first_m1["ts"])
+        self.assertGreaterEqual(assistant["received_at"], turn["started_at"])
+
+        pending = view["pending_permissions"][0]
+        denied = self.run_cli(
+            "grok", "permit", "--request-id", pending["request_id"], "--option", "reject_once",
+            session=session, repo=repo, scenario="watch_projection",
+        )
+        self.assertIsNone(denied.get("error"), denied)
+        view = self.run_view("grok", session, repo)
+        self.assertEqual(view["pending_permissions"], [])
+        self.assertEqual(len(view["answered_permissions"]), 1, view["answered_permissions"])
+        answered = view["answered_permissions"][0]
+        assert_shape(self, self.sample["answered_permissions"][0], answered,
+                     "view.answered_permissions[0]")
+        self.assertEqual(answered["request_id"], pending["request_id"])
+        self.assertEqual(answered["title"], pending["title"])
+        self.assertEqual(answered["tool_call_id"], "call_8")
+        self.assertEqual(answered["options"], pending["options"])
+        self.assertEqual(answered["chosen_option"],
+                         {"optionId": "reject_once", "name": "Reject", "kind": "reject_once"})
+        self.assertEqual(answered["outcome"], "denied")
+        logged = next(
+            event for event in self.read_events("grok", session, repo)
+            if event.get("kind") == "permission_answered"
+        )
+        self.assertEqual(answered["answered_at"], logged["ts"])
+        self.assertLess(answered["cursor"], logged["cursor"])
+
+        self.run_cli("grok", "cancel", session=session, repo=repo,
+                     scenario="watch_projection", check=False)
+        view = self.wait_view("grok", session, repo, lambda v: not v["turn"]["active"])
+        ended = next(
+            event for event in self.read_events("grok", session, repo)
+            if event.get("kind") == "turn_ended"
+        )
+        self.assertEqual(view["turn"]["ended_at"], ended["ts"])
+        self.assertGreaterEqual(view["turn"]["ended_at"], view["turn"]["started_at"])
+        finished = view["turns"][0]
+        self.assertEqual(finished["ended_at"], ended["ts"])
+        self.assertEqual(finished["end_cursor"], ended["cursor"])
+        self.assertEqual(finished["outcome"], ended["outcome"])
+        self.assertEqual(finished["stop_reason"], ended["stop_reason"])
+        self.assertLessEqual(finished["start_cursor"], assistant["cursor"])
+        self.assertLessEqual(assistant["cursor"], finished["end_cursor"])
+
+        gate, gate_repo, _ = self.start(
+            "grok", repo=self.other_repo, session=f"wch-gate-{os.getpid()}", scenario="permission_gate",
+        )
+        for answer, expected in (("allow", "approved"), ("cancelled", "cancelled")):
+            self.run_cli(
+                "grok", "send", "--text", f"gated {answer}", "--no-wait",
+                session=gate, repo=gate_repo, scenario="permission_gate",
+            )
+            view = self.wait_view("grok", gate, gate_repo, lambda v: v.get("pending_permissions"))
+            request_id = view["pending_permissions"][0]["request_id"]
+            self.run_cli(
+                "grok", "permit", "--request-id", request_id, "--option", answer,
+                session=gate, repo=gate_repo, scenario="permission_gate",
+            )
+            view = self.wait_view("grok", gate, gate_repo, lambda v: not v["turn"]["active"])
+            latest = view["answered_permissions"][-1]
+            self.assertEqual(latest["request_id"], request_id)
+            self.assertEqual(latest["outcome"], expected)
+            if expected == "cancelled":
+                self.assertIsNone(latest["chosen_option"])
+            else:
+                self.assertEqual(latest["chosen_option"]["optionId"], "allow")
+        self.assertEqual([item["outcome"] for item in view["answered_permissions"]],
+                         ["approved", "cancelled"])
+        turns = view["turns"]
+        self.assertEqual(len(turns), 2, turns)
+        ends = [
+            event for event in self.read_events("grok", gate, gate_repo)
+            if event.get("kind") == "turn_ended"
+        ]
+        self.assertEqual([t["ended_at"] for t in turns], [e["ts"] for e in ends])
+        self.assertEqual([t["end_cursor"] for t in turns], [e["cursor"] for e in ends])
+        self.assertLessEqual(turns[0]["end_cursor"], turns[1]["start_cursor"])
+        self.assertLessEqual(turns[0]["ended_at"], turns[1]["started_at"])
+        for item in turns:
+            self.assertLessEqual(item["started_at"], item["ended_at"])
 
     def test_holder_restart_does_not_reuse_low_cursors(self) -> None:
         session, repo, _ = self.start("grok")
@@ -751,6 +893,50 @@ class AcpProjectionOfflineTests(unittest.TestCase):
             ("assistant", "Done.", 6),
             ("assistant", "Next turn.", 7),
         ])
+
+    def test_answered_permission_outcome_reads_the_chosen_kind(self) -> None:
+        entry = {
+            "request_id": 7, "title": "Run tests?", "tool_call_id": "c1",
+            "options": [
+                {"id": "yes", "kind": "allow_always", "label": "Always"},
+                {"id": "no", "kind": "reject_once", "label": "No"},
+                {"id": "odd", "kind": "custom", "label": "Odd"},
+            ],
+        }
+        view = self.holder_module.answered_permission_view
+        cases = {
+            "yes": ("approved", {"optionId": "yes", "name": "Always", "kind": "allow_always"}),
+            "no": ("denied", {"optionId": "no", "name": "No", "kind": "reject_once"}),
+            "odd": ("unknown", {"optionId": "odd", "name": "Odd", "kind": "custom"}),
+            "never-offered": ("unknown", {"optionId": "never-offered", "name": None, "kind": None}),
+            None: ("cancelled", None),
+        }
+        for option, (outcome, chosen) in cases.items():
+            answered = view(entry, option, 12.5, 3)
+            self.assertEqual(answered["outcome"], outcome, option)
+            self.assertEqual(answered["chosen_option"], chosen, option)
+            self.assertEqual(answered["request_id"], "7")
+            self.assertEqual((answered["answered_at"], answered["cursor"]), (12.5, 3))
+            self.assertEqual(len(answered["options"]), 3)
+
+    def test_turns_close_once_and_are_capped(self) -> None:
+        mod = self.holder_module
+        projection = mod.ViewProjection()
+        projection.add_user_from_prompt("one", 1, 100.0)
+        projection.end_turn(105.25, 4, "process_exited", None)
+        projection.end_turn(999.0, 9, "turn_completed", "end_turn")
+        first = projection.snapshot()["turns"][0]
+        self.assertEqual(
+            first,
+            {"started_at": 100.0, "ended_at": 105.25, "outcome": "process_exited",
+             "stop_reason": None, "start_cursor": 1, "end_cursor": 4},
+        )
+        for index in range(mod.TIMELINE_MAX + 5):
+            projection.add_user_from_prompt(f"p{index}", 10 + index, 200.0 + index)
+        snap = projection.snapshot()
+        self.assertEqual(len(snap["turns"]), mod.TIMELINE_MAX)
+        self.assertTrue(snap["turns_dropped"])
+        self.assertEqual(snap["turns"][-1]["start_cursor"], 10 + mod.TIMELINE_MAX + 4)
 
     def test_caps_bound_memory_and_view_bytes(self) -> None:
         mod = self.holder_module

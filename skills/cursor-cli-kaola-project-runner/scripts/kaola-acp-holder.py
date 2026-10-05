@@ -772,12 +772,14 @@ class EventLog:
         """Cached; updated on append and rotation, never a per-call file scan."""
         return self.oldest
 
-    def append(self, event: dict[str, Any]) -> int:
+    def append(self, event: dict[str, Any], ts: float | None = None) -> int:
+        """``ts`` lets a caller stamp the view with the same time this line gets."""
         with self.lock:
             self.cursor += 1
             if self.oldest is None:
                 self.oldest = self.cursor
-            entry = {"cursor": self.cursor, "ts": round(time.time(), 3), **scrub(event)}
+            stamp = round(time.time(), 3) if ts is None else ts
+            entry = {"cursor": self.cursor, "ts": stamp, **scrub(event)}
             line = json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n"
             try:
                 if self.path.exists() and self.path.stat().st_size > EVENT_LOG_MAX:
@@ -1276,6 +1278,45 @@ def _normalize_locations(raw: Any) -> list[dict[str, Any]]:
     return out
 
 
+def permission_options_view(entry: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {"optionId": opt.get("id"), "name": opt.get("label"), "kind": opt.get("kind")}
+        for opt in entry.get("options") or []
+    ]
+
+
+def answered_permission_view(
+    entry: dict[str, Any], option: Any, answered_at: float, cursor: int
+) -> dict[str, Any]:
+    """One answer this holder wrote to the agent. ``option`` None means cancelled.
+
+    ``outcome`` reads the chosen option's ACP ``kind``: ``allow_*`` is approved,
+    ``reject_*`` is denied. An option id the agent did not offer, or a kind
+    outside those two families, is ``unknown``.
+    """
+    options = permission_options_view(entry)
+    chosen = None
+    outcome = "cancelled"
+    if option is not None:
+        chosen = next((opt for opt in options if opt["optionId"] == option), None)
+        if chosen is None:
+            chosen = {"optionId": str(option), "name": None, "kind": None}
+        kind = str(chosen.get("kind") or "")
+        outcome = ("approved" if kind.startswith("allow")
+                   else "denied" if kind.startswith("reject") else "unknown")
+    request_id = entry.get("request_id")
+    return {
+        "request_id": "" if request_id is None else str(request_id),
+        "title": entry.get("title"),
+        "tool_call_id": entry.get("tool_call_id"),
+        "options": options,
+        "chosen_option": copy.deepcopy(chosen),
+        "outcome": outcome,
+        "answered_at": answered_at,
+        "cursor": cursor,
+    }
+
+
 class ViewProjection:
     """In-memory compacted human projection; separate from L0 turn state."""
 
@@ -1292,22 +1333,56 @@ class ViewProjection:
         self.commands: list[dict[str, Any]] | None = None
         self.usage: dict[str, Any] | None = None
         self.messages_dropped = False
+        self.turns: list[dict[str, Any]] = []
+        self.turns_dropped = False
+        self.answered_permissions: list[dict[str, Any]] = []
+        self.answered_dropped = False
         self._prompt_texts: list[str] = []
         # The last appended message; chunks without messageId append to it
         # until a tool call, a new prompt, or turn end closes it.
         self._open_message: dict[str, Any] | None = None
 
-    def add_user_from_prompt(self, text: str, cursor: int) -> None:
+    def add_user_from_prompt(self, text: str, cursor: int, started_at: float | None = None) -> None:
+        """The prompt opens a turn. Its message has no event-log line, so no ``received_at``."""
         with self.lock:
             self._prompt_texts.append(text)
             self._open_message = None
-            self._add_message_locked("user", text, None, cursor)
+            self._add_message_locked("user", text, None, cursor, None)
+            self.turns.append({
+                "started_at": started_at,
+                "ended_at": None,
+                "outcome": None,
+                "stop_reason": None,
+                "start_cursor": cursor,
+                "end_cursor": None,
+            })
+            if len(self.turns) > TIMELINE_MAX:
+                del self.turns[: len(self.turns) - TIMELINE_MAX]
+                self.turns_dropped = True
+
+    def end_turn(self, ended_at: float, cursor: int, outcome: Any, stop_reason: Any) -> None:
+        with self.lock:
+            self._open_message = None
+            if self.turns and self.turns[-1]["ended_at"] is None:
+                self.turns[-1].update({
+                    "ended_at": ended_at,
+                    "outcome": outcome,
+                    "stop_reason": stop_reason,
+                    "end_cursor": cursor,
+                })
+
+    def add_answered_permission(self, answered: dict[str, Any]) -> None:
+        with self.lock:
+            self.answered_permissions.append(answered)
+            if len(self.answered_permissions) > TIMELINE_MAX:
+                del self.answered_permissions[: len(self.answered_permissions) - TIMELINE_MAX]
+                self.answered_dropped = True
 
     def close_message(self) -> None:
         with self.lock:
             self._open_message = None
 
-    def apply(self, update: dict[str, Any], cursor: int) -> None:
+    def apply(self, update: dict[str, Any], cursor: int, received_at: float | None = None) -> None:
         variant = update.get("sessionUpdate", "unknown")
         with self.lock:
             if variant == "agent_message_chunk":
@@ -1315,7 +1390,8 @@ class ViewProjection:
                 if message_id is not None:
                     message_id = str(message_id)
                 self._add_message_locked(
-                    "assistant", _as_text(update.get("content")), message_id, cursor
+                    "assistant", _as_text(update.get("content")), message_id, cursor,
+                    received_at,
                 )
             elif variant == "user_message_chunk":
                 text = _as_text(update.get("content"))
@@ -1328,7 +1404,7 @@ class ViewProjection:
                     if previous
                 ):
                     return
-                self._add_message_locked("user", text, message_id, cursor)
+                self._add_message_locked("user", text, message_id, cursor, received_at)
             elif variant == "agent_thought_chunk":
                 text = _as_text(update.get("content"))
                 self.thinking_chars += len(text)
@@ -1388,7 +1464,8 @@ class ViewProjection:
                     pass
 
     def _add_message_locked(
-        self, role: str, text: str, message_id: str | None, cursor: int
+        self, role: str, text: str, message_id: str | None, cursor: int,
+        received_at: float | None,
     ) -> None:
         if message_id is not None:
             for message in reversed(self.messages):
@@ -1411,6 +1488,7 @@ class ViewProjection:
             "text": text,
             "messageId": message_id,
             "cursor": cursor,
+            "received_at": received_at,
         }
         self.messages.append(message)
         self._open_message = message
@@ -1460,6 +1538,10 @@ class ViewProjection:
                 "mode": self.mode,
                 "commands": self.commands,
                 "usage": self.usage,
+                "turns": self.turns,
+                "turns_dropped": self.turns_dropped,
+                "answered_permissions": self.answered_permissions,
+                "answered_dropped": self.answered_dropped,
             })
 
 
@@ -1815,6 +1897,7 @@ class Holder:
             "tool_order": [],
             "failed_tools": [],
             "started_at": None,
+            "ended_at": None,
             "cancel_requested": False,
         }
 
@@ -2208,9 +2291,10 @@ class Holder:
                     {"code": "agent-system-error", "threadStatus": thread_status["type"]}
                     if thread_status.get("type") == "systemError" else None
                 )
-        self.projection.apply(update, self.events.cursor + 1)
+        received_at = round(time.time(), 3)
+        self.projection.apply(update, self.events.cursor + 1, received_at)
         cursor = self.events.append({"kind": "session_update", "sessionId": params.get("sessionId"),
-                                     "update": update})
+                                     "update": update}, ts=received_at)
         self.write_record()
         self.fanout_follow_delta()
 
@@ -2251,9 +2335,12 @@ class Holder:
         # prompt supersedes - an output-token maximum among them - would
         # otherwise leave nothing behind to count afterwards. Written verbatim:
         # whatever stopReason the agent reported is what the log says.
-        self.events.append({"kind": "turn_ended", "outcome": outcome,
-                            "stop_reason": turn.get("stop_reason"),
-                            "prompt_fingerprint": turn.get("fingerprint")})
+        turn["ended_at"] = round(time.time(), 3)
+        end_cursor = self.events.append({"kind": "turn_ended", "outcome": outcome,
+                                         "stop_reason": turn.get("stop_reason"),
+                                         "prompt_fingerprint": turn.get("fingerprint")},
+                                        ts=turn["ended_at"])
+        self.projection.end_turn(turn["ended_at"], end_cursor, outcome, turn.get("stop_reason"))
         sideagent = self.session_role in SIDEAGENT_ROLES
         if ((outcome in ("turn_completed", "turn_failed") or (sideagent and outcome == "turn_canceled"))
                 and not self.agent.exited.is_set()):
@@ -2288,12 +2375,15 @@ class Holder:
         # stop never kills a half-delivered worker-event notification.
         self._notify_heartbeat_host_now("terminated", reason)
         self.agent_exited.set()
-        self.events.append({"kind": "process_exited", "code": self.agent.exit_code,
-                            "signal": self.agent.exit_signal})
+        exited_at = round(time.time(), 3)
+        exit_cursor = self.events.append({"kind": "process_exited", "code": self.agent.exit_code,
+                                          "signal": self.agent.exit_signal}, ts=exited_at)
         turn = self.turn
         if turn["active"]:
             turn["outcome"] = "process_exited"
             turn["active"] = False
+            turn["ended_at"] = exited_at
+            self.projection.end_turn(exited_at, exit_cursor, "process_exited", None)
             self.last_prompt = {
                 "fingerprint": turn["fingerprint"],
                 "written_at": turn["written_at"],
@@ -2537,7 +2627,7 @@ class Holder:
                 "mutation_status": "in_progress",
                 "stop_reason": None,
             }
-            self.projection.add_user_from_prompt(text, self.events.cursor)
+            self.projection.add_user_from_prompt(text, self.events.cursor, self.turn["written_at"])
             self.write_record()
 
         threading.Thread(
@@ -3962,14 +4052,20 @@ class Holder:
         entry = self.pending_permissions.get(key)
         if entry is None:
             return None
-        outcome = {"outcome": "cancelled"} if option in (None, "cancelled", "cancel") else {
+        cancelled = option in (None, "cancelled", "cancel")
+        outcome = {"outcome": "cancelled"} if cancelled else {
             "outcome": "selected", "optionId": option
         }
-        self.agent.send_message(
+        written = self.agent.send_message(
             {"jsonrpc": "2.0", "id": entry["request_id"], "result": {"outcome": outcome}}
         )
+        answered_at = round(time.time(), 3)
         self.pending_permissions.pop(key, None)
-        return entry
+        if written:
+            self.projection.add_answered_permission(
+                answered_permission_view(entry, None if cancelled else option,
+                                         answered_at, self.events.cursor))
+        return {**entry, "answered_at": answered_at}
 
     def _cancel_pending_permissions(self) -> None:
         """Cancel every still-pending permission at most once under self.lock."""
@@ -4015,7 +4111,7 @@ class Holder:
                 return {"error": {"code": "unknown-request",
                                   "message": f"no pending permission with id {request_id}"}}
             self.events.append({"kind": "permission_answered", "request_id": request_id,
-                                "option": option})
+                                "option": option}, ts=entry["answered_at"])
             self.write_record()
             self.fanout_follow_delta()
             return {"permitted": request_id, "option": option,
@@ -4547,17 +4643,11 @@ class Holder:
                 "request_id": "" if entry.get("request_id") is None else str(entry.get("request_id")),
                 "title": entry.get("title"),
                 "tool_call_id": entry.get("tool_call_id"),
-                "options": [
-                    {
-                        "optionId": opt.get("id"),
-                        "name": opt.get("label"),
-                        "kind": opt.get("kind"),
-                    }
-                    for opt in entry.get("options") or []
-                ],
+                "options": permission_options_view(entry),
             })
         truncated = bool(
             thinking_truncated or tools_truncated or timeline_truncated or cursor_gap
+            or proj["turns_dropped"] or proj["answered_dropped"]
         )
         payload = {
             "schema": VIEW_SCHEMA,
@@ -4577,6 +4667,7 @@ class Holder:
             "tools": tools,
             "plan": proj["plan"],
             "pending_permissions": pending,
+            "answered_permissions": proj["answered_permissions"],
             "mode": proj["mode"],
             "commands": proj["commands"],
             "usage": proj["usage"],
@@ -4585,7 +4676,10 @@ class Holder:
                 "outcome": self.turn.get("outcome"),
                 "stop_reason": self.turn.get("stop_reason"),
                 "active": bool(self.turn.get("active")),
+                "started_at": self.turn.get("written_at"),
+                "ended_at": self.turn.get("ended_at"),
             },
+            "turns": proj["turns"],
             "unparsed_update_count": self.agent.unknown_updates,
         }
         models = self._quota_models()
@@ -4678,12 +4772,12 @@ class Holder:
 
     @staticmethod
     def _fit_view(payload: dict[str, Any]) -> None:
-        """Whole-view cap: drop oldest tools, then oldest messages, until it fits."""
+        """Whole-view cap: drop oldest tools, messages, answers, then turns, until it fits."""
         size = len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
         if size <= VIEW_BYTES:
             return
         payload["truncated"] = True
-        for key in ("tools", "messages"):
+        for key in ("tools", "messages", "answered_permissions", "turns"):
             items = payload[key]
             drop = 0
             while size > VIEW_BYTES and drop < len(items):
