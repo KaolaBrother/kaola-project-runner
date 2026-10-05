@@ -16,6 +16,8 @@ state the edit and integration responsibility for shared files (`AGENTS.md`,
 supervising: this duty grants no self-execute and no arbitrary
 documentation-editing authority.
 
+Write in accordance with ASD-STE100.
+
 ## Acceptance — impact travels with the candidate
 
 At candidate acceptance, check the documents the assignment affects against

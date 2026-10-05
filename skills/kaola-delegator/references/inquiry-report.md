@@ -34,6 +34,8 @@ Pass valid evidence forward; recheck only changed facts or gaps. Every inquiry
 report has these five parts, in order. An empty part says
 “none”; a missing source is named.
 
+Write in accordance with ASD-STE100.
+
 1. User special requirements, listed in full from the `AGENTS.md` region
    (`user_requirements`). New owner direction replaces a conflicting old
    requirement; a received message is not proof it was adopted.
