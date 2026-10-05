@@ -679,7 +679,13 @@ class UpgradeSafetyTests(unittest.TestCase):
         self.assertIn("Seats: restart required", conventions)
         self.assertIn("Seats: restart not required", conventions)
         changelog = (PROJECT / "CHANGELOG.md").read_text(encoding="utf-8")
-        self.assertIn("## Unreleased", changelog)
+        sections = changelog.split("\n## ")[1:]
+        self.assertTrue(sections, "CHANGELOG.md has no release section")
+        current_lines = [line.strip() for line in sections[0].splitlines()[1:]]
+        self.assertTrue(
+            {"Seats: restart required", "Seats: restart not required"} & set(current_lines),
+            f"current CHANGELOG section lacks a Seats line: {sections[0].splitlines()[0]}",
+        )
         self.assertIn("**Seats: restart required.**", changelog)
         host_doc = (PROJECT / "docs" / "zcode-host.md").read_text(encoding="utf-8")
         self.assertIn("there is no rebind operation", host_doc)
