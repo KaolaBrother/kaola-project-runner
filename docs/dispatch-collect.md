@@ -124,6 +124,9 @@ A later actual `execute` on the same index keeps an unrelated pending row.
 `returned` and `failed` stay while acceptance is absent, `pending`, `undecided`, or `repair`.
 `repair` on those rows is an open repair reference. It is not duty settlement.
 The kept bytes are the row on disk, so a collect update stays.
+An omitted row uses that locked disk status, not the older baseline status.
+A baseline `in-flight` row that the lock finds `returned` and `accepted` does not stay.
+A baseline `returned` and `accepted` row that the lock finds `in-flight`, `unknown`, or `repair` stays as those disk bytes.
 A `not-run` row does not stay.
 A `returned` or `failed` row whose acceptance is `accepted`, `cancelled`, `superseded`, or `handed-off` does not stay.
 A per-result disposition does not settle every duty.

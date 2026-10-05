@@ -2,7 +2,9 @@
 """Issue #244: capability projection and one dispatch/collect entry.
 
 Behavioral checks drive the CLI with fake Runner receipts. They do not import
-the entry's helpers or score model capability.
+the entry's helpers or score model capability. The omitted-row order check
+calls merge_index_rows. A sequential CLI sees the same bytes at read and at
+lock, so it cannot show this order. That check starts no Runner.
 """
 
 from __future__ import annotations
@@ -3612,6 +3614,49 @@ class DispatchEntry(unittest.TestCase):
         self.assertNotIn("devin-KPR-i259-unknown", seen)
         self.assertNotIn("devin-KPR-i259-repair", seen)
         self.assertNotIn("devin-KPR-i259-failed-repair", seen)
+
+    def test_omitted_row_follows_the_locked_disk_status(self) -> None:
+        """The lock decides an omitted row. The older baseline status does not."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("kpr_i259_dispatch_merge", SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        identity = {
+            "item_id": "prior-flight",
+            "holder_instance_id": "owned-holder",
+            "prompt_sha256": "sha256:owned-prompt",
+        }
+        pending = {**identity, "status": "in-flight", "acceptance": "pending"}
+        settled = {**identity, "status": "returned", "acceptance": "accepted",
+                   "result": {"locator": "original-return"}}
+        self.assertEqual(module.merge_index_rows([settled], [pending], []), [])
+        fresh = {**identity, "status": "in-flight", "acceptance": "pending"}
+        self.assertEqual(module.merge_index_rows([fresh], [settled], []), [fresh])
+        unknown = {**identity, "status": "unknown", "acceptance": "accepted"}
+        self.assertEqual(module.merge_index_rows([unknown], [settled], []), [unknown])
+        repair = {**identity, "status": "returned", "acceptance": "repair"}
+        failed_repair = {**identity, "status": "failed", "acceptance": "repair"}
+        self.assertEqual(module.merge_index_rows([repair], [settled], []), [repair])
+        self.assertEqual(module.merge_index_rows([failed_repair], [settled], []), [failed_repair])
+        added = {
+            "item_id": "other-writer",
+            "status": "returned",
+            "acceptance": "accepted",
+            "holder_instance_id": "holder-added",
+            "prompt_sha256": "sha256:added",
+        }
+        self.assertEqual(module.merge_index_rows([added], [], []), [added])
+        mine = {**pending, "reason": "admitted"}
+        prior = {**pending, "reason": "old"}
+        disk_row = {**prior, "result": {"locator": "disk-result"}}
+        merged = module.merge_index_rows([disk_row], [prior], [mine])
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0]["reason"], "admitted")
+        self.assertEqual(merged[0]["result"], {"locator": "disk-result"})
+        self.assertEqual(merged[0]["holder_instance_id"], "owned-holder")
+        self.assertEqual(merged[0]["prompt_sha256"], "sha256:owned-prompt")
+        self.assertEqual(commands(self.log), [])
 
 
 class RenderedGuidance(unittest.TestCase):

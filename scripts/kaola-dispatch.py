@@ -2319,8 +2319,9 @@ def merge_index_rows(disk: list[Any], base: list[Any], mine: list[Any]) -> list[
     A field this writer changed since it read ``base`` is its own. Every
     other field on a row this writer still emits keeps the disk value.
     A row another writer added stays. A row this writer read but did not
-    emit stays when it is still pending correlation, and the kept bytes are
-    the disk row. A ``not-run`` row does not stay. A ``returned`` or
+    emit stays only when the locked disk row is still pending correlation.
+    The older baseline status does not keep a row the lock already settled.
+    The kept bytes are the disk row. A ``not-run`` row does not stay. A ``returned`` or
     ``failed`` row stays for an open acceptance or ``repair``, and does not
     stay for ``accepted``, ``cancelled``, ``superseded``, or ``handed-off``.
     A per-result disposition is not settlement of every duty.
@@ -2349,7 +2350,7 @@ def merge_index_rows(disk: list[Any], base: list[Any], mine: list[Any]) -> list[
     for ident, row in on_disk.items():
         if ident in seen:
             continue
-        if ident not in before or pending_correlation(before.get(ident)) or pending_correlation(row):
+        if ident not in before or pending_correlation(row):
             merged.append(row)
     return merged
 
