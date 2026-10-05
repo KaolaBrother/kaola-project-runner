@@ -1098,6 +1098,8 @@ RUNNER_BUILD_FILES = (
     "kaola-acp-holder.py",
     "kaola-zcode-acp.py",
     "kaola-opencode-acp.py",
+    "kaola-dsh-acp.py",
+    "kaola-dsh-steer.mjs",
     "kaola-opencode-steer.mjs",
     "kaola-acp.py",
     "kaola-quota.py",
@@ -2570,6 +2572,15 @@ class Holder:
                         "mutation_performed": False,
                         "error": {"code": "stopping",
                                   "message": "this holder is stopping; the prompt was not started"}}
+            if "expected_prior_turn_request_id" in params and (
+                    self.turn.get("request_id") != params["expected_prior_turn_request_id"]
+                    or self.acp_session_id != params.get("expected_acp_session_id")):
+                return {"outcome": "prior_turn_changed", "mutation_status": "not_started",
+                        "mutation_performed": False,
+                        "active_turn_request_id": self.turn.get("request_id"),
+                        "error": {"code": "steer-turn-changed",
+                                  "message": "another turn or session replaced the targeted prior "
+                                             "turn; nothing was written"}}
             if self.turn["active"]:
                 return {"error": {"code": "prompt-in-progress",
                                   "message": "a prompt turn is already active"},
@@ -4191,14 +4202,17 @@ class Holder:
                         "outcome": original.get("outcome"),
                         "stop_reason": original.get("stop_reason"),
                         "final_text": original.get("final_text")}
-                    if self.acp_session_id != session_id:
-                        sent = {"outcome": "session_changed", "mutation_performed": False}
+                    if original.get("outcome") != "turn_completed":
+                        sent = {"outcome": "prior_turn_not_completed",
+                                "mutation_status": "not_started", "mutation_performed": False}
                     else:
                         # op_prompt refuses before writing if another prompt
                         # owns the slot or the holder is stopping. Preserve that
                         # receipt; never cancel that prompt or retry the write.
                         sent = self.op_prompt({"text": text, "wait": False,
-                            "expected_holder_instance_id": self.holder_instance_id})
+                            "expected_holder_instance_id": self.holder_instance_id,
+                            "expected_prior_turn_request_id": turn_request_id_before,
+                            "expected_acp_session_id": session_id})
                     self.events.append({"kind": "steer_followup", "queue_cursor": queue_cursor,
                         "turn_request_id": turn_request_id_before,
                         "original_turn": original_result,
@@ -4220,7 +4234,7 @@ class Holder:
             if self.args.platform == "grok" and method == "_x.ai/interject":
                 # Grok ignores idleBehavior and requires top-level text.
                 request_params = {"sessionId": self.acp_session_id, "text": text}
-            elif self.args.platform == "opencode":
+            elif self.args.platform in ("opencode", "dsh"):
                 request_params["_meta"]["steering"]["expectedTurnId"] = turn_request_id_before
             elif standard_prompt:
                 # These installed ACP servers accept a second standard prompt

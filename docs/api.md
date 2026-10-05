@@ -1368,3 +1368,15 @@ bash /absolute/path/to/scripts/kaola-tmux.sh codex send \
 If Python itself is unavailable, the shell reports that error on stderr; it
 cannot create a JSON receipt. Parser errors omit supplied values because a
 value can contain prompt text or a secret.
+
+DSH next-step steering (#263): the local ACP adapter loads one in-process Cordis plugin
+through the documented `dsh --profile acp --patch` overlay. The existing `_session/steering`
+KPR-owned contract checks the owned ACP session and original prompt request before one private-socket
+write. It is an adapter extension, not a vendor ACP method. The plugin calls supported `agent.steer`, the same operation used by the shipped session
+controller. `native-admitted` confirms its next-step inbox admission, with consumption null.
+The native operation can route to next-turn after an independent abort; the socket reply does
+not claim an exact inbox target or processing. Processing needs session output. Native ACP still owns the original request and stream. An idle
+local guard writes nothing; a native turn-end race can admit a detached later turn. That result
+is reported as `started_new_turn`. No cancel or retry occurs. The adapter uses the exact DSH_BIN
+and a process-local overlay; it changes no profile or global configuration. A custom direct ACP
+command omits the adapter. Its local plugin and socket are removed when the adapter ends.

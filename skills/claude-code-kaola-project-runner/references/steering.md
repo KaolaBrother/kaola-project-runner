@@ -1,6 +1,6 @@
 # Claude Code steering (`steer`)
 
-Scope: the ACP channel only. Native steering on this platform's ACP surface:
+Scope: the ACP channel only. Noninterrupting input on this platform's ACP route:
 **supported** (entry `_session/steering`). Native mid-turn steering on the ACP surface: the vendored bridge drives `claude --input-format stream-json` and a second user message written while the turn runs joins that turn (live probe, cli 2.1.272: one `result` event, num_turns 3, the steer replaced the remaining tool steps). The CLI acknowledges nothing for an injected message - the whole stdout stream carries no echo and no `user` event beyond tool results - so the bridge reports `written` with `steer_confirmation: write-only`, never `injected`. A steer written after the turn's `result` starts a NEW turn (probe: a second result event), so the bridge refuses once the turn settles and reports `unknown` for a write that races it.
 
 `steer` has two modes and the Agent picks one. `--steer-mode native` uses the
@@ -16,8 +16,7 @@ Processing can occur in the current step, a later step, or a later turn. Deliver
 prove processing. It uses the same routing as `send`: no scheduler, no second writer, no second lifecycle. The original
 prompt keeps its request id, output, and terminal state. Direct native receipts carry
 `turn_request_id_after` and `turn_request_id_preserved`. A local queue receipt carries only the
-original `turn_request_id`; its later `steer_followup` records `original_turn` and a new prompt id. Content is literal
-transport under the same identity, redaction, and bounded-receipt rules as `send`.
+original `turn_request_id`; its later `steer_followup` records `original_turn` and a new prompt id. Text uses the same identity, redaction, and receipt bounds as `send`.
 
 `steer_outcome` and `steer_consumed` are the only consumption claims:
 
@@ -47,7 +46,7 @@ capture event log retains its late `steer_reply` with its own request id and ori
 For delivery after the current prompt, the existing prompt completion signal wakes
 one pending operation. It calls ordinary `send` admission once on the same session.
 The original prompt keeps its own ended state; the follow-up has an owned new request id.
-If another prompt owns the slot, the follow-up receipt reports no write. If a holder stops,
+Admission checks the prior turn and session under its own lock. A replaced, cancelled, or failed prior turn gets no write. If a holder stops,
 it loses process-local pending input. Read the existing events before recovery. A known
 no-write receipt permits an Agent-chosen new send; an unknown effect does not.
 A running old holder retains old code. Adopt new mappings at a safe restart boundary;

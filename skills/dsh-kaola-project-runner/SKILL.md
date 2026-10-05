@@ -13,7 +13,7 @@ transport-only.
 
 ## Transport
 
-ACP is the only transport (Issue #130). The ACP command is `dsh --profile acp`; prompts travel over its stdio JSON-RPC, never shell eval. There is no login step (authMethods is empty); a provider route still needs its credential, such as DEEPSEEK_API_KEY. This platform's ACP quirks are in [references/acp.md](references/acp.md) — open it when a quirk matters. A request for the retired PTY transport is refused with `transport-pty-retired` and changes nothing.
+ACP is the only transport (Issue #130). The ACP command is `python3 $SKILL_DIR/scripts/kaola-dsh-acp.py`; prompts travel over its stdio JSON-RPC, never shell eval. There is no login step (authMethods is empty); a provider route still needs its credential, such as DEEPSEEK_API_KEY. This platform's ACP quirks are in [references/acp.md](references/acp.md) — open it when a quirk matters. A request for the retired PTY transport is refused with `transport-pty-retired` and changes nothing.
 
 | `mutation_status` | Safe interpretation |
 |---|---|

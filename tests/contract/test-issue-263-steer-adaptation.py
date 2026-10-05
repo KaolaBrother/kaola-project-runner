@@ -25,6 +25,7 @@ def module(name, path):
 race = module('race263', ROOT / 'tests/contract/test-issue-65-steer-race.py')
 bridge = module('oc263', ROOT / 'scripts/kaola-opencode-acp.py')
 cli = module('cli263', ROOT / 'scripts/kaola-acp.py')
+dsh = module('dsh263', ROOT / 'scripts/kaola-dsh-acp.py')
 
 class Mapping(unittest.TestCase):
     def setUp(self):
@@ -217,6 +218,42 @@ class Mapping(unittest.TestCase):
         self.assertEqual(len(self.agent.prompts_sent()), 2)
         self.assertFalse(self.agent.cancels_sent())
 
+    def test_after_turn_replaced_turn_that_already_ended_writes_nothing(self):
+        admitted, release = threading.Event(), threading.Event()
+        op_prompt = self.holder.op_prompt
+        def delay(params):
+            if params.get('text') == 'later':
+                admitted.set(); release.wait(3)
+            return op_prompt(params)
+        self.holder.op_prompt = delay
+        first, _, _, logged = self.queued()
+        self.settle(first['turn_request_id'])
+        self.assertTrue(admitted.wait(3))
+        second, _ = self.start_turn('competing')
+        self.settle(second['turn_request_id'])
+        release.set()
+        self.assertTrue(logged.wait(3))
+        event = next(json.loads(line) for line in self.holder.events.path.read_text().splitlines()
+                     if json.loads(line)['kind'] == 'steer_followup')
+        self.assertFalse(event['receipt']['mutation_performed'])
+        self.assertEqual(event['receipt']['error']['code'], 'steer-turn-changed')
+        self.assertEqual(len(self.agent.prompts_sent()), 2)
+        self.assertFalse(self.agent.cancels_sent())
+
+    def test_after_turn_failed_or_cancelled_original_writes_nothing(self):
+        for stop in ('cancelled', 'failure'):
+            first, original, _, logged = self.queued()
+            response = ({'error': {'code': -32000, 'message': 'failed'}} if stop == 'failure'
+                        else {'result': {'stopReason': stop}})
+            self.holder.on_prompt_response(first['turn_request_id'], response)
+            self.assertTrue(logged.wait(3))
+            event = [json.loads(line) for line in self.holder.events.path.read_text().splitlines()
+                     if json.loads(line)['kind'] == 'steer_followup'][-1]
+            self.assertFalse(event['receipt']['mutation_performed'])
+            self.assertEqual(event['receipt']['outcome'], 'prior_turn_not_completed')
+            self.assertEqual(event['original_turn']['outcome'], original['outcome'])
+            self.assertFalse(self.agent.cancels_sent())
+
     def test_after_turn_stop_does_not_send_or_restart(self):
         first, _, result, logged = self.queued()
         self.holder.stop_requested = True
@@ -364,6 +401,85 @@ class OpenCodeAdapter(unittest.TestCase):
         finally:
             child.terminate();child.wait(timeout=5)
             child.stdout.close()
+
+class DshAdapter(unittest.TestCase):
+    def setUp(self):
+        OpenCodeAdapter.setUp(self)
+        self.adapter = dsh.Adapter(self.child, self.adapter.endpoint)
+        self.steer['id'] = 18
+    tearDown = OpenCodeAdapter.tearDown
+
+    def reply(self, native):
+        self.adapter.input(self.prompt)
+        received = []
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
+            server.bind(self.adapter.endpoint); server.listen()
+            def answer():
+                connection, _ = server.accept()
+                with connection:
+                    received.append(json.loads(connection.recv(4096)))
+                    connection.sendall((json.dumps(native)+'\n').encode())
+            thread = threading.Thread(target=answer); thread.start()
+            result = self.adapter.steer(self.steer); thread.join(3)
+        self.assertEqual(received, [{'id': 18, 'op': 'steer', 'sessionId': 'ses_owned', 'text': 'new'}])
+        self.assertEqual(self.adapter.active, {'ses_owned': 17})
+        self.assertNotIn('cancel', self.child.stdin.getvalue())
+        return result
+
+    def test_native_admission_is_not_processing_or_original_owner_replacement(self):
+        result = self.reply({'id': 18, 'ok': True, 'admitted': 'native-steer',
+                             'agentStatus': 'running', 'statusAfter': 'running'})
+        self.assertEqual(result['outcome'], 'written')
+        self.assertEqual(result['confirmation'], 'native-admitted')
+        self.assertNotIn('consumed', result)
+
+    def test_idle_native_race_is_a_separate_turn(self):
+        result = self.reply({'id': 18, 'ok': True, 'admitted': 'native-steer',
+                             'agentStatus': 'idle', 'statusAfter': 'running'})
+        self.assertEqual(result['outcome'], 'startedNewTurn')
+        self.assertEqual(self.adapter.active, {'ses_owned': 17})
+
+    def test_uncorrelated_reply_and_internal_error_are_unknown_without_replay(self):
+        result = self.reply({'id': 19, 'ok': True, 'admitted': 'native-steer'})
+        self.assertEqual(result['outcome'], 'unknown')
+        Path(self.adapter.endpoint).unlink()
+        result = self.reply({'id': 18, 'ok': False, 'error': {'code': 'internal'}})
+        self.assertEqual(result['outcome'], 'unknown')
+
+    def test_local_foreign_replaced_or_ended_guard_writes_nothing(self):
+        self.adapter.input(self.prompt)
+        before = self.child.stdin.getvalue()
+        for session, expected in [('foreign', 17), ('ses_owned', 16), ('ses_owned', None)]:
+            self.steer['params']['sessionId'] = session
+            self.steer['params']['_meta']['steering']['expectedTurnId'] = expected
+            self.assertEqual(self.adapter.steer(self.steer)['outcome'], 'promptRequired')
+        self.assertEqual(self.child.stdin.getvalue(), before)
+
+    def test_exact_native_binary_overlay_and_exit_cleanup(self):
+        import sys
+        fake = Path(self.tmp.name) / 'dsh'
+        snapshot = Path(self.tmp.name) / 'launch.json'
+        fake.write_text('#!' + sys.executable + '\n' +
+            'import json,os,sys\n' +
+            f'open({str(snapshot)!r},"w").write(json.dumps({{"args":sys.argv[1:],"socket":os.environ["KPR_DSH_STEER_SOCK"]}}))\n' +
+            'request=json.loads(sys.stdin.readline())\n' +
+            'print(json.dumps({"jsonrpc":"2.0","id":request["id"],"result":{"protocolVersion":1}}),flush=True)\n' +
+            'sys.exit(7)\n')
+        fake.chmod(0o700)
+        env = {**os.environ, 'DSH_BIN': str(fake)}
+        process = subprocess.Popen([sys.executable,str(ROOT/'scripts/kaola-dsh-acp.py')],
+            stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,env=env)
+        try:
+            process.stdin.write('{"jsonrpc":"2.0","id":1,"method":"initialize"}\n');process.stdin.flush()
+            self.assertEqual(json.loads(process.stdout.readline())['result']['protocolVersion'],1)
+            self.assertEqual(process.wait(timeout=5),7)
+            launch = json.loads(snapshot.read_text())
+            self.assertEqual(launch['args'][:3], ['--profile','acp','--patch'])
+            self.assertFalse(Path(launch['args'][3]).parent.exists())
+            self.assertEqual(Path(launch['socket']).parent,Path(launch['args'][3]).parent)
+        finally:
+            if process.poll() is None: process.terminate();process.wait(timeout=5)
+            process.stdin.close();process.stdout.close();process.stderr.close()
 
 if __name__ == '__main__':
     unittest.main()

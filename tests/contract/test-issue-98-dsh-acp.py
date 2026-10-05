@@ -25,6 +25,7 @@ import importlib.util
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -164,11 +165,12 @@ class DshManifestMatchesTheMeasuredSurface(unittest.TestCase):
     def setUp(self) -> None:
         self.values = manifest_values()
 
-    def test_the_acp_peer_is_dsh_itself_with_no_wrapper(self) -> None:
-        self.assertEqual(self.values["acp_command"], "dsh --profile acp")
+    def test_local_steer_adapter_keeps_native_acp_and_no_vendor_replacement(self) -> None:
+        self.assertEqual(self.values["acp_command"], "python3 $SKILL_DIR/scripts/kaola-dsh-acp.py")
         self.assertEqual(self.values["acp_wrapper_pin"], "")
         self.assertNotIn("default_transport", self.values)  # Issue #130: ACP-only
-        self.assertFalse(list(SKILL.glob("scripts/kaola-dsh-acp.py")))
+        self.assertTrue((SKILL / "scripts/kaola-dsh-acp.py").is_file())
+        self.assertTrue((SKILL / "scripts/kaola-dsh-steer.mjs").is_file())
         self.assertFalse((SKILL / "scripts" / "vendor").exists())
 
     def test_no_mode_option_so_no_skip_all_entry(self) -> None:
@@ -199,12 +201,14 @@ class DshManifestMatchesTheMeasuredSurface(unittest.TestCase):
                                                      "loadSession"))
         self.assertIn("session/resume", self.values["resume_syntax"])
 
-    def test_native_steering_unsupported_with_its_evidence(self) -> None:
-        """method-surface.txt: all four candidate methods answer -32601."""
-        self.assertEqual(self.values["native_steering"], "unsupported")
-        self.assertEqual(self.values["acp_steer_method"], "")
-        self.assertIn("-32601", self.values["steering_summary"])
-        self.assertIn("0.1.5-rc.2", self.values["steering_summary"])
+    def test_local_extension_names_native_steer_admission_and_native_acp_limit(self) -> None:
+        # Issue263 native frames preserve request4 and the original tool. The
+        # product adapter exposes a KPR-owned extension, not a vendor RPC.
+        self.assertEqual(self.values["native_steering"], "supported")
+        self.assertEqual(self.values["acp_steer_method"], "_session/steering")
+        self.assertIn("agent.steer", self.values["steering_summary"])
+        self.assertIn("admission only", self.values["steering_summary"])
+        self.assertIn("still refuses concurrent session/prompt", self.values["steering_summary"])
 
     def test_model_map_values_are_well_formed_two_element_routes(self) -> None:
         """set_config_option only accepts the agent's own [provider, model] strings."""
@@ -549,15 +553,25 @@ class Issue227LaunchUsesDshBin(unittest.TestCase):
         self.addCleanup(cli, "stop", "--force")
         return json.loads(cli("start", *args).stdout)
 
+    def assert_native_overlay(self, label: str, binary: Path) -> None:
+        argv = shlex.split(self.seen.read_text())
+        self.assertEqual(argv[:4], [label, str(binary), "--profile", "acp"])
+        self.assertEqual(argv[4], "--patch")
+        overlay = Path(argv[5])
+        self.assertTrue(overlay.is_file())
+        self.assertEqual(overlay.read_text(), "- insert:\n    - id: kpr-dsh-steer-bridge\n      name: ./steer.mjs\n")
+        self.assertEqual((overlay.parent / 'steer.mjs').read_bytes(),
+                         (SCRIPTS / 'kaola-dsh-steer.mjs').read_bytes())
+
     def test_dsh_bin_is_the_launched_binary(self) -> None:
         receipt = self.start(DSH_BIN=str(self.env_dsh))
         self.assertEqual(receipt.get("state"), "ready", receipt)
-        self.assertEqual(self.seen.read_text(), f"dsh-bin {self.env_dsh} --profile acp")
+        self.assert_native_overlay("dsh-bin", self.env_dsh)
 
     def test_without_dsh_bin_path_still_resolves(self) -> None:
         receipt = self.start()
         self.assertEqual(receipt.get("state"), "ready", receipt)
-        self.assertEqual(self.seen.read_text(), f"path {self.path_dsh} --profile acp")
+        self.assert_native_overlay("path", self.path_dsh)
 
     def test_acp_command_env_still_wins(self) -> None:
         receipt = self.start(DSH_BIN=str(self.env_dsh), KAOLA_ACP_COMMAND=f"{self.path_dsh} --profile acp")

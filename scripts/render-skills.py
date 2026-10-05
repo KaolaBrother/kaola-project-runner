@@ -734,6 +734,9 @@ def expected_files(manifest: dict[str, str], main_build: bytes) -> dict[str, byt
     if manifest["id"] == "opencode":
         for name in ("kaola-opencode-acp.py", "kaola-opencode-steer.mjs"):
             result[f"scripts/{name}"] = (shared_root / name).read_bytes()
+    if manifest["id"] == "dsh":
+        for name in ("kaola-dsh-acp.py", "kaola-dsh-steer.mjs", "kaola-opencode-acp.py"):
+            result[f"scripts/{name}"] = (shared_root / name).read_bytes()
     return result
 
 

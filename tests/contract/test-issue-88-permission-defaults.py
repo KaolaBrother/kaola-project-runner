@@ -622,7 +622,7 @@ class DshSkipAllIsTheLaunchVariable(unittest.TestCase):
     def test_the_manifest_advertises_no_mode_option_to_match(self) -> None:
         values = manifest_values(DSH_MANIFEST)
         self.assertEqual(values["acp_mode_config_id"], "")
-        self.assertEqual(values["acp_command"], "dsh --profile acp")
+        self.assertEqual(values["acp_command"], "python3 $SKILL_DIR/scripts/kaola-dsh-acp.py")
 
 
 if __name__ == "__main__":
