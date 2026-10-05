@@ -1,0 +1,3 @@
+verdict: fail
+validation_command: NO_COLOR=1 CLICOLOR=0 ./scripts/validate.sh
+validated_candidate_hash: e477b0b524955a419ca87f176fdc3375dff024c27da50f030e81b758c97773c1
