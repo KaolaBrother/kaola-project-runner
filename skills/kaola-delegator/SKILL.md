@@ -6,12 +6,12 @@ description: "Use when an outer Agent (Grok Bot, Codex, or generic) should deleg
 # Kaola-Delegator
 
 This Skill is the external delegation Skill for Grok Bot (post-bridge),
-Codex, and generic hosts, not Project Runner or a platform worker.
+Codex, and generic hosts, not Project Runner or a worker.
 
 Project Runner (`kaola-project-runner`) is the inner control-plane Skill. One
 CLI Host loads it and owns planning, worker dispatch, path binding,
 heartbeat, acceptance, and Workflow close-out. Do not copy that engine; one
-project runs only one Agent for it.
+project runs one Agent for it.
 
 ## Extract once
 
@@ -20,8 +20,11 @@ goal; progress; the Host platform; authorized worker platforms by class;
 Elite grants/counts; Expert grants/lifetime; bound-target local choices
 separate from authorization (host-platforms.md); Worker pool rules;
 exclusions; the quota the user actually gave, each figure in its own unit;
-priority; delivery/stop boundary; project path.
-On a live Host, apply only the user's latest change; consolidate nonurgent corrections at latest values; urgent owner stops go now. Relay explicit owner model/seat choices unchanged; the Host allocates. Invent no assignments/constraints. On a new Host, missing,
+priority; delivery/stop boundary; project path; optional `project.user_language` for user-facing
+text; unset keeps the existing preference.
+On a live Host, apply only the user's latest change; consolidate nonurgent
+corrections; urgent owner stops go now. Relay owner model/seat choices
+unchanged; the Host allocates. Invent no assignments/constraints. On a new Host, missing,
 conflicting, or expired key values must be confirmed before `start`. A quota
 unit the user never gave is not a missing key value — carry it as unspecified
 and start; a quota whose unit is unclear is, so ask. Do not open a blank Host.
@@ -32,21 +35,23 @@ quota as unlimited, reuse a stale quota, or expand authorization.
 
 Select any supported Host platform
 ([host-platforms.md](references/host-platforms.md)) and use its own Runner
-`<platform>-kaola-project-runner`, entry line, native resume id. If that Runner
-is missing, report not executable; claim no Host.
+`<platform>-kaola-project-runner`, entry line, native resume id. A missing Runner is
+not executable; claim no Host.
 
-One live Host per repo, whatever its platform. Recover at canonical root: `<platform>-<PROJECT_CODE>-orchestrator-<purpose>` and Runner receipts; A Git worktree is not an ACP id. Attach exact verified identity even if its recorded name is not the new form. `host-exists` means attach its `existing_host`; never rename and retry. Missing standard name permits no second Host. Failed identity is exact-stopped, proven gone (`residual_pids: []`) before replacement. Resume with attested native id; authorize before start. Never restart in-flight work; interrupt/cancel only for urgent scoped owner stops. [Bricked or quota-exhausted Host](references/host-brick.md); never log in. Grok Bot account bridge attests via locator; Codex/generic don't. Start/resume/replace/attach: [handoff.md](references/handoff.md).
+One live Host per repo, whatever its platform. Recover at canonical root: `<platform>-<PROJECT_CODE>-orchestrator-<purpose>` and Runner receipts; A Git worktree is not an ACP id. Attach exact verified identity even if its recorded name is not the new form. `host-exists` means attach its `existing_host`; never rename and retry. Missing standard name permits no second Host. Failed identity is exact-stopped, proven gone (`residual_pids: []`) before replacement. Resume with attested native id; authorize before start. Never restart in-flight work; interrupt only an urgent scoped owner stop. [Bricked or quota-exhausted Host](references/host-brick.md); never log in. Grok Bot account bridge attests via locator; Codex/generic don't. Start/resume/replace/attach: [handoff.md](references/handoff.md).
 
 Pass no per-worker `--repo`, scheduling, or heartbeat instructions.
-Exact Host `stop` and live attach use `holder_instance_id` from its
-receipt (`--expected-holder-instance-id`); a different holder is not that Host.
+Host `stop` and live attach use the receipt's
+`holder_instance_id` (`--expected-holder-instance-id`); a different holder is not that Host.
 
 ## After the handoff
 
-Relay user changes to the same Host: idle `send`; busy `steer` or wait for idle
+Relay user changes to the same Host: idle `send`; busy `steer` or wait
 (no queue). `--no-wait` admission and Host `end_turn` are not delivery. After
-the first Host beat, verify file/work-product evidence and the first dispatch
+the first Host beat, verify work-product evidence and the first dispatch
 receipt against plan and authorization; do not trust the Host's self-description.
-Correct mismatches on this Host; do not accept completion. Use `kaola-dispatch.py delegator`. Read the [snapshot (`sweep=` line)](references/snapshot.md), observe/capture outcomes and [report](references/inquiry-report.md). Relay pacing if warranted; escalate unresolved human decisions. Do not dispatch workers, copy a mission ledger, write the Host heartbeat, create a Routine, touch inner sessions, or stop before close-out. Changing the outer Agent does not stop it.
+Correct mismatches; do not accept completion. At cadence, read the [snapshot (`sweep=` line)](references/snapshot.md), observe/capture and [report](references/inquiry-report.md). Relay pacing if warranted; escalate unresolved decisions. Do not dispatch workers, copy a mission ledger, write the Host heartbeat, create a Routine, touch inner sessions, or stop before close-out. Changing the outer Agent does not stop it.
+
+Write in accordance with ASD-STE100.
 
 KPR update: [host-platforms.md](references/host-platforms.md#kpr-updates); a notice proves no updated install or loaded guidance, authorizes no install/restart.

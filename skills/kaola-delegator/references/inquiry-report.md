@@ -15,6 +15,14 @@ $STATE timer --repo "$PROJECT" --target local|cloud --entry '<this Skill entry l
 A v1 file (`kaola-heartbeat-prompt/1`) has no Delegator view: audit its
 `body` as before and ask the Host for `state migrate` at a safe point.
 
+## User-facing writing
+
+Ordinary user questions, progress replies and inquiry reports use the recorded
+reply language (`project.user_language`); an unset value keeps the existing
+conversation preference. Agent-to-agent messages and documentation keep their
+own language. The style standard sets style, not language; it does not force
+English.
+
 ## Native timer
 
 The timer body is exactly the Skill entry line plus one locator sentence:
@@ -33,8 +41,6 @@ unrelated user task.
 Pass valid evidence forward; recheck only changed facts or gaps. Every inquiry
 report has these five parts, in order. An empty part says
 “none”; a missing source is named.
-
-Write in accordance with ASD-STE100.
 
 1. User special requirements, listed in full from the `AGENTS.md` region
    (`user_requirements`). New owner direction replaces a conflicting old
