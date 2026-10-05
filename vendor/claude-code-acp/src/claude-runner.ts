@@ -29,13 +29,24 @@ export interface ClaudeResult {
 }
 
 export interface StreamEvent {
-  type: "text_delta" | "tool_use" | "result" | "permission_request" | "thinking";
+  type:
+    | "text_delta"
+    | "tool_use"
+    | "result"
+    | "permission_request"
+    | "thinking"
+    | "compact_boundary";
   text?: string;
   toolName?: string;
   toolInput?: unknown;
   sessionId?: string;
   permissionId?: string;
   usage?: { input_tokens?: number; output_tokens?: number };
+  /** Kaola fork (Issue #264): fields of one `compact_boundary` wire frame. */
+  compactUuid?: string;
+  compactTrigger?: "manual" | "auto";
+  compactPreTokens?: number;
+  compactPostTokens?: number;
 }
 
 /**
@@ -815,6 +826,46 @@ export class ClaudeRunner {
       parsed.delta?.type === "thinking_delta"
     ) {
       onEvent({ type: "thinking", text: parsed.delta.thinking });
+      return;
+    }
+
+    // Kaola fork (Issue #264): a finished context compaction surfaces on
+    // the stream-json wire as a `system`/`compact_boundary` frame that
+    // carries `compact_metadata` (installed cli 2.1.288 zod schema:
+    // `{type:"system",subtype:"compact_boundary",compact_metadata:{trigger:
+    // "manual"|"auto",pre_tokens:int,...}}` plus `session_id` and `uuid`).
+    // Forward this completed event to the agent layer. A status frame,
+    // token drop, or assistant text does not qualify. Keep the native uuid
+    // when present; emission alone does not prove a Skill reread.
+    if (
+      parsed.type === "system" &&
+      parsed.subtype === "compact_boundary" &&
+      typeof parsed.compact_metadata === "object" &&
+      parsed.compact_metadata !== null &&
+      !Array.isArray(parsed.compact_metadata)
+    ) {
+      const meta = parsed.compact_metadata;
+      onEvent({
+        type: "compact_boundary",
+        compactUuid:
+          typeof parsed.uuid === "string" && parsed.uuid
+            ? parsed.uuid
+            : undefined,
+        compactTrigger:
+          meta.trigger === "manual" || meta.trigger === "auto"
+            ? meta.trigger
+            : undefined,
+        compactPreTokens:
+          typeof meta.pre_tokens === "number" &&
+          Number.isFinite(meta.pre_tokens)
+            ? meta.pre_tokens
+            : undefined,
+        compactPostTokens:
+          typeof meta.post_tokens === "number" &&
+          Number.isFinite(meta.post_tokens)
+            ? meta.post_tokens
+            : undefined,
+      });
       return;
     }
 

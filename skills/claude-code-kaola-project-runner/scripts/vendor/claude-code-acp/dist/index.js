@@ -16124,6 +16124,17 @@ var ClaudeRunner = class {
       onEvent({ type: "thinking", text: parsed.delta.thinking });
       return;
     }
+    if (parsed.type === "system" && parsed.subtype === "compact_boundary" && typeof parsed.compact_metadata === "object" && parsed.compact_metadata !== null && !Array.isArray(parsed.compact_metadata)) {
+      const meta3 = parsed.compact_metadata;
+      onEvent({
+        type: "compact_boundary",
+        compactUuid: typeof parsed.uuid === "string" && parsed.uuid ? parsed.uuid : void 0,
+        compactTrigger: meta3.trigger === "manual" || meta3.trigger === "auto" ? meta3.trigger : void 0,
+        compactPreTokens: typeof meta3.pre_tokens === "number" && Number.isFinite(meta3.pre_tokens) ? meta3.pre_tokens : void 0,
+        compactPostTokens: typeof meta3.post_tokens === "number" && Number.isFinite(meta3.post_tokens) ? meta3.post_tokens : void 0
+      });
+      return;
+    }
     if (parsed.type === "result") {
       onEvent({
         type: "result",
@@ -16679,6 +16690,22 @@ function createClaudeCodeAgent(connection, runner = new ClaudeRunner()) {
             });
           });
           permissionPromises.push(permPromise);
+        } else if (event.type === "compact_boundary") {
+          connection.sessionUpdate({
+            sessionId,
+            update: {
+              sessionUpdate: "compaction_update",
+              status: "completed",
+              ...event.compactUuid ? { compactionId: event.compactUuid } : {},
+              _meta: {
+                "claude-code/compact_boundary": {
+                  ...event.compactTrigger ? { trigger: event.compactTrigger } : {},
+                  ...event.compactPreTokens !== void 0 ? { preTokens: event.compactPreTokens } : {},
+                  ...event.compactPostTokens !== void 0 ? { postTokens: event.compactPostTokens } : {}
+                }
+              }
+            }
+          });
         }
       };
       try {
