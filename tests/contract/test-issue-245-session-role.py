@@ -256,6 +256,10 @@ class SessionRoleWire(unittest.TestCase):
         )
         self.assertEqual(refused.returncode, 2, refused.stderr)
         self.assertIn("invalid choice", refused.stderr)
+        receipt = json.loads(refused.stdout)
+        self.assertEqual(receipt["error"]["code"], "invalid-input")
+        self.assertEqual(receipt["mutation_status"], "not_started")
+        self.assertIs(receipt["mutation_performed"], False)
 
     def test_preset_class_and_sideagent_persist_across_stop(self) -> None:
         cases = (

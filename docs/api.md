@@ -232,7 +232,7 @@ that block a launch stay in the row: Node.js/npm before the Codex adapter, or
 | Platform | Actual ACP layer and update boundary |
 |---|---|
 | `claude-code` | The vendored `claude-code-acp` Node bridge ships in the KPR Skill; reinstall that Skill to refresh the bridge, and check the Claude CLI version separately. |
-| `codex` | The manifest npx command launches adapter `@agentclientprotocol/codex-acp` 2.0.1. The child CLI is the absolute `CODEX_PATH` binary (requested Codex CLI 0.160.0). Install that 0.160.0 binary through Codex's own installer and set `CODEX_PATH` to it. PATH does not select the child. The adapter's nested `@openai/codex` package does not select the child. `acp_verified_versions` records the launched child's package version in `cli=` and the adapter in `adapter=`, separate from `acp_requested_cli`. Node.js and npm/npx are prerequisites. |
+| `codex` | The manifest npx command launches adapter `@agentclientprotocol/codex-acp` 2.0.1. The child CLI is the explicit absolute `CODEX_PATH` binary (requested Codex CLI 0.160.0). If `CODEX_PATH` is unset or empty, the Runner resolves `CODEX_BIN`, then `codex` on PATH, and supplies that absolute path to the adapter. An invalid explicit `CODEX_PATH` returns `codex-child-path` before spawn. Use `CODEX_PATH=/absolute/path/to/codex` to select one installed executable. No executable is installed by this resolution. The adapter's nested `@openai/codex` package does not select the child. `acp_verified_versions` records the launched child's package version in `cli=` and the adapter in `adapter=`, separate from `acp_requested_cli`. Node.js and npm/npx are prerequisites. |
 | `cursor-cli` | `cursor-agent --yolo acp` is native to Cursor CLI; there is no separate adapter to update. |
 | `devin` | `devin acp` is native to Devin CLI; there is no separate adapter to update. |
 | `droid` | `droid exec --output-format acp` is native to Droid CLI; there is no separate adapter to update. |
@@ -1337,3 +1337,26 @@ functions remain in the files until a follow-on removes them. Adapters contain p
 and must not evaluate runtime- or user-produced shell text. Starting a CLI does not invoke a
 Workflow materializer. Cursor CLI start does not call a Workflow
 materializer or mutate `.cursor`; installed/global/project command surfaces are reported only.
+
+### Invalid Runner input (Issue #260)
+
+Both `kaola-tmux.sh` and `kaola-acp.py` return one JSON receipt on stdout and
+exit nonzero for invalid arguments. The receipt has `schema_version: 3`,
+`error.code: invalid-input`, `mutation_status: not_started`, and
+`mutation_performed: false`. No holder is contacted by that invalid call.
+These fields describe that call only. They do not change the result or state
+of an earlier call. Do not repeat an earlier mutation without its receipt or
+session evidence. `--help` still prints usage text and exits 0.
+
+Runner `send` accepts `--text TEXT`, or prompt text from stdin when `--text`
+is omitted. It does not accept `--text-file`. The direct Python entry accepts
+`--stdin`. To send a file through the platform Runner, redirect stdin:
+
+```bash
+bash /absolute/path/to/scripts/kaola-tmux.sh codex send \
+  --repo /absolute/project/root --session exact-session < /absolute/prompt.txt
+```
+
+If Python itself is unavailable, the shell reports that error on stderr; it
+cannot create a JSON receipt. Parser errors omit supplied values because a
+value can contain prompt text or a secret.

@@ -181,7 +181,11 @@ class TypedRefusal(Fixture):
         result = self.run_cli("grok", "status", "--repo", str(self.repo),
                               "--session", "i130-bad", "--transport", "tmux")
         self.assertEqual(result.returncode, 1)
-        self.assertEqual(result.stdout, "")
+        receipt = json.loads(result.stdout)
+        self.assertEqual(receipt["schema_version"], 3)
+        self.assertEqual(receipt["error"]["code"], "invalid-input")
+        self.assertEqual(receipt["mutation_status"], "not_started")
+        self.assertIs(receipt["mutation_performed"], False)
         self.assertIn("--transport must be acp", result.stderr)
         self.assertNotIn("pty", result.stderr)
 

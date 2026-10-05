@@ -21,7 +21,7 @@ catalog is still launched as the exact declared literal, and the catalog fact is
 
 ## Launch
 
-ACP runs adapter @agentclientprotocol/codex-acp@2.0.1. The child CLI is the absolute CODEX_PATH binary (requested Codex CLI 0.160.0). PATH does not select that child. The adapter's nested @openai/codex package does not select that child. ACP start sets mode=agent-full-access after initialize.
+ACP runs adapter @agentclientprotocol/codex-acp@2.0.1. The child CLI is the explicit absolute CODEX_PATH binary, else the Runner resolves CODEX_BIN then PATH and sets CODEX_PATH for the adapter (requested Codex CLI 0.160.0). The adapter's nested @openai/codex package does not select that child. ACP start sets mode=agent-full-access after initialize.
 
 Native launch policy, when this adapter supports it, is reported separately from ACP mode
 selection. Read the platform permission facts in [acp.md](acp.md); existing explicit policy
