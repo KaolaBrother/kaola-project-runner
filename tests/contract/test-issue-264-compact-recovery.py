@@ -219,13 +219,17 @@ class ClassifyTests(unittest.TestCase):
         text = self.cr.reload_instruction()
         self.assertIn("completely re-read", text.lower())
         self.assertIn("installed", text.lower())
-        self.assertIn("not from memory", text.lower())
+        self.assertIn("from memory", text.lower())
         self.assertIn("continue", text.lower())
+        # The instruction must require the file read tool before the answer.
+        self.assertIn("read tool", text.lower())
+        self.assertIn("stale", text.lower())
 
     def test_worker_instruction_names_exact_skill_path(self) -> None:
         text = self.cr.worker_reload_prompt("/skills/codex/SKILL.md")
         self.assertIn("/skills/codex/SKILL.md", text)
         self.assertIn("completely re-read", text.lower())
+        self.assertIn("read tool", text.lower())
         # A worker prompt does not open the Host control-plane entry.
         self.assertNotIn("$kaola-project-runner", text)
 
