@@ -17,11 +17,11 @@ A v1 file (`kaola-heartbeat-prompt/1`) has no Delegator view: audit its
 
 ## User-facing writing
 
-Ordinary user questions, progress replies and inquiry reports all follow this
-general rule. Write in accordance with ASD-STE100. Write in the recorded reply
-language (`project.user_language`); an unset value keeps the existing
+Ordinary user questions, progress replies and inquiry reports use the recorded
+reply language (`project.user_language`); an unset value keeps the existing
 conversation preference. Agent-to-agent messages and documentation keep their
-own language. The standard sets style, not language; it does not force English.
+own language. The style standard sets style, not language; it does not force
+English.
 
 ## Native timer
 
