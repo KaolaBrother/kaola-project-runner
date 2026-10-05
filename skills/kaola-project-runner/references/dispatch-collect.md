@@ -84,9 +84,8 @@ Noncatalog model needs owner choice, `model_switch` or `model_switches`, else
 `model-switch-unauthorized`. A bare model inherits no effort. `task_scope`
 only narrows; other keys are `override-unapplied`.
 
-Shared seat, write path, `desktop: true`, account or port: conflicting
-items are `not-run` / `resource-conflict`. Unreadable resources are reported.
-A live shared seat is `shared-occupied`.
+Rows with the same `shared_seat` share a pool capped at the highest `count` (default one).
+Each item uses a seat. Full pools return `shared-occupied`; other conflicts stay `resource-conflict`.
 
 `elite_cap` limits Elite+Expert; plan `seat_cap` only tightens it. Worker pool
 is outside it; `count` limits that preset. Host rows (`host_class: true`) and the bound Sideagent (`seat_exempt`) are not worker seats. Resolve a row's preset from the row, identity-bound index

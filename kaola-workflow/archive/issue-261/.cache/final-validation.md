@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-261/scripts/render-skills.py --check && python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-261/tests/contract/test-issue-244-dispatch.py DispatchEntry.test_shared_seat_blocks_the_pair_and_an_independent_item_runs DispatchEntry.test_shared_droid_pool_admits_two_items_and_refuses_a_third DispatchEntry.test_one_live_droid_uses_one_slot_of_the_shared_pool
+validated_candidate_hash: 6833903bd0bcc69dea6d682dc57a98d19d9504c52c18ef98b76f2d10a441371f

@@ -1,10 +1,10 @@
 {
-  "build": "e87d73d72a50",
+  "build": "f86e1ba5ba8d",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "1af732f378a11bd04e4533a3e1fe38cef9b9b48b393360748d0a8030f5524df7",
     "agents/openai.yaml": "7e353e90103c16b5f3d27855f63087cc4785e77b4d5a4d36118ba3843435640e",
-    "references/dispatch-collect.md": "d79b70740417dfeb3d224a0a549c5def6cf377cde09d9a4964a1c7e0f60d021d",
+    "references/dispatch-collect.md": "17e673923a4cfc118836791b23e6decccc9dc67df286400799c85adb794d3925",
     "references/doc-maintenance.md": "6970e4387cf71862da5860710db033582c66ebf7fbc62e2fbda2358f4b25f2a5",
     "references/duty-reconcile.md": "0c9257570e7ddb072aaabf03449dcfe29cb1b19d80303c4553cda614284df178",
     "references/heartbeat-skeleton.md": "f971e1b8a934a90608b8cccee41769d6d526e9f4d8444f097ec639699bbf4134",
@@ -22,7 +22,7 @@
     "references/workflow-worktree.md": "814df8b1c8278771381fd683ad1961a6c7afe1244affa0891b28cf6cc14f7ce7",
     "references/zcode-host-dispatch.md": "8ea2c0c95378c4ac24ae70066829e1d2217d5a2adf68d01913ff96a3d3ab6565",
     "references/zcode-native-skill-entry.md": "22f5e4ce50d92a0e264c71252616a9c2db8473817be1c5eb99d0a415f814918f",
-    "scripts/kaola-dispatch.py": "11c717ac5ea7a1fdfa1ac912811a770f1a89c50ddbba2b9c14070e0fc84957a4",
+    "scripts/kaola-dispatch.py": "92a5a6a4abe7483c223150d4b85094e0f7accf01c996ed365a531ec9218297b9",
     "scripts/kaola-record-contract.py": "b456811a67c592f91973679ea6098f7b5072c6c69be81ee58b31f780a1a11426"
   },
   "skill": "kaola-project-runner"
