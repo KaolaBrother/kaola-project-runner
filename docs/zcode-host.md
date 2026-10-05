@@ -622,15 +622,20 @@ session marker, cursor ledger, or state machine was added. The superseded Issue 
 carrier, per-send carrier text, manual `SKILL.md` reread) is removed from
 the generated Skill; its runtime findings stay true and are kept in
 `references/zcode-native-skill-entry.md`: ZCode 0.16.5/3.12.3 has no
-compaction hook (`SessionStart` fires on `startup`/`resume` only), no
-compaction reaches the ACP stream (`observe`/`capture` show none,
-`context_usage` stays null), `/compact` and the `session/compact` RPC write
+compaction hook (`SessionStart` fires on `startup`/`resume` only).
+`context_usage` stays null. `/compact` and the `session/compact` RPC write
 the same `compaction`/`context_compaction` `part` rows, auto-compaction
 writes the same rows, and a read-only `part`-table cursor stays an optional
-diagnostic — never a per-send gate. Not verified: real-model behaviour
+diagnostic — never a per-send gate. Issue #264 projects a completed engine
+compact onto ACP `compaction_update`. During that compact, the engine also
+inserts model-only messages that begin `Called the Read tool` and contain the
+pre-compact file body (`resume_referenced_session_context`). Those messages
+are restored read state. They are not a current file read. The ZCode bridge
+appends one clause to the compact-reload prompt only: issue a new Read tool
+call after that prompt, and use only the result that arrives after it.
+Ordinary prompts stay unchanged. Not verified: real-model behaviour
 after a genuine auto-compaction (the catalog GLM models are 1M-window, so
-forcing one is beyond bounded cost), any compact-specific ACP event,
-because none exists, and a `Skill` tool_call from a busy `steer` guide —
+forcing one is beyond bounded cost), and a `Skill` tool_call from a busy `steer` guide —
 steer forwards the guide into the running turn and no re-invocation is
 claimed there (the interrupt resend's first line is contract-tested; its
 `Skill` tool_call follows the same verified entry mechanism).

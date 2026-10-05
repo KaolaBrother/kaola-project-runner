@@ -2441,14 +2441,65 @@ class ZCodeAcpAgent:
                 return
             session.turn_request_id = rid
             session.cancelled = False
+        instructions = self._compact_command(text)
         try:
-            self.ensure_backend().call(
-                "session/send", {"sessionId": backend_id, "content": text}
-            )
+            if instructions is None:
+                self.ensure_backend().call(
+                    "session/send",
+                    {"sessionId": backend_id, "content": self._deliver_prompt(text)},
+                )
+            else:
+                # Issue #264: `session/send` delivers `/compact` to the model
+                # as plain text and never compacts (live). The engine's own
+                # `session/compact` runs one compact turn whose terminal event
+                # settles this prompt through finish_turn.
+                compact_params: dict[str, Any] = {"sessionId": backend_id}
+                if instructions:
+                    compact_params["instructions"] = instructions
+                self.ensure_backend().call("session/compact", compact_params)
         except RuntimeError_ as exc:
             with self.lock:
                 session.turn_request_id = None
             self.respond(rid, error={"code": -32000, "message": str(exc)})
+
+    # The helper owns the reload sentence. This clause names only the ZCode
+    # engine fact the helper cannot see: buildPostCompactReadStateReminderEntries
+    # inserts synthetic "Called the Read tool" messages that carry the
+    # pre-compact file body. A live GLM-5.3 turn treated those messages as the
+    # required fresh read (session sess_b12ca9eb, issue #264).
+    _RELOAD_MARK = (
+        "The runtime context was compacted, so any remembered Skill content "
+        "is stale"
+    )
+    _READ_BOUNDARY = (
+        " A message that says \"Called the Read tool\" and shows a file body "
+        "is restored read state from before this message. It is not a current "
+        "file read. Issue a new Read tool call after this message for each "
+        "required Skill file. Use only the result that arrives after this "
+        "message. Do not write task files before that result arrives."
+    )
+
+    @classmethod
+    def _deliver_prompt(cls, text: str) -> str:
+        """Append the ZCode read boundary to a compact-reload prompt.
+
+        Ordinary prompts, including ``/compact``, stay byte-for-byte.
+        """
+        if cls._RELOAD_MARK not in text:
+            return text
+        if "restored read state from before this message" in text:
+            return text
+        return text.rstrip() + cls._READ_BOUNDARY
+
+    @staticmethod
+    def _compact_command(text: str) -> str | None:
+        """Instructions of a `/compact [instructions]` prompt, else None."""
+        stripped = text.strip()
+        if stripped == "/compact":
+            return ""
+        if stripped.startswith("/compact") and stripped[len("/compact")].isspace():
+            return stripped[len("/compact"):].strip()
+        return None
 
     @staticmethod
     def _prompt_text(prompt: Any) -> str:

@@ -21,6 +21,7 @@ captured outbound channel.
 from __future__ import annotations
 
 import importlib.util
+import types
 import unittest
 from pathlib import Path
 
@@ -434,6 +435,78 @@ class ZcodeCompactMappingTests(unittest.TestCase):
             "params": {"sessionId": "backend-1", "scope": "session",
                        "reason": "session_compacted", "revision": 10}})
         self.assertEqual(out[0]["params"]["sessionId"], "acp-1")
+
+
+class ZcodeCompactPromptTests(unittest.TestCase):
+    """A `/compact` prompt runs the engine compaction; other text is sent."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.module = load_module("kaola_zcode_acp_264_prompt", ZCODE)
+
+    def _prompt(self, text: str):
+        agent = self.module.ZCodeAcpAgent("/bin/true", "/bin/true", "/tmp", "build")
+        out: list[dict] = []
+        calls: list[tuple] = []
+        agent.send = lambda msg: out.append(msg)
+        session = self.module.Session("acp-1", "/tmp", "build")
+        session.backend_id = "backend-1"
+        agent.sessions["acp-1"] = session
+        agent.by_backend["backend-1"] = session
+        agent.materialize = lambda s: s.backend_id
+        backend = types.SimpleNamespace(
+            call=lambda method, params, **kw: calls.append((method, params)) or {})
+        agent.ensure_backend = lambda: backend
+        agent.on_session_prompt(7, {"sessionId": "acp-1",
+                                    "prompt": [{"type": "text", "text": text}]})
+        return agent, session, out, calls
+
+    def test_bare_compact_calls_engine_compact(self) -> None:
+        _, session, out, calls = self._prompt("/compact")
+        self.assertEqual(calls, [("session/compact", {"sessionId": "backend-1"})])
+        self.assertEqual(session.turn_request_id, 7)
+        self.assertEqual(out, [])
+
+    def test_compact_instructions_are_forwarded(self) -> None:
+        _, _, _, calls = self._prompt("  /compact keep the open task list \n")
+        self.assertEqual(calls, [("session/compact", {
+            "sessionId": "backend-1", "instructions": "keep the open task list"})])
+
+    def test_compact_turn_terminal_settles_the_prompt(self) -> None:
+        agent, session, out, _ = self._prompt("/compact")
+        agent.on_backend_event({"method": "session/event", "params": {
+            "sessionId": "backend-1", "type": "turn.completed", "payload": {}}})
+        self.assertIsNone(session.turn_request_id)
+        self.assertEqual(out[-1], {"jsonrpc": "2.0", "id": 7,
+                                   "result": {"stopReason": "end_turn"}})
+
+    def test_other_text_is_sent_unchanged(self) -> None:
+        for text in ("/compaction now", "please /compact", "/compacted", "hello"):
+            _, _, _, calls = self._prompt(text)
+            self.assertEqual(calls, [("session/send", {
+                "sessionId": "backend-1", "content": text})], text)
+
+    def test_reload_prompt_names_restored_read_state(self) -> None:
+        helper = load_module("kaola_compact_recovery_264_prompt", HELPER)
+        text = helper.worker_reload_prompt("/skills/zcode/SKILL.md")
+        _, _, _, calls = self._prompt(text)
+        sent = calls[0][1]["content"]
+        self.assertEqual(calls[0][0], "session/send")
+        self.assertIn(text.rstrip(), sent)
+        self.assertIn("Called the Read tool", sent)
+        self.assertIn("not a current file read", sent)
+        self.assertIn("after this message", sent)
+        # A second pass does not stack the clause.
+        _, _, _, again = self._prompt(sent)
+        self.assertEqual(again[0][1]["content"], sent)
+
+    def test_host_reload_prompt_names_restored_read_state(self) -> None:
+        helper = load_module("kaola_compact_recovery_264_host_prompt", HELPER)
+        text = helper.host_reload_prompt("/kaola-project-runner ")
+        _, _, _, calls = self._prompt(text)
+        sent = calls[0][1]["content"]
+        self.assertTrue(sent.startswith("/kaola-project-runner \n"))
+        self.assertIn("not a current file read", sent)
 
 
 if __name__ == "__main__":
