@@ -1,0 +1,43 @@
+{
+  "initial_reads": [
+    {
+      "path": "/Users/ylmacstudio/.agents/skills/droid-kaola-project-runner/SKILL.md",
+      "cursor": 22,
+      "raw_input": {
+        "file_path": "/Users/ylmacstudio/.agents/skills/droid-kaola-project-runner/SKILL.md"
+      },
+      "output_bytes": 10364,
+      "file_bytes": 10365,
+      "exact": false,
+      "full_file_present": false,
+      "sha256": "d99d5e4f09a22f73f472b8b076a0eb0c3ef817b5160d8527d1280918be0c0fad",
+      "equals_except_trailing_newlines": true,
+      "nonblank_lines_match": true
+    },
+    {
+      "path": "/Users/ylmacstudio/.agents/skills/workflow-next/SKILL.md",
+      "cursor": 23,
+      "raw_input": {
+        "file_path": "/Users/ylmacstudio/.agents/skills/workflow-next/SKILL.md"
+      },
+      "output_bytes": 9770,
+      "file_bytes": 9772,
+      "exact": false,
+      "full_file_present": false,
+      "sha256": "ef0817158253f89ee84d680e3139217b6059d463452404b2b2c0c006e21c314a",
+      "equals_except_trailing_newlines": true,
+      "nonblank_lines_match": true
+    }
+  ],
+  "native_compact_events": [],
+  "notice": null,
+  "continued_file_exists": false,
+  "original_completed_cursor": 157,
+  "elapsed_seconds": 2583.3410000801086,
+  "qualified_original_source_findings": "/tmp/kpr-heartbeat731-host-review.md",
+  "original_sha256": "40e26811c5fc99698acf9cadf755861e396a1bbec0997cf7341ac38394cd351a",
+  "post_compaction_read_use": "unmeasured",
+  "seed_read_result": "Both current installed Skill contents full, only final newline whitespace omitted by native payload; no offset/limit. Initial reading and useful source task only, not postcompact.",
+  "exact_stop": "/tmp/kpr-i264-737-droid-diagnostic-exact-stop.json",
+  "owned_cleanup": "/tmp/kpr-i264-737-droid-diagnostic-cleanup.json"
+}

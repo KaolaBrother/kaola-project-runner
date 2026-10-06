@@ -1,0 +1,50 @@
+{
+  "native_session": "sess_40b9618c-7bf5-4bab-88c9-bd3ed2a44d3d",
+  "holder": "515d77659fb2c837013ec9adb91c6549",
+  "manual_native_compact_automatic_reload": true,
+  "compact_boundary_cursor": 83,
+  "fresh_reads": [
+    {
+      "path": "/private/tmp/kpr-i264/live-readproof/proj/.zcode/skills/zcode-kaola-project-runner/SKILL.md",
+      "tool_call_id": "call_9ddae57b1e3a4384b0863ab3",
+      "cursor": 216,
+      "lines": 177,
+      "source_sha256": "2a72837dad442a45d95713aa50af83f056653f616d9a0960a8c38163fd72966e",
+      "missing_or_different_nonblank_lines": [],
+      "time": {
+        "start": 1791227774825,
+        "end": 1791227774826
+      },
+      "TASK_B_in_current_output": false
+    },
+    {
+      "path": "/tmp/kpr-i264/live-readproof/proj/.zcode/skills/kpr264-scratch-task/SKILL.md",
+      "tool_call_id": "call_3296341c1a724818b7d13f41",
+      "cursor": 219,
+      "lines": 20,
+      "source_sha256": "5a751f9ebe74f4462c79dc39092977a0ce6a93133984b34536e722612c2ef2f3",
+      "missing_or_different_nonblank_lines": [],
+      "time": {
+        "start": 1791227774843,
+        "end": 1791227774844
+      },
+      "TASK_B_in_current_output": true
+    }
+  ],
+  "source_hashes": {
+    "scripts/kaola-zcode-acp.py": "35815c836d91ffb27066de2a4be17935a4a29de79a064be6279e2c98699ecadd",
+    "skills/zcode-kaola-project-runner/scripts/kaola-zcode-acp.py": "35815c836d91ffb27066de2a4be17935a4a29de79a064be6279e2c98699ecadd",
+    "tests/contract/test-issue-264-compact-recovery.py": "e9346da8652c8709c4eb4d0f117906ab57b133aa99352266189dc621884fab2e",
+    "docs/zcode-host.md": "6bc7fee0f6996eb66a0fd38f83c83a381d4024d13909f34d82dd01cc1fac583c"
+  },
+  "stop": {
+    "agent_exit_code": 0,
+    "agent_exit_signal": null,
+    "mutation_status": "completed",
+    "residual_pids": [],
+    "stopped": true,
+    "swept_child_pgids": []
+  },
+  "old_proof_preserved": true,
+  "limitation": "Step2 last-line echo includes source176+177; full actual fresh Read and TASK-B use verified. Native manual compact with automatic reminder; auto-compaction and universal model adherence unverified."
+}

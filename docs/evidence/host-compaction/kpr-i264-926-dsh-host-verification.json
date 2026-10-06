@@ -1,0 +1,67 @@
+{
+  "candidate": "badca11e4f3b7b109b1b93c8536d4893208f50d7",
+  "report_sha256": "3d5ed0ec5d0470f9d993b9a41bc78c19e9065dbc443077e96ac98cdec4273247",
+  "raw_sha256": "b0168249246c05c8949608eaf94b240fa6d683ea587b3356f86918cef01dfda9",
+  "installed_skill_sha256": "ea2ccfbd2c523baebb6f6ff7a5b41654b08922bd379f52f35770d7c00098db22",
+  "native_occurrence": "4457a701-458e-40e5-b423-691d417655cc",
+  "native_source_command": "1ab9654e-309b-4fd0-b88f-efa592a36102",
+  "native_seqs": [
+    52,
+    53,
+    55
+  ],
+  "raw_cursors": [
+    32,
+    33,
+    34,
+    35,
+    42,
+    45,
+    55,
+    58,
+    59,
+    62,
+    63,
+    70
+  ],
+  "full_read_lines": 165,
+  "full_read_bytes": 10450,
+  "target_stop": {
+    "agent_exit_code": 0,
+    "agent_exit_signal": null,
+    "git": {
+      "branch": "main",
+      "dirty": true
+    },
+    "mutation_status": "completed",
+    "platform": "dsh",
+    "repo": "/private/tmp/kpr-i264-913-dsh-live/consumer",
+    "residual_pids": [],
+    "schema_version": 3,
+    "session": "dsh-KPR-i264-913-compact",
+    "stopped": true,
+    "swept_child_pgids": [],
+    "transport": {
+      "selected": "acp"
+    }
+  },
+  "worker_stop": {
+    "agent_exit_code": 0,
+    "agent_exit_signal": null,
+    "git": {
+      "branch": "main",
+      "dirty": true
+    },
+    "mutation_status": "completed",
+    "platform": "zcode",
+    "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+    "residual_pids": [],
+    "schema_version": 3,
+    "session": "zcode-KPR-i264-dsh-live-proof",
+    "stopped": true,
+    "swept_child_pgids": [],
+    "transport": {
+      "selected": "acp"
+    }
+  }
+}

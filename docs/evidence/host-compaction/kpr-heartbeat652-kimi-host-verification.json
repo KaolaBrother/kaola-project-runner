@@ -1,0 +1,64 @@
+{
+  "scope": "Actual native Kimi2.1.1 declared default k3/thinkingmax; normal candidate98d0 holder automatic compact reload, task-guided recovery from incorrect reminder directory. Not whole runtime matrix or corrected prompt-path acceptance.",
+  "holder_instance_id": "0e5d059347a45b01fac45aa0943fc1b3",
+  "acp_session_id": "session_f54282f2-0323-47e8-b29a-50fd9a436165",
+  "compact_request": 7,
+  "native_completed_text_cursor": 3230,
+  "detected_cursor": 3231,
+  "automatic_reminder_cursor": 3232,
+  "automatic_prompt_fingerprint": "sha256:fc896f6817dd3a64c7f8333bf4b7b1f4dfbf044e1106322835cfe52afb4c9c20",
+  "reads": [
+    {
+      "path": "/private/tmp/kpr-kimi-compact-proof-1ya8x9hh/TASK.md",
+      "sha256": "847c5ac6a2b12a81552df7cb0a3f77830a0252c40fc15e2245aafb03608e0c87",
+      "source_bytes": 1497,
+      "tool_start_cursor": 4238,
+      "tool_completed_cursor": 4360,
+      "status": "completed",
+      "all_nonblank_current_source_lines_present": true
+    },
+    {
+      "path": "/Users/ylmacstudio/.agents/skills/kimi-cli-kaola-project-runner/SKILL.md",
+      "sha256": "90f1c257706d8a760ec29490e79ce5222479c1499e096357e4fc34ebbb66479e",
+      "source_bytes": 10260,
+      "tool_start_cursor": 4262,
+      "tool_completed_cursor": 4363,
+      "status": "completed",
+      "all_nonblank_current_source_lines_present": true
+    },
+    {
+      "path": "/Users/ylmacstudio/.agents/skills/workflow-next/SKILL.md",
+      "sha256": "ef0817158253f89ee84d680e3139217b6059d463452404b2b2c0c006e21c314a",
+      "source_bytes": 9772,
+      "tool_start_cursor": 4287,
+      "tool_completed_cursor": 4364,
+      "status": "completed",
+      "all_nonblank_current_source_lines_present": true
+    }
+  ],
+  "original_unchanged": true,
+  "task_B_unchanged": true,
+  "continuation_contains_current_B": true,
+  "task_output_sha256": "a2cc64f222369c4b753d5696aac600874c4fbfb5c25af6f02238552d18345ccb",
+  "continued_end_cursor": 7357,
+  "stop_receipt": "/tmp/kpr-heartbeat652-kimi-exact-stop.json",
+  "stop": {
+    "agent_exit_code": 0,
+    "agent_exit_signal": null,
+    "git": {
+      "branch": null,
+      "dirty": true
+    },
+    "mutation_status": "completed",
+    "platform": "kimi-cli",
+    "repo": "/private/tmp/kpr-kimi-compact-proof-1ya8x9hh",
+    "residual_pids": [],
+    "schema_version": 3,
+    "session": "kimi-cli-KPR-compact-proof",
+    "stopped": true,
+    "swept_child_pgids": [],
+    "transport": {
+      "selected": "acp"
+    }
+  }
+}

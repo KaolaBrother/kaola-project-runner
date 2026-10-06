@@ -1,0 +1,189 @@
+{
+  "candidate": "0553a8dbad2d6e9813075f07e3705a42844eca12",
+  "source_files": {
+    "scripts/kaola-acp-holder.py": {
+      "sha256": "4ae5543d05fc97b8fa1c3bb3f00bdb7de623396e410afa6ea78c8e2134cd5989",
+      "matches_git": true
+    },
+    "scripts/kaola-compact-recovery.py": {
+      "sha256": "c45662a4297047bd860a46157e950b4aac460b3e9df1a889abe99ca687e90f27",
+      "matches_git": true
+    },
+    "scripts/kaola-dispatch.py": {
+      "sha256": "71357f283ab403e4987dc82c74a684da929f34dc9afe47ad1238aceac8c22a8f",
+      "matches_git": true
+    },
+    "vendor/claude-code-acp/dist/index.js": {
+      "sha256": "2135ad71793902a3a5e91118ddf6d7c8ef46477e3db051fc834de1be0d9efd51",
+      "matches_git": true
+    }
+  },
+  "node_pairs": [
+    {
+      "holder": "033888122e50907d593459e6f65393e6",
+      "started": 15,
+      "stopped": 32,
+      "stop_receipt": {
+        "stopped": true
+      },
+      "elapsed_seconds": 171.647
+    },
+    {
+      "holder": "b2fb2be1e4fde6d955f80d8457030709",
+      "started": 33,
+      "stopped": 40,
+      "stop_receipt": {
+        "stopped": true
+      },
+      "elapsed_seconds": 199.762
+    },
+    {
+      "holder": "77e731e9eaae6eda89120e82a2e96112",
+      "started": 47,
+      "stopped": 63,
+      "stop_receipt": {
+        "stopped": true
+      },
+      "elapsed_seconds": 464.54
+    },
+    {
+      "holder": "15c8c1b717d88587a3eb34383e15ad23",
+      "started": 77,
+      "stopped": 85,
+      "stop_receipt": {
+        "stopped": true
+      },
+      "elapsed_seconds": 511.364
+    },
+    {
+      "holder": "f1189326177f546208076de0fe65601f",
+      "started": 108,
+      "stopped": 115,
+      "stop_receipt": {
+        "stopped": true
+      },
+      "elapsed_seconds": 350.882
+    },
+    {
+      "holder": "3acacac41ef92d62658222b912cbd2e8",
+      "started": 116,
+      "stopped": 124,
+      "stop_receipt": {
+        "stopped": true
+      },
+      "elapsed_seconds": 557.438
+    },
+    {
+      "holder": "ce3718cde5f1b4baf4780c094255f8e8",
+      "started": 137,
+      "stopped": 144,
+      "stop_receipt": {
+        "stopped": true
+      },
+      "elapsed_seconds": 351.883
+    }
+  ],
+  "events_sha256": "330d97e76ab33d2fca39d763cb77cb36b3ffda3e298cca988da72e06db918f61",
+  "installed_skills": {
+    "kaola-project-runner": {
+      "bytes": 17407,
+      "sha256": "1af732f378a11bd04e4533a3e1fe38cef9b9b48b393360748d0a8030f5524df7",
+      "lines": 264,
+      "last_line": "machine, quota engine, or close-out dashboard or ledger."
+    },
+    "claude-code-kaola-project-runner": {
+      "bytes": 10472,
+      "sha256": "68989e48d2cd3bcd4fd87f78f5f002d8399183b3e0e197704420d6a65bfb9e59",
+      "lines": 163,
+      "last_line": "and [references/acp.md](references/acp.md) for the structured ACP command surface."
+    }
+  },
+  "host_stop": {
+    "agent_exit_code": 0,
+    "agent_exit_signal": null,
+    "git": {
+      "branch": "master",
+      "dirty": true
+    },
+    "mutation_status": "completed",
+    "platform": "claude-code",
+    "repo": "/private/tmp/kpr-i264-882-host-proof/run/repo",
+    "residual_pids": [],
+    "schema_version": 3,
+    "session": "claude-code-KPR882P-orchestrator-main",
+    "stopped": true,
+    "swept_child_pgids": [],
+    "transport": {
+      "selected": "acp"
+    }
+  },
+  "os_remaining": [],
+  "final_checkpoint": {
+    "at": "2026-10-06T03:58:45.647800+00:00",
+    "batch": "b-3364a45e5f1b",
+    "host_revision": {
+      "current": 8,
+      "from": 7,
+      "through": 7
+    },
+    "node": {
+      "holder_instance_id": "ce3718cde5f1b4baf4780c094255f8e8",
+      "session": "codex-KPR882P-sideagent"
+    },
+    "recovery": {
+      "checked": {
+        "authorization": [
+          "/private/tmp/kpr-i264-882-host-proof/run/repo/AGENTS.md#KPR-USER-REQUIREMENTS",
+          "/private/tmp/kpr-i264-882-host-proof/run/repo/.kaola/delegator-heartbeat.json#project",
+          "/private/tmp/kpr-i264-882-host-proof/run/repo/.kaola/delegator-heartbeat.json#authorization",
+          "/private/tmp/kpr-i264-882-host-proof/run/repo/.kaola/heartbeat-prompt.json#state.project",
+          "/private/tmp/kpr-i264-882-host-proof/run/repo/.kaola/heartbeat-prompt.json#state.authorization",
+          "/private/tmp/kpr-i264-882-host-proof/run/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+          "/private/tmp/kpr-i264-882-host-proof/kaola-workflow/.ledger/issue-264.jsonl"
+        ],
+        "duties": [
+          "/private/tmp/kpr-i264-882-host-proof/run/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe",
+          "/private/tmp/kpr-i264-882-host-proof/run/repo/.kaola/heartbeat-prompt.json#state.decisions.qa-boundary",
+          "/private/tmp/kpr-i264-882-host-proof/run/repo/.kaola/heartbeat-prompt.json#state.alerts",
+          "/private/tmp/kpr-i264-882-host-proof/run/repo/.kaola/heartbeat-prompt.json#state.maintenance.last_checkpoint",
+          "/private/tmp/kpr-i264-882-host-proof/run/repo/qa/progress.md"
+        ],
+        "links": [
+          "/private/tmp/kpr-i264-882-host-proof/run/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe.dispatch",
+          "/private/tmp/kpr-i264-882-host-proof/run/repo/.kaola/heartbeat-prompt.json#state.decisions.qa-boundary",
+          "/private/tmp/kpr-i264-882-host-proof/run/repo/.kaola/dispatch-index.json#items/qa-prior-reclaim-1",
+          "/private/tmp/kpr-i264-882-host-proof/run/repo/.kaola/dispatch-index.json#items",
+          "/tmp/kpr-i264-862-core/claude/receipt.json",
+          "/tmp/kpr-i264-862-core/claude/record/record.json",
+          "/tmp/kpr-i264-862-core-runtime-proof.md",
+          "/tmp/kpr-i264-882-host-review.md",
+          "/private/tmp/kpr-i264-882-host-proof/run/records/claude-code/claude-code-KPR882P-orchestrator-main/76d0c3163e7e30ef/record.json",
+          "/private/tmp/kpr-i264-882-host-proof/run/records/claude-code/claude-code-KPR882P-orchestrator-main/76d0c3163e7e30ef/events.jsonl#138",
+          "/private/tmp/kpr-i264-882-host-proof/run/records/codex/codex-KPR882P-sideagent/76d0c3163e7e30ef/record.json"
+        ]
+      },
+      "input": {
+        "at": "2026-10-06T03:53:27.870107+00:00",
+        "evidence": "final bounded check: all originals materialized; verify clean recovery checkpoint",
+        "holder": "497f81ce9465878e1000a2540ad3b61c",
+        "kind": "request",
+        "occurrence_id": null,
+        "seq": 4,
+        "source": "qa:final-verified-checkpoint"
+      },
+      "seq": 4,
+      "unavailable": {}
+    },
+    "returned_to_host": {},
+    "settled": [
+      "recovery#4"
+    ],
+    "source": "b-3364a45e5f1b",
+    "verified": true
+  },
+  "alerts": {},
+  "pending_task_dispatch": [
+    "qa-prior-reclaim-1",
+    "qa-gap-missing"
+  ]
+}

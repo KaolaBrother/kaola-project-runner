@@ -149,6 +149,13 @@ is outside this repository and is not verified here.
 
 ### State-format updates and migration
 
+Before choosing or changing a Host, use its version-matched row in
+[the internal capability table](host-compact-capabilities.md). Disclose material
+unverified stages, task impact and recovery without adding an approval gate.
+Recheck affected rows on relevant runtime/ACP/KPR changes or owner periodic review;
+keep the full table out of routine JSON and timer text. See the table for measured
+routes, original proof and remaining verification duties.
+
 Grouped grant update (#259, 2026-10-06): update the reader before migrating a
 supported schema 1 or previous schema 2 authorization to one `preset_ids` row
 per shared grant. Load the matching generated Project Runner tool, record its

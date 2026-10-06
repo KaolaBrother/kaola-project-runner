@@ -1,14 +1,14 @@
 # Host platforms
 
-Every shipped platform is a supported Host candidate (#119, #122, #126). This
-table is a support reference, not proof of local availability. For a new Host,
-offer only a runtime discovered as present by the existing survey on the bound
-execution target and a matching installed platform Runner with a valid Host
-entry. Do not replace selected remote-target facts with the outer computer's
-PATH; keep unresolved survey facts unknown. A live Host keeps its own platform.
-Host platform is its own fact, apart from `authorized_platforms`; being the Host
-authorizes no worker seat, and a worker grant chooses no Host. Rows come from
-platforms/<id>.yaml; an empty entry is host-entry-unsupported.
+All platforms have Host entry (#119, #122, #126); availability needs proof.
+A new Host needs the bound target's surveyed runtime and installed Runner with a
+valid entry. Unknown stays unknown; never substitute the outer PATH. A live Host
+keeps its platform; Host choice and worker grants are separate.
+Rows: platforms/<id>.yaml; empty entry means host-entry-unsupported.
+
+Before Host choice/change, read its version-matched checkout row:
+`docs/host-compact-capabilities.md`; disclose material limits, unknowns, impact
+and recovery. Keep owner choice; no extra approval or automatic switch.
 
 | Platform (`<runtime_name>`) | Runner Skill (`$RUNNER` dir) | `host_skill_entry` (first line) | Host name |
 |---|---|---|---|
@@ -52,6 +52,9 @@ Name current grants/pauses by exact catalog preset id; remove settled revocation
 For a choice on the bound target, require both a present survey runtime and that target's installed Runner declaring the tier. Never use the outer computer's PATH. Omit missing rows; keep unknown discovery unknown. Read only the exact catalog rows for runtimes present on that target. Do not load the full catalog, install a runtime, authenticate, or substitute. Refresh after an install or explicit-path change; do not rescan each beat or interrupt a verified session.
 
 ## KPR updates
+
+Recheck affected rows on runtime/ACP/KPR/support changes or owner periodic review;
+reuse unaffected proof. No timer or full-table injection.
 
 A release notice proves neither installation nor loaded guidance and authorizes
 no install or restart. On update, reconcile once against current rules, latest

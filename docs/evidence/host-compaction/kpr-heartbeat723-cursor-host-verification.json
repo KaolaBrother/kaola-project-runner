@@ -1,0 +1,46 @@
+{
+  "candidate": "bb7c47d444a174c985894e5d140f14bebca97add",
+  "holder_instance_id": "12a07a5425a82ecb64168ac395f9a927",
+  "acp_session_id": "e59ea089-0606-4937-9183-5e324421f399",
+  "native_hook_events": [],
+  "compact_project_notice": null,
+  "seed_skill_reads": [
+    {
+      "path": "/Users/ylmacstudio/.agents/skills/cursor-cli-kaola-project-runner/SKILL.md",
+      "request": {
+        "path": "/Users/ylmacstudio/.agents/skills/cursor-cli-kaola-project-runner/SKILL.md"
+      },
+      "completion_cursor": 43,
+      "returned_content_present": false,
+      "current_full_file_match": null,
+      "content_bytes": null,
+      "installed_sha256": "2a4dafef90d91ce0df0dd9c7137800bd7f83bbac3e53d9663950ad25031595cf"
+    },
+    {
+      "path": "/Users/ylmacstudio/.agents/skills/workflow-next/SKILL.md",
+      "request": {
+        "path": "/Users/ylmacstudio/.agents/skills/workflow-next/SKILL.md"
+      },
+      "completion_cursor": 44,
+      "returned_content_present": true,
+      "current_full_file_match": true,
+      "content_bytes": 9772,
+      "installed_sha256": "ef0817158253f89ee84d680e3139217b6059d463452404b2b2c0c006e21c314a"
+    }
+  ],
+  "native_compact_commands_advertised": [],
+  "turn_outcomes": [
+    {
+      "cursor": 1871,
+      "kind": "turn_ended",
+      "outcome": "turn_completed",
+      "prompt_fingerprint": "sha256:5f8f0c31196758ecb4f243302670dbc118c2ab67c861fbe7e412e1ca6f98891f",
+      "stop_reason": "end_turn",
+      "ts": 1791231807.416
+    }
+  ],
+  "output": "/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-cursor-current-notice-k52k202a/original.txt",
+  "output_sha256": "9974944f7f07099ea729799f69f0d3b4e05d9dd7873041c12979c9f3e77791bd",
+  "continued_exists": false,
+  "judgment": "Useful source review returned. No native notice or reminder; post-compaction full Skill read/use/task continuation unmeasured. Source preservation finding valid bounded; broad write_unknown=false inference, private-object path recovery and absence-of-text replay inference are not accepted recovery instructions."
+}
