@@ -2499,7 +2499,9 @@ def selection_basis(args: argparse.Namespace) -> dict[str, Any]:
     ``*_model_id`` match; that label does not assign the preset or its effort.
     A resume/continue without tier/model/effort preserves the native session
     and carries no display: a current name is a live option read, not inherited
-    launch metadata. Component metadata never becomes the launch effort.
+    launch metadata. Omitting those flags does not by itself claim that a prior
+    applied model or effort is still effective; ``selection_continuity`` is that
+    claim. Component metadata never becomes the launch effort.
     """
     manifest = args.manifest
     tier = args.tier or "default"
@@ -2645,7 +2647,12 @@ def merge_policy_evidence(receipt: dict[str, Any], policy: dict[str, Any]) -> No
         "requested_name": policy.get("requested_model_name"),
         "resolved_model": policy.get("resolved_runtime_model_id") or None,
         "resolved_effort": (policy.get("resolved_parameters") or {}).get("effort"),
+        # ``preserved`` starts as the resume-preserved branch. ``start`` clears
+        # it when a prior applied selection exists and the fresh readback does
+        # not confirm it (Issue #268). ``override_omitted`` stays the branch
+        # fact so a later resume can still find that applied selection.
         "preserved": policy.get("requested_model_source") == "resume-preserved",
+        "override_omitted": policy.get("requested_model_source") == "resume-preserved",
     }
 
 
@@ -3431,6 +3438,297 @@ def echo_model_verification(
     return result
 
 
+# Issue #268: authority order for a continuation. The chosen tier is
+# ``selection_continuity.precedence``. ``unresolved`` means neither stale
+# holder metadata nor an unconfirmed load was treated as the winner.
+CONTINUITY_PRECEDENCE = (
+    "explicit-current",
+    "saved-session-selection",
+    "prior-applied",
+    "fresh-start-default",
+)
+_DIFFERS_RECOVERY = (
+    "The fresh effective readback differs from the prior successfully applied "
+    "selection. This continuation sent no model or effort override and does not "
+    "claim the prior settings were preserved. Why the loaded values differ is "
+    "unproven. To choose a selection, continue again with explicit --model, "
+    "--effort, or --tier. A bare continuation does not re-apply the fresh-start preset."
+)
+_CONTRADICTORY_RECOVERY = (
+    "The prior applied configuration and the prior live readback disagree, and "
+    "the fresh readback does not confirm a single selection. Stale holder "
+    "metadata is not the current selection. Continue with explicit --model, "
+    "--effort, or --tier to choose."
+)
+_UNVERIFIABLE_RECOVERY = (
+    "The fresh effective readback is missing for a model or effort the prior "
+    "start applied. Those prior values remain historical and are not claimed "
+    "preserved. Inspect status configOptions, or continue with explicit "
+    "--model, --effort, or --tier to re-apply a chosen selection."
+)
+_EXPLICIT_RECOVERY = (
+    "The explicit selection was not confirmed by the fresh readback. "
+    "config_application records the attempt. This reconciliation applied no "
+    "substitute model."
+)
+_SAVED_SESSION_DETAIL = (
+    "The fresh readback matches the prior live readback, which already differed "
+    "from the prior applied value. That saved-session selection is left unchanged."
+)
+
+
+def _continuity_text(value: Any) -> str | None:
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def _applied_config_value(application: Any, label: str) -> str | None:
+    if not isinstance(application, dict):
+        return None
+    entry = application.get(label)
+    if not isinstance(entry, dict) or entry.get("applied") is not True:
+        return None
+    return _continuity_text(entry.get("value"))
+
+
+def _application_fact(application: Any, label: str) -> dict[str, Any]:
+    """This start's application for one axis, without agent error bodies."""
+    entry = application.get(label) if isinstance(application, dict) else None
+    if not isinstance(entry, dict):
+        return {"applied": False, "value": None, "reason": "absent"}
+    fact: dict[str, Any] = {
+        "applied": entry.get("applied") is True,
+        "value": _continuity_text(entry.get("value")),
+    }
+    if isinstance(entry.get("reason"), str) and entry.get("reason"):
+        fact["reason"] = entry["reason"]
+    if isinstance(entry.get("applied_via"), str) and entry.get("applied_via"):
+        fact["applied_via"] = entry["applied_via"]
+    error = entry.get("error")
+    if isinstance(error, dict) and isinstance(error.get("code"), str) and error.get("code"):
+        fact["error_code"] = error["code"]
+    return fact
+
+
+def _readback_value(effective: Any, label: str) -> tuple[str | None, bool, str | None]:
+    """Native currentValue for one axis.
+
+    A launch-argv model is the Runner's substitute, not a native readback
+    (Issue #140). The advertised option stays out of this comparison.
+    """
+    if not isinstance(effective, dict):
+        return None, False, None
+    if label == "model" and effective.get("effective_model_source") == "launch-argv":
+        return None, False, "launch-argv-not-a-native-readback"
+    key = "effective_model" if label == "model" else "effective_effort"
+    value = _continuity_text(effective.get(key))
+    if value is None:
+        return None, False, None
+    return value, True, None
+
+
+def _continuity_equal(label: str, left: str, right: str) -> bool:
+    if label == "effort":
+        return left.lower() == right.lower()
+    return left == right
+
+
+def _axis_status(label: str, *, explicit: bool, prior_applied: str | None,
+                 prior_live: str | None, prior_live_readable: bool,
+                 fresh: str | None, fresh_readable: bool) -> str:
+    if explicit:
+        return "explicit"
+    if prior_applied is None:
+        return "not-applicable"
+    if not fresh_readable or fresh is None:
+        return "unverifiable"
+    if prior_live_readable and prior_live is not None and not _continuity_equal(
+            label, prior_live, prior_applied):
+        if _continuity_equal(label, fresh, prior_live):
+            return "saved-session-change"
+        return "contradictory-evidence"
+    if _continuity_equal(label, fresh, prior_applied):
+        return "matches-prior-applied"
+    return "differs-from-prior-applied"
+
+
+def _continuity_outcome(statuses: list[str], *, resumed: bool, explicit: bool,
+                        had_prior: bool) -> str:
+    if explicit:
+        return "explicit-current"
+    if not resumed:
+        return "fresh-start-default"
+    applicable = [status for status in statuses if status not in ("not-applicable", "explicit")]
+    if not had_prior or not applicable:
+        return "resume-without-prior-applied"
+    if "contradictory-evidence" in applicable:
+        return "contradictory-evidence"
+    if "differs-from-prior-applied" in applicable:
+        return "differs-from-prior-applied"
+    if "unverifiable" in applicable:
+        return "unverifiable"
+    if "saved-session-change" in applicable:
+        return "saved-session-change"
+    if all(status == "matches-prior-applied" for status in applicable):
+        return "matches-prior-applied"
+    return "unverifiable"
+
+
+def _explicit_readback_matches(axes: dict[str, dict[str, Any]]) -> bool | None:
+    """Whether this start's own applied values match the fresh readback."""
+    saw_unknown = False
+    saw_applied = False
+    for axis in axes.values():
+        if axis.get("applied") is not True:
+            if axis.get("recorded"):
+                return False
+            continue
+        saw_applied = True
+        if not axis.get("fresh_readable"):
+            saw_unknown = True
+            continue
+        fresh = axis.get("fresh_effective")
+        applied = axis.get("applied_this_start")
+        label = axis["label"]
+        if not isinstance(fresh, str) or not isinstance(applied, str):
+            return False
+        if not _continuity_equal(label, fresh, applied):
+            return False
+    if not saw_applied:
+        return None
+    if saw_unknown:
+        return None
+    return True
+
+
+def reconcile_selection_continuity(
+    *,
+    resumed: bool,
+    explicit: bool,
+    recorded_source: Any,
+    recorded_model: Any,
+    recorded_effort: Any,
+    application: Any,
+    fresh: Any,
+    inherited: Any,
+) -> dict[str, Any]:
+    """Compare recorded, applied, and fresh values for one start (Issue #268).
+
+    Precedence is explicit current selection, then a saved-session selection
+    already visible on the prior live readback, then the prior successfully
+    applied selection, then a fresh-start default. A bare continuation does
+    not re-apply the preset and does not overwrite the loaded session. Stale
+    applied metadata alone never counts as the current selection. A match is
+    claimed only when the fresh readback equals the prior applied value and
+    the prior live readback does not contradict it. Why a loaded value differs
+    is left unproven.
+    """
+    recorded = {
+        "source": recorded_source if isinstance(recorded_source, str) else None,
+        "model": _continuity_text(recorded_model),
+        "effort": _continuity_text(recorded_effort),
+    }
+    prior_application = inherited.get("config_application") if isinstance(inherited, dict) else None
+    prior_effective = inherited.get("effective_selection") if isinstance(inherited, dict) else None
+    axes: dict[str, dict[str, Any]] = {}
+    statuses: list[str] = []
+    prior_model = _applied_config_value(prior_application, "model")
+    prior_effort = _applied_config_value(prior_application, "effort")
+    for label, recorded_value, prior_applied in (
+        ("model", recorded["model"], prior_model),
+        ("effort", recorded["effort"], prior_effort),
+    ):
+        prior_live, prior_live_readable, prior_note = _readback_value(prior_effective, label)
+        fresh_value, fresh_readable, fresh_note = _readback_value(fresh, label)
+        status = _axis_status(
+            label, explicit=explicit, prior_applied=prior_applied,
+            prior_live=prior_live, prior_live_readable=prior_live_readable,
+            fresh=fresh_value, fresh_readable=fresh_readable,
+        )
+        statuses.append(status)
+        axis = {
+            "label": label,
+            "recorded": recorded_value,
+            "applied_this_start": _applied_config_value(application, label),
+            "applied": _applied_config_value(application, label) is not None,
+            "fresh_effective": fresh_value,
+            "fresh_readable": fresh_readable,
+            "prior_applied": prior_applied,
+            "prior_live": prior_live,
+            "prior_live_readable": prior_live_readable,
+            "status": status,
+        }
+        if fresh_note:
+            axis["fresh_note"] = fresh_note
+        if prior_note:
+            axis["prior_live_note"] = prior_note
+        axes[label] = axis
+    had_prior = prior_model is not None or prior_effort is not None
+    outcome = _continuity_outcome(
+        statuses, resumed=resumed, explicit=explicit, had_prior=had_prior)
+    if outcome == "matches-prior-applied":
+        prior_settings_preserved: bool | None = True
+    elif outcome in (
+        "differs-from-prior-applied", "contradictory-evidence", "saved-session-change",
+    ):
+        prior_settings_preserved = False
+    elif outcome == "explicit-current" and resumed and had_prior:
+        prior_settings_preserved = False
+    else:
+        prior_settings_preserved = None
+    precedence = {
+        "explicit-current": "explicit-current",
+        "saved-session-change": "saved-session-selection",
+        "resume-without-prior-applied": "saved-session-selection",
+        "matches-prior-applied": "prior-applied",
+        "fresh-start-default": "fresh-start-default",
+    }.get(outcome, "unresolved")
+    readback_matches = _explicit_readback_matches(axes) if explicit else None
+    for axis in axes.values():
+        axis.pop("label", None)
+    result: dict[str, Any] = {
+        "precedence_order": list(CONTINUITY_PRECEDENCE),
+        "precedence": precedence,
+        "outcome": outcome,
+        "prior_settings_preserved": prior_settings_preserved,
+        "had_prior_applied": had_prior,
+        "recorded_selection": recorded,
+        "applied_configuration": {
+            "model": _application_fact(application, "model"),
+            "effort": _application_fact(application, "effort"),
+        },
+        "fresh_effective_readback": {
+            "model": axes["model"]["fresh_effective"],
+            "effort": axes["effort"]["fresh_effective"],
+            "model_readable": axes["model"]["fresh_readable"],
+            "effort_readable": axes["effort"]["fresh_readable"],
+            "source": "acp-config-echo",
+        },
+        "prior_applied_selection": None if not had_prior else {
+            "model": prior_model,
+            "effort": prior_effort,
+            "source": "prior-holder-record",
+            "historical": True,
+        },
+        "axes": {"model": axes["model"], "effort": axes["effort"]},
+        "explicit_readback_matches": readback_matches,
+    }
+    if outcome == "differs-from-prior-applied":
+        result["cause"] = "unproven"
+        result["recovery"] = _DIFFERS_RECOVERY
+    elif outcome == "contradictory-evidence":
+        result["cause"] = "unproven"
+        result["recovery"] = _CONTRADICTORY_RECOVERY
+    elif outcome == "unverifiable":
+        result["recovery"] = _UNVERIFIABLE_RECOVERY
+    elif outcome == "explicit-current" and readback_matches is False:
+        result["recovery"] = _EXPLICIT_RECOVERY
+    elif outcome == "saved-session-change":
+        result["detail"] = _SAVED_SESSION_DETAIL
+    return result
+
+
 # Issue #203: the start receipt facts the holder keeps as `start_evidence`, by
 # their existing names. `model_evidence_provenance` drops only its bulky
 # `catalog_probe` output.
@@ -3439,6 +3737,7 @@ START_EVIDENCE_KEYS = (
     "config_application", "effective_selection", "fast",
     "host_selection", "model_verified", "model_mismatch_reason",
     "actual_runtime_model_id", "actual_parameters",
+    "selection_continuity",
 )
 
 
@@ -3472,7 +3771,17 @@ def inherited_start_evidence(prior: Any, args: argparse.Namespace, repo: str,
     if not isinstance(saved, dict) or saved.get("acp_session_id") != acp_session_id:
         return None
     older = saved.get("inherited")
-    if (saved.get("model_selection") or {}).get("preserved") and isinstance(older, dict):
+    selection = saved.get("model_selection") if isinstance(saved.get("model_selection"), dict) else {}
+    # A no-override resume carries the last applied evidence forward. Old
+    # records say that with ``preserved``; current records say it with
+    # ``override_omitted``, including when the fresh readback did not confirm
+    # the prior values (Issue #268).
+    passthrough = selection.get("override_omitted") is True or (
+        "override_omitted" not in selection
+        and selection.get("preserved") is True
+        and selection.get("source") == "resume-preserved"
+    )
+    if passthrough and isinstance(older, dict):
         return older
     inherited = start_evidence_facts(saved)
     inherited.update({
@@ -5028,6 +5337,22 @@ def command_start(args: argparse.Namespace, repo: str,
                 "parameters": echo_verdict["actual_parameters"],
             }
             receipt["model_evidence_provenance"] = provenance
+        continuity = reconcile_selection_continuity(
+            resumed=bool(args.resume or args.use_continue),
+            explicit=bool(args.model or args.effort or args.tier),
+            recorded_source=policy.get("requested_model_source"),
+            recorded_model=policy.get("resolved_runtime_model_id") or None,
+            recorded_effort=(policy.get("resolved_parameters") or {}).get("effort") or None,
+            application=application,
+            fresh=effective,
+            inherited=inherited_start_evidence(
+                prior_record, args, repo, receipt.get("acp_session_id")),
+        )
+        receipt["selection_continuity"] = continuity
+        selection = receipt.get("model_selection")
+        if (isinstance(selection, dict) and continuity.get("had_prior_applied")
+                and continuity.get("prior_settings_preserved") is not True):
+            selection["preserved"] = False
         explicit_model = acp_model_value if args.model else ""
         explicit_effort = effort_value if args.effort else ""
         problem = (explicit_selection_problem(explicit_model, explicit_effort, effective)

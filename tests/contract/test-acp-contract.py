@@ -2248,7 +2248,7 @@ class Issue203StartEvidenceTests(AcpSessionFixture, unittest.TestCase):
             evidence = self.cli(command, platform="codex").get("start_evidence") or {}
             for key in ("model_selection", "config_application", "effective_selection",
                         "fast", "model_verified", "model_mismatch_reason",
-                        "actual_runtime_model_id"):
+                        "actual_runtime_model_id", "selection_continuity"):
                 self.assertEqual(evidence.get(key), receipt.get(key), (command, key))
             self.assertEqual(evidence["model_selection"]["source"], "runner-astra")
             self.assertEqual(evidence["acp_session_id"], receipt["acp_session_id"])
@@ -2292,8 +2292,16 @@ class Issue203StartEvidenceTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual(status["start_selection"]["tier"], None, "an omitted tier stays null")
         self.assertEqual(status["start_selection"]["model"], None)
         evidence = status["start_evidence"]
-        self.assertTrue(evidence["model_selection"]["preserved"])
+        # Issue #268: no config readback, so the prior applied selection is not
+        # claimed preserved. override_omitted still carries that evidence forward.
+        self.assertTrue(evidence["model_selection"]["override_omitted"])
+        self.assertFalse(evidence["model_selection"]["preserved"])
         self.assertEqual(evidence["model_selection"]["source"], "resume-preserved")
+        continuity = evidence["selection_continuity"]
+        self.assertEqual(continuity["outcome"], "unverifiable")
+        self.assertIsNone(continuity["prior_settings_preserved"])
+        self.assertEqual(continuity["prior_applied_selection"]["model"], "gpt-6-astra")
+        self.assertFalse(continuity["fresh_effective_readback"]["model_readable"])
         self.assertEqual(evidence["model_display"], {
             "name": None, "preset_id": None, "preset_effort": None, "components": None,
         })

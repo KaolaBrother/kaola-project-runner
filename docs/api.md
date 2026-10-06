@@ -1202,9 +1202,29 @@ ACP `fast-mode` configId, Cursor parameterized `fast` option, the Claude bridge'
 vendored bridge turns into a per-turn `--settings '{"fastMode": ...}'` — the native CLI determines model support and effective reports `unknown` without
 native evidence). Where no
 native mechanism or advertised fast variant exists, the request is reported `resolved_fast:
-"unsupported"`, never silently claimed. `--resume`/`--continue` without tier/model/effort preserves the
-saved native session selection (`resume-preserved`); supplying any of them re-applies that selection.
-There is no automatic escalation based on complexity, failures, or elapsed time. Catalog output is
+"unsupported"`, never silently claimed. `--resume`/`--continue` without tier/model/effort sends no model or effort override
+(`resume-preserved`); supplying any of them re-applies that selection.
+There is no automatic escalation based on complexity, failures, or elapsed time. Omitting
+those flags does not by itself mean the prior applied model or effort is still in effect.
+`selection_continuity` on the `start` receipt (and on `start_evidence`) is the comparison.
+Its precedence is explicit current selection, then a saved-session selection that the prior
+live readback already showed, then the prior successfully applied selection, then a
+fresh-start default. Stale holder metadata alone never wins. A bare continuation does not
+re-apply the fresh-start preset and does not overwrite the loaded session.
+
+`prior_settings_preserved` is true only when the fresh ACP `currentValue` readback matches
+the prior successfully applied model and effort and the prior live readback does not
+contradict them. A difference is `differs-from-prior-applied`: not preserved, cause
+`unproven`, with recovery that names an explicit `--model`, `--effort`, or `--tier`
+continuation. A missing readback is `unverifiable` and is not called preserved. A prior
+live readback that already differed from the applied value, when the fresh readback still
+matches that live value, is `saved-session-change` and is left in place. Contradictory
+prior applied and prior live evidence is not resolved from the stale applied value.
+Recorded selection, this start's applied configuration, and the fresh readback stay
+separate fields. `model_selection.override_omitted` records the no-override branch.
+`model_selection.preserved` stays true only when that branch had no prior applied
+selection, or the fresh readback confirmed it. Droid's `model_verified` echo verdict is
+unchanged. Catalog output is
 reported as evidence and never rewrites or blocks the declared exact model literal. Actual mismatch,
 catalog absence, or unreadable evidence never disables generic communication.
 
@@ -1385,7 +1405,7 @@ the record when the holder is stopped or lost), across every whole-record rewrit
 receipt's `model_selection`, `model_display`, `requested_effort`, `config_application`, `effective_selection` (including
 `effective_model_source: "launch-argv"` beside the separate `advertised_model`), `fast`,
 `host_selection`, `model_verified`, `model_mismatch_reason`, `actual_runtime_model_id`,
-`actual_parameters`, and `model_evidence_provenance` without its `catalog_probe`, each present only
+`actual_parameters`, `selection_continuity`, and `model_evidence_provenance` without its `catalog_probe`, each present only
 when the start receipt had it, plus `acp_session_id`, `resumed`, and `recorded_at`. It is evidence
 from that start or resume, not a fresh observation: the current selection is
 `session_meta.configOptions`, an applied option or launch argument is application evidence, and
@@ -1394,8 +1414,9 @@ caller's raw flags, so an omitted `--tier` is `null`. A resume or `--continue` w
 `acp_session_id` equals the one the previous record for the same platform/session/repo ran and
 recorded its evidence under keeps that evidence as `start_evidence.inherited` (`source:
 "prior-holder-record"`, `holder_instance_id`, `acp_session_id`, `recorded_at`), also echoed as the
-start receipt's `inherited_start_evidence`; a preserved resume carries the older applied evidence
-forward flat. Any other native session, a Runner name alone, or a record without evidence inherits
+start receipt's `inherited_start_evidence`; a no-override resume (`model_selection.override_omitted`)
+carries the older applied evidence forward flat, including when the fresh readback did not confirm it.
+Any other native session, a Runner name alone, or a record without evidence inherits
 nothing, and the model stays unknown or native-preserved. Resume sends no extra model/effort option
 to fill these fields. The start receipt reports `start_evidence_recorded` (and
 `start_evidence_error` when a holder could not keep it, for example a pre-#203 holder or evidence

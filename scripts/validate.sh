@@ -311,6 +311,7 @@ python_suites_all=(
   "test-issue-255-lifecycle-state.py"
   "test-issue-259-record-contract.py"
   "test-issue-267-rejection-count.py"
+  "test-issue-268-selection-continuity.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -400,6 +401,7 @@ shell_suites=(
   "test-installer-migration.sh"
   "test-installer-runtimes.sh"
   "test-issue-267-rejection-count.py"
+  "test-issue-268-selection-continuity.py"
 )
 
 array_contains() {

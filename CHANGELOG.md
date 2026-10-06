@@ -21,6 +21,11 @@ manifest changes only its explanatory text.
   false`; earlier calls keep their original mutation state. Prompt files can
   be sent through stdin. `--text-file` remains unsupported (Issue #260, item 8).
 - Allow two Droid sessions across `droid/default`, `droid/opus`, and `droid/core` to use the shared two-seat pool.
+- A bare `--continue` or `--resume` still sends no model or effort override.
+  `selection_continuity` compares the fresh ACP readback with the prior applied
+  selection. A difference is reported and is not called preserved. Explicit
+  `--model`, `--effort`, or `--tier` still re-applies that selection. Why a
+  loaded session differs stays unproven (Issue #268).
 
 ## 0.9.0 — 2026-10-05 (lifecycle state and OpenCode managed permissions)
 

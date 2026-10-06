@@ -124,6 +124,7 @@ class MockAgent:
                         self.sessions.setdefault(
                             entry["sessionId"], {"cwd": entry.get("cwd", "")}
                         )
+        self._seed_echo_current()
         log_event({"event": "mock_start", "scenario": scenario, "caps": sorted(caps)})
 
     @staticmethod
@@ -141,6 +142,11 @@ class MockAgent:
           keeps ``new``. Until ``delay_ms`` elapses, setting ``value`` returns
           the OpenCode -32602 model-not-found error. Then the mock advertises
           ``ready`` and accepts that value. Issue #254.
+
+        Cap ``echo-current`` (Issue #268) stamps ``configured`` onto each
+        returned option as ``currentValue``, and seeds ``configured`` from
+        fixture ``new``/``resume`` currentValues so a later mode/fast set does
+        not drop the loaded model and effort.
         """
         raw = os.environ.get("MOCK_ACP_CONFIG", "")
         if not raw:
@@ -150,6 +156,22 @@ class MockAgent:
         except ValueError:
             return {}
         return data if isinstance(data, dict) else {}
+
+    def _seed_echo_current(self) -> None:
+        """Keep loaded currentValues across later set_config responses."""
+        if "echo-current" not in self.caps:
+            return
+        for key in ("new", "resume"):
+            options = self.config_fixture.get(key)
+            if not isinstance(options, list):
+                continue
+            for option in options:
+                if not isinstance(option, dict):
+                    continue
+                option_id = option.get("id")
+                current = option.get("currentValue")
+                if isinstance(option_id, str) and option_id and isinstance(current, str) and current:
+                    self.configured.setdefault(option_id, current)
 
     @staticmethod
     def _load_list_pages() -> list[dict[str, Any]] | None:
@@ -532,7 +554,16 @@ class MockAgent:
     def config_options(self) -> list[dict[str, Any]]:
         if "cursor-params" in self.caps:
             return self.cursor_config_options()
-        return self.CONFIG_OPTIONS
+        if "echo-current" not in self.caps:
+            return self.CONFIG_OPTIONS
+        options = []
+        for option in self.CONFIG_OPTIONS:
+            copied = dict(option)
+            current = self.configured.get(copied["id"])
+            if current is not None:
+                copied["currentValue"] = current
+            options.append(copied)
+        return options
 
     def on_set_config(self, request_id: Any, params: dict[str, Any]) -> None:
         config_id = params.get("configId") or params.get("config_id")
