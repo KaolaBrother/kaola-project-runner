@@ -3530,7 +3530,7 @@ def delegator_view(doc: dict[str, Any], path: Path, repo: Path) -> dict[str, Any
         "sideagent": projected.get("sideagent"),
         "unknown": RECORD.unknown_paths(state),
         "maintenance": maintenance_brief(state),
-        "pending_host_changes": sorted(host_changes(doc, int((state.get("maintenance") or {}).get(
+        "pending_host_changes": sorted(host_changes(doc, int(maintenance_brief(state).get(
             "handled_host_revision") or 0), int(doc.get("host_revision") or 0))),
     }
 
