@@ -343,6 +343,10 @@ python_suites_a=(
   "test-issue-236-install-completion.py"
   "test-issue-237-model-display.py"
   "test-issue-255-lifecycle-state.py"
+  "test-issue-266-launch-broker.py"
+  "test-issue-266-launch-broker-composed.py"
+  "test-issue-267-rejection-count.py"
+  "test-issue-268-selection-continuity.py"
 )
 python_suites_b=(
   "test-issue-78-heredoc-deadlock.py"
@@ -400,8 +404,6 @@ python_suites_b=(
 shell_suites=(
   "test-installer-migration.sh"
   "test-installer-runtimes.sh"
-  "test-issue-267-rejection-count.py"
-  "test-issue-268-selection-continuity.py"
 )
 
 array_contains() {
