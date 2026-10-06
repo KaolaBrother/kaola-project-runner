@@ -36,15 +36,27 @@ platforms/<id>.yaml; an empty entry is host-entry-unsupported.
   CLI (the `KAOLA_ZCODE_*` gate is zcode-only). Liveness is Runner
   `status`/`list`.
 
+  On the Grok Bot account bridge, launch the Host through the shared
+  outside-caller launcher, which the normal platform Runner `start` or
+  `start --resume` selects by default. The per-user service manager runs the holder outside the caller tree. The holder
+  survives the caller shell and the one-shot launcher job exiting; Grok Bot app quit/relaunch survival is unverified. Keep the
+  launcher start receipt (`holder_instance_id`, `acp_session_id`) as the
+  attachment identity. When no launcher or service manager is available, the
+  normal path degrades to a direct start and its receipt says so; for an
+  explicit `--launch-backend launchd`, ask the owner to run the same command in
+  an independent shell on the same target. Never launch the holder directly
+  from the caller's own execution environment without that receipt.
+
+
 ## Classes, pool, and grants
 
 Relay these facts. The Host selects seats; do not load its selection policy.
 
 - **Expert**: complex thinking only. Each task needs explicit user permission. No implementation.
 - **Elite**: primary implementation and demanding execution, only inside an explicit preset/count grant.
-- **Worker**: simpler bounded work. The pool is exactly: `codex/luna`, `devin/default`, `dsh/default`, `opencode/default`, `zcode/default`. Those five are default-authorized and outside the general concurrency cap; real limits and owner exclusions still apply. Default authorization is permission, not a preference over a suitable Elite.
+- **Worker**: simpler bounded work. The pool is exactly: `codex/luna`, `devin/default`, `dsh/default`, `opencode/default`, `zcode/default`. Those five are default-authorized and do not consume Elite/Expert grants; real limits and owner exclusions still apply. Default authorization is permission, not a preference over a suitable Elite.
 
-Name every granted, paused, or revoked seat by its exact catalog preset id (`<platform>/<tier>`; absent `special_requirements` means none). A switch grant is per seat and stays inside that runtime. Visibility is not authorization.
+Name current grants/pauses by exact catalog preset id; remove settled revocations. Name each seat (`<platform>/<tier>`; absent `special_requirements` means none). A switch grant is per seat and stays inside that runtime. Visibility is not authorization.
 
 For a choice on the bound target, require both a present survey runtime and that target's installed Runner declaring the tier. Never use the outer computer's PATH. Omit missing rows; keep unknown discovery unknown. Read only the exact catalog rows for runtimes present on that target. Do not load the full catalog, install a runtime, authenticate, or substitute. Refresh after an install or explicit-path change; do not rescan each beat or interrupt a verified session.
 

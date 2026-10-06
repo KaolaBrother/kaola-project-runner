@@ -25,14 +25,13 @@ not edit the repository. The Host exact-stops every session the plan starts.
 `$AUTH` is the existing Host heartbeat. A legacy file is `{"body":"<state JSON>"}`
 written by `snapshot`; a lifecycle-state file (`kaola-heartbeat-prompt/2`, written only by
 `state`) is read from its `state.authorization`. The authorization object holds grants
-by exact preset id, optional `elite_cap` (an integer covering Elite and
-Expert; the Worker pool is excluded), per-grant `model_switch`, top-level
-`model_switches`, `count`, `shared_seat`, and owner `special_requirements`.
-Granted rows with the same `shared_seat` label use one pool. Its capacity is
-the greatest count on those rows, or one when no row states a count. The count
-on each preset still limits that preset, and each live or admitted session
-uses one seat in the shared pool. The tool does not add repeated pool counts
-across grant rows.
+by exact preset/shared group counts. Each grant has `id` or `preset_ids`,
+`count`, current `state`, optional owner `special_requirements`, and one
+`model_switch` authority. A grouped grant has one count and choice set.
+Per-choice restrictions stay on that same grant. Compatibility rows are
+computed; they are not independent writers. Choices alone grant no switching.
+Missing counts authorize no Elite/Expert admission. Repeated legacy group
+counts or switch conflicts require source-based migration or owner recovery.
 An Expert grant may also carry `lifetime` (`task`, the default when absent, or
 `standing`) and `expires` (an ISO-8601 instant with an offset, `Z` accepted).
 Both are read for Expert presets only; Elite and Worker rows ignore them. A
@@ -58,20 +57,20 @@ python3 "$ENTRY" project \
 `capability_summary` lists eligible preset ids. It does not read a capability
 out of profile wording and does not copy each profile. Ungranted Expert does
 not appear. `candidates` still carry the exact id, Class, catalog profile,
-and selection. The Host writes the short capability paragraph and changes it
-only when a grant, profile, or availability fact changes.
+and selection. The tools derive this output from grants, default Worker pool, exclusions,
+current holds and availability. Class definitions and preset defaults come
+from version-matched catalog/templates; only owner overrides are stored.
 
 ## 2. Admit an adopted plan
 
 `scope` is `research`, `qa`, `report`, or `implementation`. `repo` is `$REPO`. Each item has
 one `item_id`, exact `preset`, `session`, and `prompt`. Pass `--live` from a
-fresh Runner list when a cap or shared seat matters. A list row whose
-`host_class` is true is the project's Host and is not a worker seat. Omitting
-`seat_cap` does not erase `elite_cap`. A stopped session name is not absent
+fresh Runner list when a count or shared seat matters. A list row whose
+`host_class` is true is the project's Host and is not a worker seat. Legacy plan `seat_cap` is refused with an owner recovery action. A stopped session name is not absent
 and needs a new name. A fresh item whose named session is already live, with
 the same repo, platform and preset, `identity: verified`, a status receipt
 naming that session and holder, and nothing sent yet (`mutation_status:
-not_started`) holds that seat: `count`, `elite_cap` and its shared seat are
+not_started`) holds that seat: `count` and its shared seat are
 judged against the other live rows only, `execute` does not start it again
 and sends the first prompt to that holder (`evidence.seat_note`). Any other
 live row of the preset still counts against the item, and a refused attempt
@@ -80,13 +79,13 @@ dispatch runs through `execute`; a direct Runner `start`/`send` is the
 standalone, degraded, or same-assignment recovery path.
 When `<repo>/.kaola/delegator-heartbeat.json` has schema `kaola-delegator-heartbeat/1`,
 that file is the eligibility ceiling for new dispatch.
-Host grants may be narrower. They cannot add a preset, a count, or a cap.
+Host grants may be narrower. They cannot add a preset or enlarge a granted/shared count.
 A preset the Delegator revoked, paused, or omitted is `not-run`.
 An in-flight or returned row with the same identity stays.
 Its evidence names the pending duty: `stop`, `handoff`, `finalize`, or `reclaim`.
 A missing Delegator file leaves standalone Host authorization unchanged.
 An unreadable ceiling blocks new dispatch and leaves running work in place.
-`worker_pool_cap` counts live Worker seats and new admissions in that pool.
+No independently writable aggregate or Worker pool cap is supported.
 A stated Delegator `count` applies when the Host grant omits `count`.
 One `elite_grants` entry with several `preset_ids` and one `count` is one shared pool.
 `lifetime`, `switch_authorization`, and structured `special_requirements` stay on that decision.
@@ -116,7 +115,7 @@ on that item's Runner `start`. Apart from the legacy alias below, other values s
 metadata. It does not authorize that role, relabel a holder, or refuse an
 otherwise valid item. The seat's identity still comes from the Host name,
 that explicit sideagent flag, or the preset this start actually selected.
-Only the maintenance Sideagent bound in lifecycle state is outside `elite_cap` and
+Only the maintenance Sideagent bound in lifecycle state is outside worker
 preset `count` (`seat_exempt: true`); a shared seat it uses stays occupied. Any other
 `sideagent` item is a counted worker (`evidence.seat_note`). On recovery of a live session, the
 entry does not start again and does not change that session's
@@ -187,7 +186,7 @@ The user report shows:
 - Currently occupied seats and their linked tasks.
 - Idle, available capacity within each effective grant; held/unavailable/unknown shown separately.
 
-Count a shared seat group once across its permitted tiers. Idle but unreclaimed/reserved sessions are not automatically available. General cap and resource constraints still apply; per-grant free counts do not authorize exceeding the combined cap. Host and Sideagent roles do not consume worker seats. Show no Expert authorization as none, without implying a grant.
+Count a shared seat group once across its permitted tiers. Idle but unreclaimed/reserved sessions are not automatically available. Capacity derives only from effective grant/shared counts and occupancy. Service/quota/fault restrictions remain in their proper roles; there is no separate authorization concurrency cap. This sentence adopts the latest owner951 correction. Host and Sideagent roles do not consume worker seats. Show no Expert authorization as none, without implying a grant.
 
 Derive the report from existing current authorization and verified occupancy/task links. Do not create a second writable seat table, copy occupancy into Delegator JSON, retain historical seat rows, or inject complete model profiles. Reuse the existing Host dispatch view when needed; no new mandatory Host reading or reporting cycle.
 
@@ -201,7 +200,7 @@ when an original source requires an explicit locator. Without `--live`, the
 existing Runner lists fresh verified holders. Missing task/availability facts
 remain unknown; an empty project list does not prove external account or
 native QA target capacity. Shared counts use the current grant groups and
-existing Delegator ceilings. Profiles stay on demand. The same read-only
+existing Delegator grant restrictions. Profiles stay on demand. The same read-only
 `project --seats` interface remains available to Host when dispatch needs it.
 Update generated Skills through the renderer. Existing state migration keeps
 the schemas and pending duty links; installed old views need the accepted
@@ -236,3 +235,46 @@ stop that name cannot be reused.
 ```
 
 Do not stop a session this plan did not start.
+
+### Owner correction: seat counts are the authorization capacity (2026-10-06)
+
+The authorization JSON records which runtime/tier choices or shared groups are granted and how many seats each has. Do not offer an independently writable aggregate concurrency cap such as `elite_cap`, `total_cap`, or an equivalent renamed field. This supersedes earlier language retaining an optional extra aggregate cap.
+
+Compute available capacity from effective individual/shared grant counts and current occupancy. Shared tiers refer to one shared count, not separate additive grants. Derived totals may be shown to the user but are not another stored authorization value. Preserve model-switch scope, grant lifetime and applicable owner restrictions; keep service/quota/fault facts in their existing proper current-state locations, not an invented concurrency grant limit.
+
+Update the existing admission and role/report projections to consume this same authority. Migration must remove obsolete standalone aggregate limits without changing individual/shared grants or interrupting active work; if legacy total-limit intent conflicts with grant counts, make that specific ambiguity actionable rather than silently inventing authority. For this run the owner explicitly revoked the old cap4: current individual/shared grants authorize six possible Elite worker seats.
+
+Use existing affected checks to prove all granted seats can be used, shared counts are respected and excess per-grant admission remains refused. Do not substitute a huge numeric cap, another override list or a free-text capacity policy.
+
+
+Migration plans remove null or demonstrably redundant known legacy aggregate keys.
+A legacy integer must be at least the sum of all explicit shared counts, counted
+once, with every count known. Total-only, smaller, malformed or Worker-pool
+limits stay actionable blockers. Active work, original duty links and grants stay
+unchanged. Resolve from original owner evidence, then use the existing Host
+`state update --section authorization --set '{"elite_cap":null}'` or Delegator
+`update --expect-revision REV --set '{"authorization":{"elite_cap":null}}'`
+with the exact file, writer and source. Repeat the read-only migration plan
+before `--write`. Do not move the old limit to a note or renamed field.
+A missing Elite/Expert count is `count-unreadable`; source the exact count.
+Worker pool defaults and grant-specific restrictions remain unchanged.
+
+### Owner correction: minimal current facts and owner requirements only (2026-10-06)
+
+The owner requires the two routinely read JSONs to allow only concise CURRENT information and effective owner requirements. This is a field/source/lifecycle design constraint, not a word blacklist or an instruction to shorten arbitrary prose. Ordinary project notes and original evidence outside these routinely injected surfaces retain their existing scope.
+
+Personal source review found seven concrete groups to consolidate in this issue:
+
+1. Remove independently writable aggregate concurrency limits, as already specified above. Capacity comes from individual/shared seat grants.
+2. Keep model-switch authorization in one canonical grant/group location. Do not independently maintain both per-grant `model_switch` and a second `model_switches` list. Preserve the exact owner-approved choices and switching permission; a list of permitted tiers alone must not invent permission to switch a running seat.
+3. Derive eligible/capability preset lists from current grants, the declared default Worker pool, exclusions, scoped holds and actual availability evidence. `capability_summary.presets` must not be a second manually maintained authority or a shortcut that bypasses those sources. Preserve unknown availability honestly.
+4. Derive catalog-owned Class definitions, preset Class, profile and default model/effort from the existing version-matched catalog/templates. They remain visible in the appropriate Host view/candidate tool and user report, but are not separately agent-authored routine state. Retain explicit owner overrides as overrides, not copied defaults.
+5. A shared grant has one authoritative count and one set of permitted choices/restrictions. Repeated tier rows must not each own a competing copy of the group count. Reuse the existing grouped owner grant representation and generate any compatibility rows mechanically. Do not add another group registry or lose per-choice restrictions.
+6. Revoked/expired/completed entries are not authorization history to retain in current JSON. Remove settled entries. A still-effective exclusion of a default-authorized Worker preset remains a current exclusion; a revoked seat still requiring exact stop/handoff retains that CURRENT recovery duty until resolved. Do not erase those duties or silently restore default-pool authorization. A paused/on-hold grant remains authorized but unavailable, with its current reason and reopening route. No duplicate pause state in several independently writable collections.
+7. Keep one concise current objective and original source pointers. Do not append issue-by-issue adoption history, earlier decisions, copied Skill rules or completed relay narratives into `project.goal`, `rules`, `requirements_source`, `watch` or equivalent fields. Task details stay with their current task/forge source. Resolved relays and exceptions leave routine state; history remains in the existing original evidence/Git/forge/Runner locations.
+
+Owner requirements: project-specific owner requirements stay in the existing user section of AGENTS.md; current operating settings and grants use their existing typed configuration fields. Keep only a source reference in routine views when the source owns the full text. Do not create a second requirements narrative or let an agent invent requirements. Reflect a new owner correction by replacing superseded current content while preserving unfulfilled duties.
+
+For each field retained, identify its authoritative writer/source and the CURRENT decision, delivery, recovery or consistency need it serves. Computable totals/occupancy/candidates are tool outputs, not independent agent-maintained records. Keep necessary exact identities, concurrency revisions, pending-delivery/maintenance sequence and scoped recovery checkpoints: these cannot safely be reconstructed from a count or current text. A tool-generated compatibility body/cache can remain where an actual consumer requires it; it must be regenerated from the same source and never become a second writable authority. Authorization relay/adoption across Delegator and Host must retain its real ownership boundary.
+
+Apply this through the existing shared field contract, writers, consumer projections and migration. Do not merely hide duplicate stored fields in the user report. Reuse current checks to show a grant/count/switch/exclusion change updates every derived view, resolved records disappear without losing active duties, and old readers cannot silently expand authorization. Keep mixed-version limitations and actionable migration explicit. No new schema framework, state store, periodic full audit or blanket live-file rewrite is authorized by this correction. Preserve the active sole writer and in-flight work.

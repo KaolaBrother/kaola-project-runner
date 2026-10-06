@@ -31,6 +31,7 @@ from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 HOLDER = SCRIPT_DIR / "kaola-acp-holder.py"
+LAUNCH_BROKER = SCRIPT_DIR / "kaola-launchd-broker.py"
 MODEL_POLICY_HELPER = SCRIPT_DIR / "kaola-model-policy.py"
 FAST_VARIANT_SUFFIXES = ("-fast", "-priority")
 SESSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
@@ -3573,26 +3574,50 @@ def record_start_evidence(sock: Path, receipt: dict[str, Any], args: argparse.Na
         receipt["start_evidence_error"] = reply["error"]
 
 
-def stop_started_holder(sock: Path, proc: subprocess.Popen) -> dict[str, Any]:
-    """Force-stop the holder this start just spawned and reap it."""
-    stop_reply = socket_request(sock, "stop", {"force": True}, 30.0)
-    # Reap through proc.wait: an exited holder stays a zombie under
-    # pid_alive until its own Popen object collects it.
-    try:
-        proc.wait(timeout=10.0)
-    except subprocess.TimeoutExpired:
+def stop_started_holder(sock: Path, proc: subprocess.Popen | None,
+                        holder_pid: int | None = None,
+                        expected_instance: str | None = None) -> dict[str, Any]:
+    """Force-stop the holder this start just created and report its truth.
+
+    The direct path reaps its own Popen child. The outside-launch path (#266)
+    has no local child: it stops through the socket and reports the reply's
+    residual facts, never polling a process object it does not own.
+    """
+    params: dict[str, Any] = {"force": True}
+    if expected_instance:
+        params["expected_holder_instance_id"] = expected_instance
+    stop_reply = socket_request(sock, "stop", params, 30.0)
+    reply = stop_reply if isinstance(stop_reply, dict) else {}
+    stopped = reply.get("stopped") is True
+    residual = reply.get("residual_pids")
+    if proc is not None:
+        # Reap through proc.wait: an exited holder stays a zombie under
+        # pid_alive until its own Popen object collects it.
         try:
-            os.killpg(proc.pid, signal.SIGKILL)
-        except OSError:
-            pass
-        try:
-            proc.wait(timeout=5.0)
+            proc.wait(timeout=10.0)
         except subprocess.TimeoutExpired:
-            pass
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except OSError:
+                pass
+            try:
+                proc.wait(timeout=5.0)
+            except subprocess.TimeoutExpired:
+                pass
+        holder_alive = proc.poll() is None
+    else:
+        holder_alive = pid_alive(holder_pid) if holder_pid is not None else None
+    # The holder validates the expected instance before it mutates and does not
+    # echo it back. Clean is a bound request plus a positive stop, an actual
+    # empty residual list, and a gone holder; anything else stays unknown.
+    reclaimed = (stopped and isinstance(residual, list) and residual == []
+                 and holder_alive is False)
     return {
-        "host_session_stopped": bool(isinstance(stop_reply, dict) and stop_reply.get("stopped")),
-        "residual_pids": stop_reply.get("residual_pids") if isinstance(stop_reply, dict) else None,
-        "holder_alive": proc.poll() is None,
+        "host_session_stopped": stopped,
+        "residual_pids": residual,
+        "holder_alive": holder_alive,
+        "holder_reclaimed": reclaimed,
+        "holder_identity": {"holder_pid": holder_pid},
     }
 
 
@@ -4468,6 +4493,90 @@ def pre_spawn_refusal(args: argparse.Namespace,
                   "hostish": hostish, "resolution": resolution}
 
 
+LAUNCH_BACKENDS = ("direct", "launchd", "auto", "systemd-user")
+
+
+def resolved_launch_backend(args: argparse.Namespace) -> str:
+    """Issue #266: explicit flag, else the inherited backend, else auto.
+
+    ``auto`` uses the shared outside-caller launcher when it is available (the
+    normal macOS path) and only degrades to direct when it is not. A Host started
+    outside exports KAOLA_LAUNCH_BACKEND to its agent, so the seats it dispatches
+    use the same path.
+    """
+    explicit = getattr(args, "launch_backend", None)
+    if explicit:
+        return explicit
+    return os.environ.get("KAOLA_LAUNCH_BACKEND") or "auto"
+
+
+def outside_launch_requested(args: argparse.Namespace) -> bool:
+    return resolved_launch_backend(args) != "direct"
+
+
+def spawn_holder_outside(args: argparse.Namespace, repo: str, directory: Path,
+                         holder_argv: list[str], holder_env: dict[str, str],
+                         log_path: Path, sock: Path) -> dict[str, Any]:
+    """Launch the holder as a one-shot per-user job; never through the caller.
+
+    The broker receives only ``holder_env`` and filters it; the literal holder
+    argv travels through a mode-600 exclusive file that is removed here.
+    """
+    broker = LAUNCH_BROKER
+    requested = resolved_launch_backend(args)
+    if not broker.is_file():
+        if requested == "auto":
+            return {"degraded": True, "detail": "the outside launcher is not installed"}
+        return {"error": {"code": "launch-broker-missing",
+                          "message": f"outside-caller launch requested but {broker} is not installed"}}
+    run_base = directory / "launch"
+    run_base.mkdir(parents=True, exist_ok=True)
+    os.chmod(run_base, 0o700)
+    argv_file = run_base / ("argv-" + secrets.token_hex(6) + ".json")
+    fd = os.open(argv_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        os.write(fd, json.dumps(holder_argv).encode("utf-8"))
+    finally:
+        os.close(fd)
+    cmd = [sys.executable, str(broker), "submit",
+           "--platform", args.platform, "--session", args.session, "--repo", repo,
+           "--record-dir", str(directory), "--socket", str(sock), "--log", str(log_path),
+           "--cwd", repo, "--run-base", str(run_base),
+           "--backend", resolved_launch_backend(args), "--argv-json", str(argv_file)]
+    child_record = holder_env.get("KAOLA_ACP_CHILD_RECORD")
+    if child_record:
+        cmd += ["--child-record", child_record]
+    for key in (args.manifest.get("acp_env_allowlist") or "").split(","):
+        if key:
+            cmd += ["--env-allow", key]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                                timeout=START_WAIT + session_new_extra(args) + 60,
+                                env={**holder_env})
+    except subprocess.TimeoutExpired:
+        return {"error": {"code": "launch-broker-timeout",
+                          "message": "the outside launcher did not answer inside the window"},
+                "holder_may_exist": True}
+    finally:
+        try:
+            argv_file.unlink()
+        except OSError:
+            pass
+    try:
+        out = json.loads(result.stdout)
+    except ValueError:
+        return {"error": {"code": "launch-broker-failed",
+                          "message": (result.stderr or result.stdout or "no broker receipt")[-300:]},
+                "holder_may_exist": True}
+    if out.get("result") not in ("ready", "existing"):
+        if requested == "auto" and out.get("reason") == "launch-backend-unsupported":
+            return {"degraded": True, "detail": out.get("detail")}
+        return {"error": {"code": out.get("reason") or "launch-broker-failed",
+                          "message": out.get("detail") or "outside launch refused"},
+                "holder_may_exist": bool(out.get("holder_may_exist"))}
+    return {"launch": out}
+
+
 def command_start(args: argparse.Namespace, repo: str,
                   decided: tuple[dict[str, Any] | None, dict[str, Any]] | None = None
                   ) -> dict[str, Any]:
@@ -4585,27 +4694,59 @@ def command_start(args: argparse.Namespace, repo: str,
         "fast": fast_intent(args),
         "mode": mode_value,
         "session_role": role,
+        "launch_backend": resolved_launch_backend(args),
     }, sort_keys=True)]
     cli_version = cli_version_fact(args, holder_env)
     if cli_version is not None:
         holder_argv += ["--cli-version", json.dumps(cli_version, sort_keys=True)]
-    with open(log_path, "ab") as log:
-        if heartbeat_host is not None:
-            # Hand the holder the target this command validated and resolved,
-            # so the binding it reports back is the one that was checked here
-            # rather than a re-reading of the caller's raw string.
-            holder_env[HEARTBEAT_HOST_ENV] = json.dumps(heartbeat_host, sort_keys=True)
-            holder_env[HEARTBEAT_HOST_SOCKET_ENV] = heartbeat_host["socket"]
-        proc = subprocess.Popen(
-            holder_argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-            start_new_session=True, env=holder_env,
-        )
-    # When this start runs inside an outer agent (nested Host/Worker chain),
-    # record the holder's identity for the outer holder's exact sweep.
-    child_record = record_holder_child_spawn(proc)
-    if child_record is not None:
-        receipt["child_record"] = child_record
     sock = sock_path(args, repo)
+    if heartbeat_host is not None:
+        # Hand the holder the target this command validated and resolved,
+        # so the binding it reports back is the one that was checked here
+        # rather than a re-reading of the caller's raw string.
+        holder_env[HEARTBEAT_HOST_ENV] = json.dumps(heartbeat_host, sort_keys=True)
+        holder_env[HEARTBEAT_HOST_SOCKET_ENV] = heartbeat_host["socket"]
+    proc: subprocess.Popen | None = None
+    holder_pid_hint: int | None = None
+    request = resolved_launch_backend(args)
+    if request != "direct":
+        # Issue #266: name the backend to the holder so its seats inherit it.
+        holder_env["KAOLA_LAUNCH_BACKEND"] = request
+    launched = None
+    if request != "direct":
+        launched = spawn_holder_outside(args, repo, directory, holder_argv, holder_env, log_path, sock)
+        if launched.get("degraded"):
+            # auto: the outside launcher is unavailable; fall back to the
+            # explicit direct path and say so in the receipt.
+            receipt["launch_backend_degraded"] = True
+            launched = None
+        elif "error" in launched:
+            receipt["error"] = launched["error"]
+            # A holder may already exist; report that truth instead of not_started.
+            if launched.get("holder_may_exist"):
+                receipt["mutation_status"] = "unknown"
+                receipt["mutation_performed"] = None
+            else:
+                receipt["mutation_status"] = "not_started"
+                receipt["mutation_performed"] = False
+            return receipt
+    if launched is None:
+        receipt.setdefault("launch_backend", "direct")
+        with open(log_path, "ab") as log:
+            proc = subprocess.Popen(
+                holder_argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                start_new_session=True, env=holder_env,
+            )
+        holder_pid_hint = proc.pid
+        # When this start runs inside an outer agent (nested Host/Worker chain),
+        # record the holder's identity for the outer holder's exact sweep.
+        child_record = record_holder_child_spawn(proc)
+        if child_record is not None:
+            receipt["child_record"] = child_record
+    else:
+        holder_pid_hint = launched["launch"].get("holder_pid")
+        if launched["launch"].get("child_record") is not None:
+            receipt["child_record"] = launched["launch"]["child_record"]
     deadline = time.monotonic() + START_WAIT + session_new_extra(args)
     state: dict[str, Any] | None = None
     while time.monotonic() < deadline:
@@ -4614,17 +4755,17 @@ def command_start(args: argparse.Namespace, repo: str,
             if "error" not in state or state.get("error", {}).get("code") != "holder-unreachable":
                 if state.get("state") in ("ready", "error", "agent_exited"):
                     break
-        if not pid_alive(proc.pid):
+        if not pid_alive(holder_pid_hint):
             break
         time.sleep(0.1)
     if state is None:
         record = read_record(directory) or {}
         receipt["error"] = {"code": "holder-start-timeout",
                             "message": "holder did not report within the start window",
-                            "holder_pid": proc.pid}
+                            "holder_pid": holder_pid_hint}
         return receipt
     receipt.update({
-        "holder_pid": state.get("holder_pid", proc.pid),
+        "holder_pid": state.get("holder_pid", holder_pid_hint),
         "holder_instance_id": state.get("holder_instance_id"),
         "agent_pid": state.get("agent_pid"),
         "acp_session_id": state.get("acp_session_id"),
@@ -4880,6 +5021,9 @@ def command_start(args: argparse.Namespace, repo: str,
         problem = (explicit_selection_problem(explicit_model, explicit_effort, effective)
                    if args.platform in EXPLICIT_SELECTION_VERIFIED else None)
         if problem is not None:
+            stopped = stop_started_holder(sock, proc, holder_pid_hint,
+                                          receipt.get("holder_instance_id"))
+            reclaimed = stopped.get("holder_reclaimed") is True
             receipt.pop("error", None)
             receipt.update({
                 "result": "refused",
@@ -4888,9 +5032,9 @@ def command_start(args: argparse.Namespace, repo: str,
                 "detail": (f"the {args.platform} agent did not report the explicit "
                            f"selection: {problem}; the session was stopped before this "
                            "start returned, and no other model was substituted."),
-                **stop_started_holder(sock, proc),
-                "mutation_performed": False,
-                "mutation_status": "not_started",
+                **stopped,
+                "mutation_performed": False if reclaimed else None,
+                "mutation_status": "not_started" if reclaimed else "unknown",
             })
             return receipt
         if host_required:
@@ -4906,7 +5050,9 @@ def command_start(args: argparse.Namespace, repo: str,
                 effective_model, effective_effort)
             receipt["host_selection"] = host_fact
             if not host_fact["verified"]:
-                stopped = stop_started_holder(sock, proc)
+                stopped = stop_started_holder(sock, proc, holder_pid_hint,
+                                              receipt.get("holder_instance_id"))
+                reclaimed = stopped.get("holder_reclaimed") is True
                 receipt.pop("error", None)
                 receipt.update({
                     "result": "refused",
@@ -4919,8 +5065,8 @@ def command_start(args: argparse.Namespace, repo: str,
                         "stopped before this start returned."
                     ),
                     **stopped,
-                    "mutation_performed": False,
-                    "mutation_status": "not_started",
+                    "mutation_performed": False if reclaimed else None,
+                    "mutation_status": "not_started" if reclaimed else "unknown",
                 })
                 return receipt
         record_start_evidence(sock, receipt, args, repo, prior_record)
@@ -4954,6 +5100,7 @@ def _selection_explicit(args: argparse.Namespace) -> dict[str, bool]:
         "fast": args.fast is not None,
         "mode": args.mode is not None,
         "command": args.agent_command_given,
+        "launch_backend": args.launch_backend is not None,
     }
 
 
@@ -4984,6 +5131,8 @@ def apply_recorded_selection(args: argparse.Namespace, record: dict[str, Any]) -
             args.fast = saved["fast"]
         if not explicit["mode"] and isinstance(saved.get("mode"), str):
             args.mode = saved["mode"]
+        if not explicit["launch_backend"] and isinstance(saved.get("launch_backend"), str):
+            args.launch_backend = saved["launch_backend"]
     if not explicit["command"] and not os.environ.get("KAOLA_ACP_COMMAND"):
         args.agent_command = manifest_launch_command(
             args, tier_agent_command(args) or args.manifest.get("acp_command") or ""
@@ -5243,6 +5392,8 @@ def main() -> int:
     parser.add_argument("--request-id")
     parser.add_argument("--option")
     parser.add_argument("--expected-holder-instance-id")
+    parser.add_argument("--launch-backend", choices=LAUNCH_BACKENDS, default=None,
+                        help="holder launch backend: auto (default), direct, launchd or systemd-user")
     parser.add_argument("--key")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--preserve-dispatched-workers", action="store_true",

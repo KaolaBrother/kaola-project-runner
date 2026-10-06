@@ -35,7 +35,10 @@ row leaves stored `watch`: `update --expect-revision REV --source ORIGINAL
 evidence also removes it; `sent` remains pending. Do not move settled text to
 another field. An absent row is not created. An unresolved unclassified matter
 keeps original evidence on the current decision/reconciliation route.
-Use exact preset ids and integer counts. Do not infer counts or switch
+Use exact preset ids and integer counts; no standalone aggregate or Worker pool cap.
+Migration removes only null or provably redundant legacy limits. Conflicting or
+total-only intent needs original owner reconciliation and a sourced, revision-bound
+null removal through the existing update; never expand authority silently. Do not infer counts or switch
 permission from a condition. The plan gives each blocked path, its allowed
 form, and recovery. A refusal leaves the file unchanged. Normal updates write
 the same closed `kaola-delegator-heartbeat/1` form. `execute` reports an old
@@ -77,8 +80,8 @@ report has these five parts, in order. An empty part says
    capacity. Count each shared tier group once (Claude one; Droid count two
    when granted). Working, idle-but-unreclaimed, reserved, held/faulted and
    unknown are distinct; `ready` alone proves none of them. Unknown is not free.
-   Missing Expert authorization says “none”. Apply the total cap and current
-   resource limits; per-grant free counts are not additive. Host/Sideagent and
+   Missing Expert authorization says “none”. Derive totals from grant/shared counts
+   and occupancy; keep service/quota/fault restrictions in their proper roles. Host/Sideagent and
    Pool seats are exempt. The view derives these facts from current grants,
    dispatch/task links and fresh Runner records. Keep no occupancy table in
    either JSON. External QA target capacity needs its original resource receipt.
@@ -111,3 +114,12 @@ user; a busy granted seat is a capacity wait, not a request. If the Host and
 its Sideagent both fail, recover the Host first; the Host replaces its
 Sideagent. A request from the Host reaches you only at your next read; there
 is no faster carrier.
+
+Current authorization stores one grouped count, choices and switch permission.
+Choices alone do not permit switching. Derive Class/defaults and capabilities
+from the matched catalog, grants/default pool, exclusions, holds and availability;
+unknown stays explicit. Store only owner overrides. Remove settled grants and
+relays; keep active exclusions, pause reopening and exact stop/handoff duties.
+Keep the current objective and source pointers, not adoption history or copied
+Skill rules. AGENTS user requirements remain the source. Ambiguous legacy
+count/switch intent needs original evidence and owner recovery before migration.

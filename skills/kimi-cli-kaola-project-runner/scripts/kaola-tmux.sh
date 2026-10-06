@@ -18,7 +18,7 @@ ACP_CLI="$script_dir/kaola-acp.py"
 usage() {
   printf '%s\n' 'Usage:
   kaola-tmux.sh PLATFORM preflight --repo ABS_PATH --session NAME
-  kaola-tmux.sh PLATFORM start     --repo ABS_PATH --session NAME [--continue | --resume ID] [--tier default|PLATFORM_TIER] [--model ID --effort LEVEL] [--fast on|off] [--role sideagent]
+  kaola-tmux.sh PLATFORM start     --repo ABS_PATH --session NAME [--continue | --resume ID] [--tier default|PLATFORM_TIER] [--model ID --effort LEVEL] [--fast on|off] [--role sideagent] [--launch-backend direct|launchd|auto|systemd-user]
   kaola-tmux.sh PLATFORM observe   --repo ABS_PATH --session NAME
   kaola-tmux.sh PLATFORM status    --repo ABS_PATH --session NAME
   kaola-tmux.sh PLATFORM capture   --repo ABS_PATH --session NAME [--lines N] [--full]
@@ -87,13 +87,14 @@ case "$command_name" in preflight|start|observe|status|capture|send|steer|wait|p
 repo="" session="" resume_id="" continue_mode=false force=false lines=120 text_value="" text_given=false
 if_snapshot="" require_empty_editor=false decision_id="" replace_editor=false model="" effort="" permission_mode=auto
 model_given=false effort_given=false permission_mode_given=false key_name="" transport="" transport_given=false
+launch_backend="" launch_backend_given=false
 tier="" tier_given=false fast="off" fast_given=false role="" role_given=false
 acp_wait="" timeout="" request_id="" option="" capture_tools=false capture_since="" capture_full=false capture_inline=false
 expected_holder_instance_id="" expected_holder_instance_id_given=false steer_mode="" cancel_timeout=""
 preserve_dispatched=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --repo|--session|--resume|--lines|--text|--if-snapshot|--decision-id|--model|--effort|--tier|--role|--fast|--permission-mode|--transport|--key|--steer-mode|--cancel-timeout|--timeout|--request-id|--option|--expected-holder-instance-id|--since)
+    --repo|--session|--resume|--lines|--text|--if-snapshot|--decision-id|--model|--effort|--tier|--role|--fast|--permission-mode|--transport|--key|--steer-mode|--cancel-timeout|--timeout|--request-id|--option|--expected-holder-instance-id|--since|--launch-backend)
       [[ $# -ge 2 ]] || die "missing value for $1" ;;
   esac
   case "$1" in
@@ -111,6 +112,7 @@ while [[ $# -gt 0 ]]; do
     --wait) acp_wait=true; shift ;; --no-wait) acp_wait=false; shift ;; --timeout) timeout="$2"; shift 2 ;;
     --request-id) request_id="$2"; shift 2 ;; --option) option="$2"; shift 2 ;; --tools) capture_tools=true; shift ;;
     --expected-holder-instance-id) expected_holder_instance_id="$2"; expected_holder_instance_id_given=true; shift 2 ;;
+    --launch-backend) launch_backend="$2"; launch_backend_given=true; shift 2 ;;
     --since) capture_since="$2"; shift 2 ;; --full) capture_full=true; shift ;; --inline) capture_inline=true; shift ;;
     -h|--help) usage; exit 0 ;; *) die "unknown argument; use --help for the accepted arguments" ;;
   esac
@@ -214,6 +216,7 @@ if [[ "$command_name" == start || "$command_name" == preflight || "$command_name
   [[ "$tier_given" == true ]] && acp_args+=(--tier "$tier")
   [[ "$fast_given" == true ]] && acp_args+=(--fast "$fast")
   [[ "$role_given" == true ]] && acp_args+=(--role "$role")
+  [[ "$launch_backend_given" == true ]] && acp_args+=(--launch-backend "$launch_backend")
 fi
 # Issue #181: the per-platform permission-mode default lives once, in
 # kaola-acp.py's ACP_SKIP_MODE. This layer forwards only an explicit choice;

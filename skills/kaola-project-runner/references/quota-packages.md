@@ -8,7 +8,7 @@ Read this when receipts, captures, or events show an explicit limit or an accoun
 
 **Expert.** Preserve the task, output, and native resume id, and ask the user. No substitute Expert, no reuse of an old grant, no downgrade. Unrelated work continues.
 
-**Elite.** Preserve the output and locator, and safely reclaim (exact-stop) the seat. Revoke this run-seat: remove its availability from this run's heartbeat snapshot. Hand the task to another suitable, already-authorized Elite that is not on the known limited pool, within counts and caps. Never restart it under the old grant or switch its model to get around the limit; only the user reauthorizes.
+**Elite.** Preserve the output and locator, and safely reclaim (exact-stop) the seat. Revoke this run-seat: remove its availability from this run's heartbeat snapshot. Hand the task to another suitable, already-authorized Elite that is not on the known limited pool, within granted/shared counts and current resource limits. Never restart it under the old grant or switch its model to get around the limit; only the user reauthorizes.
 
 **Worker.** Another suitable Worker takes the task under the pool permission. The cap exemption is kept and real limits apply. Never cycle seats of a known limited shared pool.
 

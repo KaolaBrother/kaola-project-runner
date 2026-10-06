@@ -77,10 +77,12 @@ class RecordContract(unittest.TestCase):
 
     def init(self, authorization: dict | None = None) -> None:
         auth = authorization or {
-            "classes": dict(CLASS_SENTENCES),
             "grants": [{"id": "codex/default", "state": "granted", "count": 1}],
-            "elite_cap": 2,
         }
+        if any(grant.get("shared_seat") for grant in auth.get("grants", [])):
+            contract = load_module(REPO / "scripts/kaola-record-contract.py", "grouped_fixture_contract")
+            auth, blockers, _ = contract.migrate_authorization_limits(auth)
+            self.assertEqual(blockers, [], "positive fixture group must have one consistent owner count")
         code, out = self.state(
             "init", "--file", str(self.file), "--writer", "host", "--source", "turn-1",
             "--project", json.dumps({"code": "KT", "goal": "close the selected issues", "repo": str(self.repo)}),
@@ -103,6 +105,171 @@ class RecordContract(unittest.TestCase):
             "--kind", "tasks", "--id", "t1", "--set", json.dumps({"stage": "todo", "goal": "repair"}))
         self.assertEqual(code, 0, out)
         self.assertEqual(self.doc()["state"]["tasks"]["t1"]["goal"], "repair")
+
+    def test_grant_counts_admit_six_without_aggregate_and_refuse_each_excess(self) -> None:
+        grants = [{"id": preset, "state": "granted", "count": 1}
+                  for preset in ("grok/default", "cursor-cli/default", "codex/default")]
+        grants += [{"preset_ids": ["droid/default", "droid/opus", "droid/core"], "shared_seat": "droid",
+                    "count": 2, "state": "granted", "model_switch": True},
+                   {"preset_ids": ["claude-code/default", "claude-code/opus-xhigh", "claude-code/sonnet"],
+                    "shared_seat": "claude-code", "count": 1, "state": "granted", "model_switch": True,
+                    "special_requirements": {"claude-code/opus-xhigh": {"task_scope": "thinking and review only"}}}]
+        self.init({"grants": grants})
+        live = self.repo / "live.json"; live.write_text('{"rows":[]}')
+        ids = ["grok/default", "cursor-cli/default", "codex/default", "droid/default", "droid/opus",
+               "claude-code/default", "droid/core", "codex/default", "claude-code/sonnet"]
+        plan = self.repo / "plan.json"
+        plan.write_text(json.dumps({"scope": "research", "repo": str(self.repo), "items": [
+            {"item_id": str(index), "preset": preset, "session": preset.split('/')[0] + '-KT-' + str(index),
+             "prompt": "bounded original task"} for index, preset in enumerate(ids[:6])]}))
+        args = ["execute", "--plan", str(plan), "--authorization", str(self.file),
+                "--platforms", str(PLATFORMS), "--live", str(live), "--dry-run"]
+        code, result = run_dispatch(args); self.assertEqual(code, 0, result)
+        rows = {row["item_id"]: row for row in result["items"]}
+        self.assertEqual([rows[str(i)]["reason"] for i in range(6)], ["dry-run"] * 6)
+        expanded = json.loads(plan.read_text())
+        expanded["items"] += [{"item_id": str(index), "preset": preset, "session": preset.split("/")[0] + "-KT-" + str(index), "prompt": "bounded excess"} for index, preset in enumerate(ids) if index >= 6]
+        plan.write_text(json.dumps(expanded)); code, result = run_dispatch(args); self.assertEqual(code, 0, result)
+        rows = {row["item_id"]: row for row in result["items"]}
+        self.assertEqual([rows[str(i)]["reason"] for i in (6, 7, 8)], ["shared-occupied", "count", "resource-conflict"])
+        self.assertNotIn("effective_cap", result)
+        before = self.file.read_bytes()
+        for key in ("elite_cap", "total_cap", "worker_pool_cap", "model_switches", "classes", "capability_summary"):
+            code, out = self.state("update", "--file", str(self.file), "--writer", "host", "--source", "owner",
+                                   "--section", "authorization", "--expect-revision", str(self.doc()["revision"]),
+                                   "--set", json.dumps({key: 4}))
+            self.assertEqual(code, 2, out); self.assertEqual(self.file.read_bytes(), before)
+        legacy_plan = json.loads(plan.read_text()); legacy_plan["seat_cap"] = 4; plan.write_text(json.dumps(legacy_plan))
+        code, out = run_dispatch(args); self.assertEqual(code, 2, out)
+        self.assertIn("plan.seat_cap", out["detail"])
+
+    def test_group_authority_propagates_switch_exclusions_catalog_and_current_duties(self) -> None:
+        choices = ["droid/default", "droid/opus", "droid/core"]
+        grant = {"preset_ids": choices, "shared_seat": "droid", "count": 1, "state": "granted", "model_switch": False,
+                 "special_requirements": {"droid/opus": {"task_scope": "original review only"}}}
+        self.init({"grants": [grant], "exclusions": ["zcode/default"]})
+        self.update("tasks", "reclaim", {"stage": "doing", "goal": "exact original reclaim",
+                                          "session": "droid-KT-original", "holder_instance_id": "exact-holder", "next": "Host exact stop"})
+        availability = self.repo / ".kaola" / "dispatch-availability.json"
+        availability.write_text(json.dumps({"present": choices + ["zcode/default"], "absent": ["droid/core"]}))
+        def project():
+            code, out = run_dispatch(["project", "--authorization", str(self.file), "--platforms", str(PLATFORMS),
+                                      "--availability", str(availability)])
+            self.assertEqual(code, 0, out); return out
+        out = project(); self.assertNotIn("zcode/default", out["capability_summary"]["presets"])
+        self.assertNotIn("droid/core", out["capability_summary"]["presets"])
+        self.assertFalse(next(row for row in out["candidates"] if row["id"] == choices[0])["model_switch"])
+        grant.update(count=2, model_switch=True)
+        code, out = self.state("update", "--file", str(self.file), "--writer", "host", "--source", "owner-change",
+                               "--section", "authorization", "--expect-revision", str(self.doc()["revision"]),
+                               "--set", json.dumps({"grants": [grant], "exclusions": []}))
+        self.assertEqual(code, 0, out)
+        stored = self.doc()["state"]["authorization"]
+        self.assertEqual(stored, {"grants": [grant], "exclusions": []})
+        out = project(); rows = {row["id"]: row for row in out["candidates"]}
+        self.assertEqual(rows[choices[0]]["count"], 2); self.assertTrue(rows[choices[0]]["model_switch"])
+        self.assertIn("zcode/default", out["capability_summary"]["presets"])
+        self.assertEqual(rows["droid/opus"]["special_requirements"], {"task_scope": "original review only"})
+        code, host = self.state("view", "--file", str(self.file), "--role", "host")
+        self.assertEqual(code, 0, host); self.assertEqual(host["catalog"]["classes"].keys(), {"Elite", "Expert", "Worker"})
+        self.assertEqual(host["capability"]["presets"], out["capability_summary"]["presets"])
+        self.assertEqual(len(json.loads(self.doc()["body"])["authorization"]["grants"]), 3)
+        grant["state"] = "revoked"
+        code, out = self.state("update", "--file", str(self.file), "--writer", "host", "--source", "owner-revoke",
+                               "--section", "authorization", "--expect-revision", str(self.doc()["revision"]),
+                               "--set", json.dumps({"grants": [grant, {"id": "zcode/default", "count": 1, "state": "revoked"}]}))
+        self.assertEqual(code, 0, out)
+        auth = self.doc()["state"]["authorization"]; self.assertEqual(auth["grants"], [])
+        self.assertEqual(auth["exclusions"], ["zcode/default"]); self.assertNotIn("revoked", auth)
+        self.assertEqual(self.doc()["state"]["tasks"]["reclaim"]["holder_instance_id"], "exact-holder")
+
+    def test_legacy_capacity_and_group_conflicts_stay_actionable_migration_repeats(self) -> None:
+        self.init()
+        code, out = self.update("tasks", "active-work", {"stage": "doing", "goal": "pending original task", "next": "read original result", "holder_instance_id": "original"})
+        self.assertEqual(code, 0, out)
+        original = self.doc()
+        for auth, path in [({"elite_cap": 4}, "authorization.elite_cap"),
+                           ({"elite_cap": 1, "grants": [{"id": "codex/default", "count": 2, "state": "granted"}]}, "authorization.elite_cap"),
+                           ({"worker_pool_cap": 1, "grants": []}, "authorization.worker_pool_cap"),
+                           ({"grants": [{"id": "droid/default", "count": 1, "shared_seat": "droid", "state": "granted"},
+                                        {"id": "droid/opus", "count": 2, "shared_seat": "droid", "state": "granted"}]}, "authorization.grants.droid"),
+                           ({"grants": [{"id": "codex/default", "count": 1, "state": "granted", "model_switch": False}],
+                             "model_switches": ["codex/default"]}, "authorization.model_switches")]:
+            doc = json.loads(json.dumps(original)); doc["state"]["authorization"] = auth
+            self.file.write_text(json.dumps(doc)); before = self.file.read_bytes()
+            code, out = self.state("migrate", "--file", str(self.file), "--write")
+            self.assertEqual(code, 2, out); self.assertEqual(self.file.read_bytes(), before)
+            self.assertIn(path, [row["path"] for row in out["blockers"]])
+            self.assertIn("original", out["blockers"][0]["recovery"])
+        doc = json.loads(json.dumps(original))
+        doc["state"]["authorization"] = {"elite_cap": 2, "classes": CLASS_SENTENCES,
+            "capability_summary": {"presets": ["codex/default", "grok/default"]},
+            "model_switches": ["droid/default", "droid/opus"], "grants": [
+                {"id": ident, "count": 2, "shared_seat": "droid", "state": "granted"} for ident in ("droid/default", "droid/opus")]}
+        self.file.write_text(json.dumps(doc)); before = self.file.read_bytes()
+        code, out = self.state("migrate", "--file", str(self.file)); self.assertEqual(code, 0, out)
+        self.assertEqual(self.file.read_bytes(), before)
+        code, out = self.state("migrate", "--file", str(self.file), "--write"); self.assertEqual(code, 0, out)
+        after = self.file.read_bytes(); auth = self.doc()["state"]["authorization"]
+        self.assertEqual(len(auth["grants"]), 1); self.assertTrue(auth["grants"][0]["model_switch"])
+        self.assertEqual(set(auth), {"grants"}); self.assertEqual(self.doc()["state"]["tasks"]["active-work"], original["state"]["tasks"]["active-work"])
+        code, out = self.state("migrate", "--file", str(self.file), "--write"); self.assertEqual(code, 0, out)
+        self.assertEqual(self.file.read_bytes(), after)
+
+    def test_delegator_group_pause_expiry_and_resolved_relay_preserve_current_duties(self) -> None:
+        self.init({"grants": [{"preset_ids": ["droid/default", "droid/opus"], "count": 2, "state": "granted"}]})
+        self.delegator.write_text(json.dumps({"schema": "kaola-delegator-heartbeat/1", "revision": 0,
+            "project": {"goal": "current objective", "user_language": "zh-TW"},
+            "authorization": {"worker_pool": ["zcode/default"], "exclusions": ["zcode/default"],
+                "elite_grants": [{"preset_ids": ["droid/default", "droid/opus"], "count": 2,
+                    "state": "paused", "switch_authorization": False,
+                    "special_requirements": {"droid/opus": {"task_scope": "authorized review"}}}],
+                "expert_task_grants": [{"preset_id": "codex/astra", "count": 1, "lifetime": "standing",
+                    "expires": "2000-01-01T00:00:00Z"}]},
+            "watch": {"stop": {"kind": "recovery", "status": "open", "source": "original-expiry",
+                    "next": "exact-stop original holder", "locator": "original-holder"},
+                "reopen": {"kind": "decision", "status": "pending", "detail": "service hold",
+                    "source": "original-owner", "next": "owner confirms reopening"},
+                "relay": {"kind": "relay", "status": "pending", "source": "owner-change", "next": "confirm adoption"}}}))
+        args = ["delegator", "migrate", "--file", str(self.delegator)]
+        before = self.delegator.read_bytes()
+        code, plan = run_dispatch(args); self.assertEqual(code, 0, plan)
+        self.assertEqual(self.delegator.read_bytes(), before)
+        code, out = run_dispatch(args + ["--write"]); self.assertEqual(code, 0, out)
+        current = json.loads(self.delegator.read_text())
+        self.assertEqual(current["authorization"]["expert_task_grants"], [])
+        self.assertEqual(current["watch"]["stop"]["locator"], "original-holder")
+        after = self.delegator.read_bytes()
+        code, out = run_dispatch(args + ["--write"]); self.assertEqual(code, 0, out)
+        self.assertEqual(self.delegator.read_bytes(), after)
+        live = self.repo / "live.json"; live.write_text('{"rows":[]}')
+        index = self.repo / "index.json"; index.write_text(json.dumps({"schema": "kaola-dispatch-index/1", "repo": str(self.repo), "items": []}))
+        availability = self.repo / "availability.json"
+        availability.write_text(json.dumps({"present": ["droid/default", "droid/opus"]}))
+        view_args = ["delegator", "view", "--file", str(self.delegator), "--repo", str(self.repo),
+                     "--platforms", str(PLATFORMS), "--live", str(live), "--index", str(index), "--availability", str(availability)]
+        code, view = run_dispatch(view_args); self.assertEqual(code, 0, view)
+        self.assertEqual(view["seats"]["expert_authorization"], "none")
+        self.assertEqual(view["seats"]["idle_available_total"], 0)
+        self.assertEqual(view["authorization"]["elite_grants"][0]["special_requirements"]["droid/opus"]["task_scope"], "authorized review")
+        patch = {"authorization": {"elite_grants": [{**current["authorization"]["elite_grants"][0], "state": "granted"}]},
+                 "watch": {"relay": {"status": "adopted", "evidence": "original-host-adoption"}}}
+        code, out = run_dispatch(["delegator", "update", "--file", str(self.delegator), "--writer", "delegator",
+            "--source", "owner-reopening-and-adoption", "--expect-revision", str(current["revision"]), "--set", json.dumps(patch)])
+        self.assertEqual(code, 0, out)
+        stored = json.loads(self.delegator.read_text())
+        self.assertNotIn("relay", stored["watch"])
+        self.assertEqual(set(stored["watch"]), {"stop", "reopen"})
+        self.assertEqual(stored["project"]["user_language"], "zh-TW")
+        self.assertEqual(stored["authorization"]["exclusions"], ["zcode/default"])
+        code, view = run_dispatch(view_args); self.assertEqual(code, 0, view)
+        self.assertEqual(view["seats"]["idle_available_total"], 2)
+        self.assertEqual(view["seats"]["authorized_total"], 2)
+        before = self.delegator.read_bytes()
+        code, out = run_dispatch(["delegator", "update", "--file", str(self.delegator), "--writer", "delegator",
+            "--source", "duplicate-switch", "--expect-revision", str(stored["revision"]), "--set",
+            json.dumps({"authorization": {"model_switches": ["droid/default"]}})])
+        self.assertEqual(code, 2, out); self.assertEqual(self.delegator.read_bytes(), before)
 
     def update(self, kind: str, ident: str, patch: dict, *args: str) -> tuple[int, dict]:
         return self.state("update", "--file", str(self.file), "--writer", "host", "--source", "original-source",
@@ -255,17 +422,15 @@ class RecordContract(unittest.TestCase):
                                json.dumps({"grants": [{"id": "codex/default", "state": "revoked", "count": 1},
                                                       {"id": "codex/astra", "state": "granted", "count": 1,
                                                        "expires": "2000-01-01T00:00:00Z"},
-                                                      {"id": "droid/default", "state": "granted", "count": 2}],
-                                           "capability_summary": {"presets": ["codex/default", "droid/default"]}}))
+                                                      {"id": "droid/default", "state": "granted", "count": 2}]}))
         self.assertEqual(code, 0, out)
         auth = self.doc()["state"]["authorization"]
         self.assertNotIn("codex/default", [g["id"] for g in auth["grants"]])
         self.assertNotIn("codex/astra", [g["id"] for g in auth["grants"]])
-        self.assertIn("codex/astra", auth["revoked"])
-        self.assertIn("codex/default", auth["revoked"], "current stop restriction prevents pool restoration")
-        self.assertEqual(auth["capability_summary"]["presets"], ["droid/default"])
+        self.assertNotIn("revoked", auth)
+        self.assertNotIn("capability_summary", auth)
         self.assertEqual(self.doc()["state"]["tasks"]["pending-stop"]["dispatch"], ["original"])
-        self.assertEqual(auth["classes"], CLASS_SENTENCES)
+        self.assertNotIn("classes", auth)
         self.delegator.write_text(json.dumps({"revision": 0, "authorization": {
             "revoked": ["codex/default", "codex/astra"], "worker_pool": ["codex/default", "codex/luna"],
             "expert_task_grants": [{"preset_id": "codex/astra", "count": 1}],
@@ -275,7 +440,9 @@ class RecordContract(unittest.TestCase):
         code, out = run_dispatch(["delegator", "migrate", "--file", str(self.delegator), "--write"])
         self.assertEqual(code, 0, out)
         saved = json.loads(self.delegator.read_text())
-        self.assertEqual(saved["authorization"]["worker_pool"], ["codex/luna"])
+        self.assertEqual(saved["authorization"]["worker_pool"], ["codex/default", "codex/luna"])
+        self.assertIn("codex/default", saved["authorization"]["exclusions"])
+        self.assertNotIn("revoked", saved["authorization"])
         self.assertEqual(saved["authorization"]["expert_task_grants"], [])
         self.assertEqual(saved["authorization"]["elite_grants"], [{"preset_ids": ["droid/default"], "count": 2}])
         self.assertEqual(saved["watch"]["stop"]["locator"], "original-holder")
@@ -292,12 +459,12 @@ class RecordContract(unittest.TestCase):
         grants += [{"id": "codex/default", "state": "granted", "count": 1},
                    {"id": "codex/astra", "state": "granted", "count": 1, "lifetime": "standing"},
                    {"id": "codex/luna", "state": "granted", "count": 3}]
-        self.init({"classes": dict(CLASS_SENTENCES), "grants": grants, "elite_cap": 4})
+        self.init({"grants": [{"preset_ids": [g["id"] for g in grants[:3]], "count": 1, "state": "granted", "shared_seat": "claude-code"}, {"preset_ids": [g["id"] for g in grants[3:6]], "count": 2, "state": "granted", "shared_seat": "droid"}] + grants[6:]})
         self.update("tasks", "real-review", {"stage": "doing", "goal": "read original review", "dispatch": ["original-review"]})
         self.update("tasks", "reclaim", {"stage": "doing", "goal": "exact reclaim", "session": "droid-KPR-returned",
                                           "holder_instance_id": "droid-original"})
         self.delegator.write_text(json.dumps({"schema": "kaola-delegator-heartbeat/1", "revision": 0,
-            "authorization": {"elite_cap": 4, "elite_grants": [
+            "authorization": {"elite_grants": [
                 {"preset_ids": [g["id"] for g in grants if g["id"].startswith("claude-code/")], "count": 1},
                 {"preset_ids": [g["id"] for g in grants if g["id"].startswith("droid/")], "count": 2},
                 {"preset_id": "codex/default", "count": 1},
@@ -335,14 +502,16 @@ class RecordContract(unittest.TestCase):
         self.assertEqual(droid["occupied"][0]["state"], "idle-but-unreclaimed")
         self.assertEqual(droid["idle_available"], 1)
         self.assertEqual(summary["occupied_elite_expert"], 3)
-        self.assertEqual(summary["idle_available_total"], 1, "per-grant free counts are not additive beyond cap")
+        self.assertEqual(summary["authorized_total"], 5)
+        self.assertEqual(summary["idle_available_total"], 2, "derive capacity from shared grants, never sum tier rows")
+        self.assertNotIn("elite_cap", summary)
         expert = next(g for g in groups if any(p["id"] == "codex/astra" for p in g["presets"]))
         self.assertEqual(expert["presets"][0]["lifetime"], "standing")
         self.assertEqual((expert["occupied"][0]["state"], expert["idle_available"]), ("reserved", 0))
         self.assertNotIn("codex/luna", json.dumps(groups))
         code, own = run_dispatch(["delegator", "view", "--file", str(self.delegator), *flags])
         self.assertEqual(code, 0, own)
-        for key in ("groups", "expert_authorization", "occupied", "idle_available_total", "elite_cap"):
+        for key in ("groups", "expert_authorization", "occupied", "idle_available_total", "authorized_total"):
             self.assertEqual(own["seats"][key], summary[key])
         code, on_demand = run_dispatch(["project", "--seats", "--repo", str(self.repo), "--authorization", str(self.file), *flags])
         self.assertEqual(code, 0, on_demand)
@@ -379,29 +548,17 @@ class RecordContract(unittest.TestCase):
         self.assertIsNone(view["seats"]["groups"][0]["idle_available"])
         self.assertEqual(self.file.read_bytes(), before)
 
-    def test_stored_class_sentences_stay_and_capability_is_separate(self) -> None:
-        self.init({
-            "classes": dict(CLASS_SENTENCES),
-            "grants": [
-                {"id": "droid/default", "state": "granted", "count": 2, "shared_seat": "droid"},
-                {"id": "droid/opus", "state": "granted", "count": 2, "shared_seat": "droid"},
-            ],
-            "elite_cap": 2,
-        })
+    def test_catalog_class_definitions_are_derived_without_stored_copies(self) -> None:
+        self.init({"grants": [{"preset_ids": ["droid/default", "droid/opus"], "count": 2, "state": "granted"}]})
         code, out = self.state("view", "--file", str(self.file), "--role", "host")
         self.assertEqual(code, 0, out)
-        self.assertEqual(out["authorization"]["classes"], CLASS_SENTENCES)
-        self.assertNotIn("paraphrase", json.dumps(out["authorization"]["classes"]))
-        seat = out["capability"]["shared_seats"][0]
-        self.assertEqual((seat["seat"], seat["count"]), ("droid", 2))
+        self.assertEqual(set(out["catalog"]["classes"]), {"Expert", "Elite", "Worker"})
+        self.assertNotIn("classes", self.doc()["state"]["authorization"])
+        self.assertEqual(out["capability"]["shared_seats"][0]["count"], 2)
+        self.assertIn("sha256", out["catalog"])
         code, side = self.state("view", "--file", str(self.file), "--role", "sideagent")
         self.assertEqual(code, 0, side)
-        self.assertEqual(side["state"]["authorization"]["classes"], CLASS_SENTENCES)
-        code, delegator = self.state("view", "--file", str(self.file), "--role", "delegator",
-                                     "--repo", str(self.repo))
-        self.assertEqual(code, 0, delegator)
-        self.assertIn("doing", delegator)
-        self.assertNotIn("retired", delegator)
+        self.assertNotIn("classes", side["state"]["authorization"])
 
     def test_shared_seat_group_keeps_grant_count_two(self) -> None:
         """Owner grant count is 2. One live seat leaves one place in that pool."""
@@ -427,14 +584,14 @@ class RecordContract(unittest.TestCase):
             "_shared_capacity": 2, "_platform": "droid", "_pool": True,
         }
         self.assertIsNone(
-            dispatch.held_refusal(item, used_count, 1, occupied, unnamed, None, grants, catalog))
+            dispatch.held_refusal(item, used_count, occupied, unnamed, grants, catalog))
         occupied["droid"] = 2
         self.assertEqual(
-            dispatch.held_refusal(item, used_count, 1, occupied, unnamed, None, grants, catalog),
+            dispatch.held_refusal(item, used_count, occupied, unnamed, grants, catalog),
             "shared-occupied")
 
     def test_stage_warning_clears_only_on_a_sourced_stage(self) -> None:
-        body = {"project": {"code": "KT"}, "authorization": {"elite_cap": 2},
+        body = {"project": {"code": "KT"}, "authorization": {"grants": []},
                 "pending": [{"duty": "apply the named repair", "owner": "Host"}]}
         self.file.write_text(json.dumps({"schema": "kaola-heartbeat-prompt/1", "body": json.dumps(body)}),
                              encoding="utf-8")
@@ -618,12 +775,12 @@ class RecordContract(unittest.TestCase):
 
     def test_v090_execute_reads_the_new_file_both_ways(self) -> None:
         auth = {
-            "classes": dict(CLASS_SENTENCES),
+
             "grants": [
                 {"id": "codex/default", "state": "granted", "count": 1},
                 {"id": "zcode/default", "state": "paused", "count": 1},
             ],
-            "elite_cap": 2,
+
         }
         self.init(auth)
         self.state("update", "--file", str(self.file), "--writer", "host", "--source", "s",
@@ -674,7 +831,7 @@ class RecordContract(unittest.TestCase):
 
     def test_delegator_ceiling_narrows_new_dispatch_and_keeps_a_live_row(self) -> None:
         auth = {
-            "classes": dict(CLASS_SENTENCES),
+
             "grants": [
                 {"id": "codex/default", "state": "granted", "count": 1},
                 {"id": "claude-code/default", "state": "granted", "count": 1},
@@ -682,7 +839,7 @@ class RecordContract(unittest.TestCase):
                 {"id": "droid/opus", "state": "granted", "count": 4, "shared_seat": "droid"},
                 {"id": "droid/core", "state": "granted", "count": 4, "shared_seat": "droid"},
             ],
-            "elite_cap": 8,
+
         }
         self.init(auth)
         prompt = "keep the live seat"
@@ -723,16 +880,16 @@ class RecordContract(unittest.TestCase):
             "authorization": {
                 "elite_grants": [
                     {"preset_ids": ["droid/default", "droid/opus", "droid/core"], "count": 2},
-                    {"preset_id": "codex/default", "count": 1},
+                    {"preset_id": "codex/default", "count": 1, "state": "revoked"},
                 ],
-                "elite_cap": 4,
+
                 "worker_pool": ["zcode/default"],
-                "revoked": ["codex/default"],
+
             },
         }), encoding="utf-8")
         code, limited = run_dispatch(base)
         self.assertEqual(code, 0, limited)
-        self.assertEqual(limited["effective_cap"], 4)
+        self.assertNotIn("effective_cap", limited)
         rows = {row["item_id"]: row for row in limited["items"]}
         self.assertEqual(rows["new-claude"]["status"], "not-run")
         self.assertEqual(rows["new-claude"]["reason"], "above-ceiling")
@@ -764,9 +921,9 @@ class RecordContract(unittest.TestCase):
 
         classes = dict(CLASS_SENTENCES)
         pool = rows(
-            {"classes": classes, "grants": [], "elite_cap": 4},
-            {"worker_pool": ["dsh/default", "zcode/default"], "worker_pool_cap": 1,
-             "elite_grants": [], "elite_cap": 4},
+            { "grants": []},
+            {"worker_pool": ["dsh/default", "zcode/default"],
+             "elite_grants": []},
             [{"preset": "dsh/default", "platform": "dsh", "session": "dsh-existing",
               "repo": str(self.repo.resolve()), "state": "running"}],
             [{"item_id": "zcode-new", "preset": "zcode/default", "session": "zcode-new",
@@ -774,13 +931,13 @@ class RecordContract(unittest.TestCase):
         )
         with self.subTest("worker-cap"):
             self.assertEqual(pool["zcode-new"]["status"], "not-run")
-            self.assertEqual(pool["zcode-new"]["reason"], "seat-cap")
-            self.assertNotIn("argv", pool["zcode-new"])
+            self.assertEqual(pool["zcode-new"]["reason"], "dry-run")
+            self.assertIn("argv", pool["zcode-new"])
 
         counted = rows(
-            {"classes": classes, "elite_cap": 4, "grants": [
+            {  "grants": [
                 {"id": "codex/default", "state": "granted"}]},
-            {"worker_pool": [], "elite_cap": 4, "elite_grants": [
+            {"worker_pool": [],  "elite_grants": [
                 {"preset_id": "codex/default", "count": 1}]},
             [],
             [{"item_id": "codex-a", "preset": "codex/default", "session": "codex-a", "prompt": "one"},
@@ -790,11 +947,11 @@ class RecordContract(unittest.TestCase):
             self.assertEqual([counted["codex-a"]["reason"], counted["codex-b"]["reason"]], ["dry-run", "count"])
 
         grouped = rows(
-            {"classes": classes, "elite_cap": 4, "grants": [
+            {  "grants": [
                 {"id": "droid/default", "state": "granted", "count": 4},
                 {"id": "droid/opus", "state": "granted", "count": 4},
                 {"id": "droid/core", "state": "granted", "count": 4}]},
-            {"worker_pool": [], "elite_cap": 4, "elite_grants": [{
+            {"worker_pool": [],  "elite_grants": [{
                 "preset_ids": ["droid/default", "droid/opus", "droid/core"],
                 "count": 2, "switch_authorization": True}]},
             [{"preset": "droid/default", "platform": "droid", "session": "droid-existing-a",
@@ -809,7 +966,7 @@ class RecordContract(unittest.TestCase):
             self.assertNotIn("argv", grouped["droid-new"])
 
         switched = rows(
-            {"classes": classes, "elite_cap": 4, "model_switches": ["codex/default"], "grants": [
+            {   "grants": [
                 {"id": "codex/default", "state": "granted", "count": 1, "model_switch": True}]},
             {"elite_grants": [{"preset_id": "codex/default", "count": 1, "switch_authorization": False}]},
             [],
@@ -820,7 +977,7 @@ class RecordContract(unittest.TestCase):
             self.assertEqual(switched["codex-switch"]["reason"], "model-switch-unauthorized")
 
         limited = rows(
-            {"classes": classes, "elite_cap": 4, "grants": [
+            {  "grants": [
                 {"id": "codex/default", "state": "granted", "count": 1},
                 {"id": "claude-code/default", "state": "granted", "count": 1}]},
             {"elite_grants": [
@@ -848,7 +1005,7 @@ class RecordContract(unittest.TestCase):
         ])
 
         lifetime = rows(
-            {"classes": classes, "elite_cap": 4, "grants": [
+            {  "grants": [
                 {"id": "codex/astra", "state": "granted", "count": 1, "lifetime": "standing"},
                 {"id": "codex/default", "state": "granted", "count": 1}]},
             {"elite_grants": [
@@ -1092,8 +1249,7 @@ class RecordContract(unittest.TestCase):
     def test_delegator_authorization_shapes_agree_and_refuse_without_writes(self) -> None:
         dispatch = load_module(DISPATCH, "kpr_repair_shapes")
         base = {"schema": "kaola-delegator-heartbeat/1", "revision": 0,
-                "authorization": {"worker_pool": ["zcode/default"], "worker_pool_cap": 2,
-                                  "elite_cap": 3, "elite_grants": [
+                "authorization": {"worker_pool": ["zcode/default"], "elite_grants": [
                                       {"preset_id": "codex/default", "count": 1},
                                       {"preset_id": "claude-code/default", "count": 1}]},
                 "watch": {"relay": {"kind": "relay", "status": "pending", "detail": "owner condition", "next": "deliver"}}}
@@ -1144,7 +1300,7 @@ class RecordContract(unittest.TestCase):
                 self.assertEqual(json.loads(self.delegator.read_text())["watch"]["relay"]["detail"], "owner condition")
 
     def test_bad_grant_keeps_inflight_duty_and_unrelated_dispatch(self) -> None:
-        self.init({"classes": CLASS_SENTENCES, "elite_cap": 3, "grants": [
+        self.init({  "grants": [
             {"id": "codex/default", "state": "granted", "count": 1},
             {"id": "claude-code/default", "state": "granted", "count": 1}]})
         prompt = "continue assigned work"
@@ -1235,7 +1391,7 @@ class RecordContract(unittest.TestCase):
                         duty["status"] = "open"
                     doc = {"schema": "kaola-delegator-heartbeat/1", "revision": 7,
                            "source": "owner-message-7", "watch": {"repair": duty},
-                           "authorization": {"elite_cap": 4, "elite_grants": [{
+                           "authorization": { "elite_grants": [{
                                "preset_ids": ["droid/default", "droid/opus", "droid/core"],
                                "count": 2, "class": "Elite"}]}}
                     self.delegator.write_text(json.dumps(doc), encoding="utf-8")
@@ -1371,9 +1527,7 @@ class RecordContract(unittest.TestCase):
                           "cadence.interval_minutes", "entry.target", "source"})
 
     def test_capability_summary_closure_refuses_writes_and_keeps_legacy_duties(self) -> None:
-        self.init({"classes": dict(CLASS_SENTENCES), "elite_cap": 4,
-                   "grants": [{"id": "droid/opus", "count": 2, "shared_seat": "droid", "state": "granted"}],
-                   "capability_summary": {"presets": ["droid/opus"]}})
+        self.init({"grants": [{"id": "droid/opus", "count": 2, "shared_seat": "droid", "state": "granted"}]})
         code, out = self.state("update", "--file", str(self.file), "--writer", "host", "--source", "owner-7",
                                "--kind", "tasks", "--id", "repair", "--set",
                                json.dumps({"stage": "doing", "goal": "apply repair", "wait": "owner condition",
@@ -1388,11 +1542,11 @@ class RecordContract(unittest.TestCase):
                                        "--section", "authorization", "--expect-revision", str(original["revision"]), "--set",
                                        json.dumps({"capability_summary": {key: value}}))
                 self.assertEqual(code, 2, out)
-                self.assertEqual(out["path"], f"authorization.capability_summary.{key}")
+                self.assertEqual(out["path"], "authorization.capability_summary")
                 self.assertIn("rehome", out["recovery"])
                 self.assertEqual(self.file.read_bytes(), before)
                 legacy = json.loads(json.dumps(original))
-                legacy["state"]["authorization"]["capability_summary"][key] = value
+                legacy["state"]["authorization"]["capability_summary"] = {"presets": ["droid/opus"], key: value}
                 self.file.write_text(json.dumps(legacy), encoding="utf-8")
                 sentinel = self.file.read_bytes()
                 code, view = self.state("view", "--file", str(self.file), "--role", "host")
@@ -1402,34 +1556,34 @@ class RecordContract(unittest.TestCase):
                               [row["path"] for row in view["unknown"]])
                 self.assertNotIn("UNMAPPED-OWNER-CONDITION", json.dumps(view))
                 self.assertEqual(view["authorization"]["grants"], original["state"]["authorization"]["grants"])
-                self.assertEqual(view["capability"]["presets"], ["droid/opus"])
+                self.assertIn("unknown", view["capability"])
                 self.assertEqual(next(task for task in view["tasks"] if task["id"] == "repair")["wait"],
                                  "owner condition")
                 for write in (False, True):
                     code, out = self.state("migrate", "--file", str(self.file), *(["--write"] if write else []))
                     self.assertEqual(code, 2, out)
                     self.assertFalse(out["writes"])
-                    self.assertIn(f"authorization.capability_summary.{key}",
+                    self.assertIn("authorization.capability_summary",
                                   [row["path"] for row in out["blockers"]])
                     self.assertEqual(self.file.read_bytes(), sentinel)
                 # Restore only this test fixture; no product mapping is inferred.
                 self.file.write_bytes(before)
         code, out = self.state("migrate", "--file", str(self.file))
-        self.assertEqual((code, out["result"]), (0, "current"), out)
+        self.assertEqual(code, 0, out)
+        self.assertIn(out["result"], ("planned", "current"))
         self.assertEqual(self.file.read_bytes(), before)
 
     def test_shared_skeleton_uses_owner_count_without_a_project_grant(self) -> None:
         text = (REPO / "templates/orchestrator/references/heartbeat-skeleton.txt").read_text()
-        self.assertIn("容量取 owner 的实际 count", text)
-        self.assertNotIn("本项目授予 count=2", text)
-        self.assertNotIn("离开 active", text)
-        self.assertNotIn("留在 pending", text)
-        example = json.loads(next(line.removeprefix("例：") for line in text.splitlines()
-                                  if line.startswith("例：")))
+        example = json.loads(next(line.removeprefix("例：") for line in text.splitlines() if line.startswith("例：")))
+        contract = load_module(REPO / "scripts/kaola-record-contract.py", "skeleton_contract_955")
         auth = example["authorization"]
-        self.assertEqual(auth["elite_cap"], 4)
-        self.assertEqual(auth["grants"][0], {"id": "droid/opus", "count": 2,
-                                            "shared_seat": "droid", "state": "granted"})
+        self.assertEqual(contract.authorization_blockers(auth), [])
+        self.assertEqual(auth["grants"][0]["count"], 2)
+        self.assertEqual(auth["grants"][0]["preset_ids"], ["droid/default", "droid/opus", "droid/core"])
+        self.assertFalse(auth["grants"][0]["model_switch"])
+        self.assertNotIn("elite_cap", auth)
+        self.assertNotIn("classes", auth)
 
     def test_delegator_open_nested_bags_refuse_without_writes(self) -> None:
         for patch, path in [({"entry": {"report": {"past": True}}}, "entry.report"),
@@ -1477,23 +1631,14 @@ class RecordContract(unittest.TestCase):
         missing = {row["id"] for row in out["problems"] if row["code"] == "dispatch-task-missing"}
         self.assertEqual(missing, {"open", "unknown", "unaccepted", "bad-acceptance"})
 
-    def test_capability_keeps_worker_pool_presets_and_stored_classes(self) -> None:
-        self.init({
-            "classes": dict(CLASS_SENTENCES),
-            "capability_summary": {"presets": [
-                "codex/default", "codex/luna", "devin/default", "dsh/default",
-                "opencode/default", "zcode/default",
-            ]},
-            "grants": [{"id": "codex/default", "state": "paused", "count": 1}],
-            "paused": ["codex/default"],
-            "elite_cap": 2,
-        })
-        view = json.loads(self.doc()["body"])
-        presets = view["capability"]["presets"]
-        for preset in ("codex/luna", "devin/default", "dsh/default", "opencode/default", "zcode/default"):
-            self.assertIn(preset, presets)
-        self.assertNotIn("codex/default", presets)
-        self.assertEqual(view["authorization"]["classes"]["Worker"], CLASS_SENTENCES["Worker"])
+    def test_capability_keeps_worker_pool_presets_from_catalog_and_grants(self) -> None:
+        self.init({"grants": [{"id": "droid/opus", "count": 2, "state": "granted"}]})
+        code, view = self.state("view", "--file", str(self.file), "--role", "host")
+        self.assertEqual(code, 0, view)
+        self.assertIn("droid/opus", view["capability"]["presets"])
+        self.assertIn("zcode/default", view["capability"]["presets"])
+        self.assertNotIn("classes", self.doc()["state"]["authorization"])
+        self.assertIn("Worker", view["catalog"]["classes"])
 
     def test_nested_types_are_refused_and_bytes_stay(self) -> None:
         self.init()
@@ -1934,7 +2079,7 @@ class RecordContract(unittest.TestCase):
     def test_an_oversized_migrated_record_still_accepts_an_owner_stop(self) -> None:
         body = {
             "project": {"code": "KT", "goal": "keep the open duty"},
-            "authorization": {"elite_cap": 2},
+            "authorization": {"grants": []},
             "active": [
                 {"ref": f"row-{n}", "session": f"codex-KT-i{n}-x", "evidence": "e" * 900}
                 for n in range(80)
@@ -2027,7 +2172,7 @@ class RealAcpInjection(unittest.TestCase):
         code, out = run_dispatch([
             "state", "init", "--file", str(state), "--writer", "host", "--source", "turn-1",
             "--project", json.dumps({"code": "KT", "goal": "close the selected issues"}),
-            "--authorization", json.dumps({"classes": dict(CLASS_SENTENCES), "elite_cap": 1,
+            "--authorization", json.dumps({
                                            "grants": [{"id": "codex/default", "state": "granted", "count": 1}]})])
         self.assertEqual(code, 0, out)
         run_dispatch([
@@ -2070,7 +2215,7 @@ class RealAcpInjection(unittest.TestCase):
                 break
             time.sleep(0.2)
         self.assertIn("projected-goal-marker", text)
-        self.assertIn(CLASS_SENTENCES["Worker"], text)
+        self.assertNotIn("classes", json.loads(state.read_text())["state"]["authorization"])
         self.assertNotIn("STORED-BODY-SENTINEL", text)
         self.assertNotIn("REMOVED-EXCEPTION-SENTINEL", text)
         host_observe = self.cli("observe", session=host)

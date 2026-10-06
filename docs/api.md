@@ -622,8 +622,11 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   `pending_host_changes`; the Delegator view adds `maintenance`. The Delegator view lists the `AGENTS.md`
   user-requirements region, holds, alerts, pending decisions, `unverified`, then doing, todo,
   and outcomes. Unknown content is `unknown` locators. It is not view text.
-  Host view `capability.presets` starts from stored `capability_summary.presets`, drops paused,
-  revoked, and excluded ids, and adds granted grant ids. Stored Class sentences stay.
+  Host view derives capability from current grants, default Worker pool, exclusions, holds
+  and actual availability. Class definitions/defaults come from matched catalog/templates.
+  Grouped grants own one count, choice set and switch permission; compatibility rows are generated.
+  Stored authorization contains no Class copies, capability list, aggregate cap or second switch/pause list.
+  Legacy ambiguity blocks migration with original-source owner recovery; active duties remain.
   `delivery-open` content is the task `goal`, `next`, and verdict value.
   For `mode: node`, `sideagent_maintenance` says `a node is running` only when the
   record for this canonical repo digest is `ready`, its `holder_pid` is alive, its
@@ -648,8 +651,8 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   closed form. Pending text in legacy bags must move to typed watch duties
   before those bags can leave. Views omit historical bags. One authorization
   shape check serves writes, migration, and the dispatch ceiling. A malformed
-  grant with known preset ids refuses those ids; malformed pool or Elite caps
-  refuse their affected class. Owner conditions remain literal until mapped
+  grant with known preset ids refuses those ids; malformed pool authorization
+  refuses that class. Legacy aggregate limits require original owner reconciliation. Owner conditions remain literal until mapped
   from original authority. An untyped old file produces an actionable
   migration observation from `execute`; legacy Host authorization continues.
   `adopted` needs a string `evidence` or `locator` that names the Host record or path. `sent` does not.
@@ -769,7 +772,7 @@ Human watch is not an L0 receipt. `kaola-acp list [--platform P] [--repo ROOT]` 
 
 Derivation, in order: a standard Host name is `host` (authoritative; `session_role` mirrors `host_class`). An explicit start `--role sideagent` — the current role flag — is `sideagent`. `expert`, `elite`, and `worker` come only from the preset this start actually selected (`selection_basis.preset_id`) and that tier's manifest `{tier}_model_class`, lowercased. A custom `--model`, a resume that preserves the native session without the same-native-session inheritance identity, an unknown class, or missing evidence is `null`. Session-name spelling, model-id substrings, session purpose, and an unrelated default preset are not evidence. Unknown is never labeled `worker`.
 
-`list` projects `session_role` as `host` when `host_class` is true, otherwise the persisted record value, otherwise `null`. That is the consumer fallback for a legacy Host row: `host_class` true still reads as Host even when the stored field is missing. `status` and `observe` lift the persisted value to the top level next to `start_evidence` (a live state reply already carries it; a missing or unknown stored value is `null`). `view` and `follow` (snapshot, delta, and heartbeat) pass the holder value through. Only the one maintenance Sideagent bound in lifecycle state (`state.sideagent`, `state: active`) is outside `elite_cap` and preset counts; its row and index item carry `seat_exempt: true`, and a shared seat it occupies stays occupied. Every other `sideagent`-role item is counted as a worker under its preset Class (`evidence.seat_note`). A dispatch plan `role` of `sideagent` is passed as start `--role sideagent` and kept on the index for correlation. Apart from the legacy alias below, other `role` values stay index metadata: it does not authorize that role, relabel a holder, or refuse the item. The seat's `session_role` still comes from the Host name, that explicit sideagent flag, or the selected preset Class. Recovery does not re-send or change a live session's role; a persisted-versus-requested sideagent mismatch is a note only.
+`list` projects `session_role` as `host` when `host_class` is true, otherwise the persisted record value, otherwise `null`. That is the consumer fallback for a legacy Host row: `host_class` true still reads as Host even when the stored field is missing. `status` and `observe` lift the persisted value to the top level next to `start_evidence` (a live state reply already carries it; a missing or unknown stored value is `null`). `view` and `follow` (snapshot, delta, and heartbeat) pass the holder value through. Only the one maintenance Sideagent bound in lifecycle state (`state.sideagent`, `state: active`) is outside worker preset counts; its row and index item carry `seat_exempt: true`, and a shared seat it occupies stays occupied. Every other `sideagent`-role item is counted as a worker under its preset Class (`evidence.seat_note`). A dispatch plan `role` of `sideagent` is passed as start `--role sideagent` and kept on the index for correlation. Apart from the legacy alias below, other `role` values stay index metadata: it does not authorize that role, relabel a holder, or refuse the item. The seat's `session_role` still comes from the Host name, that explicit sideagent flag, or the selected preset Class. Recovery does not re-send or change a live session's role; a persisted-versus-requested sideagent mismatch is a note only.
 
 Legacy `sidekick` remains accepted in start flags and dispatch plans and stays
 verbatim in existing holder records, receipts and indexes. Consumers render both

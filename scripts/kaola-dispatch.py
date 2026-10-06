@@ -263,6 +263,13 @@ def as_id_list(value: Any) -> list[str]:
 
 
 def normalize_grants(auth: dict[str, Any]) -> list[dict[str, Any]]:
+    limits = RECORD.aggregate_limit_blockers(auth)
+    if limits:
+        raise ValueError(limits[0]["path"] + ": " + limits[0]["recovery"])
+    obsolete = set(auth) & {"model_switches", "paused", "revoked", "classes", "capability_summary"}
+    if obsolete:
+        raise ValueError("authorization." + sorted(obsolete)[0] + ": legacy duplicate authority; "
+                         "plan state migration and reconcile original owner intent before write")
     # `rows` is not a grant list. A catalog-shaped body must not become seats.
     raw = auth.get("grants")
     if raw is None:
@@ -271,7 +278,7 @@ def normalize_grants(auth: dict[str, Any]) -> list[dict[str, Any]]:
         raise ValueError("grants must be an array")
     grants = []
     seen: set[str] = set()
-    for item in raw:
+    for item in RECORD.expanded_grants(raw):
         if not isinstance(item, dict) or not isinstance(item.get("id"), str):
             raise ValueError("each grant needs a string id")
         preset = item["id"]
@@ -343,25 +350,35 @@ def current_authorization(auth: dict[str, Any]) -> dict[str, Any]:
     if not auth.get("grants") and not auth.get("revoked"):
         return auth
     revoked = set(as_id_list(auth.get("revoked")))
+    exclusions = set(as_id_list(auth.get("exclusions")))
     catalog = catalog_from_files(platform_paths(Path(__file__), None))
     kept = []
     for grant in auth.get("grants") or []:
-        ident = grant["id"]
+        ids = grant.get("preset_ids") or [grant["id"]]
         expiry = parse_expiry(grant["expires"]) if isinstance(grant.get("expires"), str) else None
-        ended = (grant.get("state") == "revoked" or ident in revoked or (
-            catalog.get(ident, {}).get("class") == "Expert" and expiry is not None
-            and expiry <= datetime.now(timezone.utc)))
-        if ended:
-            revoked.add(ident)
-        else:
+        current = []
+        for ident in ids:
+            ended = (grant.get("state") == "revoked" or ident in revoked or (
+                catalog.get(ident, {}).get("class") == "Expert" and expiry is not None
+                and expiry <= datetime.now(timezone.utc)))
+            if ended:
+                if catalog.get(ident, {}).get("class") == "Worker":
+                    exclusions.add(ident)
+            else:
+                current.append(ident)
+        if current:
+            if "preset_ids" in grant:
+                grant["preset_ids"] = current
+                special = grant.get("special_requirements")
+                if isinstance(special, dict) and set(special) <= set(ids):
+                    grant["special_requirements"] = {key: value for key, value in special.items() if key in current}
             kept.append(grant)
     if "grants" in auth:
         auth["grants"] = kept
-    if revoked:
-        auth["revoked"] = sorted(revoked)
-    summary = auth.get("capability_summary")
-    if isinstance(summary, dict) and isinstance(summary.get("presets"), list):
-        summary["presets"] = [ident for ident in summary["presets"] if ident not in revoked]
+    exclusions.update(ident for ident in revoked if catalog.get(ident, {}).get("class") == "Worker")
+    auth.pop("revoked", None)
+    if exclusions:
+        auth["exclusions"] = sorted(exclusions)
     return auth
 
 
@@ -440,6 +457,9 @@ def eligibility(
         granted = state == "granted"
         if not pool and not granted:
             continue
+        if not pool and not _count_ok(grant.get("count")):
+            withhold(preset, "count-unreadable")
+            continue
         presence = available.get(preset, "unknown")
         if presence == "absent":
             withhold(preset, "absent")
@@ -512,6 +532,27 @@ def capability_summary(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     return {"presets": shown, "text": text}
 
 
+def current_candidates(catalog: dict[str, Any], auth: dict[str, Any], grants: list[dict[str, Any]],
+                       available: dict[str, str], document: dict[str, Any] | None,
+                       repo: str | None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Both current views use existing grant, ceiling, hold and availability facts."""
+    ceiling, error = delegator_ceiling(repo) if repo else (None, None)
+    effective = apply_ceiling_to_grants(grants, ceiling) if ceiling else grants
+    candidates, withheld = eligibility(catalog, auth, effective, available)
+    holds = preset_holds(document)
+    kept = []
+    for candidate in candidates:
+        ident = candidate["id"]
+        reason = ("ceiling-unreadable" if error else ceiling_block(ceiling, ident, candidate["class"]) if ceiling else None)
+        if ident in holds:
+            reason = "on-hold"
+        if reason:
+            withheld.append({"id": ident, "reason": reason, **({"evidence": error} if error else {})})
+        else:
+            kept.append(candidate)
+    return kept, withheld
+
+
 def command_project(args: argparse.Namespace) -> int:
     try:
         auth_doc = load_object(Path(args.authorization))
@@ -521,14 +562,15 @@ def command_project(args: argparse.Namespace) -> int:
             load_object(Path(args.availability)) if args.availability else None
         )
         catalog = catalog_from_files(platform_paths(Path(__file__), args.platforms))
-        candidates, withheld = eligibility(catalog, auth, grants, available)
+        repo = getattr(args, "repo", None) or ((auth_doc.get("state") or {}).get("project") or {}).get("repo")
+        candidates, withheld = current_candidates(catalog, auth, grants, available, auth_doc, repo)
     except ValueError as exc:
         return fail("invalid-input", str(exc))
     if args.seats:
         if not args.repo:
             return fail("invalid-input", "--seats needs --repo")
         return project_seats(args, auth, grants, catalog, bound_sideagent(auth_doc))
-    # Eligible ids only. The Host keeps the capability paragraph.
+    # Derived eligible ids only; no independently maintained capability paragraph.
     return emit({
         "schema": "kaola-dispatch-project/1",
         "capability_summary": capability_summary(candidates),
@@ -599,7 +641,7 @@ def seat_projection(args: argparse.Namespace, auth: dict[str, Any],
         "source": {"authorization": args.authorization, "live": args.live or (str(listed) if listed else None),
                    "index": args.index, "as_of": observed_at()},
         "unknown_reasons": unknown,
-        "elite_cap": auth.get("elite_cap"), "observed_elite_expert": elite if state == "known" else None,
+        "observed_elite_expert": elite if state == "known" else None,
         "grants": [{**grant, "observed_live": used.get(grant["id"], 0) if state == "known" else None,
                     "occupancy_unknown": bool(unknown) or catalog.get(grant["id"], {}).get("platform") in unnamed,
                     "shared_occupied": grant.get("shared_seat") in shared if state == "known" else None}
@@ -638,9 +680,6 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
     holds = preset_holds(document)
     ceiling, ceiling_error = delegator_ceiling(projection["repo"])
     effective = apply_ceiling_to_grants(grants, ceiling) if ceiling else grants
-    cap = auth.get("elite_cap")
-    if ceiling and _count_ok(ceiling.get("elite_cap")):
-        cap = min(cap, ceiling["elite_cap"]) if _count_ok(cap) else ceiling["elite_cap"]
     availability = availability_map(load_object(Path(args.availability))) if getattr(args, "availability", None) else {}
     _candidates, withheld = eligibility(catalog, auth, effective, availability)
     reasons = {item["id"]: item["reason"] for item in withheld}
@@ -688,6 +727,9 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
             if shared_limit:
                 entry["authorized_count"] = min(entry["authorized_count"], shared_limit["count"])
         entry["presets"].append({"id": preset, "class": klass, "count": count,
+                                  "default_model": catalog[preset]["selection"].get("model_id"),
+                                  "default_effort": catalog[preset]["selection"].get("effort"),
+                                  **({"owner_overrides": grant["special_requirements"]} if grant.get("special_requirements") else {}),
                                   **({"lifetime": grant.get("lifetime") or "task"} if klass == "Expert" else {})})
         reason = reasons.get(preset)
         if ceiling:
@@ -699,7 +741,8 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
         if reason:
             entry["unavailable"].append({"id": preset, "reason": reason})
     observed = projection["observed_elite_expert"]
-    cap_remaining = max(0, cap - observed) if _count_ok(cap) and observed is not None and not unknown_sources else None
+    authorized_total = (sum(group["authorized_count"] for group in groups.values())
+                        if all(group["authorized_count"] is not None for group in groups.values()) else None)
     for entry in groups.values():
         ids = {item["id"] for item in entry["presets"]}
         entry["occupied"] = [row for row in occupied if row["preset"] in ids]
@@ -713,17 +756,16 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
         count = entry["authorized_count"]
         if not available_ids:
             entry["idle_available"] = 0
-        elif not unknown and not availability_unknown and count is not None and cap_remaining is not None:
-            entry["idle_available"] = min(max(0, count - len(entry["occupied"])), cap_remaining)
+        elif not unknown and not availability_unknown and count is not None:
+            entry["idle_available"] = max(0, count - len(entry["occupied"]))
     return {"groups": list(groups.values()),
             "expert_authorization": "present" if any(item["class"] == "Expert" for group in groups.values()
                                                        for item in group["presets"]) else "none",
-            "occupied": occupied, "elite_cap": cap, "occupied_elite_expert": observed,
-            "cap_remaining": cap_remaining,
-            "idle_available_total": min(sum(group["idle_available"] for group in groups.values()), cap_remaining)
-                if cap_remaining is not None and all(group["idle_available"] is not None for group in groups.values()) else None,
+            "occupied": occupied, "authorized_total": authorized_total, "occupied_elite_expert": observed,
+            "idle_available_total": sum(group["idle_available"] for group in groups.values())
+                if all(group["idle_available"] is not None for group in groups.values()) else None,
             "unknown_reasons": unknown_sources,
-            "resource_limits": {key: auth[key] for key in ("elite_cap", "account_token_quotas", "paused", "exclusions", "revoked") if key in auth},
+            "resource_limits": {key: auth[key] for key in ("account_token_quotas", "exclusions") if key in auth},
             "scope": "current project; external target/account capacity requires its original resource receipt",
             "source": projection["source"]}
 
@@ -742,15 +784,17 @@ def delegator_seats(args: argparse.Namespace, document: dict[str, Any], path: Pa
             problems = RECORD.delegator_authorization_blockers(source)
             if problems:
                 raise ValueError(problems[0]["detail"])
-            auth = {key: source[key] for key in ("elite_cap", "paused", "revoked", "exclusions", "account_token_quotas") if key in source}
+            auth = {key: source[key] for key in ("exclusions", "account_token_quotas") if key in source}
             auth["grants"] = []
             for key in ("elite_grants", "expert_task_grants"):
                 for grant in source.get(key) or []:
-                    ids = grant.get("preset_ids") or ([grant["preset_id"]] if grant.get("preset_id") else [])
-                    for ident in ids:
-                        auth["grants"].append({"id": ident, "state": "granted", "count": grant.get("count"),
-                                               **({"lifetime": grant["lifetime"]} if "lifetime" in grant else {}),
-                                               **({"shared_seat": ",".join(ids)} if len(ids) > 1 else {})})
+                    row = {field: grant[field] for field in ("preset_ids", "count", "state", "lifetime", "expires", "special_requirements") if field in grant}
+                    if grant.get("preset_id"):
+                        row["id"] = grant["preset_id"]
+                    row.setdefault("state", "granted")
+                    if "switch_authorization" in grant:
+                        row["model_switch"] = grant["switch_authorization"]
+                    auth["grants"].append(row)
             document = None
         else:
             auth = authorization_object(document)
@@ -826,8 +870,7 @@ def switch_authorized(preset: str, model: str, special: dict[str, Any],
         return False
     if grant.get("model_switch") is True:
         return True
-    switches = auth.get("model_switches")
-    return isinstance(switches, list) and preset in switches
+    return False
 
 
 def model_match(requested: Any, actual: Any) -> bool:
@@ -1298,7 +1341,7 @@ def delegator_ceiling(repo: str, observations: list[dict[str, Any]] | None = Non
                 elite_problem = elite_problem or error
         elif field in ("authorization.worker_pool", "authorization.worker_pool_cap"):
             worker_problem = worker_problem or error
-        elif field in ("authorization.elite_cap", "authorization.elite_grants"):
+        elif field in ("authorization.elite_cap", "authorization.total_cap", "authorization.elite_grants"):
             elite_problem = elite_problem or error
         elif field in ("authorization.revoked", "authorization.paused", "authorization.exclusions"):
             return None, error
@@ -1311,6 +1354,10 @@ def delegator_ceiling(repo: str, observations: list[dict[str, Any]] | None = Non
         for ident in auth.get(key) or []:
             blocked.setdefault(ident, reason)
     raw = auth.get("elite_grants")
+    for grant in raw or []:
+        if isinstance(grant, dict) and grant.get("state") in ("paused", "revoked", "excluded"):
+            for ident in grant.get("preset_ids") or [grant.get("preset_id")]:
+                blocked.setdefault(ident, grant["state"])
     elite = by_id = groups = None
     if isinstance(raw, list):
         elite, by_id, groups, semantic, semantic_evidence = _parse_elite_grants(
@@ -1322,8 +1369,6 @@ def delegator_ceiling(repo: str, observations: list[dict[str, Any]] | None = Non
         "blocked": blocked,
         "worker_ids": set(auth["worker_pool"]) if isinstance(auth.get("worker_pool"), list) and worker_problem is None else None,
         "elite_ids": elite,
-        "elite_cap": auth.get("elite_cap") if _count_ok(auth.get("elite_cap")) else None,
-        "worker_pool_cap": auth.get("worker_pool_cap") if _count_ok(auth.get("worker_pool_cap")) else None,
         "by_id": by_id or {}, "groups": groups or [],
         "problems": problems, "problem_evidence": evidence,
         "worker_problem": worker_problem, "elite_problem": elite_problem,
@@ -1395,7 +1440,8 @@ def _parse_elite_grants(raw_elite: list[dict[str, Any]], source_indices: list[in
                 "count": elite[ident], "switch": None, "lifetime": None, "special": None,
             })
             fact["count"] = elite[ident]
-            for key, value in (("switch", switch), ("lifetime", lifetime), ("special", special)):
+            choice_special = special.get(ident) if isinstance(special, dict) and special and set(special) <= set(ids) else special
+            for key, value in (("switch", switch), ("lifetime", lifetime), ("special", choice_special)):
                 if value is None:
                     continue
                 if fact[key] is None:
@@ -1412,27 +1458,6 @@ def ceiling_group(ceiling: dict[str, Any] | None, preset: str) -> dict[str, Any]
         if preset in group["ids"]:
             return group
     return None
-
-
-def worker_pool_occupancy(used_count: dict[str, int], unnamed: set[str],
-                          catalog: dict[str, dict[str, Any]], kept_items: list[dict[str, Any]],
-                          live_sessions: set[Any]) -> tuple[int, bool]:
-    """Live Worker seats count toward worker_pool_cap. An unnamed Worker platform stays unknown."""
-    worker_platforms = {
-        row["platform"] for row in catalog.values()
-        if row.get("class") == "Worker" and isinstance(row.get("platform"), str)
-    }
-    if unnamed & worker_platforms:
-        return 0, False
-    total = 0
-    for preset, count in used_count.items():
-        row = catalog.get(preset)
-        if row and row.get("class") == "Worker":
-            total += count
-    for item in kept_items:
-        if item.get("_pool") and not item.get("_exempt") and item.get("session") not in live_sessions:
-            total += 1
-    return total, True
 
 
 def ceiling_block(ceiling: dict[str, Any], preset: str, class_name: str) -> str | None:
@@ -1557,19 +1582,10 @@ def command_execute(args: argparse.Namespace) -> int:
     repo = str(Path(repo).resolve())
     if not isinstance(items, list):
         return fail("invalid-input", "plan items must be an array")
-    seat_cap = plan.get("seat_cap", None)
-    if seat_cap is not None and (isinstance(seat_cap, bool) or not isinstance(seat_cap, int) or seat_cap < 0):
-        return fail("invalid-input", "seat_cap must be a non-negative integer")
-    try:
-        elite_cap = authorization_cap(auth.get("elite_cap"))
-    except ValueError as exc:
-        return fail("invalid-input", str(exc))
-    if elite_cap is None:
-        effective_cap = seat_cap
-    elif seat_cap is None:
-        effective_cap = elite_cap
-    else:
-        effective_cap = min(elite_cap, seat_cap)
+    if "seat_cap" in plan:
+        return fail("invalid-input", "plan.seat_cap is an obsolete independent limit. Host: reconcile its "
+                    "original intent with the owner, then remove this key and retain exact grant counts. "
+                    "Do not infer new authority or stop active work.")
     ids = [item.get("item_id") for item in items if isinstance(item, dict)]
     if len(ids) != len(items) or any(not isinstance(item, str) for item in ids) or len(set(ids)) != len(ids):
         return fail("invalid-input", "each item needs a unique item_id")
@@ -1613,9 +1629,6 @@ def command_execute(args: argparse.Namespace) -> int:
     observations: list[dict[str, Any]] = []
     ceiling, ceiling_error = delegator_ceiling(repo, observations)
     if ceiling is not None:
-        if _count_ok(ceiling.get("elite_cap")):
-            elite_cap = ceiling["elite_cap"] if elite_cap is None else min(elite_cap, ceiling["elite_cap"])
-            effective_cap = elite_cap if seat_cap is None else min(elite_cap, seat_cap)
         grants = apply_ceiling_to_grants(grants, ceiling)
         shared_capacities = shared_seat_capacities(grants)
         candidates, withheld = eligibility(catalog, auth, grants, available)
@@ -1850,7 +1863,7 @@ def command_execute(args: argparse.Namespace) -> int:
         live_rows, occupancy = live_facts(getattr(args, "live", None), repo, Path(__file__), skills_root)
     except ValueError as exc:
         return fail("invalid-input", str(exc))
-    needs_live = effective_cap is not None or any(
+    needs_live = any(
         item.get("_shared_seat") or isinstance(item.get("_count"), int)
         for item in fresh_open
     )
@@ -1892,14 +1905,6 @@ def command_execute(args: argparse.Namespace) -> int:
     seat_marks = {item["item_id"]: item for item in fresh_open
                   if item.get("_exempt") or item.get("_helper_counted") or item.get("_held_row")}
     ready = list(kept_items)
-    pool_cap_now = (ceiling or {}).get("worker_pool_cap") if ceiling is not None else None
-    if _count_ok(pool_cap_now) and occupancy == "known":
-        worker_admitted, worker_known = worker_pool_occupancy(
-            used_count, unnamed_platforms, catalog, kept_items, live_sessions)
-    elif _count_ok(pool_cap_now):
-        worker_admitted, worker_known = 0, False
-    else:
-        worker_admitted, worker_known = 0, True
     for item in fresh_open:
         if item.get("_exempt"):
             ready.append(item)
@@ -1912,8 +1917,7 @@ def command_execute(args: argparse.Namespace) -> int:
             others = [row for row in live_rows if row is not held]
             o_count, o_seats, o_shared, o_unnamed = live_occupancy(
                 others, repo, catalog, grants, resolved, exempt=binding)
-            reason = held_refusal(item, o_count, o_seats, o_shared, o_unnamed,
-                                  effective_cap, grants, catalog)
+            reason = held_refusal(item, o_count, o_shared, o_unnamed, grants, catalog)
             if reason:
                 blocked.append(blank_item(item["item_id"], item["preset"], item["session"], "not-run", reason))
                 continue
@@ -1960,32 +1964,10 @@ def command_execute(args: argparse.Namespace) -> int:
         if isinstance(limit, int) and used_count.get(item["preset"], 0) >= limit:
             blocked.append(blank_item(item["item_id"], item["preset"], item["session"], "not-run", "count"))
             continue
-        if not item["_pool"] and effective_cap is not None and used_seats >= effective_cap:
-            blocked.append(blank_item(item["item_id"], item["preset"], item["session"], "not-run", "seat-cap"))
-            continue
-        if not item["_pool"] and effective_cap is not None and unnamed_platforms:
-            blocked.append(blank_item(
-                item["item_id"], item["preset"], item["session"], "not-run", "occupancy-unknown",
-            ))
-            continue
-        pool_cap = (ceiling or {}).get("worker_pool_cap") if ceiling is not None else None
-        if item["_pool"] and _count_ok(pool_cap):
-            if not worker_known:
-                blocked.append(blank_item(
-                    item["item_id"], item["preset"], item["session"], "not-run", "occupancy-unknown",
-                ))
-                continue
-            if worker_admitted >= pool_cap:
-                blocked.append(blank_item(item["item_id"], item["preset"], item["session"], "not-run", "seat-cap"))
-                continue
         if isinstance(limit, int):
             used_count[item["preset"]] = used_count.get(item["preset"], 0) + 1
         if isinstance(seat_name, str) and seat_name:
             occupied_shared[seat_name] = occupied_shared.get(seat_name, 0) + 1
-        if item["_pool"] and _count_ok(pool_cap):
-            worker_admitted += 1
-        if not item["_pool"] and effective_cap is not None:
-            used_seats += 1
         ready.append(item)
 
     if ready and (args.dry_run or skills_root is None):
@@ -2007,7 +1989,6 @@ def command_execute(args: argparse.Namespace) -> int:
         "repo": repo,
         "scope": scope,
         "occupancy": occupancy,
-        "effective_cap": effective_cap,
         "items": [],
     }
     if observations:
@@ -2216,14 +2197,6 @@ def conflict_ids(items: list[dict[str, Any]]) -> set[str]:
         if len(members) > 1:
             blocked.update(items[index]["item_id"] for index in members)
     return blocked
-
-
-def authorization_cap(value: Any) -> int | None:
-    if value is None:
-        return None
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise ValueError("elite_cap must be a non-negative integer")
-    return value
 
 
 def acp_runner(script: Path, skills_root: Path | None) -> Path | None:
@@ -2505,8 +2478,8 @@ def held_seat(item: dict[str, Any], rows: list[dict[str, Any]], repo: str,
     return row
 
 
-def held_refusal(item: dict[str, Any], used_count: dict[str, int], used_seats: int,
-                 occupied: dict[str, int], unnamed: set[str], cap: int | None,
+def held_refusal(item: dict[str, Any], used_count: dict[str, int],
+                 occupied: dict[str, int], unnamed: set[str],
                  grants: list[dict[str, Any]], catalog: dict[str, dict[str, Any]]) -> str | None:
     """The admission checks for a held seat, against every other live row."""
     seat = item.get("_shared_seat")
@@ -2520,11 +2493,6 @@ def held_refusal(item: dict[str, Any], used_count: dict[str, int], used_seats: i
         if used_count.get(item["preset"], 0) >= limit:
             return "count"
         if item.get("_platform") in unnamed:
-            return "occupancy-unknown"
-    if not item["_pool"] and cap is not None:
-        if used_seats >= cap:
-            return "seat-cap"
-        if unnamed:
             return "occupancy-unknown"
     return None
 
@@ -3612,7 +3580,33 @@ def short(value: Any, limit: int = 240) -> Any:
 
 def host_view(doc: dict[str, Any], path: Path) -> dict[str, Any]:
     """Projected Host view from the shared contract, field by field."""
-    return RECORD.host_view(doc, path)
+    view = RECORD.host_view(doc, path)
+    try:
+        catalog = catalog_from_files(platform_paths(Path(__file__), None))
+        auth = doc["state"].get("authorization") or {}
+        grants = normalize_grants(auth)
+        availability_path = path.parent / "dispatch-availability.json"
+        availability = availability_map(load_object(availability_path)) if availability_path.is_file() else {}
+        candidates, withheld = current_candidates(catalog, auth, grants, availability, doc, str(repo_of_state_file(path)))
+        view["capability"] = {**capability_summary(candidates),
+                              "shared_seats": [{"seat": seat, "count": count} for seat, count in shared_seat_capacities(grants).items()],
+                              "withheld": withheld,
+                              "catalog_source": [str(p) for p in platform_paths(Path(__file__), None)]}
+        profiles = Path(__file__).resolve().parent.parent / "references" / "worker-profiles.md"
+        if not profiles.is_file():
+            profiles = Path(__file__).resolve().parent.parent / "templates" / "orchestrator" / "references" / "worker-profiles.md.tmpl"
+        if profiles.is_file():
+            definitions = {}
+            for line in profiles.read_text().splitlines():
+                match = re.match(r"\| \*\*(Elite|Expert|Worker)\*\* \| ([^|]+) \|", line)
+                if match:
+                    definitions[match[1]] = match[2].strip()
+            view["catalog"] = {"source": str(profiles), "sha256": hashlib.sha256(profiles.read_bytes()).hexdigest(),
+                               "classes": definitions}
+    except (OSError, ValueError) as exc:
+        view["capability"] = {"presets": [], "unknown": str(exc),
+                              "next": "Host: plan migration and reconcile original grant authority; unknown is not empty authorization"}
+    return view
 
 
 def maintenance_brief(state: dict[str, Any]) -> dict[str, Any]:
@@ -5170,11 +5164,15 @@ def migrate_document(doc: dict[str, Any], raw: bytes, path: Path, index: dict[st
     blockers.extend(RECORD.project_blockers(project))
     authorization = body.get("authorization")
     if isinstance(authorization, dict):
-        state["authorization"] = authorization
-        blockers.extend(RECORD.authorization_blockers(authorization))
+        state["authorization"], limit_blockers, limit_removed = RECORD.migrate_authorization_limits(authorization)
+        blockers.extend(limit_blockers)
+        dropped.extend(limit_removed)
+        if not limit_blockers:
+            state["authorization"] = current_authorization(state["authorization"])
+        blockers.extend(item for item in RECORD.authorization_blockers(state["authorization"]) if item not in blockers)
     elif authorization is not None:
         blockers.append(RECORD.refusal(
-            "authorization", "object of grants, pauses, and caps",
+            "authorization", "object of grants and pauses",
             "rehome authorization; the file was not written"))
     kept, recovery_blockers, recovery_dropped = RECORD.recovery_from_v1(body.get("recovery"))
     blockers.extend(recovery_blockers)
@@ -5192,12 +5190,6 @@ def migrate_document(doc: dict[str, Any], raw: bytes, path: Path, index: dict[st
         state["unverified"][f"legacy-{key}"] = {
             "summary": f"unmapped body field {key}",
             "locator": key}
-    if isinstance(state["project"].get("rules"), (list, str, dict)):
-        requirements = requirement_lines(repo)
-        if requirements.get("missing"):
-            state["unverified"]["rules-source"] = {
-                "summary": "project.rules is kept as adopted; AGENTS.md holds no user requirements "
-                           "region to name as its source", "source": requirements["source"]}
     sessions: dict[str, str] = {}
     for ident, task in state["tasks"].items():
         for session in task.get("sessions") or []:
@@ -5282,7 +5274,16 @@ def command_state_migrate(args: argparse.Namespace) -> int:
                              "detail": f"{path} does not exist; nothing to migrate"}, 2)
             backups = RECORD.assess_backups(path.parent, raw.decode("utf-8", errors="replace"))
             if doc.get("schema") == STATE_SCHEMA:
-                blockers, cleaned, changed, removed = RECORD.cleanup_current(doc["state"])
+                original_state = doc["state"]
+                prepared = json.loads(json.dumps(original_state))
+                auth, auth_blockers, auth_removed = RECORD.migrate_authorization_limits(prepared.get("authorization"))
+                if auth_blockers:
+                    return emit({"result": "blocked", "writes": False, "blockers": auth_blockers,
+                                 "detail": "unresolved original authorization; active work stays current"}, 2)
+                prepared["authorization"] = current_authorization(auth or {})
+                blockers, cleaned, changed, removed = RECORD.cleanup_current(prepared)
+                removed = auth_removed + removed
+                changed = changed or cleaned != original_state
                 if not blockers:
                     auth = current_authorization(cleaned.get("authorization") or {})
                     if auth != cleaned.get("authorization"):
@@ -5572,7 +5573,7 @@ def command_delegator_migrate(args: argparse.Namespace) -> int:
     try:
         with StateLock(path):
             doc = _delegator_read(path)
-            migrated, blockers, dropped = RECORD.delegator_migrated(doc)
+            migrated, blockers, dropped = RECORD.delegator_migrated(doc, frozenset(ident for ident, row in catalog_from_files(platform_paths(Path(__file__), None)).items() if row["class"] == "Expert"))
             if blockers or migrated is None:
                 delegator_recovery(args, doc, blockers)
                 return emit({"result": "blocked", "writes": False, "blockers": blockers,
@@ -5597,6 +5598,11 @@ def command_delegator_update(args: argparse.Namespace) -> int:
         patch = json_arg(args.set)
         if not isinstance(patch, dict):
             return fail("invalid-input", "a delegator update is a JSON object")
+        auth_patch = patch.get("authorization")
+        if isinstance(auth_patch, dict):
+            limits = RECORD.aggregate_limit_blockers({key: value for key, value in auth_patch.items() if value is not None})
+            if limits:
+                return emit({"result": "refused", "reason": "invalid-input", **limits[0], "blockers": limits}, 2)
         for key, value in patch.items():
             if value is None:
                 continue
@@ -5618,7 +5624,13 @@ def command_delegator_update(args: argparse.Namespace) -> int:
             merged["schema"] = RECORD.DELEGATOR_SCHEMA
             merged["revision"] = actual + 1
             merged["updated_at"] = observed_at()
-            normalized, blockers, _dropped = RECORD.delegator_migrated(merged)
+            if isinstance(auth_patch, dict):
+                invalid = [RECORD.refusal(f"authorization.{key}", ", ".join(sorted(RECORD.DELEGATOR_AUTH_KEYS)),
+                                         "Do not create duplicate authority or move it to prose. Use the original owner source and existing grant/watch recovery route; null removes a legacy key.")
+                           for key, value in auth_patch.items() if value is not None and key not in RECORD.DELEGATOR_AUTH_KEYS]
+                if invalid:
+                    return emit({"result": "refused", "reason": "invalid-input", "blockers": invalid, **invalid[0]}, 2)
+            normalized, blockers, _dropped = RECORD.delegator_migrated(merged, frozenset(ident for ident, row in catalog_from_files(platform_paths(Path(__file__), None)).items() if row["class"] == "Expert"))
             for ident, item in (patch.get("watch") or {}).items() if isinstance(patch.get("watch"), dict) else []:
                 if (isinstance(item, dict) and item.get("status") in ("adopted", "settled")
                         and ident not in (doc.get("watch") or {})):

@@ -385,7 +385,8 @@ class BoundedAcpObserveAndStatus(unittest.TestCase):
         env.update(KAOLA_ACP_RECORD_ROOT=str(cls.root / "records"), MOCK_ACP_LOG=str(cls.root / "mock.jsonl"),
                    MOCK_ACP_CONFIG=json.dumps({"new": cls.options}))
         argv = [sys.executable, str(ACP_CLI), "grok", command, "--repo", str(cls.repo), "--session", cls.session,
-                "--command", f"{sys.executable} {MOCK_ACP_AGENT} --scenario tool_call_only", *args]
+                "--command", f"{sys.executable} {MOCK_ACP_AGENT} --scenario tool_call_only",
+                "--launch-backend", "direct", *args]
         completed = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=120)
         if check and completed.returncode != 0:
             raise AssertionError(f"{command} failed: {completed.stderr}\n{completed.stdout}")

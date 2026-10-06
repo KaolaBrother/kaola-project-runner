@@ -13,6 +13,7 @@ import json
 import os
 import re
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -24,16 +25,14 @@ COMMIT_RE = re.compile(r"^[0-9a-f]{7,40}$")
 BACKUP_RE = re.compile(r"^(?P<stem>.+)\.v(?P<gen>[0-9]+)-(?P<digest>[0-9a-f]{12})\.json$")
 
 PROJECT_KEYS = frozenset({
-    "code", "goal", "issue", "repo", "requirements_source", "rules",
-    "skill_adoption_source", "status", "stop",
+    "code", "goal", "issue", "repo", "requirements_source", "status", "stop",
 })
 GRANT_KEYS = frozenset({
-    "id", "state", "count", "shared_seat", "model_switch", "special_requirements",
+    "id", "preset_ids", "state", "count", "shared_seat", "model_switch", "special_requirements",
     "lifetime", "expires",
 })
 AUTH_KEYS = frozenset({
-    "classes", "grants", "elite_cap", "exclusions", "paused", "revoked",
-    "model_switches", "account_token_quotas", "capability_summary",
+    "grants", "exclusions", "account_token_quotas",
 })
 RECOVERY_KEYS = frozenset({"protected_untracked", "host"})
 TASK_KEYS = frozenset({
@@ -128,8 +127,8 @@ HOLD_TEXT_KEYS = frozenset({
     "scope", "reason", "owner", "resume_when", "next", "preset", "summary", "pool",
 })
 DELEGATOR_GRANT_KEYS = frozenset({
-    "preset_id", "preset_ids", "count", "class", "switch_authorization",
-    "lifetime", "special_requirements",
+    "preset_id", "preset_ids", "count", "switch_authorization",
+    "state", "lifetime", "expires", "special_requirements",
 })
 DAY_START_KEYS = frozenset({"action", "state", "evidence"})
 DAY_END_KEYS = frozenset({"action", "state", "host_ack", "claim_check", "evidence"})
@@ -149,9 +148,9 @@ DELEGATOR_SIDEAGENT_KEYS = frozenset({"preset", "scope", "source"})
 GRANT_STATES = frozenset({"granted", "paused", "revoked", "excluded"})
 TASK_STAGES = frozenset({"todo", "doing", "review", "closeout", "done"})
 DELEGATOR_AUTH_KEYS = frozenset({
-    "run_state", "dispatch_enabled", "expert_task_grants", "worker_pool", "worker_pool_cap",
-    "account_token_quotas", "elite_grants", "elite_cap", "priority", "revoked",
-    "known_resource_limits", "retired_pool_grants", "sideagent", "paused", "exclusions",
+    "run_state", "dispatch_enabled", "expert_task_grants", "worker_pool",
+    "account_token_quotas", "elite_grants", "priority",
+    "known_resource_limits", "sideagent", "exclusions",
 })
 DELEGATOR_TOP_KEYS = frozenset({
     "schema", "revision", "updated_at", "project", "host", "authorization", "watch",
@@ -387,6 +386,230 @@ def count_ok(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
+def aggregate_limit_blockers(auth: dict[str, Any], prefix: str = "authorization") -> list[dict[str, str]]:
+    return [refusal(f"{prefix}.{key}", "exact preset/shared grant counts; no independent aggregate limit",
+                    "Owner: resolve this legacy limit against the original grants. Use the existing "
+                    "revision-bound authorization update to remove it with null after explicit owner "
+                    "revocation or confirmed unchanged grant authority; otherwise retain the original "
+                    "evidence through the current decision/watch route. Do not infer counts, copy this "
+                    "limit to prose or another field, or stop active work. Then repeat migration.")
+            for key in ("elite_cap", "total_cap", "worker_pool_cap") if key in auth]
+
+
+def migrate_authorization_limits(auth: Any, delegator: bool = False, expert_ids: frozenset[str] = frozenset()) -> tuple[Any, list[dict[str, str]], list[str]]:
+    """Consolidate source-bound legacy grants; refuse ambiguous owner intent."""
+    if not isinstance(auth, dict):
+        return auth, [], []
+    out = json.loads(json.dumps(auth))
+    counts: dict[str, int] = {}
+    keys = ("elite_grants", "expert_task_grants") if delegator else ("grants",)
+    known = any(isinstance(auth.get(key), list) and auth[key] for key in keys)
+    for key in keys:
+        rows = auth.get(key, [])
+        if not isinstance(rows, list):
+            known = False
+            continue
+        for row in rows:
+            if not isinstance(row, dict) or not count_ok(row.get("count")):
+                known = False
+                continue
+            ids = row.get("preset_ids") or [row.get("preset_id") if delegator else row.get("id")]
+            if not isinstance(ids, list) or not ids or not all(isinstance(ident, str) and ident for ident in ids):
+                known = False
+                continue
+            group = row.get("shared_seat") or (",".join(sorted(ids)))
+            if not isinstance(group, str):
+                known = False
+                continue
+            counts[group] = max(counts.get(group, 0), row["count"])
+    removed = []
+    for key in ("elite_cap", "total_cap", "worker_pool_cap"):
+        if key not in out:
+            continue
+        value = out[key]
+        if value is None or (key != "worker_pool_cap" and known and count_ok(value)
+                             and value >= sum(counts.values())):
+            del out[key]
+            removed.append(f"authorization.{key}")
+    blockers = aggregate_limit_blockers(out)
+    if not delegator:
+        for key in ("classes", "capability_summary"):
+            if key in out:
+                if (key == "classes" and isinstance(out[key], dict)
+                        and set(out[key]) <= {"Elite", "Expert", "Worker"}
+                        and all(isinstance(value, str) for value in out[key].values())
+                        or key == "capability_summary" and isinstance(out[key], dict)
+                        and set(out[key]) == {"presets"} and _string_list_ok(out[key]["presets"])):
+                    del out[key]
+                    removed.append(f"authorization.{key} derived from catalog/grants")
+                else:
+                    blockers.append(refusal(f"authorization.{key}", "derived catalog/grant output",
+                                            "Owner: reconcile unknown legacy content from its original source "
+                                            "through the current decision route; do not silently delete it"))
+        rows = out.get("grants", [])
+        if isinstance(rows, list):
+            switches = out.get("model_switches")
+            paused = out.get("paused")
+            if switches is not None and not _string_list_ok(switches):
+                blockers.append(refusal("authorization.model_switches", "one grant/group switch authority",
+                                        "Host: resolve exact owner switch choices before migration"))
+            if paused is not None and not _string_list_ok(paused):
+                blockers.append(refusal("authorization.paused", "grant state paused",
+                                        "Host: resolve the current pause owner and reopening route"))
+            known_ids = {ident for row in rows if isinstance(row, dict)
+                         for ident in (row.get("preset_ids") if _string_list_ok(row.get("preset_ids")) else [row.get("id")])
+                         if isinstance(ident, str)}
+            for key, values in (("model_switches", switches), ("paused", paused)):
+                if isinstance(values, list) and set(values) - known_ids:
+                    blockers.append(refusal(f"authorization.{key}", "existing exact granted choices",
+                                            "Host: resolve unmatched original authorization; no grant is invented"))
+            groups = {}
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                ids = row.get("preset_ids") or [row.get("id")]
+                if not isinstance(ids, list) or not ids or not all(isinstance(ident, str) and ident for ident in ids):
+                    blockers.append(refusal("authorization.grants", "exact choice ids",
+                                            "Host: resolve original grant identity before migration"))
+                    continue
+                if isinstance(switches, list) and any(ident in switches for ident in ids):
+                    if row.get("model_switch") is False or not all(ident in switches for ident in ids):
+                        blockers.append(refusal("authorization.model_switches", "consistent grant/group switch permission",
+                                                "Host: resolve conflicting owner switch intent from original evidence"))
+                    else:
+                        row["model_switch"] = True
+                if isinstance(paused, list) and any(ident in paused for ident in ids):
+                    if not all(ident in paused for ident in ids):
+                        blockers.append(refusal("authorization.paused", "one applicable grant pause",
+                                                "Host: resolve partial group pause from original evidence"))
+                    else:
+                        row["state"] = "paused"
+                group = row.get("shared_seat") or ",".join(str(ident) for ident in ids)
+                if not isinstance(group, str):
+                    blockers.append(refusal("authorization.grants.shared_seat", "exact shared group string", "Host: source original group identity before migration"))
+                    continue
+                groups.setdefault(group, []).append(row)
+            canonical = []
+            for group, members in groups.items():
+                first = members[0]
+                if len(members) == 1:
+                    canonical.append(first)
+                    continue
+                keys = ("count", "state", "model_switch", "lifetime", "expires")
+                if any(any(row.get(key) != first.get(key) for key in keys) for row in members[1:]):
+                    blockers.append(refusal(f"authorization.grants.{group}", "one consistent shared count/state/switch/lifetime",
+                                            "Host: resolve competing group authority from original grants; active work stays"))
+                    continue
+                combined = {key: value for key, value in first.items() if key not in ("id", "special_requirements")}
+                combined["preset_ids"] = sorted({ident for row in members for ident in (row.get("preset_ids") if _string_list_ok(row.get("preset_ids")) else [row.get("id")])
+                         if isinstance(ident, str)})
+                special = {row["id"]: row["special_requirements"] for row in members
+                           if row.get("id") and row.get("special_requirements")}
+                if special:
+                    combined["special_requirements"] = special
+                canonical.append(combined)
+                removed.append(f"authorization.grants.{group} repeated rows -> one group")
+            if not blockers:
+                out["grants"] = canonical
+                for key in ("model_switches", "paused"):
+                    if key in out:
+                        del out[key]
+                        removed.append(f"authorization.{key} -> grant/group")
+    else:
+        revoked = out.get("revoked", [])
+        paused = out.get("paused", [])
+        if not _string_list_ok(revoked) or not _string_list_ok(paused):
+            for key, value in (("revoked", revoked), ("paused", paused)):
+                if not _string_list_ok(value):
+                    blockers.append(refusal(f"authorization.{key}", "exact current preset ids",
+                                            "Delegator: resolve original intent before migration"))
+        else:
+            pool = set(out.get("worker_pool") or []) if _string_list_ok(out.get("worker_pool", [])) else set()
+            known = set(pool)
+            for key in ("elite_grants", "expert_task_grants"):
+                kept = []
+                rows = out.get(key) or []
+                if not isinstance(rows, list):
+                    blockers.append(refusal(f"authorization.{key}", "grant array", "Delegator: source the original grants before migration"))
+                    continue
+                for row_index, row in enumerate(rows):
+                    if not isinstance(row, dict):
+                        kept.append(row)
+                        continue
+                    ids = row.get("preset_ids") or [row.get("preset_id")]
+                    if not _string_list_ok(ids) or not ids:
+                        blockers.append(refusal(f"authorization.{key}[{row_index}].preset_ids" if "preset_ids" in row else f"authorization.{key}[{row_index}].preset_id", "exact choice ids", "Delegator: source original grant identity before migration"))
+                        kept.append(row)
+                        continue
+                    known.update(ids)
+                    if row.get("state") == "revoked":
+                        revoked = list(set(revoked) | set(ids))
+                    expired = False
+                    if isinstance(row.get("expires"), str):
+                        try:
+                            expiry = datetime.fromisoformat(row["expires"].replace("Z", "+00:00"))
+                            expired = expiry.tzinfo is not None and expiry <= datetime.now(timezone.utc)
+                        except ValueError:
+                            pass  # unreadable originals remain a visible obligation
+                    current = [ident for ident in ids if ident not in revoked
+                               and not (expired and (key == "expert_task_grants" or ident in expert_ids))]
+                    special = row.get("special_requirements")
+                    if isinstance(special, dict) and special and set(special) <= set(ids):
+                        row["special_requirements"] = {ident: special[ident] for ident in current if ident in special}
+                    if not current:
+                        removed.append(f"authorization.{key} ended grant")
+                        continue
+                    if any(ident in paused for ident in current):
+                        if not all(ident in paused for ident in current):
+                            blockers.append(refusal("authorization.paused", "one applicable group pause",
+                                                    "Delegator: resolve partial group pause from original owner evidence"))
+                        else:
+                            row["state"] = "paused"
+                    if "preset_ids" in row:
+                        row["preset_ids"] = current
+                    kept.append(row)
+                if key in out:
+                    out[key] = kept
+            if (set(revoked) | set(paused)) - known:
+                blockers.append(refusal("authorization.revoked/paused", "original known grant/default pool ids",
+                                        "Delegator: reconcile unmatched original recovery duties; do not infer new grants"))
+            if not blockers:
+                exclusions = set(out.get("exclusions") or []) | (pool & set(revoked))
+                if exclusions:
+                    out["exclusions"] = sorted(exclusions)
+                for key in ("revoked", "paused"):
+                    if key in out:
+                        del out[key]
+                        removed.append(f"authorization.{key} -> current grants/exclusions")
+    return out, blockers, removed
+
+
+def expanded_grants(grants: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Mechanical compatibility rows; grouped records alone own count and switch permission."""
+    out = []
+    for grant in grants:
+        if not isinstance(grant, dict):
+            out.append(grant)
+            continue
+        ids = grant.get("preset_ids")
+        if ids is None:
+            out.append(dict(grant))
+            continue
+        if not _string_list_ok(ids) or not ids:
+            raise ValueError("grants.preset_ids needs exact owner-approved choices")
+        special = grant.get("special_requirements")
+        for ident in ids:
+            row = {key: value for key, value in grant.items() if key != "preset_ids"}
+            row["id"] = ident
+            row["shared_seat"] = grant.get("shared_seat") or ",".join(sorted(ids))
+            if isinstance(special, dict) and _string_list_ok(ids) and set(special) <= set(ids):
+                row.pop("special_requirements", None)
+                if ident in special:
+                    row["special_requirements"] = special[ident]
+            out.append(row)
+    return out
+
+
 def delegator_authorization_blockers(auth: Any) -> list[dict[str, str]]:
     """One closed shape check for writes, migration, and the dispatch ceiling.
 
@@ -397,22 +620,17 @@ def delegator_authorization_blockers(auth: Any) -> list[dict[str, str]]:
         return []
     if not isinstance(auth, dict):
         return [refusal("authorization", "object", "rehome the current grants and limits; the file was not written")]
-    found = []
+    found = aggregate_limit_blockers(auth)
 
     def bad(path: str, allowed: str, recovery: str = "rehome this fact from its source; the file was not written") -> None:
         found.append(refusal(path, allowed, recovery))
 
     for key in sorted(auth):
-        if key not in DELEGATOR_AUTH_KEYS:
+        if key not in DELEGATOR_AUTH_KEYS and key not in ("elite_cap", "total_cap", "worker_pool_cap"):
             bad(f"authorization.{key}", ", ".join(sorted(DELEGATOR_AUTH_KEYS)))
-    for key in ("worker_pool", "paused", "revoked", "exclusions"):
+    for key in ("worker_pool", "revoked", "exclusions"):
         if auth.get(key) is not None and not _string_list_ok(auth[key]):
             bad(f"authorization.{key}", "array of preset ids")
-    for key in ("worker_pool_cap", "elite_cap"):
-        if auth.get(key) is not None and not count_ok(auth[key]):
-            bad(f"authorization.{key}", "nonnegative integer, excluding boolean",
-                "map the owner's stated limit from original evidence; do not infer an integer from text. "
-                "Keep an unresolved condition in watch.detail with its source and next action; the file was not written")
     for key in ("run_state", "priority", "account_token_quotas"):
         if auth.get(key) is not None and not isinstance(auth[key], str):
             bad(f"authorization.{key}", "string")
@@ -445,7 +663,8 @@ def delegator_authorization_blockers(auth: Any) -> list[dict[str, str]]:
             if "preset_id" in grant and (not isinstance(grant["preset_id"], str) or not grant["preset_id"]):
                 bad(f"{path}.preset_id", "nonempty preset id string")
             if "preset_ids" in grant and (not _string_list_ok(grant["preset_ids"])
-                                           or not grant["preset_ids"] or not all(grant["preset_ids"])):
+                                           or not grant["preset_ids"] or not all(grant["preset_ids"])
+                                           or len(grant["preset_ids"]) != len(set(grant["preset_ids"])) or "preset_id" in grant):
                 bad(f"{path}.preset_ids", "nonempty array of preset ids")
             if not count_ok(grant.get("count")):
                 bad(f"{path}.count", "nonnegative integer count, excluding boolean; shared counts may exceed one")
@@ -454,15 +673,23 @@ def delegator_authorization_blockers(auth: Any) -> list[dict[str, str]]:
                 bad(f"{path}.switch_authorization", "boolean",
                     "retain the owner's switch condition in watch.detail with source and next action. "
                     "Map true or false only when original authority supports it; the file was not written")
-            for field in ("class", "lifetime"):
+            for field in ("lifetime",):
                 if grant.get(field) is not None and not isinstance(grant[field], str):
                     bad(f"{path}.{field}", "string")
+            if grant.get("state") is not None and grant["state"] not in GRANT_STATES:
+                bad(f"{path}.state", ", ".join(sorted(GRANT_STATES)))
             special = grant.get("special_requirements")
             if special is not None and not isinstance(special, (str, dict)):
                 bad(f"{path}.special_requirements", "owner text or object of model, effort, task_scope strings")
             elif isinstance(special, dict):
-                found.extend(_closed_strings(f"{path}.special_requirements", special,
-                                             frozenset({"model", "effort", "task_scope"})))
+                ids = grant.get("preset_ids") or [grant.get("preset_id")]
+                if special and _string_list_ok(ids) and set(special) <= set(ids):
+                    for ident, value in special.items():
+                        found.extend(_closed_strings(f"{path}.special_requirements.{ident}", value,
+                                                     frozenset({"model", "effort", "task_scope"})))
+                else:
+                    found.extend(_closed_strings(f"{path}.special_requirements", special,
+                                                 frozenset({"model", "effort", "task_scope"})))
     return found
 
 
@@ -478,43 +705,20 @@ def authorization_blockers(auth: Any, prefix: str = "authorization") -> list[dic
     if auth in (None, {}):
         return []
     if not isinstance(auth, dict):
-        return [refusal(prefix, "object of grants, pauses, and caps",
+        return [refusal(prefix, "object of grants and pauses",
                         "rehome this value into the authorization object; the file was not written")]
-    found = []
+    found = aggregate_limit_blockers(auth, prefix)
     for key in sorted(auth):
-        if key not in AUTH_KEYS:
+        if key not in AUTH_KEYS and key not in ("elite_cap", "total_cap", "worker_pool_cap"):
             found.append(refusal(
                 f"{prefix}.{key}",
                 ", ".join(sorted(AUTH_KEYS)),
                 "rehome this authorization fact into an allowed field; the file was not written",
             ))
-    classes = auth.get("classes")
-    if classes is not None:
-        if not isinstance(classes, dict) or any(not isinstance(key, str) or not isinstance(value, str) or not value
-                                                for key, value in classes.items()):
-            found.append(refusal(f"{prefix}.classes", "object of class name to stored sentence",
-                                 "keep each Class sentence as a string; the file was not written"))
-    for key in ("paused", "revoked", "exclusions"):
+    for key in ("exclusions",):
         if key in auth and auth[key] is not None and not _string_list_ok(auth[key]):
             found.append(refusal(f"{prefix}.{key}", "array of preset ids",
                                  "set this field to an array of preset ids; the file was not written"))
-    if "elite_cap" in auth and auth["elite_cap"] is not None and not isinstance(auth["elite_cap"], int):
-        found.append(refusal(f"{prefix}.elite_cap", "integer",
-                             "set elite_cap to an integer; the file was not written"))
-    summary = auth.get("capability_summary")
-    if isinstance(summary, dict):
-        for key in sorted(summary):
-            if key != "presets":
-                found.append(refusal(
-                    f"{prefix}.capability_summary.{key}", "presets only",
-                    "read this value from its source and rehome any unresolved duty in its typed field; "
-                    "then remove this key explicitly. No grant is inferred; the file was not written",
-                ))
-    if summary is not None and (
-            not isinstance(summary, dict)
-            or not _string_list_ok(summary.get("presets"))):
-        found.append(refusal(f"{prefix}.capability_summary", "object with presets array",
-                             "keep the stored preset list; the file was not written"))
     grants = auth.get("grants") or []
     if "grants" in auth and not isinstance(grants, list):
         found.append(refusal(f"{prefix}.grants", "array of grant objects",
@@ -541,9 +745,33 @@ def authorization_blockers(auth: Any, prefix: str = "authorization") -> list[dic
                                      "granted, paused, revoked, or excluded",
                                      "set state to one of those tokens; the file was not written"))
             count = grant.get("count")
-            if "count" in grant and not isinstance(count, int):
-                found.append(refusal(f"{prefix}.grants[{index}].count", "integer",
-                                     "set count to an integer; the file was not written"))
+            if "count" in grant and not count_ok(count):
+                found.append(refusal(f"{prefix}.grants[{index}].count", "nonnegative integer, excluding boolean",
+                                     "source the exact granted count; the file was not written"))
+            ids = grant.get("preset_ids")
+            if not (isinstance(grant.get("id"), str) and grant["id"] or _string_list_ok(ids) and ids and all(ids)):
+                found.append(refusal(f"{prefix}.grants[{index}]", "exact id or nonempty preset_ids", "Host: recover original grant identity; do not infer a grant"))
+            if grant.get("shared_seat") is not None and not isinstance(grant["shared_seat"], str):
+                found.append(refusal(f"{prefix}.grants[{index}].shared_seat", "string", "source original shared group identity"))
+            if ids is not None and (not _string_list_ok(ids) or not ids or not all(ids) or len(ids) != len(set(ids)) or "id" in grant):
+                found.append(refusal(f"{prefix}.grants[{index}].preset_ids", "one nonempty choice array, no competing id",
+                                     "retain exact owner choices in one grouped grant"))
+            if grant.get("model_switch") is not None and not isinstance(grant["model_switch"], bool):
+                found.append(refusal(f"{prefix}.grants[{index}].model_switch", "boolean owner permission",
+                                     "do not infer switch permission from permitted choices"))
+            special = grant.get("special_requirements")
+            if special is not None:
+                if isinstance(special, dict) and special and ids and _string_list_ok(ids) and set(special) <= set(ids):
+                    for ident, value in special.items():
+                        found.extend(_closed_strings(f"{prefix}.grants[{index}].special_requirements.{ident}", value,
+                                                     frozenset({"model", "effort", "task_scope"})))
+                else:
+                    found.extend(_closed_strings(f"{prefix}.grants[{index}].special_requirements", special,
+                                                 frozenset({"model", "effort", "task_scope"})))
+    shared = [grant.get("shared_seat") for grant in grants if isinstance(grant, dict) and isinstance(grant.get("shared_seat"), str)]
+    if len(shared) != len(set(shared)):
+        found.append(refusal(f"{prefix}.grants", "one authoritative row per shared group",
+                             "plan migration; reconcile competing group count/switch intent before grouping"))
     return found
 
 
@@ -555,16 +783,12 @@ def project_blockers(project: Any) -> list[dict[str, str]]:
     found = [refusal(
         f"project.{key}",
         ", ".join(sorted(PROJECT_KEYS)),
-        "rehome this project fact; the file was not written",
+        "Host: keep one current objective and original source pointers. Project owner requirements belong in the AGENTS user section. Resolve original unresolved intent before removing this legacy key with the revision-bound project update; do not copy settled text to another routine field. The file was not written",
     ) for key in sorted(project) if key not in PROJECT_KEYS]
-    for key in ("code", "goal", "issue", "repo", "requirements_source", "skill_adoption_source", "status", "stop"):
+    for key in ("code", "goal", "issue", "repo", "requirements_source", "status", "stop"):
         if key in project and project[key] is not None and not isinstance(project[key], str):
             found.append(refusal(f"project.{key}", "string",
                                  "set this field to a string; the file was not written"))
-    rules = project.get("rules")
-    if rules is not None and not (isinstance(rules, str) or _string_list_ok(rules)):
-        found.append(refusal("project.rules", "string or array of strings",
-                             "remove history bags from rules; the file was not written"))
     return found
 
 
@@ -631,7 +855,7 @@ def authorization_view(auth: Any) -> dict[str, Any]:
         return {}
     view = pick(AUTH_KEYS - {"capability_summary"}, auth)
     grants = []
-    for grant in auth.get("grants") or []:
+    for grant in expanded_grants(auth.get("grants") or []):
         if isinstance(grant, dict):
             grants.append(pick(GRANT_KEYS, grant))
     if "grants" in auth:
@@ -653,14 +877,9 @@ def capability_from_grants(auth: Any) -> dict[str, Any]:
             blocked.update(item for item in value if isinstance(item, str))
         elif isinstance(value, str) and value:
             blocked.add(value)
-    summary = auth.get("capability_summary")
     presets: list[str] = []
-    if isinstance(summary, dict) and isinstance(summary.get("presets"), list):
-        for item in summary["presets"]:
-            if isinstance(item, str) and item not in presets:
-                presets.append(item)
     shared: dict[str, dict[str, Any]] = {}
-    for grant in auth.get("grants") or []:
+    for grant in expanded_grants(auth.get("grants") or []):
         if not isinstance(grant, dict):
             continue
         ident = grant.get("id")
@@ -833,7 +1052,10 @@ def cleanup_current(state: dict[str, Any]) -> tuple[list[dict[str, str]], dict[s
     """Drop non-critical bags by field name. Name every removal. A bad protected list stops the write."""
     if not isinstance(state, dict):
         return [refusal("state", "object", "the file was not written")], state, False, []
-    blockers: list[dict[str, str]] = []
+    original = state
+    state = json.loads(json.dumps(state))
+    state["authorization"], limit_blockers, limit_removed = migrate_authorization_limits(state.get("authorization"))
+    blockers: list[dict[str, str]] = list(limit_blockers)
     recovery = state.get("recovery") if isinstance(state.get("recovery"), dict) else {}
     if "protected_untracked" in recovery:
         blockers.extend(protected_blockers(recovery.get("protected_untracked"), "recovery.protected_untracked"))
@@ -841,14 +1063,14 @@ def cleanup_current(state: dict[str, Any]) -> tuple[list[dict[str, str]], dict[s
     if isinstance(legacy, dict) and "protected_untracked" in legacy:
         blockers.extend(protected_blockers(
             legacy.get("protected_untracked"), "recovery.legacy.protected_untracked"))
-    blockers.extend(authorization_blockers(state.get("authorization")))
+    blockers.extend(item for item in authorization_blockers(state.get("authorization")) if item not in blockers)
     blockers.extend(project_blockers(state.get("project")))
     blockers.extend(maintenance_blockers(state.get("maintenance")))
     if blockers:
-        return blockers, state, False, []
+        return blockers, original, False, []
     cleaned = json.loads(json.dumps(state))
-    changed = False
-    removed: list[str] = []
+    changed = bool(limit_removed)
+    removed: list[str] = list(limit_removed)
     for ident, decision in list((cleaned.get("decisions") or {}).items()):
         if not isinstance(decision, dict) or decision.get("status") != "settled":
             continue
@@ -1257,8 +1479,15 @@ def delegator_blockers(doc: dict[str, Any]) -> tuple[list[dict[str, str]], list[
     return blockers, dropped
 
 
-def delegator_migrated(doc: dict[str, Any]) -> tuple[dict[str, Any] | None, list[dict[str, str]], list[str]]:
+def delegator_migrated(doc: dict[str, Any], expert_ids: frozenset[str] = frozenset()) -> tuple[dict[str, Any] | None, list[dict[str, str]], list[str]]:
+    doc = json.loads(json.dumps(doc))
+    auth, limit_blockers, limit_removed = migrate_authorization_limits(doc.get("authorization"), delegator=True, expert_ids=expert_ids)
+    if "authorization" in doc:
+        doc["authorization"] = auth
+    if limit_blockers:
+        return None, limit_blockers, []
     blockers, dropped = delegator_blockers(doc)
+    dropped = limit_removed + dropped
     if blockers:
         return None, blockers, dropped
     out: dict[str, Any] = {"schema": DELEGATOR_SCHEMA, "revision": int(doc.get("revision") or 0)}
@@ -1316,24 +1545,6 @@ def delegator_migrated(doc: dict[str, Any]) -> tuple[dict[str, Any] | None, list
     if isinstance(auth_out, dict):
         auth_out = json.loads(json.dumps(auth_out))
         out["authorization"] = auth_out
-        revoked = set(auth_out.get("revoked") or [])
-        if isinstance(auth_out.get("worker_pool"), list):
-            auth_out["worker_pool"] = [ident for ident in auth_out["worker_pool"] if ident not in revoked]
-        for key in ("elite_grants", "expert_task_grants"):
-            if isinstance(auth_out.get(key), list):
-                kept = []
-                for grant in auth_out[key]:
-                    grant = dict(grant)
-                    ids = grant.get("preset_ids") or ([grant["preset_id"]] if grant.get("preset_id") else [])
-                    current = [ident for ident in ids if ident not in revoked]
-                    if not current:
-                        if ids:
-                            dropped.append(f"authorization.{key} ended eligibility")
-                        continue
-                    if "preset_ids" in grant:
-                        grant["preset_ids"] = current
-                    kept.append(grant)
-                auth_out[key] = kept
     if isinstance(auth_out, dict) and "retired_pool_grants" in auth_out:
         auth_out.pop("retired_pool_grants")
         dropped.append("authorization.retired_pool_grants")
@@ -1537,8 +1748,10 @@ def delegator_file_view(doc: dict[str, Any]) -> dict[str, Any]:
                                    isinstance(item, (str, int, bool))
                                    or (field == "preset_ids" and _string_list_ok(item))
                                    or (field == "special_requirements" and isinstance(item, dict)
-                                       and not _closed_strings("special_requirements", item,
-                                                               frozenset({"model", "effort", "task_scope"}))))}
+                                       and (not _closed_strings("special_requirements", item,
+                                                               frozenset({"model", "effort", "task_scope"}))
+                                            or (_string_list_ok(grant.get("preset_ids")) and set(item) <= set(grant["preset_ids"])
+                                                and all(not _closed_strings("special_requirements", val, frozenset({"model", "effort", "task_scope"})) for val in item.values())))))}
                               for grant in value if isinstance(grant, dict)]
         elif key == "sideagent" and isinstance(value, dict):
             auth_view[key] = {field: item for field, item in value.items()

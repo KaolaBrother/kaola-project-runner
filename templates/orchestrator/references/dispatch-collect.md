@@ -10,11 +10,9 @@ limits first; no invented work or fixed quota ([Choosing](worker-profiles.md)).
 
 ## Routine context
 
-Keep goals, progress, and the grant's stored Class text.
-At a claim, dispatch, adoption or acceptance decision, fetch only fresh facts
-that can affect it. Reuse state read this turn; a Runner return
-uses its correlated receipt, not a heartbeat reload. Update changed
-Host facts/duties without write/read-back.
+Keep current goals and source pointers. Derive Class/defaults from matched
+catalog/templates. Fetch decision-relevant fresh facts; reuse current-turn reads
+and correlated Runner receipts. Update changed duties without read-back.
 
 `project` reads authorization plus manifests (`platforms/` or a Runner's
 `scripts/platform.yaml`). Availability JSON lists `present` and `absent`;
@@ -24,19 +22,17 @@ text. Exact id, Class, profile and selection stay on
 `candidates`. `absent` is withheld; ungranted
 Expert does not appear.
 
-Input: `grants[]` (`id`, `state`, `count`, `shared_seat`,
-`special_requirements`, `model_switch`, `lifetime`, `expires`), `exclusions`, `paused`, `revoked`,
-`elite_cap`, `model_switches`. `rows` is not grants. `state`: `granted`,
-`paused`, `revoked` or `excluded`. Historical `N live` is granted; any other
-state is `state-unreadable`. Elite and Expert need `granted`.
+Input: `grants[]` (`id` or grouped `preset_ids`, `state`, exact `count`,
+`special_requirements`, `model_switch`, `lifetime`, `expires`), `exclusions`
+and account quotas. One group owns one count, choices and switch authority;
+compatibility rows are generated. A per-choice restriction map retains owner overrides. `rows` is not grants. `state`: `granted`,
+`paused`, `revoked` or `excluded`. Legacy `N live` is granted; other tokens are `state-unreadable`. Elite and Expert need `granted` and an exact count; a missing count is `count-unreadable`.
 
 ## Who dispatches
 
-The Host reuses known facts, queries only missing or stale evidence (unknown
-is not absent; PATH is not adapter availability), and picks count, exact
-presets, assignment text and ownership by profile and task fit within current
-grants and pending changes. Split at independent context/resource
-boundaries; keep coupled code with its tests. No fixed reviewer count.
+Host selects counts, presets and assignments by task/profile fit and current
+authority. Unknown is not absent; PATH is not adapter availability. Split at
+independent context/resource boundaries; keep coupled code/tests together.
 
 The Sideagent (default `zcode/default`, or an owner-selected authorized available
 alternative) reconciles state in batches ([lifecycle-state.md](lifecycle-state.md)):
@@ -46,12 +42,12 @@ scheduler. A parallel helper is a counted worker item; it does not start other w
 
 ## Commands and compact reads
 
-Call `python3 "$SKILL_DIR/scripts/kaola-dispatch.py"` with:
+Use `python3 "$SKILL_DIR/scripts/kaola-dispatch.py"`:
 
 - `project --authorization "$AUTH" [--availability "$AVAIL"]`: candidates.
 - `project --seats --repo "$PROJECT" --authorization "$AUTH" [--live "$LIVE"]
 [--index "$INDEX"] [--skills-root "$SKILLS"]`: observed seats against supplied
-grants, count/cap/shared occupancy and unknown reasons. No authority verdict.
+grants, count/shared occupancy and unknown reasons. No authority verdict.
 - `execute --plan "$PLAN" --authorization "$AUTH" --skills-root "$SKILLS"
 [--availability "$AVAIL"] [--prior-index "$PRIOR"] [--index "$INDEX"] [--live "$LIVE"]`.
 - `collect --index "$INDEX" --skills-root "$SKILLS"`: update correlation.
@@ -63,11 +59,9 @@ truncation/unknown reasons stay visible. Missing ranges are uncertainty.
 - `snapshot --state "$STATE" --out "$PROJECT/.kaola/heartbeat-prompt.json"`: atomically replaces
 `--out` with only `body`; a v2 `--out` is `state-managed`: use `state`.
 
-`$SKILLS` contains `<platform>-kaola-project-runner`. `$LIVE` is `{"rows":[...]}`
-from `kaola-acp.py list --repo`, or omitted for a fresh list. A supplied file is
-an observation, not fresh proof. Compact reads store no state or
-verdict. If live facts a count/cap/shared seat needs cannot be
-read, execute reports `not-run` / `occupancy-unknown`.
+`$SKILLS`: sibling Runner Skills. `$LIVE`: `{"rows":[...]}` from Runner
+`list --repo`, or omitted for a fresh list. A supplied observation is not fresh
+proof. Unreadable occupancy returns `not-run` / `occupancy-unknown`.
 
 ## execute
 
@@ -79,17 +73,20 @@ Each item has `item_id`, `preset`, `session` and `prompt`, plus optional `overri
 
 Preset supplies `--tier`. Model/effort overrides require explicit owner/item
 values; owner `special_requirements` win (`override-conflicts-owner` otherwise).
-Noncatalog model needs owner choice, `model_switch` or `model_switches`, else
+Noncatalog model needs owner choice, grant/group `model_switch`, else
 `model-switch-unauthorized`. A bare model inherits no effort. `task_scope`
 only narrows; other keys are `override-unapplied`.
 
-Rows with the same `shared_seat` share a pool capped at the highest `count` (default one).
+Grouped `preset_ids` share their one exact `count`. Legacy repeated `shared_seat`
+rows require consistent count/switch migration; missing counts grant no seats.
 Each item uses a seat. Full pools return `shared-occupied`; other conflicts stay `resource-conflict`.
 
-`elite_cap` limits Elite+Expert; plan `seat_cap` only tightens it. Worker pool
-is outside it; `count` limits that preset. Host rows (`host_class: true`) and the bound Sideagent (`seat_exempt`) are not worker seats. Resolve a row's preset from the row, identity-bound index
+`count` and shared counts are the capacity. Totals derive from them and current
+occupancy; no standalone authorization or plan cap is accepted. Legacy limits
+need source-based owner reconciliation before removal; a redundant integer
+no smaller than all explicit counts can migrate safely. Worker pool is unchanged. Host rows (`host_class: true`) and the bound Sideagent (`seat_exempt`) are not worker seats. Resolve a row's preset from the row, identity-bound index
 (repo/session/holder/preset), or applied start/status model+effort. Platform
-name is no Class. Unresolved occupancy is unknown where a cap/count/shared
+name is no Class. Unresolved occupancy is unknown where a count/shared
 seat depends on it, unless known rows already fill the limit. Shared labels
 come from the row or resolved preset's grant, never from a platform name.
 
@@ -134,6 +131,4 @@ true; `mutation_status` `in_progress` alone does not. A completed match, even st
 completed idle result stays `in-flight` /
 `no-result`; identity mismatch is unknown.
 
-## Outside this entry
-
-No production-release pipeline; no second scheduler. Quota stays in [quota-packages.md](quota-packages.md).
+Quota: [quota-packages.md](quota-packages.md).

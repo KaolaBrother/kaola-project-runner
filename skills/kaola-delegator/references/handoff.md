@@ -17,8 +17,7 @@ HOST="$PLATFORM-<PROJECT_CODE>-orchestrator-main"  # codex-KPR-orchestrator-main
 unrecorded); workers are `<platform>-<PROJECT_CODE>-i<ISSUE>-<purpose>` (#72),
 the Host is not one (no `i0`). A live Host fixes `$PLATFORM` to its own.
 
-Three identities stay separate — read each from `status`, start receipts,
-or Host events; never synthesize one from another:
+Read these separate identities from Runner receipts/events:
 
 | Field | Source | Use |
 |---|---|---|
@@ -33,6 +32,8 @@ Before Host `status`, `send`, and `stop`, attest without `--intent`. Before
 zcode launch with a missing or non-file `KAOLA_ZCODE_*` refuses. Liveness is
 Runner `status`, not the locator's tmux `session.present`. Codex and generic
 skip this.
+
+Grok Bot launch: [host-platforms.md](host-platforms.md).
 
 ```bash
 kaola-project-runner-locate --target local|cloud \

@@ -246,6 +246,8 @@ python_suites_all=(
   "test-progressive-disclosure.py"
   "test-issue-50-claude-acp-bridge.py"
   "test-issue-50-runner-integration.py"
+  "test-issue-266-launch-broker.py"
+  "test-issue-266-launch-broker-composed.py"
   "test-zcode-acp-contract.py"
   "test-droid-acp-contract.py"
   "test-issue-51-runner-integration.py"
