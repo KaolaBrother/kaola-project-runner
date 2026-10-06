@@ -10,6 +10,7 @@ lock, so it cannot show this order. That check starts no Runner.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -185,8 +186,22 @@ class DispatchEntry(unittest.TestCase):
         self.tmp.cleanup()
 
     def authorization(self, grants=None, **extra) -> Path:
-        body = {"grants": grants or [], "classes": {"Expert": "e", "Elite": "l", "Worker": "w"}}
+        # Current positive fixtures grant one seat unless the case supplies another count.
+        # Legacy-limit refusal cases write their raw original JSON directly.
+        grants = [{"count": 1, **grant} for grant in (grants or [])]
+        body = {"grants": grants}
         body.update(extra)
+        for key in ("elite_cap", "worker_pool_cap"):
+            body.pop(key, None)
+        switches = body.pop("model_switches", [])
+        for grant in grants:
+            if grant.get("id") in switches:
+                grant["model_switch"] = True
+        record_spec = importlib.util.spec_from_file_location("current_grant_fixture", REPO / "scripts/kaola-record-contract.py")
+        record = importlib.util.module_from_spec(record_spec)
+        record_spec.loader.exec_module(record)
+        body, blockers, _ = record.migrate_authorization_limits(body)
+        self.assertEqual(blockers, [], "positive fixture authority must be unambiguous")
         return write_json(self.root, "auth.json", body)
 
     def availability(self, present=None, absent_ids=None) -> Path:
@@ -667,7 +682,7 @@ class DispatchEntry(unittest.TestCase):
         payload = self.execute_dry_run(plan, auth, available, live)
 
         by_id = {item["item_id"]: item for item in payload["items"]}
-        self.assertEqual(payload["effective_cap"], 4, payload)
+        self.assertNotIn("effective_cap", payload)
         self.assertEqual(by_id["droid/default"]["reason"], "dry-run", payload)
         self.assertEqual(by_id["droid/opus"]["reason"], "dry-run", payload)
         self.assertEqual(by_id["droid/core"]["reason"], "shared-occupied", payload)
@@ -696,7 +711,7 @@ class DispatchEntry(unittest.TestCase):
         payload = self.execute_dry_run(plan, auth, available, live)
 
         by_id = {item["item_id"]: item for item in payload["items"]}
-        self.assertEqual(payload["effective_cap"], 4, payload)
+        self.assertNotIn("effective_cap", payload)
         self.assertEqual(by_id["default"]["reason"], "dry-run", payload)
         self.assertEqual(by_id["core"]["reason"], "shared-occupied", payload)
         self.assertFalse(self.log.exists(), "dry-run must not call a Runner")
@@ -746,7 +761,7 @@ class DispatchEntry(unittest.TestCase):
                 "prompt": "b", "resources": {"writes": ["same.md"]},
             },
             {"item_id": "pool", "preset": "zcode/default", "session": "zcode-KPR-i244-pool", "prompt": "c"},
-        ], seat_cap=1)
+        ])
         payload = self.execute(plan, auth, self.availability(["codex/default", "cursor-cli/default", "zcode/default"]))
         by_id = {item["item_id"]: item for item in payload["items"]}
         self.assertEqual(by_id["elite-1"]["reason"], "resource-conflict")
@@ -757,13 +772,13 @@ class DispatchEntry(unittest.TestCase):
             {"item_id": "elite-1", "preset": "codex/default", "session": "codex-KPR-i244-cap1", "prompt": "a"},
             {"item_id": "elite-2", "preset": "cursor-cli/default", "session": "cursor-cli-KPR-i244-cap2", "prompt": "b"},
             {"item_id": "pool", "preset": "zcode/default", "session": "zcode-KPR-i244-pool", "prompt": "c"},
-        ], seat_cap=1)
+        ])
         self.log.write_text("", encoding="utf-8")
         payload = self.execute(cap_plan, auth, self.availability(["codex/default", "cursor-cli/default", "zcode/default"]))
         by_id = {item["item_id"]: item for item in payload["items"]}
         self.assertEqual(by_id["elite-1"]["status"], "in-flight")
-        self.assertEqual(by_id["elite-2"]["status"], "not-run")
-        self.assertEqual(by_id["elite-2"]["reason"], "seat-cap")
+        self.assertEqual(by_id["elite-2"]["status"], "in-flight")
+        self.assertEqual(by_id["elite-2"]["reason"], "admitted")
         self.assertEqual(by_id["pool"]["status"], "in-flight")
 
     def test_single_item_and_bounded_parallel_admission(self) -> None:
@@ -1270,16 +1285,16 @@ class DispatchEntry(unittest.TestCase):
         payload = self.execute(plan, capped, self.availability(["claude-code/opus-xhigh", "claude-code/sonnet"]))
         by_id = {item["item_id"]: item for item in payload["items"]}
         self.assertEqual(by_id["opus"]["status"], "in-flight")
-        self.assertEqual(by_id["sonnet"]["reason"], "seat-cap")
+        self.assertEqual(by_id["sonnet"]["reason"], "count")
         wide = self.plan([
             {"item_id": "opus", "preset": "claude-code/opus-xhigh", "session": "claude-code-KPR-i244-opus", "prompt": "a"},
             {"item_id": "sonnet", "preset": "claude-code/sonnet", "session": "claude-code-KPR-i244-sonnet", "prompt": "b"},
-        ], seat_cap=5)
+        ])
         self.log.write_text("", encoding="utf-8")
         payload = self.execute(wide, capped, self.availability(["claude-code/opus-xhigh", "claude-code/sonnet"]))
         by_id = {item["item_id"]: item for item in payload["items"]}
-        self.assertEqual(by_id["sonnet"]["reason"], "seat-cap")
-        self.assertEqual(payload["effective_cap"], 1)
+        self.assertEqual(by_id["sonnet"]["reason"], "count")
+        self.assertNotIn("effective_cap", payload)
 
         live = write_json(self.root, "live.json", {"rows": [
             {
@@ -1592,7 +1607,7 @@ class DispatchEntry(unittest.TestCase):
         payload = self.execute(plan, capped, self.availability(["claude-code/opus-xhigh"]), live=host)
         self.assertEqual(payload["items"][0]["status"], "in-flight")
         self.assertEqual(payload["items"][0]["reason"], "admitted")
-        self.assertEqual(payload["effective_cap"], 1)
+        self.assertNotIn("effective_cap", payload)
 
         counted = self.authorization([{"id": "codex/default", "state": "granted", "count": 1}])
         one = self.plan([{
@@ -1681,7 +1696,7 @@ class DispatchEntry(unittest.TestCase):
         payload = self.execute(self.plan(items), capped, self.availability(["codex/default"]), live=live)
         by_id = {item["item_id"]: item for item in payload["items"]}
         self.assertEqual(by_id["a"]["reason"], "admitted", payload)
-        self.assertEqual(by_id["c"]["reason"], "seat-cap")
+        self.assertEqual(by_id["c"]["reason"], "count")
         self.assertNotIn("start", {row["command"] for row in commands(self.log)})
 
         shared = self.authorization([{"id": "codex/default", "state": "granted", "shared_seat": "codex"}])
@@ -1696,7 +1711,7 @@ class DispatchEntry(unittest.TestCase):
         other["preset"] = "codex/default"
         crowded = write_json(self.root, "crowded.json", {"rows": [row_a, other]})
         payload = self.execute(self.plan(items[:1]), capped, self.availability(["codex/default"]), live=crowded)
-        self.assertEqual(payload["items"][0]["reason"], "seat-cap", "another live seat is not subtracted")
+        self.assertEqual(payload["items"][0]["reason"], "count", "another live seat is not subtracted")
         payload = self.execute(self.plan(items[:1]), shared, self.availability(["codex/default"]), live=crowded)
         self.assertEqual(payload["items"][0]["reason"], "shared-occupied")
 
@@ -1704,7 +1719,7 @@ class DispatchEntry(unittest.TestCase):
         # retry sends the first prompt instead of calling the seat unbound.
         index = self.root / "retry-index.json"
         self.execute(self.plan(items[:1]), capped, self.availability(["codex/default"]), live=crowded, index=index)
-        self.assertEqual(json.loads(index.read_text())["items"][0]["reason"], "seat-cap")
+        self.assertEqual(json.loads(index.read_text())["items"][0]["reason"], "count")
         self.log.write_text("", encoding="utf-8")
         payload = self.execute(self.plan(items[:1]), capped, self.availability(["codex/default"]), live=live,
                                prior_index=index, index=index)
@@ -1755,12 +1770,13 @@ class DispatchEntry(unittest.TestCase):
     def test_skeleton_example_sets_effective_cap(self) -> None:
         text = (REPO / "templates/orchestrator/references/heartbeat-skeleton.txt").read_text(encoding="utf-8")
         example = json.loads(re.search(r"例：(\{.*\})", text).group(1))
-        self.assertEqual(example["authorization"]["elite_cap"], 4)
+        self.assertNotIn("elite_cap", example["authorization"])
+        self.assertEqual(example["authorization"]["grants"][0]["count"], 2)
         self.assertNotIn("limits", example["authorization"])
         self.assertIn("model_switch", text)
         self.assertIn("model_switches", text)
         rendered = (ORCHESTRATOR / "references" / "heartbeat-skeleton.md").read_text(encoding="utf-8")
-        self.assertIn('"elite_cap":4', rendered)
+        self.assertNotIn('"elite_cap":', rendered)
         self.assertLessEqual(len(rendered.encode()), 8192)
         install_fake(self.skills, ["zcode"])
         auth = write_json(self.root, "skeleton-auth.json", example["authorization"])
@@ -1776,7 +1792,7 @@ class DispatchEntry(unittest.TestCase):
             "--skills-root", str(self.skills), "--dry-run", "--live", str(live),
         ], self.env)
         self.assertEqual(code, 0, payload)
-        self.assertEqual(payload["effective_cap"], 4)
+        self.assertNotIn("effective_cap", payload)
         self.assertEqual(payload["items"][0]["reason"], "dry-run")
 
     def test_collect_terminal_outcome_and_stopped_seat(self) -> None:
@@ -2027,7 +2043,7 @@ class DispatchEntry(unittest.TestCase):
             self.plan([{"item_id": "sonnet", "preset": "claude-code/sonnet", "session": "claude-code-KPR-i244-sonnet", "prompt": "a"}]),
             tight, self.availability(["claude-code/sonnet"]), live=live(workers),
         )
-        self.assertEqual(payload["items"][0]["reason"], "seat-cap")
+        self.assertEqual(payload["items"][0]["reason"], "count")
         shared_auth = self.authorization([
             {"id": "droid/opus", "state": "granted", "shared_seat": "seat-alpha"},
             {"id": "codex/default", "state": "granted", "shared_seat": "codex"},
@@ -2116,7 +2132,7 @@ class DispatchEntry(unittest.TestCase):
         self.assertEqual(by_id["kept"]["holder_instance_id"], "holder-kept")
         self.assertEqual(by_id["kept"]["dispatch_event_cursor"], 12)
         self.assertEqual(by_id["kept"]["evidence"]["start"]["marker"], "kept-start")
-        self.assertEqual(by_id["cap"]["reason"], "seat-cap")
+        self.assertEqual(by_id["cap"]["reason"], "count")
         self.assertEqual(by_id["count"]["reason"], "count")
         self.assertEqual(by_id["seat"]["reason"], "shared-occupied")
         seen = commands(self.log)
@@ -2384,7 +2400,7 @@ class DispatchEntry(unittest.TestCase):
                 self.assertEqual(row["status"], prior_status, payload)
                 self.assertEqual(row["reason"], prior_reason)
                 self.assertNotEqual(row["status"], "not-run")
-                self.assertEqual(row["evidence"]["blocked_attempt"]["reason"], "seat-cap")
+                self.assertEqual(row["evidence"]["blocked_attempt"]["reason"], "count")
                 self.assertEqual(row["holder_instance_id"], "holder-stuck")
                 self.assertEqual(row["dispatch_event_cursor"], 9)
                 self.assertEqual(row["evidence"]["send"]["marker"], marker)
@@ -2397,7 +2413,7 @@ class DispatchEntry(unittest.TestCase):
                 self.assertEqual(stored["reason"], prior_reason)
                 self.assertEqual(stored["holder_instance_id"], "holder-stuck")
                 self.assertEqual(stored["evidence"]["send"]["marker"], marker)
-                self.assertEqual(stored["evidence"]["blocked_attempt"]["reason"], "seat-cap")
+                self.assertEqual(stored["evidence"]["blocked_attempt"]["reason"], "count")
                 self.assertEqual(stored["result"], {"excerpt": marker})
                 self.assertIn("stuck", disk["coverage"][prior_status])
                 self.assertNotIn("stuck", disk["coverage"]["not-run"])
@@ -2477,7 +2493,7 @@ class DispatchEntry(unittest.TestCase):
         self.assertEqual(code, 0, payload)
         changed = payload["items"][0]
         self.assertEqual(changed["status"], "not-run")
-        self.assertEqual(changed["reason"], "seat-cap")
+        self.assertEqual(changed["reason"], "count")
         self.assertNotIn("holder_instance_id", changed)
         self.assertNotIn("blocked_attempt", changed.get("evidence") or {})
         self.assertNotEqual(changed.get("result"), {"excerpt": "maybe-sent"})
@@ -3165,7 +3181,7 @@ class DispatchEntry(unittest.TestCase):
         for preset, _, _ in pool:
             self.assertEqual(by_id[preset]["status"], "in-flight", payload)
         self.assertEqual(by_id["elite"]["status"], "not-run")
-        self.assertEqual(by_id["elite"]["reason"], "seat-cap")
+        self.assertEqual(by_id["elite"]["reason"], "count")
 
         roomy = self.authorization([
             {"id": "codex/astra", "state": "granted", "count": 1, "lifetime": "standing"}], elite_cap=2)
@@ -3301,7 +3317,7 @@ class DispatchEntry(unittest.TestCase):
                     "acceptance": "pending",
                     "evidence": {
                         "send": {"marker": "old-send"},
-                        "blocked_attempt": {"reason": "seat-cap"},
+                        "blocked_attempt": {"reason": "count"},
                     },
                 },
             ],
@@ -3355,7 +3371,7 @@ class DispatchEntry(unittest.TestCase):
             self.assertNotIn("blocked_attempt", kept["evidence"])
             self.assertEqual(retry["status"], "failed")
             self.assertEqual(retry["reason"], "selection-mismatch")
-            self.assertEqual(retry["evidence"]["blocked_attempt"], {"reason": "seat-cap"})
+            self.assertEqual(retry["evidence"]["blocked_attempt"], {"reason": "count"})
         finally:
             gate.write_text("go", encoding="utf-8")
         stdout, stderr = proc.communicate(timeout=20)
