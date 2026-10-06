@@ -1145,11 +1145,10 @@ RECORD_MODULE = "kaola-record-contract.py"
 # reread. The module is optional at load time so an older install still runs;
 # the behavior needs it present beside the holder.
 COMPACT_MODULE = "kaola-compact-recovery.py"
-# Issue #264 review: these platforms already inject their own compact recovery
-# into the session, so the ACP link must not add a second reload prompt for
-# them. The current Codex ACP Host receives the KPR-USER-COMPACT-RECOVERY-V1
-# marker and fully rereads its installed main Skill on that path. Preserve it.
-NATIVE_COMPACT_RECOVERY_PLATFORMS = frozenset({"codex"})
+# Native TUI hooks do not establish ACP-owned recovery. Codex 0.160.1 with
+# codex-acp 2.0.1 completed compaction without invoking those hooks; ACP must
+# deliver the bounded reload. Add an owner only with actual ACP route proof.
+NATIVE_COMPACT_RECOVERY_PLATFORMS = frozenset()
 RUNNER_BUILD_FILES = (
     "kaola-acp-holder.py",
     "kaola-compact-recovery.py",
@@ -3717,7 +3716,7 @@ class Holder:
                  else "python3 <Project Runner>/scripts/kaola-dispatch.py state")
         lines.append(f"State file: {state_file}. State tool: `{state} ... --file {shlex.quote(str(state_file))}`; "
                      f"`{state} view --role sideagent --file {shlex.quote(str(state_file))}` reads it.")
-        lines.append("As this batch's fresh maintenance node: read the related tasks and real receipts, "
+        lines.append("For ordinary Host business inputs, read the related tasks and real receipts, "
                      "apply each input with the state tool or retain it at a current record that names "
                      "its next reader. `applied` names only current records this node's holder wrote "
                      "through an authorized state operation, or `retired:<kind>/<id>` for its authorized "
@@ -3737,6 +3736,8 @@ class Holder:
                          "task-dispatch-result-reclaim links (links). Record one entry with input recovery#N, "
                          "checked:{authorization:[original refs],duties:[original refs],links:[original refs]}, "
                          "and unavailable:{scope:reason} for a scope whose originals cannot be read. "
+                         "A recovery entry accepts only input, checked, unavailable and optional applied; "
+                         "never retained. Put each scope in checked or unavailable, never both. "
                          "Unavailable originals stay Host recovery obligations; empty sources cannot PASS. "
                          "Related recovery alerts may be checked in separate scoped entries; do not clear "
                          "unread, newer or unrelated alert inputs. Preserve original Host retirement references.")

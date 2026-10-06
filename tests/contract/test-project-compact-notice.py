@@ -239,11 +239,14 @@ class Notice(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertTrue(self.holder.compact_notice_pending["write_unknown"])
 
-    def test_native_codex_remains_exempt(self):
-        for platform in ("codex",):
-            self.holder.args.platform = platform
-            self.assertFalse(self.notice()["notice_pending"])
+    def test_codex_does_not_accept_droid_project_precompact_hook(self):
+        self.holder.args.platform = "codex"
+        result = self.notice()
+        self.assertFalse(result["notice_pending"])
+        self.assertEqual(result["reason"], "unsupported-project-hook")
         self.assertIsNone(self.holder.compact_reload)
+        self.assertEqual(len(self.agent.prompts_sent()), 1)
+        self.assertFalse(self.agent.cancels_sent())
 
     def test_cursor_exact_acp_id_and_data_project_root_admit_notice(self):
         self.holder.args.platform = "cursor-cli"

@@ -5540,8 +5540,9 @@ def build_parser() -> argparse.ArgumentParser:
     checkpoint.add_argument("--through-host-revision", type=int,
                             help="the Host revision this batch selected; later changes stay pending")
     checkpoint.add_argument("--entries", required=True,
-                            help='JSON array of {"input": ID, "applied": [REF...]} or '
-                                 '{"input": ID, "retained": "kind/id"}, or @path')
+                            help='JSON array or @path: ordinary inputs use applied or retained; '
+                                 'recovery#N uses only input, checked, unavailable, optional applied '
+                                 '(never retained); each scope is checked or unavailable, not both')
     checkpoint.set_defaults(func=command_state_checkpoint)
 
     view = actions.add_parser("view")

@@ -1,0 +1,24 @@
+{
+ "rc": 0,
+ "receipt": {
+  "agent_exit_code": 0,
+  "agent_exit_signal": null,
+  "git": {
+   "branch": "main",
+   "dirty": true
+  },
+  "mutation_status": "completed",
+  "platform": "opencode",
+  "repo": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r2/run/repo",
+  "residual_pids": [],
+  "schema_version": 3,
+  "session": "opencode-KPR1035C-orchestrator-main",
+  "stopped": true,
+  "swept_child_pgids": [],
+  "transport": {
+   "selected": "acp"
+  }
+ },
+ "stderr_tail": "",
+ "stdout_tail": "{\"agent_exit_code\": 0, \"agent_exit_signal\": null, \"git\": {\"branch\": \"main\", \"dirty\": true}, \"mutation_status\": \"completed\", \"platform\": \"opencode\", \"repo\": \"/private/tmp/kpr-i264-host-chain-1035/core/opencode-r2/run/repo\", \"residual_pids\": [], \"schema_version\": 3, \"session\": \"opencode-KPR1035C-orchestrator-main\", \"stopped\": true, \"swept_child_pgids\": [], \"transport\": {\"selected\": \"acp\"}}"
+}

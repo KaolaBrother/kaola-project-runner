@@ -1,0 +1,296 @@
+validate: scrubbed inherited env: KAOLA_ACP_CHILD_RECORD KAOLA_ACP_DISPATCHER KAOLA_ZCODE_ENTRY KAOLA_ZCODE_NODE
+validate: coverage: SUBSET RUN (2 of 82 suites selected; not full-inventory coverage)
+validate: selected: test-issue-255-lifecycle-state.py test-project-compact-notice.py
+validate: candidate: eb833161 (dirty) - execution context, not complete input identity
+validate-watchdog: SKIP watchdog on bash < 4 (mapfile/BASHPID missing; detected bash 3.2.57(1)-release); running render-check unwatched
+render-skills: PASS (10 workers + kaola-project-runner + kaola-delegator + grok-bot host: 1 bridge skill, 2555 B, content stage, unpinned (not saveable); budgets OK)
+validate-watchdog: SKIP watchdog on bash < 4 (mapfile/BASHPID missing; detected bash 3.2.57(1)-release); running validate-skill.claude-code-kaola-project-runner unwatched
+validate-skill: PASS (1 Skill(s))
+validate-watchdog: SKIP watchdog on bash < 4 (mapfile/BASHPID missing; detected bash 3.2.57(1)-release); running validate-skill.codex-kaola-project-runner unwatched
+validate-skill: PASS (1 Skill(s))
+validate-watchdog: SKIP watchdog on bash < 4 (mapfile/BASHPID missing; detected bash 3.2.57(1)-release); running validate-skill.cursor-cli-kaola-project-runner unwatched
+validate-skill: PASS (1 Skill(s))
+validate-watchdog: SKIP watchdog on bash < 4 (mapfile/BASHPID missing; detected bash 3.2.57(1)-release); running validate-skill.devin-kaola-project-runner unwatched
+validate-skill: PASS (1 Skill(s))
+validate-watchdog: SKIP watchdog on bash < 4 (mapfile/BASHPID missing; detected bash 3.2.57(1)-release); running validate-skill.droid-kaola-project-runner unwatched
+validate-skill: PASS (1 Skill(s))
+validate-watchdog: SKIP watchdog on bash < 4 (mapfile/BASHPID missing; detected bash 3.2.57(1)-release); running validate-skill.dsh-kaola-project-runner unwatched
+validate-skill: PASS (1 Skill(s))
+validate-watchdog: SKIP watchdog on bash < 4 (mapfile/BASHPID missing; detected bash 3.2.57(1)-release); running validate-skill.grok-kaola-project-runner unwatched
+validate-skill: PASS (1 Skill(s))
+validate-watchdog: SKIP watchdog on bash < 4 (mapfile/BASHPID missing; detected bash 3.2.57(1)-release); running validate-skill.kaola-project-runner unwatched
+validate-skill: PASS (1 Skill(s))
+validate-watchdog: SKIP watchdog on bash < 4 (mapfile/BASHPID missing; detected bash 3.2.57(1)-release); running validate-skill.kimi-cli-kaola-project-runner unwatched
+validate-skill: PASS (1 Skill(s))
+validate-watchdog: SKIP watchdog on bash < 4 (mapfile/BASHPID missing; detected bash 3.2.57(1)-release); running validate-skill.opencode-kaola-project-runner unwatched
+validate-skill: PASS (1 Skill(s))
+validate-watchdog: SKIP watchdog on bash < 4 (mapfile/BASHPID missing; detected bash 3.2.57(1)-release); running validate-skill.zcode-kaola-project-runner unwatched
+validate-skill: PASS (1 Skill(s))
+validate-watchdog: SKIP watchdog on bash < 4 (mapfile/BASHPID missing; detected bash 3.2.57(1)-release); running validate-skill.kaola-delegator unwatched
+validate-skill: PASS (1 Skill(s))
+FAILED: test-project-compact-notice.py
+FAILED: test-issue-255-lifecycle-state.py
+validate-watchdog: SKIP watchdog on bash < 4 (mapfile/BASHPID missing; detected bash 3.2.57(1)-release); running test-project-compact-notice.py unwatched
+test_active_false_alone_is_not_success (__main__.Notice.test_active_false_alone_is_not_success) ... ok
+test_codex_acp_notice_queues_bounded_reload_after_prior_turn (__main__.Notice.test_codex_acp_notice_queues_bounded_reload_after_prior_turn) ... FAIL
+test_cursor_exact_acp_id_and_data_project_root_admit_notice (__main__.Notice.test_cursor_exact_acp_id_and_data_project_root_admit_notice) ... ok
+test_cursor_hook_requires_both_session_fields_to_match (__main__.Notice.test_cursor_hook_requires_both_session_fields_to_match) ... ok
+test_duplicate_notice_coalesces_current_pending (__main__.Notice.test_duplicate_notice_coalesces_current_pending) ... ok
+test_failed_refused_cancelled_or_stopping_original_retains_obligation (__main__.Notice.test_failed_refused_cancelled_or_stopping_original_retains_obligation) ... ok
+test_foreign_missing_or_stop_hook_never_writes_or_stages (__main__.Notice.test_foreign_missing_or_stop_hook_never_writes_or_stages) ... ok
+test_hook_socket_reply_loss_is_unknown_not_retry (__main__.Notice.test_hook_socket_reply_loss_is_unknown_not_retry) ... ok
+test_hook_uses_existing_socket_and_filters_auth_fields (__main__.Notice.test_hook_uses_existing_socket_and_filters_auth_fields) ... ok
+test_host_precompact_owes_reload_only_without_completed_maintenance (__main__.Notice.test_host_precompact_owes_reload_only_without_completed_maintenance) ... ok
+test_intervening_turn_can_start_and_end_before_admission_no_write (__main__.Notice.test_intervening_turn_can_start_and_end_before_admission_no_write) ... ok
+test_missing_host_entry_retains_notice_and_reload (__main__.Notice.test_missing_host_entry_retains_notice_and_reload) ... ok
+test_newer_native_occurrence_less_signal_survives_notice_admission (__main__.Notice.test_newer_native_occurrence_less_signal_survives_notice_admission) ... ok
+test_notice_waits_for_real_successful_response_then_standard_prompt (__main__.Notice.test_notice_waits_for_real_successful_response_then_standard_prompt) ... ok
+test_partial_write_failure_is_unknown_and_not_replayed (__main__.Notice.test_partial_write_failure_is_unknown_and_not_replayed) ... ok
+test_real_socket_after_write_reply_loss_is_unknown (__main__.Notice.test_real_socket_after_write_reply_loss_is_unknown) ... ok
+test_real_socket_before_write_failure_is_not_attempted (__main__.Notice.test_real_socket_before_write_failure_is_not_attempted) ... ok
+test_source_checkout_does_not_name_directory_as_installed_skill (__main__.Notice.test_source_checkout_does_not_name_directory_as_installed_skill) ... ok
+test_staging_event_precedes_admission_when_prior_ends_at_append (__main__.Notice.test_staging_event_precedes_admission_when_prior_ends_at_append) ... ok
+test_success_change_at_actual_admission_lock_prevents_write (__main__.Notice.test_success_change_at_actual_admission_lock_prevents_write) ... ok
+test_unknown_write_is_retained_and_never_replayed (__main__.Notice.test_unknown_write_is_retained_and_never_replayed) ... ok
+
+======================================================================
+FAIL: test_codex_acp_notice_queues_bounded_reload_after_prior_turn (__main__.Notice.test_codex_acp_notice_queues_bounded_reload_after_prior_turn)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-264/tests/contract/test-project-compact-notice.py", line 244, in test_codex_acp_notice_queues_bounded_reload_after_prior_turn
+    self.assertTrue(self.notice()["notice_pending"])
+AssertionError: False is not true
+
+----------------------------------------------------------------------
+Ran 21 tests in 0.021s
+
+FAILED (failures=1)
+validate-watchdog: SKIP watchdog on bash < 4 (mapfile/BASHPID missing; detected bash 3.2.57(1)-release); running test-issue-255-lifecycle-state.py unwatched
+test_a_host_dispatcher_is_not_re_anchored (__main__.CarrierAnchor.test_a_host_dispatcher_is_not_re_anchored) ... ok
+test_a_worker_is_not_the_carrier_of_the_sessions_it_starts (__main__.CarrierAnchor.test_a_worker_is_not_the_carrier_of_the_sessions_it_starts) ... ok
+test_an_unbound_sideagent_falls_through_to_the_dispatcher_rows (__main__.CarrierAnchor.test_an_unbound_sideagent_falls_through_to_the_dispatcher_rows) ... ok
+test_missing_host_is_a_named_failure_not_a_silent_unbound_start (__main__.CarrierAnchor.test_missing_host_is_a_named_failure_not_a_silent_unbound_start) ... ok
+test_rebind_host_anchors_a_seat_to_the_live_host_running_it (__main__.CarrierAnchor.test_rebind_host_anchors_a_seat_to_the_live_host_running_it) ... ok
+test_rebind_host_refuses_a_non_host_or_stale_caller (__main__.CarrierAnchor.test_rebind_host_refuses_a_non_host_or_stale_caller) ... ok
+test_sideagent_dispatch_notifies_its_bound_host (__main__.CarrierAnchor.test_sideagent_dispatch_notifies_its_bound_host) ... ok
+test_a_disposition_mirrored_during_a_collect_survives_it (__main__.ConsolidatedDispatch.test_a_disposition_mirrored_during_a_collect_survives_it) ... ok
+test_a_recorded_hold_is_not_re_probed (__main__.ConsolidatedDispatch.test_a_recorded_hold_is_not_re_probed) ... ok
+test_a_second_execute_batch_keeps_the_first_in_flight_ref (__main__.ConsolidatedDispatch.test_a_second_execute_batch_keeps_the_first_in_flight_ref) ... ok
+test_collect_names_the_turn_locators_truncation_and_an_absent_output (__main__.ConsolidatedDispatch.test_collect_names_the_turn_locators_truncation_and_an_absent_output) ... ok
+test_implementation_sends_the_hosts_core_and_scope_and_links_the_task (__main__.ConsolidatedDispatch.test_implementation_sends_the_hosts_core_and_scope_and_links_the_task) ... FAIL
+test_mutation_stays_refused_outside_implementation_and_prompts_are_exact (__main__.ConsolidatedDispatch.test_mutation_stays_refused_outside_implementation_and_prompts_are_exact) ... ok
+test_only_a_declared_file_can_be_reported_absent (__main__.ConsolidatedDispatch.test_only_a_declared_file_can_be_reported_absent) ... ok
+test_per_assignment_dispositions_are_mirrored_never_left_pending (__main__.ConsolidatedDispatch.test_per_assignment_dispositions_are_mirrored_never_left_pending) ... ok
+test_bound_sideagent_is_exempt_and_helpers_count (__main__.ExecuteSeats.test_bound_sideagent_is_exempt_and_helpers_count) ... ok
+test_bound_sideagent_never_takes_or_waits_for_a_shared_worker_seat (__main__.ExecuteSeats.test_bound_sideagent_never_takes_or_waits_for_a_shared_worker_seat) ... ok
+test_a_batch_the_node_does_not_admit_is_returned_once_and_not_resent (__main__.HolderNodeMode.test_a_batch_the_node_does_not_admit_is_returned_once_and_not_resent) ... ok
+test_a_checkpoint_short_of_its_batch_is_partial_and_reaches_the_host_once (__main__.HolderNodeMode.test_a_checkpoint_short_of_its_batch_is_partial_and_reaches_the_host_once) ... ok
+test_a_holder_known_not_to_be_the_host_never_starts_a_node (__main__.HolderNodeMode.test_a_holder_known_not_to_be_the_host_never_starts_a_node) ... ok
+test_a_missing_checkpoint_reaches_the_host_once (__main__.HolderNodeMode.test_a_missing_checkpoint_reaches_the_host_once) ... ok
+test_a_node_start_in_flight_ends_with_the_stopping_carrier (__main__.HolderNodeMode.test_a_node_start_in_flight_ends_with_the_stopping_carrier) ... ok
+test_a_partial_checkpoint_returns_its_batch_to_the_host_once (__main__.HolderNodeMode.test_a_partial_checkpoint_returns_its_batch_to_the_host_once) ... ok
+test_a_pinned_legacy_contract_keeps_revision_only_node_selection (__main__.HolderNodeMode.test_a_pinned_legacy_contract_keeps_revision_only_node_selection) ... ok
+test_a_resume_recipe_or_failed_start_is_not_retried (__main__.HolderNodeMode.test_a_resume_recipe_or_failed_start_is_not_retried) ... ok
+test_a_start_slower_than_the_stop_is_found_by_its_record (__main__.HolderNodeMode.test_a_start_slower_than_the_stop_is_found_by_its_record) ... ok
+test_a_stop_whose_caller_gave_up_still_ends_the_holder (__main__.HolderNodeMode.test_a_stop_whose_caller_gave_up_still_ends_the_holder) ... ok
+test_a_stopped_record_is_not_a_stopped_node_until_its_holder_is_gone (__main__.HolderNodeMode.test_a_stopped_record_is_not_a_stopped_node_until_its_holder_is_gone) ... ok
+test_a_stopping_carrier_ends_its_running_node_and_starts_none (__main__.HolderNodeMode.test_a_stopping_carrier_ends_its_running_node_and_starts_none) ... ok
+test_a_verified_batch_wakes_the_host_only_for_changed_attention (__main__.HolderNodeMode.test_a_verified_batch_wakes_the_host_only_for_changed_attention) ... ok
+test_an_unconfirmed_stop_blocks_a_competing_node (__main__.HolderNodeMode.test_an_unconfirmed_stop_blocks_a_competing_node) ... ok
+test_codex_acp_reload_and_host_maintenance_remain_independent (__main__.HolderNodeMode.test_codex_acp_reload_and_host_maintenance_remain_independent) ... ok
+test_inquiry_request_recovers_recipe_without_business_write (__main__.HolderNodeMode.test_inquiry_request_recovers_recipe_without_business_write) ... ok
+test_one_host_turn_makes_one_batch_at_its_end (__main__.HolderNodeMode.test_one_host_turn_makes_one_batch_at_its_end) ... ok
+test_ordinary_worker_returns_reach_the_host_and_start_no_node (__main__.HolderNodeMode.test_ordinary_worker_returns_reach_the_host_and_start_no_node) ... ok
+test_owed_business_recipe_failure_survives_carrier_memory_loss (__main__.HolderNodeMode.test_owed_business_recipe_failure_survives_carrier_memory_loss) ... ok
+test_recipe_refusal_for_owed_recovery_is_visible_once_in_both_views (__main__.HolderNodeMode.test_recipe_refusal_for_owed_recovery_is_visible_once_in_both_views) ... ok
+test_recovery_only_batch_at_same_revision_coalesces_and_keeps_safe_boundary (__main__.HolderNodeMode.test_recovery_only_batch_at_same_revision_coalesces_and_keeps_safe_boundary) ... ok
+test_recovery_receipt_missing_in_checkpoint_is_partial_and_visible (__main__.HolderNodeMode.test_recovery_receipt_missing_in_checkpoint_is_partial_and_visible) ... ok
+test_resume_scan_repairs_registration_window_and_pending_blocks_old_live_node (__main__.HolderNodeMode.test_resume_scan_repairs_registration_window_and_pending_blocks_old_live_node) ... ok
+test_retirement_during_an_assigned_batch_preserves_its_checkpoint (__main__.HolderNodeMode.test_retirement_during_an_assigned_batch_preserves_its_checkpoint) ... ok
+test_retirement_mixed_with_current_work_still_sends_one_useful_batch (__main__.HolderNodeMode.test_retirement_mixed_with_current_work_still_sends_one_useful_batch) ... ok
+test_retirement_only_starts_no_node_and_later_work_selects_the_full_range (__main__.HolderNodeMode.test_retirement_only_starts_no_node_and_later_work_selects_the_full_range) ... ok
+test_sent_recovery_checkpoint_keeps_later_signal_and_exact_reclaims_first_node (__main__.HolderNodeMode.test_sent_recovery_checkpoint_keeps_later_signal_and_exact_reclaims_first_node) ... ok
+test_startup_coalesces_new_useful_work_until_the_host_turn_ends (__main__.HolderNodeMode.test_startup_coalesces_new_useful_work_until_the_host_turn_ends) ... ok
+test_startup_then_empty_exact_stops_only_the_owned_unassigned_node (__main__.HolderNodeMode.test_startup_then_empty_exact_stops_only_the_owned_unassigned_node) ... ok
+test_the_checkout_entrypoint_recipe_names_the_bound_platform_first (__main__.HolderNodeMode.test_the_checkout_entrypoint_recipe_names_the_bound_platform_first) ... ok
+test_the_hosts_own_attention_change_during_a_batch_stays_quiet (__main__.HolderNodeMode.test_the_hosts_own_attention_change_during_a_batch_stays_quiet)
+Native QA: the Host settled a decision and retired an alert while ... ok
+test_worker_foreign_start_and_unknown_role_register_no_recovery (__main__.HolderNodeMode.test_worker_foreign_start_and_unknown_role_register_no_recovery) ... ok
+test_a_full_queue_still_takes_the_turn_end_that_drains_it (__main__.HolderRelay.test_a_full_queue_still_takes_the_turn_end_that_drains_it) ... ok
+test_a_lost_turn_end_returns_the_relay_to_the_host_once (__main__.HolderRelay.test_a_lost_turn_end_returns_the_relay_to_the_host_once) ... ok
+test_a_sideagent_turn_end_names_its_holder_and_turn (__main__.HolderRelay.test_a_sideagent_turn_end_names_its_holder_and_turn) ... ok
+test_a_third_review_on_the_host_direct_path_wakes_the_host (__main__.HolderRelay.test_a_third_review_on_the_host_direct_path_wakes_the_host) ... ok
+test_a_trickling_sideagent_cannot_hold_the_event_lock_past_the_deadline (__main__.HolderRelay.test_a_trickling_sideagent_cannot_hold_the_event_lock_past_the_deadline) ... ok
+test_busy_sideagent_keeps_events_and_dead_sideagent_falls_back_to_host (__main__.HolderRelay.test_busy_sideagent_keeps_events_and_dead_sideagent_falls_back_to_host) ... ok
+test_cancelled_maintenance_turn_returns_events_to_the_host (__main__.HolderRelay.test_cancelled_maintenance_turn_returns_events_to_the_host) ... ok
+test_direct_replacement_moves_open_relays_to_the_new_sideagent (__main__.HolderRelay.test_direct_replacement_moves_open_relays_to_the_new_sideagent) ... ok
+test_failed_maintenance_turn_returns_events_to_the_host (__main__.HolderRelay.test_failed_maintenance_turn_returns_events_to_the_host) ... ok
+test_only_the_turn_that_carried_a_relay_confirms_it (__main__.HolderRelay.test_only_the_turn_that_carried_a_relay_confirms_it) ... ok
+test_rebind_moves_the_carrier_in_place_and_keeps_the_seat (__main__.HolderRelay.test_rebind_moves_the_carrier_in_place_and_keeps_the_seat) ... ok
+test_record_advertises_features_and_big_state_file_is_read (__main__.HolderRelay.test_record_advertises_features_and_big_state_file_is_read) ... ok
+test_routine_events_go_to_the_bound_sideagent_not_the_host (__main__.HolderRelay.test_routine_events_go_to_the_bound_sideagent_not_the_host) ... ok
+test_without_a_binding_every_event_reaches_the_host (__main__.HolderRelay.test_without_a_binding_every_event_reaches_the_host) ... ok
+test_a_live_holder_without_the_feature_refuses_the_preserve_intent (__main__.HostPreserveStop.test_a_live_holder_without_the_feature_refuses_the_preserve_intent) ... ok
+test_preserve_keeps_the_complete_worker_tree_on_cooperative_stop (__main__.HostPreserveStop.test_preserve_keeps_the_complete_worker_tree_on_cooperative_stop) ... ok
+test_preserve_on_dead_holder_cleanup_and_default_stop_unchanged (__main__.HostPreserveStop.test_preserve_on_dead_holder_cleanup_and_default_stop_unchanged) ... ok
+test_replacement_host_takes_a_healthy_worker_in_place (__main__.HostReanchorLive.test_replacement_host_takes_a_healthy_worker_in_place) ... ok
+test_a_checkpoint_needs_the_nodes_own_identity_and_a_valid_range (__main__.MaintenanceCheckpoint.test_a_checkpoint_needs_the_nodes_own_identity_and_a_valid_range) ... ok
+test_a_host_rewrite_during_the_batch_is_superseded_not_returned (__main__.MaintenanceCheckpoint.test_a_host_rewrite_during_the_batch_is_superseded_not_returned)
+Native QA: the Host's next turn rewrote batch records while the ... ok
+test_host_retirement_preserves_an_earlier_sent_checkpoint_range (__main__.MaintenanceCheckpoint.test_host_retirement_preserves_an_earlier_sent_checkpoint_range) ... ok
+test_malformed_recovery_migration_refuses_without_losing_duty (__main__.MaintenanceCheckpoint.test_malformed_recovery_migration_refuses_without_losing_duty) ... ok
+test_recovery_checkpoint_binds_sent_input_batch_and_holder_keeps_newer (__main__.MaintenanceCheckpoint.test_recovery_checkpoint_binds_sent_input_batch_and_holder_keeps_newer) ... ok
+test_recovery_kind_requires_original_completed_session_bound_host_signal (__main__.MaintenanceCheckpoint.test_recovery_kind_requires_original_completed_session_bound_host_signal) ... ok
+test_recovery_request_and_repeat_preserve_business_revision_and_migrate (__main__.MaintenanceCheckpoint.test_recovery_request_and_repeat_preserve_business_revision_and_migrate) ... ok
+test_recovery_unavailable_sources_stay_visible_and_scoped_clear_keeps_other_alerts (__main__.MaintenanceCheckpoint.test_recovery_unavailable_sources_stay_visible_and_scoped_clear_keeps_other_alerts) ... ok
+test_two_consecutive_nodes_account_for_their_fixed_inputs (__main__.MaintenanceCheckpoint.test_two_consecutive_nodes_account_for_their_fixed_inputs) ... ok
+test_a_carrier_replaced_by_an_older_holder_reads_the_legacy_bound (__main__.Migration.test_a_carrier_replaced_by_an_older_holder_reads_the_legacy_bound) ... ok
+test_a_migrated_task_with_a_known_seat_retires_only_once_it_is_shown_stopped (__main__.Migration.test_a_migrated_task_with_a_known_seat_retires_only_once_it_is_shown_stopped) ... ok
+test_a_v1_binding_not_proven_live_stays_a_candidate (__main__.Migration.test_a_v1_binding_not_proven_live_stays_a_candidate) ... ok
+test_a_v1_file_after_an_earlier_migration_is_flagged_as_overwritten (__main__.Migration.test_a_v1_file_after_an_earlier_migration_is_flagged_as_overwritten) ... ok
+test_a_v1_key_named_like_a_v2_field_does_not_take_effect (__main__.Migration.test_a_v1_key_named_like_a_v2_field_does_not_take_effect) ... ok
+test_interrupted_migration_resumes_from_the_same_raw_evidence (__main__.Migration.test_interrupted_migration_resumes_from_the_same_raw_evidence) ... ok
+test_old_holder_bound_keeps_the_file_small_without_a_capable_host (__main__.Migration.test_old_holder_bound_keeps_the_file_small_without_a_capable_host) ... ok
+test_plan_then_write_preserves_duties_and_lists_unknowns (__main__.Migration.test_plan_then_write_preserves_duties_and_lists_unknowns) ... ok
+test_real_v1_shape_keeps_every_nested_field_or_lists_it (__main__.Migration.test_real_v1_shape_keeps_every_nested_field_or_lists_it) ... ok
+test_unreadable_legacy_body_is_left_unchanged (__main__.Migration.test_unreadable_legacy_body_is_left_unchanged) ... ok
+test_a_foreign_record_or_lost_spawn_line_protects_nothing (__main__.NestedWorkerTopology.test_a_foreign_record_or_lost_spawn_line_protects_nothing) ... ok
+test_a_worker_naming_this_sideagent_as_dispatcher_is_kept_without_a_spawn_line (__main__.NestedWorkerTopology.test_a_worker_naming_this_sideagent_as_dispatcher_is_kept_without_a_spawn_line) ... ok
+test_cooperative_stop_keeps_the_whole_worker_tree (__main__.NestedWorkerTopology.test_cooperative_stop_keeps_the_whole_worker_tree) ... ok
+test_dead_holder_cleanup_keeps_the_whole_worker_tree (__main__.NestedWorkerTopology.test_dead_holder_cleanup_keeps_the_whole_worker_tree) ... ok
+test_other_children_of_a_sideagent_are_still_swept (__main__.ProcessPreservation.test_other_children_of_a_sideagent_are_still_swept) ... ok
+test_sideagent_record_spares_runner_holder_groups (__main__.ProcessPreservation.test_sideagent_record_spares_runner_holder_groups) ... ok
+test_delegator_timer_sentence_matches_the_tool (__main__.RenderedGuidance.test_delegator_timer_sentence_matches_the_tool) ... ok
+test_host_owns_dispatch_and_the_sideagent_allocates_nothing (__main__.RenderedGuidance.test_host_owns_dispatch_and_the_sideagent_allocates_nothing) ... ok
+test_lifecycle_reference_is_generated_linked_and_bounded (__main__.RenderedGuidance.test_lifecycle_reference_is_generated_linked_and_bounded) ... ok
+test_node_reference_names_the_implemented_contract (__main__.RenderedGuidance.test_node_reference_names_the_implemented_contract) ... ok
+test_stop_and_drain_restart_forward_the_intent_only_when_given (__main__.RunnerPreserveFlag.test_stop_and_drain_restart_forward_the_intent_only_when_given) ... ok
+test_a_known_holder_in_any_seat_shape_survives_a_handoff (__main__.StateTool.test_a_known_holder_in_any_seat_shape_survives_a_handoff) ... ok
+test_a_live_seat_can_be_handed_to_a_continuing_task_with_its_evidence (__main__.StateTool.test_a_live_seat_can_be_handed_to_a_continuing_task_with_its_evidence) ... ok
+test_a_repair_keeps_its_failure_evidence_for_the_next_decision (__main__.StateTool.test_a_repair_keeps_its_failure_evidence_for_the_next_decision) ... ok
+test_a_repair_verdict_does_not_answer_the_next_review (__main__.StateTool.test_a_repair_verdict_does_not_answer_the_next_review) ... FAIL
+test_a_sideagent_settles_a_decision_only_as_transcribed_evidence (__main__.StateTool.test_a_sideagent_settles_a_decision_only_as_transcribed_evidence) ... ok
+test_a_stable_fault_id_recurs_but_a_stale_event_does_not (__main__.StateTool.test_a_stable_fault_id_recurs_but_a_stale_event_does_not) ... ok
+test_a_worker_caller_cannot_write_as_host (__main__.StateTool.test_a_worker_caller_cannot_write_as_host) ... ok
+test_alerts_coalesce_and_stay_after_acknowledgement (__main__.StateTool.test_alerts_coalesce_and_stay_after_acknowledgement) ... ok
+test_binding_guards_late_writes_of_a_replaced_sideagent (__main__.StateTool.test_binding_guards_late_writes_of_a_replaced_sideagent) ... ok
+test_check_finds_untraced_and_unassociated_work (__main__.StateTool.test_check_finds_untraced_and_unassociated_work) ... ok
+test_concurrent_writers_never_lose_an_update (__main__.StateTool.test_concurrent_writers_never_lose_an_update) ... ok
+test_delegator_view_reports_user_requirements_from_agents (__main__.StateTool.test_delegator_view_reports_user_requirements_from_agents) ... ok
+test_dispatch_reads_authorization_from_structured_state (__main__.StateTool.test_dispatch_reads_authorization_from_structured_state) ... ok
+test_every_repeated_repair_result_is_new_attention (__main__.StateTool.test_every_repeated_repair_result_is_new_attention) ... FAIL
+test_future_schema_is_refused_unchanged (__main__.StateTool.test_future_schema_is_refused_unchanged) ... ok
+test_host_view_marks_omitted_text_and_keeps_judgment_text_whole (__main__.StateTool.test_host_view_marks_omitted_text_and_keeps_judgment_text_whole) ... ok
+test_host_view_over_the_injection_bound_is_refused_not_truncated (__main__.StateTool.test_host_view_over_the_injection_bound_is_refused_not_truncated) ... ok
+test_large_state_projects_a_bounded_host_view (__main__.StateTool.test_large_state_projects_a_bounded_host_view) ... FAIL
+test_moving_past_review_without_a_verdict_keeps_the_host_asked (__main__.StateTool.test_moving_past_review_without_a_verdict_keeps_the_host_asked) ... FAIL
+test_record_updates_conflicts_and_role_rules (__main__.StateTool.test_record_updates_conflicts_and_role_rules) ... ok
+test_repeated_cycles_keep_current_records_not_history (__main__.StateTool.test_repeated_cycles_keep_current_records_not_history) ... ok
+test_retire_and_late_event_cannot_reopen (__main__.StateTool.test_retire_and_late_event_cannot_reopen) ... ERROR
+test_retirement_needs_dispatched_work_closed_and_stopped (__main__.StateTool.test_retirement_needs_dispatched_work_closed_and_stopped) ... ok
+test_scoped_requirement_headings_are_all_reported (__main__.StateTool.test_scoped_requirement_headings_are_all_reported) ... ok
+test_section_sources_and_resolved_unknowns_are_kept (__main__.StateTool.test_section_sources_and_resolved_unknowns_are_kept) ... ok
+test_sections_need_revision_and_host_ownership (__main__.StateTool.test_sections_need_revision_and_host_ownership) ... ok
+test_snapshot_does_not_overwrite_structured_state (__main__.StateTool.test_snapshot_does_not_overwrite_structured_state) ... ok
+test_timer_readback_stays_the_entry_and_can_be_unavailable (__main__.StateTool.test_timer_readback_stays_the_entry_and_can_be_unavailable) ... ok
+test_timer_template_check_is_exact (__main__.StateTool.test_timer_template_check_is_exact) ... ok
+test_wake_fingerprint_follows_what_a_host_judgment_asks (__main__.StateTool.test_wake_fingerprint_follows_what_a_host_judgment_asks) ... ok
+
+======================================================================
+ERROR: test_retire_and_late_event_cannot_reopen (__main__.StateTool.test_retire_and_late_event_cannot_reopen)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-264/tests/contract/test-issue-255-lifecycle-state.py", line 158, in test_retire_and_late_event_cannot_reopen
+    self.assertEqual(out["reason"], "retire-unmet", "a pending decision stays")
+                     ~~~^^^^^^^^^^
+KeyError: 'reason'
+
+======================================================================
+FAIL: test_implementation_sends_the_hosts_core_and_scope_and_links_the_task (__main__.ConsolidatedDispatch.test_implementation_sends_the_hosts_core_and_scope_and_links_the_task)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-264/tests/contract/test-issue-255-lifecycle-state.py", line 2104, in test_implementation_sends_the_hosts_core_and_scope_and_links_the_task
+    self.assertEqual({row["status"] for row in rows.values()}, {"in-flight"}, rows)
+AssertionError: Items in the first set but not the second:
+'not-run' : {'w1': {'acceptance': 'pending', 'dispatch_event_cursor': 7, 'evidence': {'send': {'acp_session_id': None, 'dispatch_event_cursor': 7, 'exit_code': 0, 'holder_instance_id': None, 'mutation_status': 'in_progress', 'outcome': 'in_progress', 'prompt_fingerprint': 'fp-a', 'repo': None, 'result': None}, 'start': {'acp_session_id': None, 'dispatch_event_cursor': None, 'exit_code': 0, 'holder_instance_id': 'holder-a', 'mutation_status': None, 'outcome': None, 'prompt_fingerprint': None, 'repo': '/tmp/kaola-val.O3PbhO/kpr-i255-h64y082b/consumer', 'result': None}, 'status': {'acp_session_id': None, 'dispatch_event_cursor': None, 'error_code': 'no-session', 'exit_code': 0, 'holder_instance_id': None, 'mutation_status': None, 'outcome': None, 'prompt_fingerprint': None, 'repo': None, 'result': None}}, 'holder_instance_id': 'holder-a', 'item_id': 'w1', 'platform': 'zcode', 'preset': 'zcode/default', 'prompt_fingerprint': 'fp-a', 'prompt_sha256': 'sha256:ade93827a310532d67909ce7f3964db210ffefdfe8a1726db79d5027a7062973', 'prompt_source': {'core_revision': 'r3', 'core_sha256': 'sha256:580890c7d81891c2225dea24c68177c69ef709170f6ddede9eba6d320c909c13', 'kind': 'core+scope', 'prompt_sha256': 'sha256:ade93827a310532d67909ce7f3964db210ffefdfe8a1726db79d5027a7062973', 'scope_sha256': 'sha256:55ba99e9c584d08e54fe10c3bb845d6bb3c211162205cec3423399183a76fd6b'}, 'reason': 'admitted', 'repo': '/private/tmp/kaola-val.O3PbhO/kpr-i255-h64y082b/consumer', 'selection': {'advertised': {'effort': 'max', 'model_id': 'GLM-5.3'}, 'advertised_source': 'effective_selection', 'applied': {'effort': 'max', 'model_id': 'GLM-5.3'}, 'applied_state': {'effort': 'applied', 'model_id': 'applied'}, 'comparison': 'match', 'fields': {'effort': {'advertised': 'match', 'applied': 'match'}, 'model_id': {'advertised': 'match', 'applied': 'match'}}, 'requested': {'effort': 'max', 'model_id': 'GLM-5.3', 'preset': 'zcode/default', 'tier': 'default'}, 'source': 'config_application'}, 'session': 'zcode-KT-i1-a', 'status': 'in-flight', 'task_id': 't1'}, 'w2': {'evidence': {}, 'item_id': 'w2', 'preset': 'zcode/default', 'prompt_source': {'core_revision': 'r3', 'core_sha256': 'sha256:580890c7d81891c2225dea24c68177c69ef709170f6ddede9eba6d320c909c13', 'kind': 'core+scope', 'prompt_sha256': 'sha256:3d261320bf6f5e4c1e568e6c43b0e43f4b68e85b72b8aaed4acf238a46d92abb', 'scope_sha256': 'sha256:dc614989b2644435c2f888af7d86ede8b4a8b62ce9943d8d49a5cd487dd930e5'}, 'reason': 'count', 'session': 'zcode-KT-i1-b', 'status': 'not-run', 'task_id': 't1'}}
+
+======================================================================
+FAIL: test_a_repair_verdict_does_not_answer_the_next_review (__main__.StateTool.test_a_repair_verdict_does_not_answer_the_next_review)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-264/tests/contract/test-issue-255-lifecycle-state.py", line 321, in test_a_repair_verdict_does_not_answer_the_next_review
+    self.assertEqual([(row["id"], row["why"]) for row in json.loads(self.doc()["body"])["attention"]],
+AssertionError: Lists differ: [('t3', 'delivery-open'), ('pending', 'bounded reconciliation owed')] != [('t3', 'delivery-open')]
+
+First list contains 1 additional elements.
+First extra element 1:
+('pending', 'bounded reconciliation owed')
+
+- [('t3', 'delivery-open'), ('pending', 'bounded reconciliation owed')]
++ [('t3', 'delivery-open')]
+
+======================================================================
+FAIL: test_every_repeated_repair_result_is_new_attention (__main__.StateTool.test_every_repeated_repair_result_is_new_attention)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-264/tests/contract/test-issue-255-lifecycle-state.py", line 391, in test_every_repeated_repair_result_is_new_attention
+    self.assertEqual([(r["why"], r.get("prior_verdict")) for r in rows], [("awaiting-verdict", "repair")])
+AssertionError: Lists differ: [('awaiting-verdict', 'repair'), ('bounded reconciliation owed', None)] != [('awaiting-verdict', 'repair')]
+
+First list contains 1 additional elements.
+First extra element 1:
+('bounded reconciliation owed', None)
+
+- [('awaiting-verdict', 'repair'), ('bounded reconciliation owed', None)]
++ [('awaiting-verdict', 'repair')]
+
+======================================================================
+FAIL: test_large_state_projects_a_bounded_host_view (__main__.StateTool.test_large_state_projects_a_bounded_host_view)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-264/tests/contract/test-issue-255-lifecycle-state.py", line 611, in test_large_state_projects_a_bounded_host_view
+    self.assertEqual((json.loads(holder_body), defect), (body, None),
+AssertionError: Tuples differ: ({'as[357 chars]': {'presets': ['codex/default', 'zcode/defaul[4769 chars]None) != ({'as[357 chars]': {'catalog_sha256': '73198c4df697a74816556e2[5711 chars]None)
+
+First differing element 0:
+{'as_[356 chars]': {'presets': ['codex/default', 'zcode/defaul[4762 chars]ost'}
+{'as_[356 chars]': {'catalog_sha256': '73198c4df697a74816556e2[5704 chars]ost'}
+
+Diff is 10732 characters long. Set self.maxDiff to None to see it. : a new holder injects only the projected body
+
+======================================================================
+FAIL: test_moving_past_review_without_a_verdict_keeps_the_host_asked (__main__.StateTool.test_moving_past_review_without_a_verdict_keeps_the_host_asked)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-264/tests/contract/test-issue-255-lifecycle-state.py", line 281, in test_moving_past_review_without_a_verdict_keeps_the_host_asked
+    self.assertEqual(why(), [("t7", "awaiting-verdict")])
+AssertionError: Lists differ: [('t7', 'awaiting-verdict'), ('pending', 'bounded reconciliation owed')] != [('t7', 'awaiting-verdict')]
+
+First list contains 1 additional elements.
+First extra element 1:
+('pending', 'bounded reconciliation owed')
+
+- [('t7', 'awaiting-verdict'), ('pending', 'bounded reconciliation owed')]
++ [('t7', 'awaiting-verdict')]
+
+----------------------------------------------------------------------
+Ran 127 tests in 76.710s
+
+FAILED (failures=5, errors=1)
+validate: elapsed render-check                                 1.822 s
+validate: elapsed validate-skill.claude-code-kaola-project-runner 0.020 s
+validate: elapsed validate-skill.codex-kaola-project-runner    0.020 s
+validate: elapsed validate-skill.cursor-cli-kaola-project-runner 0.020 s
+validate: elapsed validate-skill.devin-kaola-project-runner    0.020 s
+validate: elapsed validate-skill.droid-kaola-project-runner    0.020 s
+validate: elapsed validate-skill.dsh-kaola-project-runner      0.020 s
+validate: elapsed validate-skill.grok-kaola-project-runner     0.020 s
+validate: elapsed validate-skill.kaola-project-runner          0.020 s
+validate: elapsed validate-skill.kimi-cli-kaola-project-runner 0.019 s
+validate: elapsed validate-skill.opencode-kaola-project-runner 0.018 s
+validate: elapsed validate-skill.zcode-kaola-project-runner    0.019 s
+validate: elapsed validate-skill.kaola-delegator               0.019 s
+validate: elapsed test-project-compact-notice.py               0.114 s
+validate: elapsed test-issue-255-lifecycle-state.py            76.877 s
+{"killed_group_members": [], "matched_pids": [], "pgid_identity_unverified": [], "residual_pids": [], "results": [], "root": "/tmp/kaola-val.O3PbhO", "swept_groups": []}
+validate: total wall: 79.0899 s

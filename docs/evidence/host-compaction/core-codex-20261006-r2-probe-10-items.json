@@ -1,0 +1,49 @@
+{
+  "id": 5,
+  "result": {
+    "data": [
+      {
+        "turnId": "01a110db-f98d-7812-b894-660f07ec8124",
+        "item": {
+          "type": "contextCompaction",
+          "id": "01a110db-ff31-7411-bf2d-d1821b39edd5"
+        },
+        "startedAtMs": 1791284215601,
+        "completedAtMs": 1791284233545
+      },
+      {
+        "turnId": "01a110dc-aa85-7463-8dac-ab0ffd7e8044",
+        "item": {
+          "type": "userMessage",
+          "id": "01a110dc-af7f-7113-9ba6-9b5e721cf1ce",
+          "clientId": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "Reply with the single word DONE.",
+              "text_elements": []
+            }
+          ]
+        },
+        "startedAtMs": 1791284260736,
+        "completedAtMs": 1791284260736
+      },
+      {
+        "turnId": "01a110dc-aa85-7463-8dac-ab0ffd7e8044",
+        "item": {
+          "type": "agentMessage",
+          "id": "msg_06ee331942346eea016ac4d429cb0087d18e2a212588866148",
+          "text": "DONE",
+          "phase": "final_answer",
+          "memoryCitation": null,
+          "delivery": null,
+          "questions": null
+        },
+        "startedAtMs": 1791284263397,
+        "completedAtMs": 1791284263473
+      }
+    ],
+    "nextCursor": null,
+    "backwardsCursor": "{\"requestedThreadId\":\"01a110db-e44b-7f22-a286-9c920aacbb64\",\"rolloutOrdinal\":6,\"includeAnchor\":true,\"scope\":{\"kind\":\"itemsByCreatedAtOrdinal\"}}"
+  }
+}

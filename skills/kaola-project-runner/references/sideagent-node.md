@@ -72,7 +72,7 @@ finishes after the input disappears, the carrier waits for the Host turn end
 and exact-stops its unassigned node. An assigned batch keeps its range and
 checkpoint. Older bundles without the selector keep revision-only selection.
 
-The node writes once:
+For ordinary Host business inputs, the node writes once:
 
 ```bash
 $S checkpoint --writer sideagent --source B --batch B --through-host-revision R \
@@ -88,6 +88,10 @@ input settled. `acked_host_revision` never passes an unsettled change; a later
 Host write stays pending. An input the Host rewrote during the batch is
 `superseded`: its rewrite is the next batch's input. Unsettled inputs go to the Host once, in one
 `maintenance-returned` alert, and are never sent to another node.
+
+For `recovery#N`, use only `input`, `checked`, `unavailable` and optional `applied`;
+never `retained`. Put each scope in `checked` or `unavailable`, never both.
+See [duty-reconcile.md](duty-reconcile.md) for the scoped recovery entry.
 
 After a verified batch the carrier wakes the Host once, at its next idle
 boundary, only when an attention item is a record this node wrote and the

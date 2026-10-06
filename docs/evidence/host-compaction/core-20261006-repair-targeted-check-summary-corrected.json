@@ -1,0 +1,16 @@
+{
+  "baseline": "eb833161",
+  "baseline_checks": [
+    "ConsolidatedDispatch.test_implementation_sends_the_hosts_core_and_scope_and_links_the_task",
+    "StateTool.test_retire_and_late_event_cannot_reopen",
+    "StateTool.test_a_repair_verdict_does_not_answer_the_next_review",
+    "StateTool.test_every_repeated_repair_result_is_new_attention",
+    "StateTool.test_large_state_projects_a_bounded_host_view",
+    "StateTool.test_moving_past_review_without_a_verdict_keeps_the_host_asked"
+  ],
+  "baseline_exit": 1,
+  "affected_scope": "HolderNodeMode",
+  "affected_exit": 0,
+  "controlled_home_tmp": true,
+  "KAOLA_scrub": true
+}

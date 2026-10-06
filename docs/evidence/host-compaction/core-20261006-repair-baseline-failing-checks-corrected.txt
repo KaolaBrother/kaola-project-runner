@@ -1,0 +1,88 @@
+test_implementation_sends_the_hosts_core_and_scope_and_links_the_task (__main__.ConsolidatedDispatch.test_implementation_sends_the_hosts_core_and_scope_and_links_the_task) ... FAIL
+test_retire_and_late_event_cannot_reopen (__main__.StateTool.test_retire_and_late_event_cannot_reopen) ... ERROR
+test_a_repair_verdict_does_not_answer_the_next_review (__main__.StateTool.test_a_repair_verdict_does_not_answer_the_next_review) ... FAIL
+test_every_repeated_repair_result_is_new_attention (__main__.StateTool.test_every_repeated_repair_result_is_new_attention) ... FAIL
+test_large_state_projects_a_bounded_host_view (__main__.StateTool.test_large_state_projects_a_bounded_host_view) ... FAIL
+test_moving_past_review_without_a_verdict_keeps_the_host_asked (__main__.StateTool.test_moving_past_review_without_a_verdict_keeps_the_host_asked) ... FAIL
+
+======================================================================
+ERROR: test_retire_and_late_event_cannot_reopen (__main__.StateTool.test_retire_and_late_event_cannot_reopen)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/kpr-1063-baseline/tests/contract/test-issue-255-lifecycle-state.py", line 158, in test_retire_and_late_event_cannot_reopen
+    self.assertEqual(out["reason"], "retire-unmet", "a pending decision stays")
+                     ~~~^^^^^^^^^^
+KeyError: 'reason'
+
+======================================================================
+FAIL: test_implementation_sends_the_hosts_core_and_scope_and_links_the_task (__main__.ConsolidatedDispatch.test_implementation_sends_the_hosts_core_and_scope_and_links_the_task)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/kpr-1063-baseline/tests/contract/test-issue-255-lifecycle-state.py", line 2104, in test_implementation_sends_the_hosts_core_and_scope_and_links_the_task
+    self.assertEqual({row["status"] for row in rows.values()}, {"in-flight"}, rows)
+AssertionError: Items in the first set but not the second:
+'not-run' : {'w1': {'acceptance': 'pending', 'dispatch_event_cursor': 7, 'evidence': {'send': {'acp_session_id': None, 'dispatch_event_cursor': 7, 'exit_code': 0, 'holder_instance_id': None, 'mutation_status': 'in_progress', 'outcome': 'in_progress', 'prompt_fingerprint': 'fp-a', 'repo': None, 'result': None}, 'start': {'acp_session_id': None, 'dispatch_event_cursor': None, 'exit_code': 0, 'holder_instance_id': 'holder-a', 'mutation_status': None, 'outcome': None, 'prompt_fingerprint': None, 'repo': '/tmp/v.n4tdy68c/kpr-i255-gny1ss5j/consumer', 'result': None}, 'status': {'acp_session_id': None, 'dispatch_event_cursor': None, 'error_code': 'no-session', 'exit_code': 0, 'holder_instance_id': None, 'mutation_status': None, 'outcome': None, 'prompt_fingerprint': None, 'repo': None, 'result': None}}, 'holder_instance_id': 'holder-a', 'item_id': 'w1', 'platform': 'zcode', 'preset': 'zcode/default', 'prompt_fingerprint': 'fp-a', 'prompt_sha256': 'sha256:ade93827a310532d67909ce7f3964db210ffefdfe8a1726db79d5027a7062973', 'prompt_source': {'core_revision': 'r3', 'core_sha256': 'sha256:580890c7d81891c2225dea24c68177c69ef709170f6ddede9eba6d320c909c13', 'kind': 'core+scope', 'prompt_sha256': 'sha256:ade93827a310532d67909ce7f3964db210ffefdfe8a1726db79d5027a7062973', 'scope_sha256': 'sha256:55ba99e9c584d08e54fe10c3bb845d6bb3c211162205cec3423399183a76fd6b'}, 'reason': 'admitted', 'repo': '/private/tmp/v.n4tdy68c/kpr-i255-gny1ss5j/consumer', 'selection': {'advertised': {'effort': 'max', 'model_id': 'GLM-5.3'}, 'advertised_source': 'effective_selection', 'applied': {'effort': 'max', 'model_id': 'GLM-5.3'}, 'applied_state': {'effort': 'applied', 'model_id': 'applied'}, 'comparison': 'match', 'fields': {'effort': {'advertised': 'match', 'applied': 'match'}, 'model_id': {'advertised': 'match', 'applied': 'match'}}, 'requested': {'effort': 'max', 'model_id': 'GLM-5.3', 'preset': 'zcode/default', 'tier': 'default'}, 'source': 'config_application'}, 'session': 'zcode-KT-i1-a', 'status': 'in-flight', 'task_id': 't1'}, 'w2': {'evidence': {}, 'item_id': 'w2', 'preset': 'zcode/default', 'prompt_source': {'core_revision': 'r3', 'core_sha256': 'sha256:580890c7d81891c2225dea24c68177c69ef709170f6ddede9eba6d320c909c13', 'kind': 'core+scope', 'prompt_sha256': 'sha256:3d261320bf6f5e4c1e568e6c43b0e43f4b68e85b72b8aaed4acf238a46d92abb', 'scope_sha256': 'sha256:dc614989b2644435c2f888af7d86ede8b4a8b62ce9943d8d49a5cd487dd930e5'}, 'reason': 'count', 'session': 'zcode-KT-i1-b', 'status': 'not-run', 'task_id': 't1'}}
+
+======================================================================
+FAIL: test_a_repair_verdict_does_not_answer_the_next_review (__main__.StateTool.test_a_repair_verdict_does_not_answer_the_next_review)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/kpr-1063-baseline/tests/contract/test-issue-255-lifecycle-state.py", line 321, in test_a_repair_verdict_does_not_answer_the_next_review
+    self.assertEqual([(row["id"], row["why"]) for row in json.loads(self.doc()["body"])["attention"]],
+AssertionError: Lists differ: [('t3', 'delivery-open'), ('pending', 'bounded reconciliation owed')] != [('t3', 'delivery-open')]
+
+First list contains 1 additional elements.
+First extra element 1:
+('pending', 'bounded reconciliation owed')
+
+- [('t3', 'delivery-open'), ('pending', 'bounded reconciliation owed')]
++ [('t3', 'delivery-open')]
+
+======================================================================
+FAIL: test_every_repeated_repair_result_is_new_attention (__main__.StateTool.test_every_repeated_repair_result_is_new_attention)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/kpr-1063-baseline/tests/contract/test-issue-255-lifecycle-state.py", line 391, in test_every_repeated_repair_result_is_new_attention
+    self.assertEqual([(r["why"], r.get("prior_verdict")) for r in rows], [("awaiting-verdict", "repair")])
+AssertionError: Lists differ: [('awaiting-verdict', 'repair'), ('bounded reconciliation owed', None)] != [('awaiting-verdict', 'repair')]
+
+First list contains 1 additional elements.
+First extra element 1:
+('bounded reconciliation owed', None)
+
+- [('awaiting-verdict', 'repair'), ('bounded reconciliation owed', None)]
++ [('awaiting-verdict', 'repair')]
+
+======================================================================
+FAIL: test_large_state_projects_a_bounded_host_view (__main__.StateTool.test_large_state_projects_a_bounded_host_view)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/kpr-1063-baseline/tests/contract/test-issue-255-lifecycle-state.py", line 611, in test_large_state_projects_a_bounded_host_view
+    self.assertEqual((json.loads(holder_body), defect), (body, None),
+AssertionError: Tuples differ: ({'as[357 chars]': {'presets': ['codex/default', 'zcode/defaul[4769 chars]None) != ({'as[357 chars]': {'catalog_sha256': '73198c4df697a74816556e2[5625 chars]None)
+
+First differing element 0:
+{'as_[356 chars]': {'presets': ['codex/default', 'zcode/defaul[4762 chars]ost'}
+{'as_[356 chars]': {'catalog_sha256': '73198c4df697a74816556e2[5618 chars]ost'}
+
+Diff is 10646 characters long. Set self.maxDiff to None to see it. : a new holder injects only the projected body
+
+======================================================================
+FAIL: test_moving_past_review_without_a_verdict_keeps_the_host_asked (__main__.StateTool.test_moving_past_review_without_a_verdict_keeps_the_host_asked)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/kpr-1063-baseline/tests/contract/test-issue-255-lifecycle-state.py", line 281, in test_moving_past_review_without_a_verdict_keeps_the_host_asked
+    self.assertEqual(why(), [("t7", "awaiting-verdict")])
+AssertionError: Lists differ: [('t7', 'awaiting-verdict'), ('pending', 'bounded reconciliation owed')] != [('t7', 'awaiting-verdict')]
+
+First list contains 1 additional elements.
+First extra element 1:
+('pending', 'bounded reconciliation owed')
+
+- [('t7', 'awaiting-verdict'), ('pending', 'bounded reconciliation owed')]
++ [('t7', 'awaiting-verdict')]
+
+----------------------------------------------------------------------
+Ran 6 tests in 3.144s
+
+FAILED (failures=5, errors=1)

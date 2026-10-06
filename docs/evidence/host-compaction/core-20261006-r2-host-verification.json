@@ -1,0 +1,205 @@
+{
+  "source_candidate": "4b247a2d (291b33b5 behavior)",
+  "observed_date_utc": "2026-10-06",
+  "opencode_r2": {
+    "verified": true,
+    "fixture_assistance": "one project-local recovery guidance requirement, no product repair measured",
+    "host": "c1951aa949bd7870124b47d7ac3c434b",
+    "node": {
+      "holder_instance_id": "78b091356d072e3038c2db8e2ad6f247",
+      "session": "codex-KPR1035C-sideagent"
+    },
+    "batch": "b-cb3b9280f581",
+    "raw_entry_cursor": 789,
+    "raw_entry_keys": [
+      "checked",
+      "input"
+    ],
+    "signal_duty_node_batch_settle_reclaim_cursors": [
+      33,
+      36,
+      246,
+      247,
+      248,
+      253
+    ],
+    "checkpoint": {
+      "at": "2026-10-06T11:21:06.652746+00:00",
+      "batch": "b-cb3b9280f581",
+      "host_revision": {
+        "current": 3,
+        "from": 3,
+        "through": 3
+      },
+      "node": {
+        "holder_instance_id": "78b091356d072e3038c2db8e2ad6f247",
+        "session": "codex-KPR1035C-sideagent"
+      },
+      "recovery": {
+        "checked": {
+          "authorization": [
+            "AGENTS.md#KPR-USER-REQUIREMENTS-START",
+            ".kaola/heartbeat-prompt.json#state.project",
+            ".kaola/heartbeat-prompt.json#state.authorization",
+            ".kaola/delegator-heartbeat.json",
+            "kaola-workflow/kaola-project-runner/workflow-state.md",
+            "kaola-workflow/.ledger/issue-264.jsonl"
+          ],
+          "duties": [
+            ".kaola/heartbeat-prompt.json#state.tasks.qa-observe",
+            ".kaola/heartbeat-prompt.json#state.decisions",
+            ".kaola/heartbeat-prompt.json#state.alerts",
+            "qa/progress.md",
+            "qa/task-skill.md"
+          ],
+          "links": [
+            ".kaola/dispatch-index.json#items[qa-prior-reclaim-1]",
+            "/tmp/kpr-i264-862-core/oc/receipt.json",
+            "/tmp/kpr-i264-862-core/oc/record/record.json",
+            "/tmp/kpr-i264-862-core-runtime-proof.md"
+          ]
+        },
+        "input": {
+          "at": "2026-10-06T11:15:18.775362+00:00",
+          "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r2/run/records/opencode/opencode-KPR1035C-orchestrator-main/6484c7c5c724fa48/events.jsonl#33",
+          "holder": "c1951aa949bd7870124b47d7ac3c434b",
+          "kind": "host-compaction",
+          "occurrence_id": "msg_110ecc4590011MMtxrqh8LaPyx",
+          "seq": 1,
+          "source": "completed-host-signal"
+        },
+        "seq": 1,
+        "unavailable": {}
+      },
+      "returned_to_host": {},
+      "settled": [
+        "recovery#1"
+      ],
+      "source": "b-cb3b9280f581",
+      "verified": true
+    },
+    "host_stop": {
+      "agent_exit_code": 0,
+      "agent_exit_signal": null,
+      "git": {
+        "branch": "main",
+        "dirty": true
+      },
+      "mutation_status": "completed",
+      "platform": "opencode",
+      "repo": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r2/run/repo",
+      "residual_pids": [],
+      "schema_version": 3,
+      "session": "opencode-KPR1035C-orchestrator-main",
+      "stopped": true,
+      "swept_child_pgids": [],
+      "transport": {
+        "selected": "acp"
+      }
+    }
+  },
+  "codex_probe": {
+    "completed_context_compaction": true,
+    "hook_notifications": [],
+    "qualification": "measured native AppServer 0.160.1 explicit route, ACP2.0.1 boundary; isolated hook trust setup; native TUI comparison is separate, not ACP chain",
+    "probe_cleanup": "PIDs56139/56168 absent at Host read; exact original cleanup/ephemeral credential-copy removal proof still owed"
+  },
+  "report_corrections": [
+    "Three node contexts are all Codex/luna; host model differences do not establish independent node-model diversity.",
+    "Report no-outside-core write claim conflicts with reported native r1 global trust auto-persistence; exact side effect source clarification remains with owner.",
+    "No hook notification observed in measured AppServer route is not a universal hook-engine absence claim.",
+    "Original deleted contaminated run evidence stays unavailable; original captured tool outputs are provenance only."
+  ],
+  "copies": [
+    {
+      "original": "/tmp/kpr-i264-host-chain-1035/core/delivery-r2.md",
+      "durable": "docs/evidence/host-compaction/core-20261006-r2-delivery.md",
+      "sha256": "6cb31ad76725e5640c33bf811010d370db8c6c66ab43c76d3d49c1c0f983aea5"
+    },
+    {
+      "original": "/tmp/kpr-i264-host-chain-1035/core/opencode-r2/receipt.json",
+      "durable": "docs/evidence/host-compaction/core-opencode-20261006-r2-receipt.json",
+      "sha256": "5432bd9b6b4ea107c6f898ee2503b94f4d520905ba4209aa4a78ffb5ef18bc1a"
+    },
+    {
+      "original": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r2/run/records/opencode/opencode-KPR1035C-orchestrator-main/6484c7c5c724fa48/events.jsonl",
+      "durable": "docs/evidence/host-compaction/core-opencode-20261006-r2-host-events.jsonl",
+      "sha256": "988a51ec8eddf9c4f5eedfe51a6877b5bb0a64a4a32b79e132088d69ab5284a9"
+    },
+    {
+      "original": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r2/run/records/codex/codex-KPR1035C-sideagent/6484c7c5c724fa48/events.jsonl",
+      "durable": "docs/evidence/host-compaction/core-opencode-20261006-r2-node-events.jsonl",
+      "sha256": "73868efd7a0bfe6f95f73d35cf3d022b184c557f44075bfae62cf49687ce8d5d"
+    },
+    {
+      "original": "/tmp/kpr-i264-host-chain-1035/core/opencode-r2/receipts/09-host-stop.json",
+      "durable": "docs/evidence/host-compaction/core-opencode-20261006-r2-host-stop.json",
+      "sha256": "03bd7b01d92ef2d4b0a3a3dc1e7ffbae1bc59076f178872450b541ce28678a38"
+    },
+    {
+      "original": "/tmp/kpr-i264-host-chain-1035/core/opencode-r2/run/repo/AGENTS.md",
+      "durable": "docs/evidence/host-compaction/core-opencode-20261006-r2-fixture-AGENTS.md",
+      "sha256": "71cdb7eb99ccd5858c5add18ac1ffa7001190d9bc7cd71b972d55af84d0b81dc"
+    },
+    {
+      "original": "/tmp/kpr-i264-host-chain-1035/core/codex2/receipts/02-hooks-list-untrusted.json",
+      "durable": "docs/evidence/host-compaction/core-codex-20261006-r2-probe-02-hooks-list-untrusted.json",
+      "sha256": "b91ab2c89feed0b538e93ab1717b6705bf74b6102503ca034505ae16aef941c1"
+    },
+    {
+      "original": "/tmp/kpr-i264-host-chain-1035/core/codex2/receipts/05-compact-start.json",
+      "durable": "docs/evidence/host-compaction/core-codex-20261006-r2-probe-05-compact-start.json",
+      "sha256": "c52d30f8277cf5a2c277efe24739174d14e33321d75911284c2991cdf0e61d70"
+    },
+    {
+      "original": "/tmp/kpr-i264-host-chain-1035/core/codex2/receipts/01-initialize.json",
+      "durable": "docs/evidence/host-compaction/core-codex-20261006-r2-probe-01-initialize.json",
+      "sha256": "8cbce586414dc540fe15aae4cd5768e24e39e0b6b0c326e29206e50f732a7772"
+    },
+    {
+      "original": "/tmp/kpr-i264-host-chain-1035/core/codex2/receipts/06-compact-notifications.json",
+      "durable": "docs/evidence/host-compaction/core-codex-20261006-r2-probe-06-compact-notifications.json",
+      "sha256": "9d7b053d6c38b9f6ac0ca72382c8ea9398a3f183d9fbf372f90752dd9f54ea66"
+    },
+    {
+      "original": "/tmp/kpr-i264-host-chain-1035/core/codex2/receipts/10-items.json",
+      "durable": "docs/evidence/host-compaction/core-codex-20261006-r2-probe-10-items.json",
+      "sha256": "c77688cf17cfddcb1b266c31f9dbf362f63ce2467079735c7f10af8a4b40ddc6"
+    },
+    {
+      "original": "/tmp/kpr-i264-host-chain-1035/core/codex2/receipts/04-thread-start.json",
+      "durable": "docs/evidence/host-compaction/core-codex-20261006-r2-probe-04-thread-start.json",
+      "sha256": "c28ffcb9e3eeb7ae83d901de12050c823e90059d40f746d0f04ef80cdc318738"
+    },
+    {
+      "original": "/tmp/kpr-i264-host-chain-1035/core/codex2/receipts/03-hooks-list-trusted.json",
+      "durable": "docs/evidence/host-compaction/core-codex-20261006-r2-probe-03-hooks-list-trusted.json",
+      "sha256": "d6ec32f1c36a104e5ed12674729914d92d15dfa43c142480078c4f4d7d9d3f84"
+    },
+    {
+      "original": "/tmp/kpr-i264-host-chain-1035/core/codex2/receipts/07-hook-notifications.json",
+      "durable": "docs/evidence/host-compaction/core-codex-20261006-r2-probe-07-hook-notifications.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "original": "/tmp/kpr-i264-host-chain-1035/core/codex2/receipts/08-turn-start.json",
+      "durable": "docs/evidence/host-compaction/core-codex-20261006-r2-probe-08-turn-start.json",
+      "sha256": "21ae9c28b288ef9544861c10053961a98cf48143cc7a3f73a4eb0aa3051a4824"
+    },
+    {
+      "original": "/tmp/kpr-i264-host-chain-1035/core/codex2/receipts/09-turn-notifications.json",
+      "durable": "docs/evidence/host-compaction/core-codex-20261006-r2-probe-09-turn-notifications.json",
+      "sha256": "f45f6a28b2d9f79e148e8acc8960c0546da26483cc4f2c6d649fe4cf2e0bb755"
+    },
+    {
+      "original": "/tmp/kpr-i264-host-chain-1035/core/codex2/postcompact-fired.json",
+      "durable": "docs/evidence/host-compaction/core-codex-20261006-r2-tui-postcompact-fired.json",
+      "sha256": "766e8c851e9b7e94950a21ebd881de083bcd57ed15180c2e0fde18353f189306"
+    },
+    {
+      "original": "/tmp/kpr-i264-host-chain-1035/core/codex2/sessionstart-fired.json",
+      "durable": "docs/evidence/host-compaction/core-codex-20261006-r2-tui-sessionstart-fired.json",
+      "sha256": "596d9bebc278db0abb27773f62f20913828c6d09843524e33095e0b07be5fe4e"
+    }
+  ]
+}

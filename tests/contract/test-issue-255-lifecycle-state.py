@@ -2906,7 +2906,7 @@ class HolderNodeMode(HolderFixture):
         self.boundary(); self.assertEqual(self.node_count(), 0)
         self.assertEqual(self.holder._lifecycle_state()["state"]["maintenance"]["recovery_input"]["seq"], 1)
 
-    def test_native_owned_reload_does_not_clear_host_maintenance(self) -> None:
+    def test_codex_acp_reload_and_host_maintenance_remain_independent(self) -> None:
         args = argparse.Namespace(**vars(self.holder.args))
         args.platform = "codex"
         args.record_dir = str(self.records / "codex" / args.session / self.side_dir.name)
@@ -2918,8 +2918,8 @@ class HolderNodeMode(HolderFixture):
         self.holder.turn["active"] = True
         self.holder._observe_compact_signal(self.compact_signal())
         item = self.wait_registration()
-        self.assertIn("compact_reload_native_owned", self.log_kinds())
-        self.assertFalse(self.holder.compact_reload.pending)
+        self.assertNotIn("compact_reload_native_owned", self.log_kinds())
+        self.assertTrue(self.holder.compact_reload.pending)
         self.assertEqual(item["kind"], "host-compaction")
         self.assertEqual(self.holder._lifecycle_state()["host_revision"], 0)
 

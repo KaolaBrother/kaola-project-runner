@@ -1,0 +1,52 @@
+{
+  "id": 1,
+  "result": {
+    "data": [
+      {
+        "cwd": "/private/tmp/kpr-i264-host-chain-1035/core/codex2/repo",
+        "hooks": [
+          {
+            "key": "/private/tmp/kpr-i264-host-chain-1035/core/codex2/repo/.codex/hooks.json:post_compact:0:0",
+            "eventName": "postCompact",
+            "handlerType": "command",
+            "command": "python3 -c 'import sys;open(\"/tmp/kpr-i264-host-chain-1035/core/codex2/postcompact-fired.json\",\"w\").write(sys.stdin.read())'",
+            "async": false,
+            "matcher": "manual|auto",
+            "timeoutSec": 5,
+            "statusMessage": null,
+            "additionalContextLimit": null,
+            "sourcePath": "/private/tmp/kpr-i264-host-chain-1035/core/codex2/repo/.codex/hooks.json",
+            "source": "project",
+            "pluginId": null,
+            "displayOrder": 0,
+            "enabled": true,
+            "isManaged": false,
+            "currentHash": "sha256:3f1598073dba96d249bddc2db7444f1087a6bdba0e83f723da966dda28905b82",
+            "trustStatus": "untrusted"
+          },
+          {
+            "key": "/private/tmp/kpr-i264-host-chain-1035/core/codex2/repo/.codex/hooks.json:session_start:0:0",
+            "eventName": "sessionStart",
+            "handlerType": "command",
+            "command": "python3 /tmp/kpr-i264-host-chain-1035/core/codex2/repo/.codex/kaola-project-runner/hooks/kaola-codex-compact-hook.py emit",
+            "async": false,
+            "matcher": "compact",
+            "timeoutSec": 5,
+            "statusMessage": null,
+            "additionalContextLimit": null,
+            "sourcePath": "/private/tmp/kpr-i264-host-chain-1035/core/codex2/repo/.codex/hooks.json",
+            "source": "project",
+            "pluginId": null,
+            "displayOrder": 1,
+            "enabled": true,
+            "isManaged": false,
+            "currentHash": "sha256:e525d6e5c2c56ddfade1d8bfe7d2ee1da11943ee43d2e4d05507f3ea2ddc24de",
+            "trustStatus": "untrusted"
+          }
+        ],
+        "warnings": [],
+        "errors": []
+      }
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "id": 0,
+  "result": {
+    "userAgent": "Codex Desktop/0.160.1 (Mac OS 27.0.1; arm64) dumb (kpr264-probe; 0.0.0)",
+    "codexHome": "/private/tmp/kpr-i264-host-chain-1035/core/codex2/codex-home",
+    "platformFamily": "unix",
+    "platformOs": "macos"
+  }
+}

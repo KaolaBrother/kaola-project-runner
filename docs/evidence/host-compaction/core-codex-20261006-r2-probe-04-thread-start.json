@@ -1,0 +1,75 @@
+{
+  "id": 2,
+  "result": {
+    "thread": {
+      "id": "01a110db-e44b-7f22-a286-9c920aacbb64",
+      "environments": [
+        {
+          "environmentId": "local",
+          "cwd": "/tmp/kpr-i264-host-chain-1035/core/codex2/repo",
+          "runtimeWorkspaceRoots": [
+            "/tmp/kpr-i264-host-chain-1035/core/codex2/repo"
+          ]
+        }
+      ],
+      "extra": null,
+      "sessionId": "01a110db-e44b-7f22-a286-9c920aacbb64",
+      "forkedFromId": null,
+      "parentThreadId": null,
+      "preview": "",
+      "ephemeral": false,
+      "section": null,
+      "sectionEnteredAt": null,
+      "projectId": null,
+      "historyMode": "paginated",
+      "modelProvider": "openai",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": null,
+      "createdAt": 1791284212,
+      "updatedAt": 1791284212,
+      "recencyAt": 1791284212,
+      "status": {
+        "type": "idle"
+      },
+      "path": "/private/tmp/kpr-i264-host-chain-1035/core/codex2/codex-home/sessions/2026/10/06/rollout-2026-10-06T18-56-52-01a110db-e44b-7f22-a286-9c920aacbb64.jsonl",
+      "cwd": "/tmp/kpr-i264-host-chain-1035/core/codex2/repo",
+      "cliVersion": "0.160.1",
+      "originator": "Codex Desktop",
+      "source": "vscode",
+      "canAcceptDirectInput": true,
+      "threadSource": null,
+      "agentNickname": null,
+      "agentRole": null,
+      "gitInfo": null,
+      "name": null,
+      "daybreakEnabled": null,
+      "turns": []
+    },
+    "model": "gpt-6.1-sol",
+    "modelProvider": "openai",
+    "serviceTier": null,
+    "disabledPluginIds": [],
+    "cwd": "/tmp/kpr-i264-host-chain-1035/core/codex2/repo",
+    "runtimeWorkspaceRoots": [
+      "/tmp/kpr-i264-host-chain-1035/core/codex2/repo"
+    ],
+    "instructionSources": [
+      "/tmp/kpr-i264-host-chain-1035/core/codex2/repo/AGENTS.md"
+    ],
+    "approvalPolicy": "on-request",
+    "approvalsReviewer": "user",
+    "sandbox": {
+      "type": "workspaceWrite",
+      "writableRoots": [],
+      "networkAccess": false,
+      "excludeTmpdirEnvVar": false,
+      "excludeSlashTmp": false
+    },
+    "activePermissionProfile": {
+      "id": ":workspace",
+      "extends": null
+    },
+    "reasoningEffort": null,
+    "multiAgentMode": "explicitRequestOnly"
+  }
+}

@@ -1,0 +1,1 @@
+validate: prerequisite missing: Bash >= 4 is required; detected Bash 3.2.57(1)-release. Use a supported Bash interpreter.

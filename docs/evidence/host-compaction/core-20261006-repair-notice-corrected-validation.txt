@@ -1,0 +1,61 @@
+validate: scrubbed inherited env: KAOLA_ACP_CHILD_RECORD KAOLA_ACP_DISPATCHER KAOLA_ZCODE_ENTRY KAOLA_ZCODE_NODE
+validate: coverage: SUBSET RUN (1 of 82 suites selected; not full-inventory coverage)
+validate: selected: test-project-compact-notice.py
+validate: candidate: eb833161 (dirty) - execution context, not complete input identity
+render-skills: PASS (10 workers + kaola-project-runner + kaola-delegator + grok-bot host: 1 bridge skill, 2555 B, content stage, unpinned (not saveable); budgets OK)
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+test_active_false_alone_is_not_success (__main__.Notice.test_active_false_alone_is_not_success) ... ok
+test_codex_does_not_accept_droid_project_precompact_hook (__main__.Notice.test_codex_does_not_accept_droid_project_precompact_hook) ... ok
+test_cursor_exact_acp_id_and_data_project_root_admit_notice (__main__.Notice.test_cursor_exact_acp_id_and_data_project_root_admit_notice) ... ok
+test_cursor_hook_requires_both_session_fields_to_match (__main__.Notice.test_cursor_hook_requires_both_session_fields_to_match) ... ok
+test_duplicate_notice_coalesces_current_pending (__main__.Notice.test_duplicate_notice_coalesces_current_pending) ... ok
+test_failed_refused_cancelled_or_stopping_original_retains_obligation (__main__.Notice.test_failed_refused_cancelled_or_stopping_original_retains_obligation) ... ok
+test_foreign_missing_or_stop_hook_never_writes_or_stages (__main__.Notice.test_foreign_missing_or_stop_hook_never_writes_or_stages) ... ok
+test_hook_socket_reply_loss_is_unknown_not_retry (__main__.Notice.test_hook_socket_reply_loss_is_unknown_not_retry) ... ok
+test_hook_uses_existing_socket_and_filters_auth_fields (__main__.Notice.test_hook_uses_existing_socket_and_filters_auth_fields) ... ok
+test_host_precompact_owes_reload_only_without_completed_maintenance (__main__.Notice.test_host_precompact_owes_reload_only_without_completed_maintenance) ... ok
+test_intervening_turn_can_start_and_end_before_admission_no_write (__main__.Notice.test_intervening_turn_can_start_and_end_before_admission_no_write) ... ok
+test_missing_host_entry_retains_notice_and_reload (__main__.Notice.test_missing_host_entry_retains_notice_and_reload) ... ok
+test_newer_native_occurrence_less_signal_survives_notice_admission (__main__.Notice.test_newer_native_occurrence_less_signal_survives_notice_admission) ... ok
+test_notice_waits_for_real_successful_response_then_standard_prompt (__main__.Notice.test_notice_waits_for_real_successful_response_then_standard_prompt) ... ok
+test_partial_write_failure_is_unknown_and_not_replayed (__main__.Notice.test_partial_write_failure_is_unknown_and_not_replayed) ... ok
+test_real_socket_after_write_reply_loss_is_unknown (__main__.Notice.test_real_socket_after_write_reply_loss_is_unknown) ... ok
+test_real_socket_before_write_failure_is_not_attempted (__main__.Notice.test_real_socket_before_write_failure_is_not_attempted) ... ok
+test_source_checkout_does_not_name_directory_as_installed_skill (__main__.Notice.test_source_checkout_does_not_name_directory_as_installed_skill) ... ok
+test_staging_event_precedes_admission_when_prior_ends_at_append (__main__.Notice.test_staging_event_precedes_admission_when_prior_ends_at_append) ... ok
+test_success_change_at_actual_admission_lock_prevents_write (__main__.Notice.test_success_change_at_actual_admission_lock_prevents_write) ... ok
+test_unknown_write_is_retained_and_never_replayed (__main__.Notice.test_unknown_write_is_retained_and_never_replayed) ... ok
+
+----------------------------------------------------------------------
+Ran 21 tests in 0.023s
+
+OK
+kaola-grok-bot-verify: PASS /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-264/hosts/grok-bot (1 bridge skill, 2555 B, stage content, manifest, guide; no canonical content; generated state)
+validate: elapsed render-check                                 0.058 s
+validate: elapsed validate-skill.claude-code-kaola-project-runner 0.026 s
+validate: elapsed validate-skill.codex-kaola-project-runner    0.026 s
+validate: elapsed validate-skill.cursor-cli-kaola-project-runner 0.025 s
+validate: elapsed validate-skill.devin-kaola-project-runner    0.026 s
+validate: elapsed validate-skill.droid-kaola-project-runner    0.025 s
+validate: elapsed validate-skill.dsh-kaola-project-runner      0.025 s
+validate: elapsed validate-skill.grok-kaola-project-runner     0.025 s
+validate: elapsed validate-skill.kaola-project-runner          0.026 s
+validate: elapsed validate-skill.kimi-cli-kaola-project-runner 0.025 s
+validate: elapsed validate-skill.opencode-kaola-project-runner 0.026 s
+validate: elapsed validate-skill.zcode-kaola-project-runner    0.026 s
+validate: elapsed validate-skill.kaola-delegator               0.027 s
+validate: elapsed test-project-compact-notice.py               0.087 s
+validate: elapsed grok-bot-verify                              0.057 s
+{"killed_group_members": [], "matched_pids": [], "pgid_identity_unverified": [], "residual_pids": [], "results": [], "root": "/tmp/kaola-val.e1uKU7", "swept_groups": []}
+validate: total wall: 0.719041 s
