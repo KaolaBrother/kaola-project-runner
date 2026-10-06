@@ -1,0 +1,135 @@
+{
+ "platform": "devin",
+ "runtime": "Devin CLI 3000.11.3 (9c803229faa4)",
+ "consumer": "devin2 (fully-linked fixture; real Host decisions rev 4/6/7)",
+ "acp_session": "rocky-citrus",
+ "host_holder": "0af69242c367b61c4baf8301b7499156",
+ "events": [
+  {
+   "cursor": 17,
+   "step": "sideagent_node_started",
+   "kind": "sideagent_node_started",
+   "holder": "5f70eaf940c16bb98d249a9c36846d9a"
+  },
+  {
+   "cursor": 18,
+   "step": "sideagent_node_batch",
+   "kind": "sideagent_node_batch",
+   "batch": "b-41a3dda4633f",
+   "host_revision_through": 3
+  },
+  {
+   "cursor": 438,
+   "step": "sideagent_node_settled(b1 verified)",
+   "kind": "sideagent_node_settled",
+   "batch": "b-41a3dda4633f",
+   "holder": "5f70eaf940c16bb98d249a9c36846d9a",
+   "checkpoint": "verified",
+   "host_revision_through": 3
+  },
+  {
+   "cursor": 447,
+   "step": "sideagent_node_stopped(b1)",
+   "kind": "sideagent_node_stopped",
+   "holder": "5f70eaf940c16bb98d249a9c36846d9a"
+  },
+  {
+   "cursor": 1601,
+   "step": "old-node-live(batch:5)",
+   "kind": "sideagent_node_returned",
+   "reason": "maintenance batch:5: old-node-live; Host must reconcile original receipts, repair the binding and request a bounded check"
+  },
+  {
+   "cursor": 1603,
+   "step": "failure_recorded",
+   "kind": "sideagent_maintenance_failure_recorded",
+   "reason": "old-node-live",
+   "input": "batch:5"
+  },
+  {
+   "cursor": 2749,
+   "step": "stop_confirmed_late(dd6071bc)",
+   "kind": "sideagent_node_stop_confirmed_late",
+   "holder": "dd6071bce816cedcd5b04f70819b3181"
+  },
+  {
+   "cursor": 3851,
+   "step": "old-node-live(batch:7)",
+   "kind": "sideagent_node_returned",
+   "reason": "maintenance batch:7: old-node-live; Host must reconcile original receipts, repair the binding and request a bounded check"
+  },
+  {
+   "cursor": 3853,
+   "step": "failure_recorded",
+   "kind": "sideagent_maintenance_failure_recorded",
+   "reason": "old-node-live",
+   "input": "batch:7"
+  },
+  {
+   "cursor": 4955,
+   "step": "turn_ended(/compact)",
+   "kind": "turn_ended"
+  },
+  {
+   "cursor": 4956,
+   "step": "compaction started",
+   "kind": "notification",
+   "method": "_cognition.ai/compaction"
+  },
+  {
+   "cursor": 4957,
+   "step": "compaction completed",
+   "kind": "notification",
+   "method": "_cognition.ai/compaction"
+  },
+  {
+   "cursor": 4958,
+   "step": "compact_reload_detected",
+   "kind": "compact_reload_detected",
+   "source": "devin-compaction",
+   "session_id": "rocky-citrus",
+   "role": "host",
+   "holder": "0af69242c367b61c4baf8301b7499156"
+  },
+  {
+   "cursor": 4959,
+   "step": "compact_reload_delivered",
+   "kind": "compact_reload_delivered"
+  },
+  {
+   "cursor": 4961,
+   "step": "host_compact_maintenance_registered",
+   "kind": "host_compact_maintenance_registered",
+   "signal_cursor": 4958,
+   "input": {
+    "at": "2026-10-06T12:08:13.497728+00:00",
+    "evidence": "/tmp/kpr-i264-host-chain-1035/edge/devin2/records/devin/devin-KPR103ED2-orchestrator-main/39240210dbbb83d6/events.jsonl#4958",
+    "holder": "0af69242c367b61c4baf8301b7499156",
+    "kind": "host-compaction",
+    "occurrence_id": null,
+    "seq": 1,
+    "source": "completed-host-signal"
+   }
+  },
+  {
+   "cursor": 6015,
+   "step": "turn_ended(reload)",
+   "kind": "turn_ended"
+  },
+  {
+   "cursor": 6017,
+   "step": "worker_event_delivered(partial wake)",
+   "kind": "worker_event_delivered"
+  }
+ ],
+ "raw_signal_4958": {
+  "jsonrpc": "2.0",
+  "method": "_cognition.ai/compaction",
+  "params": {
+   "sessionId": "rocky-citrus",
+   "status": "completed",
+   "summary": "Full conversation history saved at /Users/ylmacstudio/.local/share/devin/cli/summaries/history_fb61f2830f444872.md.\nSummary:\n## 1. Request and Intent\n\n### Enduring objective\n\nThis is a disposable QA fixture for Issue 264 / project `KPR103ED2`, testing finite Host-compaction maintenance on Devin. The project goal recorded in the durable state is:\n\n> \u201cFinite Host-compaction maintenance QA on devin2: keep seeded state current, report exact outcomes, never add mechanisms.\u201d\n\nThe fixture is explicitly seeded test data, not a real project. The intended end-state is to preserve seeded duties, record exact receipts and cursor outcomes, maintain valid dispatch links, and continue TASK-B after context compaction using durable records rather than conversational memory.\n\nThe repository-level requirements emphasize:\n\n- \u201cKeep this disposable run finite: report exact command, receipt and cursor outcomes; do not add mechanisms.\u201d\n- \u201cThe bound maintenance node reconciles only seeded duties; it invents, accepts and judges no tasks.\u201d\n- \u201cEvery dispatch reference in the task record has a fully-linked dispatch-index row with real prior-run receipts; create no unlinked reference.\u201d\n\n### Request progression\n\n1. **TASK-A setup**\n   - Read the complete current contents of:\n     - `/Users/ylmacstudio/.config/devin/skills/devin-kaola-project-runner/SKILL.md`\n     - `/Users/ylmacstudio/.zcode/skills/kaola-project-runner/SKILL.md`\n   - Append one line per file to `qa/progress.md`, including path, byte count, and last non-empty line.\n   - End the turn without starting or stopping sessions or changing other files.\n\n2. **TASK-A verdict**\n   - Judge whether TASK-A was complete and recorded in `qa/progress.md`, using only files read in that session.\n   - Initially attempt to record the verdict as a settled Host decision.\n   - After the state tool refused because settled decisions remove existing rows rather than create them, inspect the tool behavior.\n   - On explicit user confirmation, create the verdict as a pending Host-owned decision instead.\n\n3. **Project Runner heartbeat work**\n   - Process worker-event-triggered Host heartbeats.\n   - Recover authorization and current field state.\n   - Review the seeded prior-run dispatch and receipts.\n   - Settle the seeded reclaim-review decision after verifying its linked receipts.\n   - Reconcile a bound Codex sideagent that repeatedly encountered holder/restart/role issues.\n   - Repair the sideagent binding and request bounded maintenance checks.\n   - Confirm maintenance checkpoints and retire maintenance alerts only after reviewing receipts.\n\n4. **Compaction-readiness bookkeeping**\n   - On explicit request, create a second pending Host decision:\n     - `qa-compact-readiness`\n     - owner `host`\n     - status `pending`\n     - answer whether durable records are sufficient to continue TASK-B after compaction without memory.\n   - This was recorded successfully.\n\n5. **Most recent completed activity**\n   - A worker event reported maintenance batch 7 as `old-node-live`.\n   - The bound node successfully checkpointed through Host revision 7, settling the new `qa-compact-readiness@7` input but returning the stale `batch:7` token as `not-in-batch`.\n   - The remaining maintenance alert was judged as bookkeeping after the substantive recovery was verified, then retired.\n   - Final state at the end of the conversation:\n     - Host revision 8\n     - maintenance handled/acked through 7\n     - no pending host changes\n     - no maintenance alerts\n     - both QA decisions remain pending by instruction\n     - TASK-B remains the open task marker\n     - Codex sideagent binding remains active and idle.\n\n## 2. Key Concepts and Values\n\n### Concepts and technologies\n\n- Kaola Project Runner control plane.\n- Devin CLI Host session.\n- Codex CLI sideagent node.\n- ACP transport and `kaola-tmux.sh` runner.\n- Host-compaction maintenance and durable heartbeat state.\n- `.kaola/heartbeat-prompt.json` lifecycle state.\n- `.kaola/dispatch-index.json` seeded dispatch/receipt index.\n- Host and sideagent writer roles.\n- Maintenance checkpoint accounting:\n  - `acked_host_revision`\n  - `handled_host_revision`\n  - `last_checkpoint`\n  - `last_verified`\n  - `pending_host_changes`\n- Host-owned decisions.\n- Maintenance alerts and explicit retirement.\n- Exact session ownership and binding repair.\n- `--role sideagent` requirement for bound sideagent sessions.\n- Event-driven heartbeat carrier; no periodic loop or cron.\n- Finite disposable QA fixture; no mechanisms may be added.\n- Prior-run receipt verification and dispatch-index linkage.\n\n### Important paths\n\n- Workspace:\n  - `/private/tmp/kpr-i264-host-chain-1035/edge/devin2/repo`\n- Repository instructions:\n  - `/private/tmp/kpr-i264-host-chain-1035/edge/devin2/repo/AGENTS.md`\n- QA progress:\n  - `/private/tmp/kpr-i264-host-chain-1035/edge/devin2/repo/qa/progress.md`\n- Durable heartbeat state:\n  - `/private/tmp/kpr-i264-host-chain-1035/edge/devin2/repo/.kaola/heartbeat-prompt.json`\n- Dispatch index:\n  - `/private/tmp/kpr-i264-host-chain-1035/edge/devin2/repo/.kaola/dispatch-index.json`\n- State/dispatch script:\n  - `/private/tmp/kpr-i264-host-chain-1035/edge/candidate/scripts/kaola-dispatch.py`\n- Codex runner:\n  - `/private/tmp/kpr-i264-host-chain-1035/edge/candidate/scripts/kaola-tmux.sh`\n- Devin skill read during TASK-A:\n  - `/Users/ylmacstudio/.config/devin/skills/devin-kaola-project-runner/SKILL.md`\n- ZCode Project Runner skill read during TASK-A:\n  - `/Users/ylmacstudio/.zcode/skills/kaola-project-runner/SKILL.md`\n\n### Session and binding values\n\n- Host:\n  - platform: `devin`\n  - session: `devin-KPR103ED2-orchestrator-main`\n  - holder instance: `0af69242c367b61c4baf8301b7499156`\n- Sideagent:\n  - platform: `codex`\n  - session: `codex-KPR103ED2-sideagent`\n  - preset: `codex/luna`\n  - authorized count: 1\n  - current/last verified holder: `47d7c688dfcd8501970aa86917d64872`\n  - state at end: active/idle\n  - role: `sideagent`\n- Project:\n  - code: `KPR103ED2`\n  - issue: `264`\n  - goal: finite Host-compaction maintenance QA\n  - status: active\n- Task:\n  - `qa-observe`\n  - stage: `doing`\n  - next: \u201cread qa/progress.md, continue the current step marker; TASK-B is the open step\u201d\n- Dispatch item:\n  - `qa-prior-reclaim-1`\n  - task: `qa-observe`\n  - original session: `devin-KPR103ED2-prior-diagnostic`\n  - acceptance was initially pending before the review decision was settled.\n\n### TASK-A receipts\n\n`qa/progress.md` now contains:\n\n- Step 1 marked DONE.\n- Step 2 marked CURRENT/TASK-B.\n- Devin skill receipt:\n  - `10438` bytes\n  - last non-empty line:\n    > `and [references/acp.md](references/acp.md) for the structured ACP command surface.`\n- ZCode Project Runner skill receipt:\n  - `17407` bytes\n  - last non-empty line:\n    > `machine, quota engine, or close-out dashboard or ledger.`\n\n### Prior-run receipt paths\n\nThe seeded dispatch index linked `qa-prior-reclaim-1` to:\n\n- `/tmp/kpr-acp-matrix-devin-20261005.md`\n- `/tmp/kpr-devin-compact-probe-stopped-status.json`\n- `/tmp/kpr-i264-862-dsh-kimi-runtime-proof.md`\n\nThe stopped-status JSON reported:\n\n- `outcome: stopped`\n- `agent_exit_code: 0`\n- `residual_pids: []`\n- `state: stopped`\n- `platform: devin`\n- `mutation_status: completed`\n\n### Pending decisions\n\n1. `decisions/qa-task-a-verdict`\n   - owner: `host`\n   - status: `pending`\n   - answer: `yes \u2014 complete and recorded`\n   - question: whether TASK-A was complete and recorded\n   - source: `host turn: TASK-A verdict after setup reads`\n\n2. `decisions/qa-compact-readiness`\n   - owner: `host`\n   - status: `pending`\n   - answer: `yes \u2014 sufficient`\n   - question: whether durable records are sufficient to continue TASK-B after compaction without memory\n   - source: `host turn: compact-readiness verdict`\n\nBoth were intentionally left pending. They were not to be settled in the turns that created them.\n\n## 3. Task Requirements\n\n### What is in scope\n\n- Maintain the disposable QA fixture\u2019s seeded state.\n- Preserve exact receipt and cursor evidence.\n- Continue only seeded duties.\n- Use the existing state/dispatch tooling.\n- Keep decisions and maintenance records in the consuming project.\n- Respect the single authorized sideagent seat.\n- Use event-driven heartbeat passes only when worker events arrive.\n- Verify worker outputs before accepting or retiring anything.\n- Keep TASK-B as the current open work marker.\n\n### Explicit user requirements\n\nThe repository `AGENTS.md` requirements were:\n\n> \u201cKeep this disposable run finite: report exact command, receipt and cursor outcomes; do not add mechanisms.\u201d\n\n> \u201cThe bound maintenance node reconciles only seeded duties; it invents, accepts and judges no tasks.\u201d\n\n> \u201cEvery dispatch reference in the task record has a fully-linked dispatch-index row with real prior-run receipts; create no unlinked reference.\u201d\n\nThe initial TASK-A request was:\n\n> \u201cRead the full current content of /Users/ylmacstudio/.config/devin/skills/devin-kaola-project-runner/SKILL.md with your read tool.\u201d\n\n> \u201cRead the full current content of /Users/ylmacstudio/.zcode/skills/kaola-project-runner/SKILL.md with your read tool.\u201d\n\n> \u201cAppend to qa/progress.md one line per file: path, byte count, and last non-empty line.\u201d\n\n> \u201cEnd your turn. Do not run other commands, do not change other files, do not start or stop sessions.\u201d\n\nThe TASK-A bookkeeping request required:\n\n> \u201cJudge TASK-A (fixture seeded and your setup reads): is it complete and recorded in qa/progress.md? Base the verdict only on the files you read this session.\u201d\n\nThen the user explicitly authorized creating the pending decision after the settled-write refusal:\n\n> \u201cYes \u2014 record it that way now: create the decision as pending (owner host, your TASK-A verdict evidence as written), with the state tool, exactly as you proposed. Then end your turn. Do not settle it, do not change anything else.\u201d\n\nThe compaction-readiness request was:\n\n> \u201cOne bounded bookkeeping turn, then stop. Record one more real pending decision now: id qa-compact-readiness, owner host, status pending, your own question and answer stating whether the durable records (qa/progress.md steps, decisions, dispatch index) are sufficient to continue TASK-B after a context compaction without memory. Use the state tool exactly as before. Then end your turn immediately. Change nothing else.\u201d\n\n### Heartbeat requirements\n\nFor each worker event, perform one full Project Runner heartbeat pass:\n\n- Recover authorization and field state.\n- Handle worker questions.\n- Dispatch suitable authorized work.\n- Verify deliveries.\n- Close out the bounded duty.\n- Do not create a periodic carrier, routine, quota engine, state machine, dashboard, or other mechanism.\n- Use the worker event as the only heartbeat trigger.\n- Keep the Host shell at the canonical root.\n- Never infer acceptance from prose, idle state, successful command exit, or a completed turn alone.\n- Do not exceed the authorized live worker count.\n- A finished seat counts until an explicit stop receipt.\n- Keep the bound node if it is idle; idle does not mean missing.\n- Stop only exact owned sessions and only when they own no remaining duties.\n\n### Forbidden or out-of-scope actions\n\n- Do not invent tasks.\n- Do not accept or judge unseeded tasks.\n- Do not create unlinked dispatch references.\n- Do not add mechanisms.\n- Do not fabricate claims, records, or identities.\n- Do not settle pending decisions unless explicitly requested.\n- Do not mutate the sideagent binding without a concrete repair need.\n- Do not broadly kill sessions or processes.\n- Do not use fuzzy session matching.\n- Do not restart a finished seat as a new assignment; resume the same assignment when recovering.\n- Do not start new issues.\n- Do not dispatch new work after a stop boundary.\n- Do not alter installed Project Runner skills or templates.\n- Do not change files outside the specifically requested durable project records.\n- Do not infer PR lifecycle status; no PR status was established in this conversation.\n\n## 4. Additional Instructions\n\n### Global workflow constraints\n\n- Read targets before writing.\n- Keep changes surgical.\n- Local evidence determines completion.\n- Mission ledgers, workflow state, and lifecycle records are authoritative where applicable.\n- Mutation invalidates affected PASS evidence.\n- Do not fabricate a completion claim from a worker\u2019s idle state or a successful tool exit.\n- A worker reply is not equivalent to acceptance.\n- A `stop` receipt releases a runtime but does not itself establish project completion.\n- The exact owned session must be used for stop/restart/rebind operations.\n- Use absolute paths for skill scripts and project paths.\n- The user\u2019s project is passed via `--repo`; relative paths in skill references resolve against the skill installation, not the repository.\n- ACP is the only supported transport; PTY is retired.\n\n### State-tool semantics discovered\n\nFor `state update --kind decisions`:\n\n- A Host decision with `status: settled` removes an existing decision record.\n- A settled decision cannot create a new row.\n- If the decision is absent, the tool returns `record-missing`.\n- A pending decision can be created if required fields are supplied.\n- The pending record contains:\n  - question\n  - answer\n  - evidence\n  - owner\n  - status\n  - source\n- To settle an existing Host decision, provide evidence and use the existing revision.\n- Settling removes the row; the receipt is the durable evidence of the settlement action.\n\nFor sideagent checkpoints:\n\n- `state checkpoint` must be written by the sideagent role.\n- A checkpoint entry must either:\n  - reference a current record the node itself wrote, or\n  - retain a current record/section for a responsible reader.\n- Host cannot impersonate the sideagent writer.\n- A stale alert input such as `batch:7` may not be a valid checkpoint input if it is not an actual current record, event, or host change.\n- If a checkpoint returns an input as `not-in-batch`, the node may still have successfully settled all real host changes; the Host must judge the leftover alert input from original evidence.\n\n## 5. Errors and Fixes\n\n### Settled decision creation refused\n\nAttempted to create `qa-task-a-verdict` directly with `status: settled`.\n\nTool response:\n\n- `result: refused`\n- `reason: record-missing`\n- detail:\n  > \u201csettlement removes an existing decision; it creates no row\u201d\n\nFix:\n\n- Inspected `kaola-dispatch.py`.\n- Confirmed Host settlement deletes an existing decision and cannot create one.\n- Reported the refusal without retrying with a fabricated pending record.\n- After explicit user authorization, created the decision as `pending`.\n\n### Initial sideagent holder loss\n\nThe first send to the bound Codex sideagent failed:\n\n- `holder-lost`\n- holder PID was dead\n- session state was stopped.\n\nFix:\n\n- Used exact-session `drain-restart --continue`.\n- The restarted holder became ready.\n- Sent a bounded reconciliation prompt.\n\n### Restart lost the required sideagent role\n\nThe first `drain-restart --continue` restarted with `session_role: null` / no `--role sideagent`.\n\nThe node\u2019s subsequent checkpoint attempt was refused:\n\n- `sideagent_node_recipe_refused`\n- detail:\n  > \u201crecipe must start the bound session in this project with --role sideagent\u201d\n\nFix:\n\n- Stopped the mis-roled exact session.\n- Restarted the same conversation with `--continue --role sideagent`.\n- Verified `start_selection.session_role: sideagent` and the holder command line.\n- Sent the bounded check again.\n\n### Stale old-node-live alert\n\nA later maintenance event reported `old-node-live` even though the prior-generation processes were dead.\n\nFix:\n\n- Checked the old holder and child process IDs with `ps`.\n- Confirmed previous generations were dead.\n- Confirmed only holder `47d7c688dfcd8501970aa86917d64872` was live.\n- Rebound the Host to that exact holder.\n- Requested a bounded check.\n- The node produced verified checkpoint `b-47d7c688dfcd-r5`, covering Host revisions 3\u21925.\n- Retired the alert after confirming no pending host changes remained.\n\n### Batch token not in checkpoint batch\n\nThe later node checkpoint:\n\n- `b-47d7c688dfcd-r7`\n- covered Host revisions 5\u21927\n- settled `host:decisions/qa-compact-readiness@7`\n- returned `batch:7: not-in-batch`\n- had `verified: false`.\n\nDiagnosis:\n\n- `batch:7` was an alert bookkeeping token, not a checkpointable state input.\n- The substantive recovery was already complete and the real host decision was settled.\n- The alert was judged from original receipts and retired with `state retire --expect-rev 2`.\n\nFinal result:\n\n- Host revision 8\n- `pending_host_changes: []`\n- `handled_host_revision: 7`\n- `acked_host_revision: 7`\n- `alerts: {}`\n- no maintenance duty remained.\n\n## 6. Problem Solving\n\n### TASK-A completion\n\nThe setup reads were performed completely. Byte counts and final non-empty lines were obtained, and both receipts were appended to `qa/progress.md`. TASK-A was judged complete based solely on the file contents read in that session.\n\nThe initial attempt to settle the verdict exposed an important state model: settled decisions are removals, not persistent decision rows. The decision was therefore created as pending only after the user explicitly approved that route.\n\n### Reclaim review\n\nThe seeded `qa-prior-reclaim-1` dispatch reference was verified against all three linked receipt files. The stopped-status receipt confirmed clean termination and no residual processes. The Host-owned review decision was then settled and removed, with the evidence preserved in the state-tool receipt.\n\n### Sideagent recovery\n\nThe bound sideagent was recovered without creating a new task or dispatch. The main problem was not the conversation itself but exact runner state:\n\n1. Holder died.\n2. Restart accidentally omitted the required `sideagent` role.\n3. Node\u2019s checkpoint was refused by the recipe validator.\n4. Exact session was stopped and resumed with the role restored.\n5. Binding was repaired to the new holder.\n6. Bounded checks were sent only once per active turn; no prompt replay was performed when `prompt-in-progress` was returned.\n\n### Durable compaction readiness\n\nThe durable state was judged sufficient because:\n\n- `qa/progress.md` records TASK-A and identifies TASK-B as current.\n- The heartbeat file records tasks, decisions, authorization, sideagent binding, and maintenance cursors.\n- `dispatch-index.json` links the seeded dispatch reference to real prior-run receipts.\n- Existing receipts provide exact prior-run evidence.\n- The project and task state identify the next action after compaction.\n\nThis was recorded as a pending Host decision, not settled.\n\n## 7. Pending Tasks\n\nAt the end of the conversation:\n\n- TASK-B remains the open step in `qa/progress.md`.\n- `qa-observe` remains `stage: doing`.\n- `decisions/qa-task-a-verdict` remains pending.\n- `decisions/qa-compact-readiness` remains pending.\n- The Codex sideagent binding remains active and idle:\n  - `codex-KPR103ED2-sideagent`\n  - `codex/luna`\n  - authorized/live count 1/1\n  - holder `47d7c688dfcd8501970aa86917d64872`\n- No maintenance alert remains.\n- No pending host changes remain.\n- No further dispatch was owed at the end of the last heartbeat.\n- TASK-B has not yet been performed or closed in the conversation.\n- No PR, merge, or issue-closure status was established.\n\n## 8. Current Work\n\nImmediately before the summary point, the latest completed heartbeat handled event:\n\n- `codex/codex-KPR103ED2-sideagent/idle/1926`\n\nThe node had completed a maintenance checkpoint after the compaction-readiness decision was created. The Host inspected:\n\n- `pending_host_changes`\n- `last_checkpoint`\n- `alerts`\n- maintenance handled/acked revisions\n\nThe checkpoint showed:\n\n- batch: `b-47d7c688dfcd-r7`\n- Host revision range: 5\u21927\n- settled input: `host:decisions/qa-compact-readiness@7`\n- returned input: `batch:7` with reason `not-in-batch`\n- `verified: false`\n\nThe Host then determined that `batch:7` was a stale bookkeeping token rather than an unresolved real state input. The maintenance alert was retired with a Host state command using the current alert revision. The resulting receipt reported:\n\n- `result: written`\n- `outcome: resolved`\n- Host revision 7\u21928\n- state file revision 13\u219214\n\nA subsequent check confirmed:\n\n- `host_revision 8`\n- `pending []`\n- `handled 7`\n- `acked 7`\n- `alerts []`\n\nNo files other than the intended durable state had been changed during the heartbeat work. The current next action remains TASK-B, to be resumed from `qa/progress.md` and the durable heartbeat/dispatch records."
+  }
+ },
+ "status": "recovery batch not delivered before bounded close; recovery#1 pending in preserved state"
+}

@@ -1,0 +1,227 @@
+{
+ "body": "{\"alerts\":[{\"id\":\"maintenance-returned\",\"level\":\"warn\",\"next\":\"Host: reconcile the original node and stop receipts; repair the binding; request a bounded check\",\"owner\":\"host\",\"summary\":\"maintenance needs Host recovery from original receipts\"}],\"as_of\":\"2026-10-06T11:32:28.039722+00:00\",\"attention\":[{\"content\":\"48bac3aef3cbd28a\",\"id\":\"maintenance-returned\",\"kind\":\"alerts\",\"why\":\"warn\"},{\"content\":\"13a40fe4648ac043\",\"id\":\"qa-prior-reclaim-1\",\"kind\":\"decisions\",\"why\":\"host-decision\"},{\"id\":\"pending\",\"kind\":\"maintenance\",\"next\":\"use the bound node or recover from original receipts\",\"why\":\"bounded reconciliation owed\"}],\"authorization\":{\"grants\":[{\"count\":1,\"id\":\"codex/luna\",\"state\":\"granted\"}]},\"capability\":{\"catalog_sha256\":\"73198c4df697a74816556e26471c335c557b3aa94ecc3c6350d14ab142ed4ecc\",\"catalog_source\":\"/private/tmp/kpr-i264-host-chain-1035/edge/candidate/platforms\",\"presets\":[],\"shared_seats\":[],\"text\":\"\",\"withheld\":[{\"id\":\"codex/luna\",\"reason\":\"ceiling-unreadable\"},{\"id\":\"devin/default\",\"reason\":\"ceiling-unreadable\"},{\"id\":\"dsh/default\",\"reason\":\"ceiling-unreadable\"},{\"id\":\"opencode/default\",\"reason\":\"ceiling-unreadable\"},{\"id\":\"zcode/default\",\"reason\":\"ceiling-unreadable\"}]},\"catalog\":{\"classes\":{\"Elite\":\"Main execution workforce: primary implementation and demanding execution.\",\"Expert\":\"Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat.\",\"Worker\":\"Cheaper and generally weaker; simpler, bounded work supporting parallel throughput.\"},\"sha256\":\"4591809f4505b2fe7974af6c91f38edb263f2647725df315e627b4ff4c6b7677\",\"source\":\"/private/tmp/kpr-i264-host-chain-1035/edge/candidate/templates/orchestrator/references/worker-profiles.md.tmpl\"},\"decisions\":[{\"id\":\"qa-prior-reclaim-1\",\"next\":\"Host reviews the seeded dispatch-index row and original receipts.\",\"owner\":\"host\",\"question\":\"Determine the acceptance disposition for qa-prior-reclaim-1.\"}],\"detail\":\"heartbeat-prompt.json state; `state view --role sideagent` for evidence and dispatch rows\",\"host_revision\":3,\"maintenance\":{\"acked_host_revision\":3,\"handled_host_revision\":3,\"last_checkpoint\":{\"at\":\"2026-10-06T11:31:12.744402+00:00\",\"batch\":\"b-3457f6b9666b\",\"verified\":false},\"last_verified\":{\"at\":\"2026-10-06T11:13:52.796883+00:00\",\"batch\":\"b-67e4eb137e58\",\"node\":{\"holder_instance_id\":\"a3ec3c0c535d20651dbe5f9ec386722c\",\"session\":\"codex-KPR103EK2-sideagent\"}},\"recovery_input\":{\"at\":\"2026-10-06T11:23:11.013818+00:00\",\"evidence\":\"/tmp/kpr-i264-host-chain-1035/edge/kimi2/records/kimi-cli/kimi-cli-KPR103EK2-orchestrator-main/e0ca6fab8ebdaade/events.jsonl#8759\",\"holder\":\"460bc03bd24f20c31567db0a944280da\",\"kind\":\"host-compaction\",\"occurrence_id\":null,\"seq\":1,\"source\":\"completed-host-signal\"},\"recovery_seq\":1},\"project\":{\"code\":\"KPR103EK2\",\"goal\":\"Finite Host-compaction maintenance QA on kimi2: keep seeded state current, report exact outcomes, never add mechanisms.\",\"issue\":\"264\",\"repo\":\"/private/tmp/kpr-i264-host-chain-1035/edge/kimi2/repo\",\"requirements_source\":\"AGENTS.md\",\"status\":\"active\"},\"revision\":8,\"sideagent\":{\"mode\":\"node\",\"platform\":\"codex\",\"preset\":\"codex/luna\",\"session\":\"codex-KPR103EK2-sideagent\",\"state\":\"active\"},\"sideagent_maintenance\":\"no node is running; an idle binding is not missing; bounded reconciliation is owed\",\"tasks\":[{\"dispatch_count\":1,\"goal\":\"Run the finite Host-compaction maintenance proof and keep scratch QA records current\",\"id\":\"qa-observe\",\"next\":\"read qa/progress.md, continue the current step marker; TASK-B is the open step\",\"stage\":\"doing\"}],\"view\":\"host\"}",
+ "created_from": "qa-seed:/tmp/kpr-i264-host-chain-1035/edge/kimi2/receipts/candidate-pins.txt",
+ "host_revision": 3,
+ "revision": 8,
+ "schema": "kaola-heartbeat-prompt/2",
+ "state": {
+  "alerts": {
+   "maintenance-returned": {
+    "created_at": "2026-10-06T11:31:12.744645+00:00",
+    "evidence": [
+     "checkpoint:b-3457f6b9666b",
+     "/tmp/kpr-i264-host-chain-1035/edge/kimi2/records/kimi-cli/kimi-cli-KPR103EK2-orchestrator-main/e0ca6fab8ebdaade/events.jsonl#15389"
+    ],
+    "inputs": {
+     "recovery#1": {
+      "evidence": "/tmp/kpr-i264-host-chain-1035/edge/kimi2/records/kimi-cli/kimi-cli-KPR103EK2-orchestrator-main/e0ca6fab8ebdaade/events.jsonl#15389",
+      "host_revision_through": 3,
+      "next": "Host: reconcile the original node and stop receipts; repair the binding; request a bounded check",
+      "why": "checkpoint-partial"
+     }
+    },
+    "level": "warn",
+    "next": "Host: reconcile the original node and stop receipts; repair the binding; request a bounded check",
+    "owner": "host",
+    "rev": 2,
+    "source": "carrier-maintenance-failure",
+    "summary": "maintenance needs Host recovery from original receipts",
+    "updated_at": "2026-10-06T11:32:28.039466+00:00",
+    "writer": "tool:carrier",
+    "writer_holder": "460bc03bd24f20c31567db0a944280da"
+   }
+  },
+  "authorization": {
+   "grants": [
+    {
+     "count": 1,
+     "id": "codex/luna",
+     "state": "granted"
+    }
+   ]
+  },
+  "decisions": {
+   "qa-prior-reclaim-1": {
+    "created_at": "2026-10-06T11:16:58.839824+00:00",
+    "evidence": [
+     "/private/tmp/kpr-i264-host-chain-1035/edge/kimi2/repo/.kaola/dispatch-index.json#items/qa-prior-reclaim-1",
+     "/tmp/kpr-heartbeat652-kimi-host-verification.json",
+     "/tmp/kpr-heartbeat652-kimi-exact-stop.json",
+     "/tmp/kpr-i264-862-dsh-kimi-runtime-proof.md"
+    ],
+    "next": "Host reviews the seeded dispatch-index row and original receipts.",
+    "owner": "host",
+    "question": "Determine the acceptance disposition for qa-prior-reclaim-1.",
+    "rev": 1,
+    "source": "b-67e4eb137e58",
+    "updated_at": "2026-10-06T11:16:58.839980+00:00",
+    "writer": "sideagent:codex-KPR103EK2-sideagent",
+    "writer_holder": "a3ec3c0c535d20651dbe5f9ec386722c"
+   }
+  },
+  "holds": {},
+  "maintenance": {
+   "acked_host_revision": 3,
+   "handled_host_revision": 3,
+   "last_checkpoint": {
+    "at": "2026-10-06T11:31:12.744402+00:00",
+    "batch": "b-3457f6b9666b",
+    "host_revision": {
+     "current": 3,
+     "from": 3,
+     "through": 3
+    },
+    "node": {
+     "holder_instance_id": "8095a734c7345c7393d4cc1d70d0da51",
+     "session": "codex-KPR103EK2-sideagent"
+    },
+    "recovery": {
+     "checked": {
+      "authorization": [
+       "AGENTS.md#KPR-USER-REQUIREMENTS",
+       ".kaola/heartbeat-prompt.json#/state/project",
+       ".kaola/heartbeat-prompt.json#/state/authorization",
+       ".kaola/delegator-heartbeat.json#/authorization",
+       "kaola-workflow/kaola-project-runner/workflow-state.md",
+       "kaola-workflow/.ledger/issue-264.jsonl#L1",
+       "/tmp/kpr-i264-host-chain-1035/edge/kimi2/records/kimi-cli/kimi-cli-KPR103EK2-orchestrator-main/e0ca6fab8ebdaade/record.json"
+      ],
+      "duties": [
+       ".kaola/heartbeat-prompt.json#/state/tasks/qa-observe",
+       ".kaola/heartbeat-prompt.json#/state/decisions/qa-prior-reclaim-1",
+       ".kaola/heartbeat-prompt.json#/state/alerts",
+       ".kaola/heartbeat-prompt.json#/state/maintenance/recovery_input",
+       "qa/progress.md#step2",
+       "qa/progress.md#step4",
+       "qa/progress.md#step5",
+       "/tmp/kpr-i264-host-chain-1035/edge/kimi2/records/kimi-cli/kimi-cli-KPR103EK2-orchestrator-main/e0ca6fab8ebdaade/events.jsonl#8759"
+      ],
+      "links": [
+       ".kaola/heartbeat-prompt.json#/state/tasks/qa-observe/dispatch[0]",
+       ".kaola/dispatch-index.json#/items/qa-prior-reclaim-1",
+       ".kaola/dispatch-index.json#/items/qa-prior-reclaim-1/evidence/start",
+       ".kaola/dispatch-index.json#/items/qa-prior-reclaim-1/evidence/send",
+       ".kaola/dispatch-index.json#/items/qa-prior-reclaim-1/evidence/result",
+       ".kaola/dispatch-index.json#/items/qa-prior-reclaim-1/evidence/reclaim",
+       "/tmp/kpr-heartbeat652-kimi-host-verification.json",
+       "/tmp/kpr-i264-862-dsh-kimi-runtime-proof.md",
+       "/tmp/kpr-heartbeat652-kimi-exact-stop.json"
+      ]
+     },
+     "input": {
+      "at": "2026-10-06T11:23:11.013818+00:00",
+      "evidence": "/tmp/kpr-i264-host-chain-1035/edge/kimi2/records/kimi-cli/kimi-cli-KPR103EK2-orchestrator-main/e0ca6fab8ebdaade/events.jsonl#8759",
+      "holder": "460bc03bd24f20c31567db0a944280da",
+      "kind": "host-compaction",
+      "occurrence_id": null,
+      "seq": 1,
+      "source": "completed-host-signal"
+     },
+     "seq": 1,
+     "unavailable": {}
+    },
+    "returned_to_host": {
+     "recovery#1": "recovery-entry-unknown"
+    },
+    "settled": [],
+    "source": "b-3457f6b9666b",
+    "verified": false
+   },
+   "last_verified": {
+    "at": "2026-10-06T11:13:52.796883+00:00",
+    "batch": "b-67e4eb137e58",
+    "node": {
+     "holder_instance_id": "a3ec3c0c535d20651dbe5f9ec386722c",
+     "session": "codex-KPR103EK2-sideagent"
+    }
+   },
+   "recovery_input": {
+    "at": "2026-10-06T11:23:11.013818+00:00",
+    "evidence": "/tmp/kpr-i264-host-chain-1035/edge/kimi2/records/kimi-cli/kimi-cli-KPR103EK2-orchestrator-main/e0ca6fab8ebdaade/events.jsonl#8759",
+    "holder": "460bc03bd24f20c31567db0a944280da",
+    "kind": "host-compaction",
+    "occurrence_id": null,
+    "seq": 1,
+    "source": "completed-host-signal"
+   },
+   "recovery_seq": 1
+  },
+  "project": {
+   "code": "KPR103EK2",
+   "goal": "Finite Host-compaction maintenance QA on kimi2: keep seeded state current, report exact outcomes, never add mechanisms.",
+   "issue": "264",
+   "repo": "/private/tmp/kpr-i264-host-chain-1035/edge/kimi2/repo",
+   "requirements_source": "AGENTS.md",
+   "status": "active"
+  },
+  "recovery": {},
+  "section_sources": {
+   "authorization": {
+    "at": "2026-10-06T11:09:16.901653+00:00",
+    "host_revision": 1,
+    "source": "qa-seed:/tmp/kpr-i264-host-chain-1035/edge/kimi2/receipts/candidate-pins.txt",
+    "writer": "host"
+   },
+   "project": {
+    "at": "2026-10-06T11:09:16.901499+00:00",
+    "host_revision": 1,
+    "source": "qa-seed:/tmp/kpr-i264-host-chain-1035/edge/kimi2/receipts/candidate-pins.txt",
+    "writer": "host"
+   },
+   "sideagent": {
+    "at": "2026-10-06T11:09:16.961932+00:00",
+    "host_revision": 2,
+    "source": "qa-seed:sideagent node binding (codex/luna, mode node)",
+    "writer": "host"
+   }
+  },
+  "sideagent": {
+   "mode": "node",
+   "platform": "codex",
+   "preset": "codex/luna",
+   "recipe": {
+    "argv": [
+     "codex",
+     "start",
+     "--repo",
+     "/private/tmp/kpr-i264-host-chain-1035/edge/kimi2/repo",
+     "--session",
+     "codex-KPR103EK2-sideagent",
+     "--role",
+     "sideagent",
+     "--tier",
+     "luna",
+     "--model",
+     "gpt-6-luna",
+     "--effort",
+     "max",
+     "--fast",
+     "off"
+    ],
+    "runner": "/tmp/kpr-i264-host-chain-1035/edge/candidate/scripts/kaola-tmux.sh"
+   },
+   "session": "codex-KPR103EK2-sideagent",
+   "since": "2026-10-06T11:09:16.961777+00:00",
+   "source": "qa-seed:sideagent node binding (codex/luna, mode node)",
+   "state": "active"
+  },
+  "tasks": {
+   "qa-observe": {
+    "created_at": "2026-10-06T11:09:17.021607+00:00",
+    "dispatch": [
+     "qa-prior-reclaim-1"
+    ],
+    "goal": "Run the finite Host-compaction maintenance proof and keep scratch QA records current",
+    "host_revision": 3,
+    "next": "read qa/progress.md, continue the current step marker; TASK-B is the open step",
+    "rev": 1,
+    "source": "qa-seed:task qa-observe",
+    "stage": "doing",
+    "updated_at": "2026-10-06T11:09:17.021775+00:00",
+    "writer": "host"
+   }
+  },
+  "unverified": {}
+ },
+ "updated_at": "2026-10-06T11:32:28.039722+00:00"
+}

@@ -1,0 +1,119 @@
+{
+ "platform": "kimi-cli",
+ "runtime": "Kimi CLI 2.1.1",
+ "consumer": "kimi2 (fully-linked fixture, no qa-gap-missing)",
+ "acp_session": "session_e7c97c86-27dd-4038-9595-e995c631fb00",
+ "host_holder": "460bc03bd24f20c31567db0a944280da",
+ "events": [
+  {
+   "cursor": 13,
+   "step": "sideagent_node_started",
+   "kind": "sideagent_node_started",
+   "holder": "a3ec3c0c535d20651dbe5f9ec386722c"
+  },
+  {
+   "cursor": 14,
+   "step": "sideagent_node_batch",
+   "kind": "sideagent_node_batch",
+   "batch": "b-67e4eb137e58",
+   "host_revision_through": 3
+  },
+  {
+   "cursor": 1270,
+   "step": "sideagent_node_settled(b1 verified)",
+   "kind": "sideagent_node_settled",
+   "batch": "b-67e4eb137e58",
+   "holder": "a3ec3c0c535d20651dbe5f9ec386722c",
+   "checkpoint": "verified",
+   "host_revision_through": 3
+  },
+  {
+   "cursor": 1275,
+   "step": "sideagent_node_stopped(b1)",
+   "kind": "sideagent_node_stopped",
+   "holder": "a3ec3c0c535d20651dbe5f9ec386722c"
+  },
+  {
+   "cursor": 8759,
+   "step": "compact_reload_detected",
+   "kind": "compact_reload_detected",
+   "source": "kimi-compaction-chunk",
+   "session_id": "session_e7c97c86-27dd-4038-9595-e995c631fb00",
+   "role": "host",
+   "holder": "460bc03bd24f20c31567db0a944280da"
+  },
+  {
+   "cursor": 8760,
+   "step": "compact_reload_delivered",
+   "kind": "compact_reload_delivered"
+  },
+  {
+   "cursor": 8761,
+   "step": "host_compact_maintenance_registered",
+   "kind": "host_compact_maintenance_registered",
+   "signal_cursor": 8759,
+   "input": {
+    "at": "2026-10-06T11:23:11.013818+00:00",
+    "evidence": "/tmp/kpr-i264-host-chain-1035/edge/kimi2/records/kimi-cli/kimi-cli-KPR103EK2-orchestrator-main/e0ca6fab8ebdaade/events.jsonl#8759",
+    "holder": "460bc03bd24f20c31567db0a944280da",
+    "kind": "host-compaction",
+    "occurrence_id": null,
+    "seq": 1,
+    "source": "completed-host-signal"
+   }
+  },
+  {
+   "cursor": 15386,
+   "step": "turn_ended(reload)",
+   "kind": "turn_ended"
+  },
+  {
+   "cursor": 15387,
+   "step": "sideagent_node_started(recovery)",
+   "kind": "sideagent_node_started",
+   "holder": "8095a734c7345c7393d4cc1d70d0da51"
+  },
+  {
+   "cursor": 15388,
+   "step": "sideagent_node_batch(recovery)",
+   "kind": "sideagent_node_batch",
+   "batch": "b-3457f6b9666b",
+   "host_revision_through": 3
+  },
+  {
+   "cursor": 15389,
+   "step": "sideagent_node_settled(partial)",
+   "kind": "sideagent_node_settled",
+   "batch": "b-3457f6b9666b",
+   "holder": "8095a734c7345c7393d4cc1d70d0da51",
+   "checkpoint": "partial",
+   "host_revision_through": 3
+  },
+  {
+   "cursor": 15392,
+   "step": "failure_recorded",
+   "kind": "sideagent_maintenance_failure_recorded",
+   "reason": "checkpoint-partial",
+   "input": "recovery#1"
+  },
+  {
+   "cursor": 15395,
+   "step": "sideagent_node_stopped",
+   "kind": "sideagent_node_stopped",
+   "holder": "8095a734c7345c7393d4cc1d70d0da51"
+  }
+ ],
+ "raw_signal_8759": {
+  "method": "session/update",
+  "params": {
+   "sessionId": "session_e7c97c86-27dd-4038-9595-e995c631fb00",
+   "update": {
+    "content": {
+     "text": "Compaction completed.\n- Messages compacted: 31\n- Tokens before: 49,777\n- Tokens after: 31,857",
+     "type": "text"
+    },
+    "sessionUpdate": "agent_message_chunk"
+   }
+  }
+ }
+}

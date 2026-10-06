@@ -1,0 +1,323 @@
+{
+  "candidate": "4b247a2dbae9006be71962da32b31e5c5eb05629",
+  "scope": "original edge r2; not current repair efficacy",
+  "lanes": {
+    "kimi2": {
+      "host": "460bc03bd24f20c31567db0a944280da",
+      "native_session": "session_e7c97c86-27dd-4038-9595-e995c631fb00",
+      "host_events": "/tmp/kpr-i264-host-chain-1035/edge/kimi2/records/kimi-cli/kimi-cli-KPR103EK2-orchestrator-main/e0ca6fab8ebdaade/events.jsonl",
+      "host_events_sha256": "6269f9a8e3c80a739ef31f96060fdd13fbb85c3bb43438b0a59a07744d6e9182",
+      "stop": {
+        "stopped": true,
+        "agent_exit_code": 0,
+        "residual_pids": [],
+        "swept_child_pgids": []
+      },
+      "checkpoint_commands": [
+        {
+          "cursor": 223,
+          "batch": "b-67e4eb137e58",
+          "entries": [
+            {
+              "input": "host:section/authorization@1",
+              "retained": "tasks/qa-observe"
+            },
+            {
+              "input": "host:section/project@1",
+              "retained": "tasks/qa-observe"
+            },
+            {
+              "input": "host:section/sideagent@2",
+              "retained": "tasks/qa-observe"
+            },
+            {
+              "input": "host:tasks/qa-observe@3",
+              "retained": "tasks/qa-observe"
+            }
+          ]
+        },
+        {
+          "cursor": 1307,
+          "batch": "b-3457f6b9666b",
+          "entries": [
+            {
+              "input": "recovery#1",
+              "retained": "decisions/qa-prior-reclaim-1",
+              "checked": {
+                "authorization": [
+                  "AGENTS.md#KPR-USER-REQUIREMENTS",
+                  ".kaola/heartbeat-prompt.json#/state/project",
+                  ".kaola/heartbeat-prompt.json#/state/authorization",
+                  ".kaola/delegator-heartbeat.json#/authorization",
+                  "kaola-workflow/kaola-project-runner/workflow-state.md",
+                  "kaola-workflow/.ledger/issue-264.jsonl#L1",
+                  "/tmp/kpr-i264-host-chain-1035/edge/kimi2/records/kimi-cli/kimi-cli-KPR103EK2-orchestrator-main/e0ca6fab8ebdaade/record.json"
+                ],
+                "duties": [
+                  ".kaola/heartbeat-prompt.json#/state/tasks/qa-observe",
+                  ".kaola/heartbeat-prompt.json#/state/decisions/qa-prior-reclaim-1",
+                  ".kaola/heartbeat-prompt.json#/state/alerts",
+                  ".kaola/heartbeat-prompt.json#/state/maintenance/recovery_input",
+                  "qa/progress.md#step2",
+                  "qa/progress.md#step4",
+                  "qa/progress.md#step5",
+                  "/tmp/kpr-i264-host-chain-1035/edge/kimi2/records/kimi-cli/kimi-cli-KPR103EK2-orchestrator-main/e0ca6fab8ebdaade/events.jsonl#8759"
+                ],
+                "links": [
+                  ".kaola/heartbeat-prompt.json#/state/tasks/qa-observe/dispatch[0]",
+                  ".kaola/dispatch-index.json#/items/qa-prior-reclaim-1",
+                  ".kaola/dispatch-index.json#/items/qa-prior-reclaim-1/evidence/start",
+                  ".kaola/dispatch-index.json#/items/qa-prior-reclaim-1/evidence/send",
+                  ".kaola/dispatch-index.json#/items/qa-prior-reclaim-1/evidence/result",
+                  ".kaola/dispatch-index.json#/items/qa-prior-reclaim-1/evidence/reclaim",
+                  "/tmp/kpr-heartbeat652-kimi-host-verification.json",
+                  "/tmp/kpr-i264-862-dsh-kimi-runtime-proof.md",
+                  "/tmp/kpr-heartbeat652-kimi-exact-stop.json"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "node_events": "/tmp/kpr-i264-host-chain-1035/edge/kimi2/records/codex/codex-KPR103EK2-sideagent/e0ca6fab8ebdaade/events.jsonl",
+      "node_events_sha256": "8dafc8f0fd99531ed5663ee477f1fe5a4a03e444efa83c86217d3a1ad289f0ee",
+      "maintenance": {
+        "acked_host_revision": 3,
+        "handled_host_revision": 3,
+        "last_checkpoint": {
+          "at": "2026-10-06T11:31:12.744402+00:00",
+          "batch": "b-3457f6b9666b",
+          "host_revision": {
+            "current": 3,
+            "from": 3,
+            "through": 3
+          },
+          "node": {
+            "holder_instance_id": "8095a734c7345c7393d4cc1d70d0da51",
+            "session": "codex-KPR103EK2-sideagent"
+          },
+          "recovery": {
+            "checked": {
+              "authorization": [
+                "AGENTS.md#KPR-USER-REQUIREMENTS",
+                ".kaola/heartbeat-prompt.json#/state/project",
+                ".kaola/heartbeat-prompt.json#/state/authorization",
+                ".kaola/delegator-heartbeat.json#/authorization",
+                "kaola-workflow/kaola-project-runner/workflow-state.md",
+                "kaola-workflow/.ledger/issue-264.jsonl#L1",
+                "/tmp/kpr-i264-host-chain-1035/edge/kimi2/records/kimi-cli/kimi-cli-KPR103EK2-orchestrator-main/e0ca6fab8ebdaade/record.json"
+              ],
+              "duties": [
+                ".kaola/heartbeat-prompt.json#/state/tasks/qa-observe",
+                ".kaola/heartbeat-prompt.json#/state/decisions/qa-prior-reclaim-1",
+                ".kaola/heartbeat-prompt.json#/state/alerts",
+                ".kaola/heartbeat-prompt.json#/state/maintenance/recovery_input",
+                "qa/progress.md#step2",
+                "qa/progress.md#step4",
+                "qa/progress.md#step5",
+                "/tmp/kpr-i264-host-chain-1035/edge/kimi2/records/kimi-cli/kimi-cli-KPR103EK2-orchestrator-main/e0ca6fab8ebdaade/events.jsonl#8759"
+              ],
+              "links": [
+                ".kaola/heartbeat-prompt.json#/state/tasks/qa-observe/dispatch[0]",
+                ".kaola/dispatch-index.json#/items/qa-prior-reclaim-1",
+                ".kaola/dispatch-index.json#/items/qa-prior-reclaim-1/evidence/start",
+                ".kaola/dispatch-index.json#/items/qa-prior-reclaim-1/evidence/send",
+                ".kaola/dispatch-index.json#/items/qa-prior-reclaim-1/evidence/result",
+                ".kaola/dispatch-index.json#/items/qa-prior-reclaim-1/evidence/reclaim",
+                "/tmp/kpr-heartbeat652-kimi-host-verification.json",
+                "/tmp/kpr-i264-862-dsh-kimi-runtime-proof.md",
+                "/tmp/kpr-heartbeat652-kimi-exact-stop.json"
+              ]
+            },
+            "input": {
+              "at": "2026-10-06T11:23:11.013818+00:00",
+              "evidence": "/tmp/kpr-i264-host-chain-1035/edge/kimi2/records/kimi-cli/kimi-cli-KPR103EK2-orchestrator-main/e0ca6fab8ebdaade/events.jsonl#8759",
+              "holder": "460bc03bd24f20c31567db0a944280da",
+              "kind": "host-compaction",
+              "occurrence_id": null,
+              "seq": 1,
+              "source": "completed-host-signal"
+            },
+            "seq": 1,
+            "unavailable": {}
+          },
+          "returned_to_host": {
+            "recovery#1": "recovery-entry-unknown"
+          },
+          "settled": [],
+          "source": "b-3457f6b9666b",
+          "verified": false
+        },
+        "last_verified": {
+          "at": "2026-10-06T11:13:52.796883+00:00",
+          "batch": "b-67e4eb137e58",
+          "node": {
+            "holder_instance_id": "a3ec3c0c535d20651dbe5f9ec386722c",
+            "session": "codex-KPR103EK2-sideagent"
+          }
+        },
+        "recovery_input": {
+          "at": "2026-10-06T11:23:11.013818+00:00",
+          "evidence": "/tmp/kpr-i264-host-chain-1035/edge/kimi2/records/kimi-cli/kimi-cli-KPR103EK2-orchestrator-main/e0ca6fab8ebdaade/events.jsonl#8759",
+          "holder": "460bc03bd24f20c31567db0a944280da",
+          "kind": "host-compaction",
+          "occurrence_id": null,
+          "seq": 1,
+          "source": "completed-host-signal"
+        },
+        "recovery_seq": 1
+      },
+      "qualified_result": "actual completed8759/duty8761/automatic node15387/partial15389/exact reclaim15395; extra retained reproduced on fully-linked fixture. Raw entry1307 has NO unavailable scope/overlap; contrary r2 report overlap assertion is rejected."
+    },
+    "devin2": {
+      "host": "0af69242c367b61c4baf8301b7499156",
+      "native_session": "rocky-citrus",
+      "host_events": "/tmp/kpr-i264-host-chain-1035/edge/devin2/records/devin/devin-KPR103ED2-orchestrator-main/39240210dbbb83d6/events.jsonl",
+      "host_events_sha256": "42c7f56c0cb2139febe4db2c2a014225d843cbfca169074ac017a6b605270027",
+      "stop": {
+        "stopped": true,
+        "agent_exit_code": 0,
+        "residual_pids": [],
+        "swept_child_pgids": [
+          27987
+        ]
+      },
+      "checkpoint_commands": [
+        {
+          "cursor": 482,
+          "batch": "b-41a3dda4633f",
+          "entries": [
+            {
+              "input": "host:section/authorization@1",
+              "retained": "section/authorization"
+            },
+            {
+              "input": "host:section/project@1",
+              "retained": "section/project"
+            },
+            {
+              "input": "host:section/sideagent@2",
+              "retained": "section/sideagent"
+            },
+            {
+              "input": "host:tasks/qa-observe@3",
+              "retained": "tasks/qa-observe"
+            }
+          ]
+        },
+        {
+          "cursor": 1105,
+          "batch": "b-qa-task-a-r5",
+          "entries": [
+            {
+              "input": "host:decisions/qa-task-a-verdict@4",
+              "retained": "decisions/qa-task-a-verdict"
+            }
+          ]
+        },
+        {
+          "cursor": 1420,
+          "batch": "b-47d7c688dfcd-r5",
+          "entries": [
+            {
+              "input": "host:decisions/qa-task-a-verdict@4",
+              "retained": "decisions/qa-task-a-verdict"
+            }
+          ]
+        },
+        {
+          "cursor": 1681,
+          "batch": "b-47d7c688dfcd-r7",
+          "entries": [
+            {
+              "input": "host:decisions/qa-compact-readiness@7",
+              "retained": "decisions/qa-compact-readiness"
+            },
+            {
+              "input": "batch:7",
+              "retained": "alerts/maintenance-returned"
+            }
+          ]
+        },
+        {
+          "cursor": 2132,
+          "batch": "b-47d7c688dfcd-r9-s1",
+          "entries": [
+            {
+              "input": "host:tasks/qa-observe@9",
+              "retained": "tasks/qa-observe"
+            },
+            {
+              "input": "recovery:1",
+              "retained": "tasks/qa-observe"
+            }
+          ]
+        }
+      ],
+      "node_events": "/tmp/kpr-i264-host-chain-1035/edge/devin2/records/codex/codex-KPR103ED2-sideagent/39240210dbbb83d6/events.jsonl",
+      "node_events_sha256": "7fb4e642670365a4f17ac290699266676c627c957e21c6344bd47a5d22930d55",
+      "maintenance": {
+        "acked_host_revision": 7,
+        "handled_host_revision": 7,
+        "last_checkpoint": {
+          "at": "2026-10-06T12:05:11.164308+00:00",
+          "batch": "b-47d7c688dfcd-r7",
+          "host_revision": {
+            "current": 7,
+            "from": 5,
+            "through": 7
+          },
+          "node": {
+            "holder_instance_id": "47d7c688dfcd8501970aa86917d64872",
+            "session": "codex-KPR103ED2-sideagent"
+          },
+          "returned_to_host": {
+            "batch:7": "not-in-batch"
+          },
+          "settled": [
+            "host:decisions/qa-compact-readiness@7"
+          ],
+          "source": "b-47d7c688dfcd-r7",
+          "verified": false
+        },
+        "last_verified": {
+          "at": "2026-10-06T11:59:46.014894+00:00",
+          "batch": "b-47d7c688dfcd-r5",
+          "node": {
+            "holder_instance_id": "47d7c688dfcd8501970aa86917d64872",
+            "session": "codex-KPR103ED2-sideagent"
+          }
+        },
+        "recovery_input": {
+          "at": "2026-10-06T12:08:13.497728+00:00",
+          "evidence": "/tmp/kpr-i264-host-chain-1035/edge/devin2/records/devin/devin-KPR103ED2-orchestrator-main/39240210dbbb83d6/events.jsonl#4958",
+          "holder": "0af69242c367b61c4baf8301b7499156",
+          "kind": "host-compaction",
+          "occurrence_id": null,
+          "seq": 1,
+          "source": "completed-host-signal"
+        },
+        "recovery_seq": 1
+      },
+      "qualified_result": "completed4957/detected4958/duty4961 verified; no delivered recovery batch before exact stop. Only first node5f70 has carrier-start event17. Host-model tool commands1113 drain-restart,2776 start --continue,2860 manual send created/reused subsequent nodes outside carrier ownership; old-node-live is a correct refusal to those holders, not proven carrier start race. Manual checkpoints excluded.",
+      "manual_node_provenance": {
+        "originals": "/tmp/kpr-1069-devin-r2-manual-node-originals.json",
+        "commands": [
+          1113,
+          2776,
+          2860,
+          3361
+        ],
+        "carrier_start_events": [
+          17
+        ]
+      },
+      "node_record_stale_after_stop": "latest node47d7 record still ready but holder27987 and agent27988 independently dead; Host exact stop swept27987, so do not claim every node record stopped."
+    }
+  },
+  "candidate_hashes": {
+    "scripts/kaola-acp-holder.py": "d8cc9dc147f69db50dc5be5c7cf1f7efced677c19813155792a191aedb72f280",
+    "scripts/kaola-dispatch.py": "140d13992f1749b003c69222c3d6f714bdf8e5e9c7db19ed7e84c05245c6fbfd",
+    "scripts/kaola-acp.py": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+  }
+}
