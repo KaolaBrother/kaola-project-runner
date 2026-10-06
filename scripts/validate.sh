@@ -54,6 +54,12 @@ while (( $# )); do
   esac
 done
 
+if (( BASH_VERSINFO[0] < 4 )); then
+  printf 'validate: prerequisite missing: Bash >= 4 is required; detected Bash %s. Use a supported Bash interpreter.\n' \
+    "$BASH_VERSION" >&2
+  exit 2
+fi
+
 # The whole suite runs in a controlled temporary HOME: no Codex (or other
 # runtime) configuration is required, and real user configuration is never
 # read or modified.

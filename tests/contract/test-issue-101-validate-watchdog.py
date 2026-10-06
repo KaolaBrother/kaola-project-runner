@@ -183,6 +183,37 @@ class TestValidateWatchdog(unittest.TestCase):
 # chooses the set.
 class TestValidateSuiteSelection(unittest.TestCase):
 
+    def test_unsupported_bash_refuses_before_allocating_roots(self) -> None:
+        shell = Path("/bin/bash")
+        if not shell.is_file():
+            self.skipTest("no /bin/bash for the unsupported-shell check")
+        version = subprocess.run(
+            [str(shell), "-c", 'printf %s "${BASH_VERSINFO[0]}"'],
+            capture_output=True, text=True, timeout=10).stdout.strip()
+        if not version.isdigit() or int(version) >= 4:
+            self.skipTest("/bin/bash is not an unsupported Bash version")
+        with tempfile.TemporaryDirectory(prefix="kaola-i265-prerequisite-") as tmp:
+            root = Path(tmp)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            trace = root / "mktemp-calls"
+            mktemp = bin_dir / "mktemp"
+            mktemp.write_text(
+                '#!/bin/sh\nprintf "%s\\n" "$*" >> "$KPR_ENTRY_MKTEMP_TRACE"\n'
+                'exec "$KPR_ENTRY_REAL_MKTEMP" "$@"\n', encoding="utf-8")
+            mktemp.chmod(0o755)
+            env = dict(os.environ, TMPDIR=tmp,
+                       PATH=str(bin_dir) + os.pathsep + os.environ["PATH"],
+                       KPR_ENTRY_MKTEMP_TRACE=str(trace),
+                       KPR_ENTRY_REAL_MKTEMP=shutil.which("mktemp") or "/usr/bin/mktemp")
+            result = subprocess.run(
+                [str(shell), str(VALIDATE), "--suite", "test-issue-78-heredoc-deadlock.py"],
+                capture_output=True, text=True, timeout=10, cwd=PROJECT, env=env)
+            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("Bash >= 4", result.stderr)
+            self.assertFalse(trace.exists(), "the refused entry allocated a root")
+            self.assertEqual(list(root.iterdir()), [bin_dir])
+
     def run_validate(self, *args: str, env: dict | None = None,
                      timeout: int = 180) -> subprocess.CompletedProcess[str]:
         merged = dict(os.environ)
