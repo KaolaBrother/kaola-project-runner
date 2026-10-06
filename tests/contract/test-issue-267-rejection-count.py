@@ -501,6 +501,122 @@ class RejectionCount(unittest.TestCase):
         self.assertLessEqual(len(failure.encode()), 8192)
         self.assertLessEqual(len(inquiry.encode()), 8192)
 
+    def _row(self, view: dict, ident: str) -> dict:
+        rows = view.get("tasks") or view.get("doing") or []
+        return next(row for row in rows if row["id"] == ident)
+
+    def _marker(self, ident: str = "gate") -> dict:
+        return {
+            "binding": "unbound",
+            "status": "unknown",
+            "evidence": f"state.tasks.{ident}.evidence",
+        }
+
+    def _assert_storage_keeps_typed_facts(self, ident: str = "gate") -> None:
+        stored = self.task(ident).get("rejection") or {}
+        self.assertNotIn("count", stored)
+        self.assertNotIn("unknown", json.dumps(stored))
+        state = json.dumps(self.doc()["state"])
+        self.assertNotIn("unknown", state)
+        self.assertNotIn("unbound", state)
+        self.assertNotRegex(state, r'"count"\s*:\s*0\b')
+        self.assertNotIn(0, stored.values())
+
+    def test_an_unbound_review_projects_unknown_and_does_not_double_count(self) -> None:
+        """No review number, no single repair disposition, no single receipt."""
+        self.open_task()
+        evidence = ["notes/receipt-a.txt", "notes/receipt-b.txt"]
+        self.reject(why="order not established", review=0, evidence=evidence)
+        self.assertEqual(self.task()["verdict"]["value"], "repair")
+        self.assertEqual(self.task()["evidence"], evidence)
+        self.assertNotIn("receipt", self.task().get("rejection") or {})
+        self.assertNotIn("dispatch", self.task().get("rejection") or {})
+        self.assertNotIn("review", self.task().get("rejection") or {})
+        self._assert_storage_keeps_typed_facts()
+        marker = self._marker()
+        host = self.view("host")
+        delegator = self.view("delegator")
+        self.assertEqual(self._row(host, "gate")["rejection"], marker)
+        self.assertEqual(self._row(delegator, "gate")["rejection"], marker)
+        self.assertNotIn(0, marker.values())
+        opened = [row for row in host["attention"] if row["why"] == "delivery-open"]
+        self.assertEqual(len(opened), 1)
+        self.assertEqual(opened[0]["binding"], "unbound")
+        self.assertEqual(opened[0]["status"], "unknown")
+        self.assertEqual(opened[0]["evidence"], marker["evidence"])
+        self.assertNotIn("rejection_count", opened[0])
+        self.assertNotIn("receipt-a", json.dumps(opened[0]["evidence"]))
+        once = self.fingerprint()
+        again = ["notes/receipt-a.txt", "notes/receipt-c.txt"]
+        self.reject(why="still not established", review=0, evidence=again)
+        self.assertEqual(self.task()["evidence"], again)
+        self.assertEqual(self.task()["verdict"]["value"], "repair")
+        self._assert_storage_keeps_typed_facts()
+        host = self.view("host")
+        delegator = self.view("delegator")
+        self.assertEqual(self._row(host, "gate")["rejection"], marker)
+        self.assertEqual(self._row(delegator, "gate")["rejection"], marker)
+        self.assertEqual([row for row in host["tasks"] if row["id"] == "gate"][0]["rejection"], marker)
+        self.assertEqual(self.fingerprint(), once, "a second unbound review does not count or wake again")
+        self.assertNotIn('"count": 0', self.doc()["body"])
+        self.assertNotIn('"count":0', self.doc()["body"])
+        self.reopen()
+        self.assertEqual(self.task()["prior_verdict"]["value"], "repair")
+        self.assertNotIn("verdict", self.task())
+        self._assert_storage_keeps_typed_facts()
+        host = self.view("host")
+        delegator = self.view("delegator")
+        self.assertEqual(self._row(host, "gate")["rejection"], marker)
+        self.assertEqual(self._row(delegator, "gate")["rejection"], marker)
+        waiting = [row for row in host["attention"] if row["id"] == "gate"]
+        self.assertEqual([row["why"] for row in waiting], ["awaiting-verdict"])
+        self.assertEqual(waiting[0]["status"], "unknown")
+        self.assertEqual(waiting[0]["binding"], "unbound")
+        self.assertEqual(waiting[0]["evidence"], marker["evidence"])
+
+    def test_a_known_pending_submission_without_a_count_is_unbound(self) -> None:
+        doc = self.doc()
+        doc["state"]["tasks"]["pending"] = {
+            "stage": "review",
+            "goal": "judge the named submission",
+            "rev": 1,
+            "evidence": ["notes/pending-receipt.txt"],
+            "rejection": {"v": 1, "dispatch": "item-9", "receipt": "notes/pending-receipt.txt", "review": 4},
+        }
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        self.assertNotIn("count", self.task("pending")["rejection"])
+        self.assertNotIn("unknown", json.dumps(self.doc()["state"]))
+        marker = self._marker("pending")
+        self.assertEqual(self._row(self.view("host"), "pending")["rejection"], marker)
+        self.assertEqual(self._row(self.view("delegator"), "pending")["rejection"], marker)
+        shown = self._row(self.view("host"), "pending")["rejection"]
+        self.assertNotIn("count", shown)
+        self.assertNotEqual(shown.get("count"), 0)
+        self.assertNotEqual(shown.get("count"), 4)
+
+    def test_a_never_failed_task_gains_no_unknown_marker(self) -> None:
+        self.open_task("clean-doing", stage="doing", evidence="notes/wip.txt")
+        self.open_task("clean-review", evidence="notes/first-delivery.txt")
+        host = self.view("host")
+        delegator = self.view("delegator")
+        for ident in ("clean-doing", "clean-review"):
+            for view in (host, delegator):
+                row = self._row(view, ident)
+                self.assertNotIn("rejection", row)
+                text = json.dumps(row)
+                self.assertNotIn("unknown", text)
+                self.assertNotIn("unbound", text)
+            attention = [row for row in host["attention"] if row["id"] == ident]
+            self.assertNotIn("unknown", json.dumps(attention))
+            self.assertNotIn("unbound", json.dumps(attention))
+        review = self.task("clean-review")
+        self.assertNotIn("verdict", review)
+        self.assertNotIn("prior_verdict", review)
+        self.assertEqual(review["rejection"]["open_review"], 1)
+        self.assertNotIn("count", review["rejection"])
+        doing = self.task("clean-doing")
+        self.assertNotIn("rejection", doing)
+
 
 if __name__ == "__main__":
     unittest.main()

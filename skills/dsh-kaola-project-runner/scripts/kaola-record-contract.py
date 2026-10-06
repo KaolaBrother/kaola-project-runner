@@ -1668,19 +1668,86 @@ def judgment_digest(record: dict[str, Any]) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
-def rejection_projection(task: dict[str, Any], holds: Any, task_id: str) -> dict[str, Any] | None:
-    """Current-owner rejection facts for the views (#267). Absent count is unknown."""
-    rejection = task.get("rejection") if isinstance(task.get("rejection"), dict) else None
-    if not isinstance(rejection, dict) or not isinstance(rejection.get("count"), int):
+def _positive_count(value: Any) -> int | None:
+    """A stored rejection count is a positive int. Zero, bool, and text are not a count."""
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         return None
-    shown: dict[str, Any] = {"count": rejection["count"]}
+    return value
+
+
+def _verdict_value(task: dict[str, Any], key: str) -> str | None:
+    record = task.get(key)
+    if isinstance(record, dict) and isinstance(record.get("value"), str):
+        return record["value"]
+    return None
+
+
+def _has_original_evidence(task: dict[str, Any]) -> bool:
+    evidence = task.get("evidence")
+    if isinstance(evidence, str) and evidence.strip():
+        return True
+    return isinstance(evidence, list) and any(isinstance(item, str) and item.strip() for item in evidence)
+
+
+def _evidence_locator(task: dict[str, Any], task_id: str) -> str:
+    """Name where the original evidence already lives. Do not copy its text."""
+    if _has_original_evidence(task):
+        return f"state.tasks.{task_id}.evidence"
+    if _verdict_value(task, "verdict") == "repair":
+        return f"state.tasks.{task_id}.verdict"
+    if _verdict_value(task, "prior_verdict") == "repair":
+        return f"state.tasks.{task_id}.prior_verdict"
+    return f"state.tasks.{task_id}.rejection"
+
+
+def _pending_unbound_submission(task: dict[str, Any], rejection: dict[str, Any] | None) -> bool:
+    """A stored submission is waiting for judgment and has no reliable count.
+
+    Opening review records ``open_review`` on a never-failed task. That slot
+    is not a known submission, and it must not become an unknown marker.
+    """
+    if task.get("stage") != "review" or _verdict_value(task, "verdict"):
+        return False
+    if not isinstance(rejection, dict):
+        return False
+    return any(rejection.get(key) not in (None, "") for key in ("dispatch", "receipt", "review"))
+
+
+def _unbound_marker(task: dict[str, Any], task_id: str) -> dict[str, str]:
+    return {
+        "binding": "unbound",
+        "status": "unknown",
+        "evidence": _evidence_locator(task, task_id),
+    }
+
+
+def rejection_projection(task: dict[str, Any], holds: Any, task_id: str) -> dict[str, Any] | None:
+    """Current-owner rejection facts for the views (#267).
+
+    A reliable count is a positive int. Absent is not zero and is never stored
+    as the word unknown. The unbound marker is projection-only. It appears
+    only when this task carries a repair verdict, a prior repair, or a known
+    pending submission and still has no reliable count. A never-failed task
+    stays quiet.
+    """
+    rejection = task.get("rejection") if isinstance(task.get("rejection"), dict) else None
+    count = _positive_count(rejection.get("count")) if isinstance(rejection, dict) else None
+    if count is None:
+        carries = (
+            _verdict_value(task, "verdict") == "repair"
+            or _verdict_value(task, "prior_verdict") == "repair"
+            or _pending_unbound_submission(task, rejection)
+        )
+        if not carries:
+            return None
+        return _unbound_marker(task, task_id)
+    shown: dict[str, Any] = {"count": count}
     if rejection.get("owner") is not None:
         shown["owner"] = rejection["owner"]
     submission = {key: rejection[key] for key in ("dispatch", "receipt", "review")
                   if rejection.get(key) is not None}
     if submission:
         shown["submission"] = submission
-    count = rejection["count"]
     if count >= 2:
         label = "owed"
         if task.get("resume_when"):
@@ -1701,9 +1768,15 @@ def task_attention(task_id: str, task: dict[str, Any], holds: Any = None) -> lis
     verdict = task.get("verdict") if isinstance(task.get("verdict"), dict) else None
     if task.get("stage") == "review" and not verdict:
         prior = task.get("prior_verdict") if isinstance(task.get("prior_verdict"), dict) else None
-        found.append({"kind": "tasks", "id": task_id, "why": "awaiting-verdict",
-                      **({"prior_verdict": prior.get("value")} if prior else {}),
-                      "content": judgment_digest(task)})
+        waiting = {"kind": "tasks", "id": task_id, "why": "awaiting-verdict",
+                   **({"prior_verdict": prior.get("value")} if prior else {}),
+                   "content": judgment_digest(task)}
+        projected = rejection_projection(task, holds, task_id) or {}
+        if projected.get("status") == "unknown":
+            waiting["binding"] = projected["binding"]
+            waiting["status"] = projected["status"]
+            waiting["evidence"] = projected["evidence"]
+        found.append(waiting)
     elif (task.get("stage") in ("closeout", "done")
           and (verdict or {}).get("value") not in ("accepted", "partial", "cancelled")):
         found.append({"kind": "tasks", "id": task_id, "why": "verdict-missing", "stage": task["stage"],
@@ -1711,9 +1784,14 @@ def task_attention(task_id: str, task: dict[str, Any], holds: Any = None) -> lis
     if isinstance(verdict, dict) and verdict.get("value") == "repair" and task.get("goal"):
         # Host goal, next and verdict, plus the #267 rejection facts: a new
         # counted rejection wakes the Host once; an unchanged row stays quiet.
+        # An unbound repair names its evidence here and does not invent a count.
         projected = rejection_projection(task, holds, task_id) or {}
         body = {"goal": task.get("goal"), "next": task.get("next"), "verdict": verdict.get("value"),
                 "rejection_count": projected.get("count"), "escalation": projected.get("escalation")}
+        if projected.get("status") == "unknown":
+            body["binding"] = projected.get("binding")
+            body["status"] = projected.get("status")
+            body["evidence"] = projected.get("evidence")
         text = json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         row = {"kind": "tasks", "id": task_id, "why": "delivery-open",
                "content": hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]}
@@ -1722,6 +1800,10 @@ def task_attention(task_id: str, task: dict[str, Any], holds: Any = None) -> lis
                 row[key if key != "count" else "rejection_count"] = projected[key]
         if projected.get("submission"):
             row["submission"] = projected["submission"]
+        if projected.get("status") == "unknown":
+            row["binding"] = projected["binding"]
+            row["status"] = projected["status"]
+            row["evidence"] = projected["evidence"]
         found.append(row)
     if isinstance(task.get("transcribed"), dict):
         found.append({"kind": "tasks", "id": task_id, "why": "transcribed-check",
