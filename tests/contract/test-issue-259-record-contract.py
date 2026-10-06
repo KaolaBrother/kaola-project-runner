@@ -1609,6 +1609,8 @@ class RecordContract(unittest.TestCase):
                         self.assertEqual(saved_g.get("count"), orig_g["count"])
                         self.assertNotIn("class", saved_g,
                                          "Class is catalog-derived; no stored copy")
+                        self.assertEqual(set(saved_g), {k for k in orig_g if k != "class"},
+                                         "no grant key is added or lost")
                         for key, value in orig_g.items():
                             if key != "class":
                                 self.assertEqual(saved_g.get(key), value)
