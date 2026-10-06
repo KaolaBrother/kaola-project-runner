@@ -20,13 +20,13 @@ usage() {
     '  --suite NAME  run only the named contract suite(s); repeatable.' \
     '                NAME is an inventory basename (with extension) or a' \
     '                unique stem. Unknown or ambiguous names are rejected.' \
-    '  --list        print the valid suite names and exit.' \
-    '  --help        print this help and exit.' \
+    '  --list        print the valid suite names and exit (read-only).' \
+    '  --help        print this help and exit (read-only).' \
     '' \
-    'Every mode keeps the controlled HOME/TMPDIR, the inherited KAOLA_* scrub,' \
-    'the required render/Skill checks, the per-suite watchdog and the exact' \
-    'sweep. A selected run prints that it is a subset and never claims full' \
-    'coverage.'
+    'A run (no argument or --suite) keeps the controlled HOME/TMPDIR, the' \
+    'inherited KAOLA_* scrub, the required render/Skill checks, the per-suite' \
+    'watchdog and the exact sweep. A selected run prints that it is a subset' \
+    'and never claims full coverage. --list and --help run no check.'
 }
 
 requested_suites=()
@@ -89,28 +89,102 @@ watched() {
     >>"$validate_tmp/elapsed.txt" 2>/dev/null || true
   return "$rc"
 }
-# Issue #265: report per-suite elapsed lines and the total wall time on every
-# exit, including a failing or interrupted run. The summary runs from the EXIT
-# trap before the sweep removes $validate_tmp.
-final_summary() {
+# Issue #265: report per-suite elapsed lines before the root removal, and the
+# true total wall time after this invocation's cleanup. A read-only --list ran
+# no suite and reports nothing.
+print_elapsed() {
   [[ -n "$run_started" ]] || return 0
-  local wall
-  wall="$(awk "BEGIN{print ${EPOCHREALTIME:-$SECONDS}-$wall_start}" 2>/dev/null || printf 'unknown')"
   if [[ -f "$validate_tmp/elapsed.txt" ]]; then
     while IFS= read -r line; do
       printf '%s\n' "$line"
     done <"$validate_tmp/elapsed.txt"
   fi
-  printf 'validate: total wall: %s s\n' "$wall"
+  return 0
+}
+total_wall() {
+  # Never format an unavailable measurement as 0.
+  if [[ -z "${wall_start:-}" ]]; then
+    printf 'unknown'
+    return 0
+  fi
+  awk "BEGIN{print ${EPOCHREALTIME:-$SECONDS}-$wall_start}" 2>/dev/null || printf 'unknown'
+}
+# Issue #265 repair: stop every process this invocation started — the lane
+# subshells, their watchdogs and the suites they run — before the holder sweep
+# and the root removal. A writer that stays alive can recreate $validate_tmp
+# after the removal, which is the observed interrupted-cleanup failure (SIGINT
+# mid-suite: exit 130, empty sweep residue, rm "Directory not empty"). Only
+# descendants of this process are enumerated and signalled, so foreign and
+# unrelated work is never named or touched. The TERM/KILL sequence mirrors
+# validate-watchdog.sh; it is not a new supervisor.
+stop_owned_writers() {
+  local -a pids=()
+  local pid listing
+  # The enumerator runs ps as its own child and drops its whole subtree, so
+  # the transient enumerator never counts as a writer (a clean run then has no
+  # descendant and pays no grace).
+  listing="$(python3 -c '
+import os, subprocess, sys
+owner = int(sys.argv[1])
+out = subprocess.run(["ps", "-axo", "pid=,ppid="],
+                     capture_output=True, text=True).stdout
+children = {}
+parent = {}
+for line in out.splitlines():
+    parts = line.split()
+    if len(parts) == 2:
+        pid, ppid = int(parts[0]), int(parts[1])
+        children.setdefault(ppid, []).append(pid)
+        parent[pid] = ppid
+excluded = set()
+def collect(pid):
+    excluded.add(pid)
+    for child in children.get(pid, []):
+        collect(child)
+# Drop the enumerator: itself, its own subtree (the ps child) and every
+# ancestor below the owner (the command-substitution subshell).
+collect(os.getpid())
+p = parent.get(os.getpid(), 0)
+while p not in (0, 1, owner):
+    collect(p)
+    p = parent.get(p, 0)
+order = []
+def walk(pid, depth):
+    for child in children.get(pid, []):
+        if child in excluded:
+            continue
+        order.append((depth, child))
+        walk(child, depth + 1)
+walk(owner, 1)
+for _, pid in sorted(order, key=lambda item: -item[0]):
+    print(pid)' "$$")"
+  for pid in $listing; do
+    if [[ "$pid" =~ ^[0-9]+$ ]]; then
+      pids+=("$pid")
+    fi
+  done
+  (( ${#pids[@]} )) || return 0
+  for pid in "${pids[@]}"; do
+    kill -TERM "$pid" 2>/dev/null || true
+  done
+  sleep 2
+  for pid in "${pids[@]}"; do
+    kill -KILL "$pid" 2>/dev/null || true
+  done
+  return 0
 }
 cleanup_done=""
 cleanup() {
-  final_summary
   if [[ -z "$cleanup_done" ]]; then
     cleanup_done=1
-    # Sweep before removal and never let a nonzero sweep block the removal.
-    # A read-only --list ran no suite, so it owns no holder to sweep.
+    print_elapsed
     if [[ -n "$run_started" ]]; then
+      # Stop and reap this invocation's writers before the holder sweep and
+      # the root removal. Nothing outside this invocation is signalled.
+      stop_owned_writers
+      if [[ -n "${lane_a:-}" ]]; then wait "$lane_a" 2>/dev/null || true; fi
+      if [[ -n "${lane_b:-}" ]]; then wait "$lane_b" 2>/dev/null || true; fi
+      # Sweep before removal and never let a nonzero sweep block the removal.
       python3 "$repo_root/scripts/kaola-acp-sweep.py" --root "$validate_tmp" || true
     fi
     if compgen -G "$watchdog_dir/*.watchdog.txt" >/dev/null; then
@@ -119,7 +193,11 @@ cleanup() {
     else
       rm -rf "$validate_tmp" "$sandbox_home" || true
     fi
+    if [[ -n "$run_started" ]]; then
+      printf 'validate: total wall: %s s\n' "$(total_wall)"
+    fi
   fi
+  return 0
 }
 trap cleanup EXIT
 trap 'exit 130' INT
