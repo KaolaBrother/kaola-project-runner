@@ -7,8 +7,8 @@ Both files hold current facts only:
 - `project`; `host` (platform, exact `--session`, `holder_instance_id`,
   attested native id); `authorization` a safe handoff needs — each applicable grant and active restriction named by its exact catalog preset id
   (`<platform>/<tier>`, e.g. `cursor-cli/default` vs `grok/default`), with
-  count, Class grant lifetime, cap, quota units, seat identity and switch
-  authorization kept as separate facts, and an optional
+  count as the sole capacity, and Class grant lifetime, quota units, seat identity
+  and switch authorization kept as separate facts, and an optional
   `special_requirements` only when the owner actually supplied one (absent
   means none); an Expert grant is `task` unless the owner said `standing`, and
   you infer no standing grant; relay owner-explicit model/seat choices unchanged and infer no

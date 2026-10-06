@@ -60,10 +60,10 @@ session keeps its ownership when availability changes.
 
 ## Preset IDs in authorization
 
-A granted, paused, or revoked seat is named by its exact catalog Preset ID
-`<platform>/<tier>`; a platform word alone names no seat. Count, Class grant
-lifetime, cap, quota units, seat identity and switch authorization stay
-separate facts; an Expert grant's `lifetime` is `task` when absent, or
+Name applicable grants and active restrictions by exact Preset ID
+`<platform>/<tier>`; a platform names no seat. Count alone sets capacity;
+Class grant lifetime, quota units, seat identity and switch authorization stay
+separate facts. Remove revoked grants. An Expert grant's `lifetime` is `task` when absent, or
 `standing`, and `expires` is optional; a Worker exclusion names its exact ID. An authorization item
 carries `special_requirements` only when the owner actually supplied a
 deviation (`{"effort":"high"}`, `{"task_scope":"visual QA"}`); omit by
