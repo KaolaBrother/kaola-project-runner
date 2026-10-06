@@ -4230,9 +4230,9 @@ def open_seats(seats: dict[str, list[str]], rows: list[dict[str, Any]]) -> list[
 
 def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
     """Why a task's dispatched items are not shown closed: each needs an index
-    row that is no longer in flight and, when the task names sessions, live
-    rows showing none of them still running. A task with no dispatch and no
-    named seat has dispatched nothing."""
+    row that is no longer in flight and stopped seats. A Host can reconcile
+    an initial fingerprint against its accepted same-holder continuation;
+    this does not change the original unknown collect result."""
     refs = task.get("dispatch")
     refs = [refs] if isinstance(refs, str) else [ref for ref in refs or [] if isinstance(ref, str)]
     seats = task_seats(task)
@@ -4250,8 +4250,46 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
     if refs:
         rows = {row.get("item_id"): row for row in load_object(Path(args.index)).get("items") or []
                 if isinstance(row, dict)}
-        problems = [f"{ref} is {rows[ref].get('status')}" if ref in rows else f"{ref} is not in the index"
-                    for ref in refs if ref not in rows or rows[ref].get("status") in ("in-flight", "unknown")]
+        for ref in refs:
+            row = rows.get(ref)
+            if row is None:
+                problems.append(f"{ref} is not in the index")
+                continue
+            if row.get("status") not in ("in-flight", "unknown"):
+                continue
+            evidence_rows = row.get("evidence") if isinstance(row.get("evidence"), dict) else {}
+            collected = evidence_rows.get("collect_status")
+            collected = collected if isinstance(collected, dict) else {}
+            holder, session = row.get("holder_instance_id"), session_name(row.get("session"))
+            verdict = task.get("verdict") or {}
+            # The Host owns the result judgment. Mechanical proof is limited
+            # to this known initial-fingerprint discrepancy and exact reclaim.
+            reconciled = (
+                args.writer == "host" and task.get("stage") == "done"
+                and verdict.get("value") == "accepted"
+                and (task.get("dispositions") or {}).get(ref) == "accepted"
+                and row.get("task_id") == args.id
+                and row.get("status") == "unknown" and row.get("reason") == "fingerprint-differs"
+                and isinstance(holder, str) and bool(holder) and session is not None
+                and collected.get("holder_instance_id") == holder
+                and collected.get("mutation_status") == "completed" and collected.get("outcome") == "stopped"
+                and isinstance(collected.get("repo"), str) and bool(collected.get("repo"))
+                and isinstance(row.get("repo"), str) and bool(row.get("repo"))
+                and same_repo(collected.get("repo"), row.get("repo"))
+                and same_repo(row.get("repo"), repo_of_state_file(Path(args.file)))
+                and any(live_row.get("session") == session
+                        and live_row.get("holder_instance_id") == holder
+                        and live_row.get("platform") == row.get("platform")
+                        and isinstance(live_row.get("repo"), str) and bool(live_row.get("repo"))
+                        and same_repo(live_row.get("repo"), row.get("repo")) for live_row in live)
+                and not open_seats({session: [holder]}, live))
+            if reconciled:
+                args._reconciled_dispatch = getattr(args, "_reconciled_dispatch", []) + [
+                    {"item_id": ref, "session": session, "holder_instance_id": holder,
+                     "collect_status": "unknown", "reason": "fingerprint-differs",
+                     "disposition": "accepted"}]
+            else:
+                problems.append(f"{ref} is {row.get('status')}")
         sessions = {rows[ref].get("session") for ref in refs if ref in rows} - set(seats)
         for row in live:
             if row.get("state") != "stopped" and row.get("session") in sessions:
@@ -4372,6 +4410,8 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
             )
     stone = {"kind": kind, "id": record_id, "outcome": args.outcome or current.get("stage") or "resolved",
              "at": observed_at(),
+             **({"reconciled_dispatch": args._reconciled_dispatch}
+                if getattr(args, "_reconciled_dispatch", None) else {}),
              **({"cite": cite} if cite else {}),
              **({"handed_to": handoff, **handed} if handoff else {})}
     stamp_writer(doc, stone, args, caller_dispatcher())

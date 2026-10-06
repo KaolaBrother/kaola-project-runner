@@ -1807,6 +1807,87 @@ class RecordContract(unittest.TestCase):
         missing = {row["id"] for row in out["problems"] if row["code"] == "dispatch-task-missing"}
         self.assertEqual(missing, {"open", "unknown", "unaccepted", "bad-acceptance"})
 
+        # A settled continuation can differ from the initial prompt. The
+        # Host disposition and exact reclaim settle the duty, not collect.
+        item = {"item_id": "initial", "task_id": "continued", "status": "unknown",
+                "reason": "fingerprint-differs", "acceptance": "pending",
+                "session": "codex-KT-continued", "holder_instance_id": "worker-1",
+                "platform": "codex", "repo": str(self.repo),
+                "evidence": {"collect_status": {"holder_instance_id": "worker-1",
+                    "repo": str(self.repo), "mutation_status": "completed", "outcome": "stopped"}}}
+        stopped = {"session": item["session"], "holder_instance_id": "worker-1",
+                   "platform": "codex", "repo": str(self.repo), "state": "stopped"}
+        code, out = self.state("update", "--file", str(self.file), "--writer", "host",
+                               "--source", "original result and continuation custody",
+                               "--kind", "tasks", "--id", "continued", "--set", json.dumps({
+                                   "stage": "done", "goal": "settled research", "dispatch": ["initial"],
+                                   "verdict": {"value": "accepted"},
+                                   "dispositions": {"initial": "accepted"}}))
+        self.assertEqual(code, 0, out)
+        baseline = self.file.read_bytes()
+        for change in ("no-disposition", "in-flight", "unknown-effect", "foreign-holder",
+                       "foreign-repo", "wrong-task", "unrelated-unknown", "missing-stop", "live",
+                       "missing-repo", "foreign-collected-holder", "sideagent"):
+            with self.subTest(change=change):
+                self.file.write_bytes(baseline)
+                doc = self.doc()
+                candidate = json.loads(json.dumps(item))
+                current_live = dict(stopped)
+                if change == "no-disposition":
+                    doc["state"]["tasks"]["continued"].pop("dispositions")
+                elif change == "in-flight":
+                    candidate["status"] = "in-flight"
+                elif change == "unknown-effect":
+                    candidate["evidence"]["collect_status"]["mutation_status"] = "unknown"
+                elif change == "foreign-holder":
+                    current_live["holder_instance_id"] = "foreign"
+                elif change == "foreign-repo":
+                    current_live["repo"] = str(self.repo / "foreign")
+                elif change == "wrong-task":
+                    candidate["task_id"] = "another"
+                elif change == "unrelated-unknown":
+                    candidate["reason"] = "holder-mismatch"
+                elif change == "live":
+                    current_live["state"] = "running"
+                elif change == "missing-repo":
+                    current_live.pop("repo")
+                elif change == "foreign-collected-holder":
+                    candidate["evidence"]["collect_status"]["holder_instance_id"] = "foreign"
+                self.file.write_text(json.dumps(doc), encoding="utf-8")
+                index.write_text(json.dumps({"items": [candidate]}), encoding="utf-8")
+                live.write_text(json.dumps({"rows": [] if change == "missing-stop" else [current_live]}),
+                                encoding="utf-8")
+                before_state, before_index = self.file.read_bytes(), index.read_bytes()
+                code, out = self.state("retire", "--file", str(self.file), "--writer",
+                    "sideagent" if change == "sideagent" else "host",
+                    "--source", "original accepted continuation and exact reclaim",
+                    "--kind", "tasks", "--id", "continued", "--expect-rev", "1",
+                    "--evidence", "original Host result, custody and exact stop", "--cite", CITE,
+                    "--index", str(index), "--live", str(live))
+                self.assertEqual(code, 2, out)
+                self.assertEqual(out["reason"], "retire-unmet", out)
+                self.assertEqual(self.file.read_bytes(), before_state)
+                self.assertEqual(index.read_bytes(), before_index)
+        self.file.write_bytes(baseline)
+        index.write_text(json.dumps({"items": [item]}), encoding="utf-8")
+        live.write_text(json.dumps({"rows": [stopped]}), encoding="utf-8")
+        before_index = index.read_bytes()
+        code, out = self.state("retire", "--file", str(self.file), "--writer", "host",
+            "--source", "original accepted continuation and exact reclaim",
+            "--kind", "tasks", "--id", "continued", "--expect-rev", "1",
+            "--evidence", "original Host result, custody and exact stop", "--cite", CITE,
+            "--index", str(index), "--live", str(live))
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["value"]["reconciled_dispatch"][0]["item_id"], "initial")
+        self.assertEqual(out["value"]["reconciled_dispatch"][0]["collect_status"], "unknown")
+        self.assertEqual(index.read_bytes(), before_index)
+        self.assertNotIn("continued", self.doc()["state"]["tasks"])
+        self.assertFalse(self.doc()["state"].get("retired"))
+        for role in ("host", "sideagent", "delegator"):
+            code, view = self.state("view", "--file", str(self.file), "--role", role)
+            self.assertEqual(code, 0, view)
+            self.assertNotIn("continued", json.dumps(view))
+
     def test_capability_keeps_worker_pool_presets_from_catalog_and_grants(self) -> None:
         self.init({"grants": [{"id": "droid/opus", "count": 2, "state": "granted"}]})
         code, view = self.state("view", "--file", str(self.file), "--role", "host")

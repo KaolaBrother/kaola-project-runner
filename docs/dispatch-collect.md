@@ -173,6 +173,15 @@ Use original evidence of the handled duty; accepted tasks also need a retrievabl
 it or put its text elsewhere. Keep unresolved original evidence on the existing
 current decision/reconciliation route until the proper type is established.
 The Agent decides semantic currentness. The tool checks types, ownership and CAS.
+A Host may retire an accepted same-assignment continuation whose initial
+index row is `unknown/fingerprint-differs`. Record an accepted per-item task
+`dispositions` entry from the original result and custody evidence. Pass a
+copy of that original index and fresh `--live` rows to `state retire`, with
+`--evidence` and `--cite`. The collected result must show completed/stopped
+under the same holder and root; the live row must prove exact reclaim. The
+command reports the reconciliation but preserves the unknown index row.
+This route refuses missing links, foreign holders and unknown effects. It
+does not settle remaining integration or issue lifecycle duties.
 A pending recovery input requires its exact scoped checkpoint. Retiring an old
 alert does not clear a newer recovery input. Plan `state migrate` before `--write`;
 repeat migration preserves pending adoption, grants, duties and current links.
