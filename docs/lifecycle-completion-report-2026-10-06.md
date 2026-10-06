@@ -243,8 +243,8 @@ no-log SKIPs root-caused to suites registered in the replay list but never in an
 narrowing masked it), fixed at `204456e9`, pinned at `b5472308`; the earlier five-issue successor-frontier text
 is retired to this history note. Engineering evidence: `render-skills.py --check`
 PASS; `t255` full 128 OK; `t259` full 60/60; generated+progressive
-suites 15 OK — these cover the AFFECTED checks only; the full inventory
-is red as described above. Regression scope, precisely: at
+suites 15 OK — these cover the AFFECTED checks only; the full-inventory
+state is stated in the current Gate block above. Regression scope, precisely: at
 `0b3af748` the full `t259` file had 7 failures, each already present at
 clean `3c7e7417` under the same stash-controlled, same-machine runs (8
 there; `1248` was repaired by `f562560f`); no new regression within the
