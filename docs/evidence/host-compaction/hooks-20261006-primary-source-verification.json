@@ -1,0 +1,99 @@
+{
+  "/Users/ylmacstudio/.local/bin/droid": {
+    "sha256": "0e0bf625f7c45ade78fb5e11efcccaf4bcd00d53414e8e82b76c62969d0c1e34",
+    "getDefaultCompactionTokenLimit(){": {
+      "found": true,
+      "offset": 142032411,
+      "excerpt": "erShownTui(e){this.updateSettings({general:{reauthBannerShownTui:e}})}getDefaultCompactionTokenLimit(){return this.settings.general?.compactionTokenLimit??O}setDefaultCompactionTokenLimit(e){this.updateSettings({general:{compactionTokenLimit:e}})}getDefaultCompactionThresholdCheckEnabled(){return this.settings.general?.compactionThresholdCheckEnabled??!0}setDefaultCompactionThresholdCheckEnabled(e){this.updateSetting"
+    },
+    "setDefaultCompactionTokenLimit(e)": {
+      "found": true,
+      "offset": 142032498,
+      "excerpt": "ionTokenLimit(){return this.settings.general?.compactionTokenLimit??O}setDefaultCompactionTokenLimit(e){this.updateSettings({general:{compactionTokenLimit:e}})}getDefaultCompactionThresholdCheckEnabled(){return this.settings.general?.compactionThresholdCheckEnabled??!0}setDefaultCompactionThresholdCheckEnabled(e){this.updateSettings({general:{compactionThresholdCheckEnabled:e}})}resolveModelInputWindow(e,t,i){return "
+    },
+    "droid.compact_session": {
+      "found": true,
+      "offset": 65252564,
+      "excerpt": "tory\u0000\u0000\u0014\u0000\u0000�\u0019b�\u0000droid.clear_mcp_auth\u0013\u0000\u0000�(.�\u0000droid.close_session\u0000\u0015\u0000\u0000����\u0000droid.compact_session\u0000\u0000\u0000\u0014\u0000\u0000�O�!\u0000droid.execute_rewind\u0012\u0000\u0000��a=\u0000droid.fork_session\u0000\u0000\u001b\u0000\u0000�t_\r\u0000droid.get_context_breakdown\u0000\u0017\u0000\u0000�|� \u0000droid.get_context_stats\u0000\u0015\u0000\u0000����\u0000droid.get_rewind_info\u0000\u0000\u0000\u0017\u0000\u0000��0�\u0000droid.interrupt_session\u0000\u0019\u0000\u0000�^6�\u0000droid.kill_worker_session\u0000\u0000\u0000\u0013\u0000\u0000�\b}�\u0000droid.list_commands\u0000\u0017\u0000\u0000�?�+\u0000droid.list_mcp_registry\u0000\u0016\u0000\u0000��i4\u0000droid.list_mcp_servers\u0000\u0000\u0014\u0000\u0000���&\u0000dr"
+    },
+    "compaction_update": {
+      "found": false,
+      "offset": -1,
+      "excerpt": null
+    },
+    "compactionCompleted": {
+      "found": false,
+      "offset": -1,
+      "excerpt": null
+    }
+  },
+  "/Users/ylmacstudio/.local/share/cursor-agent/versions/2026.09.28-64d2043/index.js": {
+    "sha256": "0d0c83f5478c3dcd806cb9697123cee3f548005fbcd3acafe31f102d659f5a7b",
+    "case\"preCompact\"": {
+      "found": true,
+      "offset": 4251654,
+      "excerpt": "quest;if(!r)return new i.S1({response:void 0});switch(r.request.case){case\"preCompact\":{const e=r.request.value,t={conversation_id:e.conversationId??\"\",generation_id:e.generationId??\"\",model:e.model??\"\",...(0,Me.U4)(e),trigger:\"manual\"===e.trigger?\"manual\":\"auto\",context_usage_percent:e.contextUsagePercent,context_tokens:Number(e.contextTokens),context_window_size:Number(e.contextWindowSize),message_count:e.messageCo"
+    },
+    "sendAvailableCommands(){": {
+      "found": false,
+      "offset": -1,
+      "excerpt": null
+    },
+    "handleSlashCommand(e)": {
+      "found": false,
+      "offset": -1,
+      "excerpt": null
+    },
+    "id:\"summarize\"": {
+      "found": false,
+      "offset": -1,
+      "excerpt": null
+    }
+  },
+  "/Users/ylmacstudio/.local/share/cursor-agent/versions/2026.09.28-64d2043/3115.index.js": {
+    "sha256": "290fb013b7cfeed1717aedb15e54bdf4bcfac84042f26933e083a180af51d65e",
+    "case\"preCompact\"": {
+      "found": false,
+      "offset": -1,
+      "excerpt": null
+    },
+    "sendAvailableCommands(){": {
+      "found": true,
+      "offset": 6217,
+      "excerpt": "s.pendingAutoNamePromise=null}})()),this.pendingAutoNamePromise}async sendAvailableCommands(){const{slashCommands:e}=await this.loadCommandsAndSkills(),t={sessionUpdate:\"available_commands_update\",availableCommands:[{name:\"copy-request-id\",description:\"Copy the last request ID to clipboard\"},...e.map((e=>({name:e.id,description:e.description||\"\"})))]};(0,I.cY)(\"Sending available commands:\",t),await this.sendSessionUp"
+    },
+    "handleSlashCommand(e)": {
+      "found": true,
+      "offset": 15926,
+      "excerpt": "|void 0===s||await(this.subagentPublisher?.settledForTurn(s))}}}async handleSlashCommand(e){if(\"/copy-request-id\"===e.toLowerCase().trim())return await this.handleCopyRequestId(),{handled:!0};const t={handled:!1,cursorCommands:[],selectedSkills:[]};if(!e.startsWith(\"/\")&&!(0,b._)(e))return t;let s;try{({loader:s}=await this.loadCommandsAndSkills())}catch(e){return(0,I.cY)(\"Failed to load commands and skills for promp"
+    },
+    "id:\"summarize\"": {
+      "found": false,
+      "offset": -1,
+      "excerpt": null
+    }
+  },
+  "/Users/ylmacstudio/.local/share/cursor-agent/versions/2026.09.28-64d2043/6949.index.js": {
+    "sha256": "638d60026e23ff5993daa1fd911bdb807a0e5ea70037297909456cb5cfa7d4f5",
+    "case\"preCompact\"": {
+      "found": false,
+      "offset": -1,
+      "excerpt": null
+    },
+    "sendAvailableCommands(){": {
+      "found": false,
+      "offset": -1,
+      "excerpt": null
+    },
+    "handleSlashCommand(e)": {
+      "found": false,
+      "offset": -1,
+      "excerpt": null
+    },
+    "id:\"summarize\"": {
+      "found": true,
+      "offset": 651329,
+      "excerpt": "r(e instanceof Error?e.message:String(e))}n.insertText(\"\")}}),l.push({id:\"summarize\",title:\"Summarize\",autoExecuteOnAccept:!0,description:\"Summarize the conversation to reduce context\",boostedAlts:[\"compress\",\"compact\"],run:async(e,t,n)=>{if(n.clearInput?.(),0!==Ce.getConversationStateStructure().turns.length){try{Ee(!0)}catch{}await(n.onSummarize?.())}else n.print?.([[{text:\"No active session.\",color:\"red\"}]])}}),l."
+    }
+  }
+}

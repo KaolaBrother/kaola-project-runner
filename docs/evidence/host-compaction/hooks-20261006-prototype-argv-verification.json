@@ -1,0 +1,20 @@
+{
+  "nonadapter_launch_arg_references": [],
+  "original_argv_witnesses": [
+    {
+      "cursor": 2814,
+      "sessionUpdate": "tool_call_update",
+      "snippet": " [{\"content\": {\"text\": \"manifest patched\\n39:acp_command: \\\"droid exec --output-format acp --settings /tmp/kpr-i264-host-chain-1035/hooks/droid/host/droid-settings.json\\\"\\nconsumer ready\\n0eb1e34 seed droid consumer fixture\\n\", \"type\": \"text\"}, \"ty"
+    },
+    {
+      "cursor": 2895,
+      "sessionUpdate": "tool_call_update",
+      "snippet": "text\": \"=== droid agent process args ===\\n  PID ARGS\\n12156 droid exec --output-format acp --settings /tmp/kpr-i264-host-chain-1035/hooks/droid/host/droid-settings.json\\nylmacstudio      17875   0.0  0.7 499078352 331984   ??  Ss    5:48PM   0:01.0"
+    },
+    {
+      "cursor": 3233,
+      "sessionUpdate": "tool_call_update",
+      "snippet": "8c6b3a87a28\\\",\\n      \\\"prototype_manifest_acp_command\\\": \\\"droid exec --output-format acp --settings /tmp/kpr-i264-host-chain-1035/hooks/droid/host/droid-settings.json\\\",\\n      \\\"note\\\": \\\"scratch-only diagnostic prototype under the lane; agent p"
+    }
+  ]
+}

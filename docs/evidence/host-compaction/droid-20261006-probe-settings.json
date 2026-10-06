@@ -1,0 +1,1 @@
+{"compactionThresholdCheckEnabled": true, "compactionTokenLimit": 4000, "compactionTokenLimitPerModel": {"auto": 4000}, "compactionLimitSelector": {"currentCustom": 4000}}

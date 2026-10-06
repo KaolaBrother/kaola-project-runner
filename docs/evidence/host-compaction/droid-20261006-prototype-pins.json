@@ -1,0 +1,54 @@
+{
+ "subject": "Droid experimental prototype provenance reconciliation (r3)",
+ "date": "2026-10-06",
+ "candidate_source": {
+  "frozen_head": "4b247a2dbae9006be71962da32b31e5c5eb05629",
+  "unchanged_manifest": "/tmp/kpr-i264-host-chain-1035/hooks/candidate/platforms/droid.yaml",
+  "unchanged_manifest_sha256": "4bc00dde6c2418a006b2b95f6bddf5ef542fbed2df957deb46c72bcb6cfc2846",
+  "unchanged_adapter": "/tmp/kpr-i264-host-chain-1035/hooks/candidate/scripts/adapters/droid.sh",
+  "unchanged_adapter_sha256": "73a1059b0f0d04a017600280583ba3516896ef0ed642a6d867436d233bc5ba51"
+ },
+ "experimental_adapter": {
+  "path": "/tmp/kpr-i264-host-chain-1035/hooks/proto/candidate/scripts/adapters/droid.sh",
+  "sha256": "6c831ad3b65995c4bfde515910fdd04df5873072f1b5a5d79e1e28c6b3a87a28",
+  "effective_for_attempt": false,
+  "reason": "adapter_build_launch is not called anywhere in the current candidate scripts; the ACP command is built by manifest_launch_command, which does not append launch args. The adapter patch was inert for both ACP attempts."
+ },
+ "present_prototype_tree": {
+  "path": "/tmp/kpr-i264-host-chain-1035/hooks/proto/candidate/platforms/droid.yaml",
+  "note": "This tree was last patched for the droid/pos attempt and currently names droid/pos/settings.json. It is the present scratch state and must NOT be bound retroactively to the original droid/host attempt, which is pinned separately in per_attempt_bindings.",
+  "sha256": "8be978541c6eb755619d4cc29b4eb57d3315491f722f2b3b9b178989536998e6"
+ },
+ "per_attempt_bindings": [
+  {
+   "attempt": "droid-host-original",
+   "manifest_copy": "/tmp/kpr-i264-host-chain-1035/hooks/droid/host/manifest.droid.attempt.yaml",
+   "manifest_sha256": "d6b09cafa0de933e7dd12f4efb71bee55c8f871fc8be65d73a2c8685d6ad1fba",
+   "settings": "/tmp/kpr-i264-host-chain-1035/hooks/droid/host/droid-settings.json",
+   "settings_sha256": "23e47836a8c5d49871ff4ddcfea41fb43ab892cd81ea2fd1bd5355767675ba3d",
+   "settings_bytes": "{\"compactionThresholdCheckEnabled\": true, \"compactionTokenLimit\": 4000}",
+   "acp_command_from_manifest": "droid exec --output-format acp --settings /tmp/kpr-i264-host-chain-1035/hooks/droid/host/droid-settings.json",
+   "observed_applied_argv": "droid exec --output-format acp --settings /tmp/kpr-i264-host-chain-1035/hooks/droid/host/droid-settings.json",
+   "observed_applied_argv_source": "live `ps -o pid,args -p <agent_pid>` during the attempt (agent_pid 12156); consistent with the per-attempt manifest",
+   "persisted_session_settings": "/tmp/kpr-i264-host-chain-1035/hooks/droid/host/receipts/raw/session-settings.json",
+   "persisted_applied_key": {
+    "compactionThresholdCheckEnabled": true,
+    "compactionTokenLimit": "NOT_PERSISTED"
+   }
+  },
+  {
+   "attempt": "droid-settings-probe",
+   "manifest_copy": "/tmp/kpr-i264-host-chain-1035/hooks/droid/probe/manifest.droid.probe.yaml",
+   "manifest_sha256": "00c14cfc3ab5c38da71afcfd2ec619f236b44811769c5f4e6f5bd2184049019f",
+   "settings": "/tmp/kpr-i264-host-chain-1035/hooks/droid/probe/settings.json",
+   "settings_sha256": "8ef0b319f0a059d2c9d7c2fe49b05a4549a2136b38629813fe9574ce39be87b7",
+   "settings_bytes": "{\"compactionThresholdCheckEnabled\": true, \"compactionTokenLimit\": 4000, \"compactionTokenLimitPerModel\": {\"auto\": 4000}, \"compactionLimitSelector\": {\"currentCustom\": 4000}}",
+   "acp_command_from_manifest": "droid exec --output-format acp --settings /tmp/kpr-i264-host-chain-1035/hooks/droid/probe/settings.json",
+   "persisted_applied_key": {
+    "compactionThresholdCheckEnabled": true,
+    "others": "NOT_PERSISTED"
+   }
+  }
+ ],
+ "conclusion": "The only effective experimental change for the Droid attempts was the per-attempt manifest acp_command --settings injection. The adapter patch is inert and is pinned only for completeness."
+}

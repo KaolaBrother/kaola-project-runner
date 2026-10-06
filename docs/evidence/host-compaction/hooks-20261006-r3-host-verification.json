@@ -1,0 +1,113 @@
+{
+  "date": "2026-10-06",
+  "runtime": "Droid0.233.0; Cursor2026.09.28-64d2043",
+  "report_sha256": "579ba6a2548170b34deec320eac804d3fa0c00a817a9ae914e624f1aa9856f3c",
+  "r2_original_preserved": true,
+  "returned_cursor": 4074,
+  "prompt_fingerprint": "sha256:8dc3dbf8238cae608a4c28675ae6ce2bac80ba38fbe59aa6ce64f74d85ee6a7b",
+  "source_verification": "/tmp/kpr-1053-hooks-primary-source-verification.json",
+  "correlation_note": "indexed initial send correlates old r1 range; direct full original capture4074 matches same-holder r3 continuation, not relabeled initial collect",
+  "droid_pos": {
+    "start_identity": {
+      "session": "droid-KPR264HDP-orchestrator-main",
+      "holder_instance_id": "a48e6ba005ad4e821ceb49bf210c58f6",
+      "acp_session_id": "09180068-c527-4d43-b4dd-29c8c6a3b91e",
+      "repo": "/private/tmp/kpr-i264-host-chain-1035/hooks/droid/pos/consumer",
+      "session_role": "host",
+      "effective_selection": {
+        "effective_effort": "none",
+        "effective_model": "auto",
+        "effort_config_id": "reasoning_effort"
+      },
+      "fast": {
+        "applied": false,
+        "applied_via": "none",
+        "detail": "no native Fast mechanism; nothing to enable",
+        "effective": "off",
+        "requested": "off",
+        "support": "none"
+      }
+    },
+    "stop": {
+      "agent_exit_code": 0,
+      "agent_exit_signal": null,
+      "git": {
+        "branch": "main",
+        "dirty": false
+      },
+      "mutation_status": "completed",
+      "platform": "droid",
+      "repo": "/private/tmp/kpr-i264-host-chain-1035/hooks/droid/pos/consumer",
+      "residual_pids": [],
+      "schema_version": 3,
+      "session": "droid-KPR264HDP-orchestrator-main",
+      "stopped": true,
+      "swept_child_pgids": [],
+      "transport": {
+        "selected": "acp"
+      }
+    },
+    "native_completed_observed": false,
+    "recovery_registration_observed": false,
+    "settings_observed": {
+      "compactionThresholdCheckEnabled": true,
+      "general": null,
+      "compactionTokenLimit": null,
+      "model": "auto",
+      "tokenUsage": {
+        "inputTokens": 14117,
+        "outputTokens": 404,
+        "cacheCreationTokens": 0,
+        "cacheReadTokens": 18214,
+        "thinkingTokens": 206,
+        "factoryCredits": 3009
+      }
+    },
+    "raw_sha256": "eae8ca7b3e19f3b9addb6c52d01cb0758e8466fce1e282e059873c69f4561d03",
+    "manifest_sha256": "8be978541c6eb755619d4cc29b4eb57d3315491f722f2b3b9b178989536998e6",
+    "settings_input_sha256": "144c2d0bfdfc5db4fedee940b084bc23bc30867acf0102aacd408458b0b6e86b",
+    "node_is_business_only": true,
+    "node_stop": {
+      "cursor": 23,
+      "holder": "90de5671ab037355923cae24bf1043b4",
+      "kind": "sideagent_node_stopped",
+      "receipt": {
+        "stopped": true
+      },
+      "ts": 1791281039.19
+    },
+    "final_records": [
+      {
+        "session": "droid-KPR264HDP-orchestrator-main",
+        "holder_instance_id": "a48e6ba005ad4e821ceb49bf210c58f6",
+        "session_role": "host",
+        "state": "stopped",
+        "agent_alive": false
+      },
+      {
+        "session": "droid-KPR264HDP-S-sideagent",
+        "holder_instance_id": "90de5671ab037355923cae24bf1043b4",
+        "session_role": "sideagent",
+        "state": "stopped",
+        "agent_alive": false
+      }
+    ]
+  },
+  "cursor_provenance": {
+    "actual-host.2d550c93": {
+      "sha256": "941a65da4e11ce1022b512901ca1f870c61b2e543dacf40579aa335ae4fb2ee1",
+      "events": 46
+    },
+    "old-elite.db96800f": {
+      "sha256": "de6800c7428c599535f985cec1a64466aa74d976a80b20ff39ca0e1de9e1d3c1",
+      "events": 6
+    }
+  },
+  "verdict": "Bounded diagnostic assignment accepted with explicit unverified compaction stages for Droid/Cursor; DSH prior explicit positive remains accepted. No confirmed KPR causal defect. Pending project264 conclusions and affected review remain, not blanket all-ten chain success.",
+  "source_claim_qualifications": [
+    "Binary names/default-general accessor do not prove accepted ACP settings API. Two real per-process settings attempts did not reach compact. Undocumented or unmapped path absence is not universal unsupported.",
+    "Cursor TUI registration/onSummarize differs from observed ACP loader/advertised56 commands; server-produced hook precedes compaction, not completion.",
+    "Per-attempt manifest copies were reconstructed for provenance, corroborated by original applied argv/settings; present prototype must not be retroactively bound. Inert shell adapter patch is not a tested production change.",
+    "Actual hooks scope ended; further source-supported external route/version evidence can reopen the affected diagnostic, with inquiry fallback until then."
+  ]
+}
