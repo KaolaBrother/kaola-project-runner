@@ -67,6 +67,41 @@ apart from the authorized worker platforms. Grok Bot is a bridge host for
 Kaola-Delegator only — not a worker platform and not a Project Runner host; see
 [Grok Bot host](docs/grok-bot-host.md).
 
+## Host runtime capabilities and limits
+
+Before choosing or changing a Host runtime, read that runtime's row here and
+disclose its measured limits and gaps to the user first; selection stays an
+explicit user choice, and this table adds no gate. Each row cites only the
+named measured route (runtime version, adapter, candidate) — the full
+evidence matrix is [docs/host-compact-capabilities.md](docs/host-compact-capabilities.md),
+steer evidence lives in [docs/api.md](docs/api.md) § `steer` and each
+`platforms/<id>.yaml` `steering_summary`. **A capability counts as supported
+when information reaches the same Host through an actual consumption path
+without stopping or restarting the Host runtime**; native real-time steering
+is not required, and a file write with no consumption path is not support.
+Unverified cells stay unknown — never written as "unsupported" or "fully
+supported". Re-check a row only against actual runtime version, adapter and
+measured evidence, and fill a gap only when verified.
+
+| Runtime (measured) | Host entry | Compaction → automatic recovery chain | Steer into a busy turn | Explicit gaps / limits |
+|---|---|---|---|---|
+| ZCode app-server 0.16.9 | measured | **VERIFIED** scoped checkpoint (requires explicit controller binding setup; bridge-mapped completed signal) | busy: injected at next tool/message boundary (3.12+, event-verified `injected`) | ACP Read payload absent (summary-only exposure); background route unmeasured |
+| Claude Code 2.1.289 (bridge 0.1.0) | measured | qualified on older candidate `0553a8db` (full chain; affected-boundary reuse pending, no fresh current run) | busy: second user message joins the running turn (2.1.272 probe; write-only confirmation) | not a fresh current-holder proof after later changes/reinstall |
+| Codex 0.160.1 (codex-acp 2.0.1) | measured | **VERIFIED** scoped checkpoint (candidate `9f778981`) | busy: `injected` while the turn runs (adapters 1.11.0/1.13.0; idle refused) | CODEX_HOME dropped by non-Codex broker caused a native global-trust side effect (qualified) |
+| Cursor CLI 2026.09.28 | measured | **UNREACHED** — no native completed signal in bounded attempts; preCompact notice fallback only | after-turn: holder queue + ordinary prompt (native concurrent prompt cancels the turn) | post-compaction read/use and recovery unverified |
+| Devin 3000.11.3 | measured | chain complete, entry VALID, checkpoint honestly partial (`recovery-originals-unavailable` on links — fixture-evidence gap, named recovery) | busy: second `session/prompt` observed with model reply (adoption unconfirmed) | fixture needs one real prior-diagnostic record in the same record root |
+| Droid 0.233.0 | measured | **UNREACHED** — two finite attempts, no completed signal; PreCompact-notice fallback | busy: second `session/prompt` observed, both turns ended (turn number unconfirmed) | post-compaction stages unverified; no threshold claim |
+| DSH 0.2.0-rc.2 | measured | **VERIFIED** scoped checkpoint (explicit positive) | busy: next-step inbox admission via local plugin (admission confirmed; processing read from output) | background forwarding / installed-adapter efficacy unverified |
+| Grok 1.0.46 | measured | **VERIFIED** scoped checkpoint (candidate `9f778981`) | busy: `_x.ai/interject` queued ack (write ack; no consumption guard) | turn-end race can start a detached fallback turn |
+| Kimi CLI 2.1.1 | measured | **POSITIVE** on fixed `24a2355a`: full automatic chain, **VERIFIED** scoped checkpoint `b-e93d1a2aaa85` (explicit `/compact`) | after-turn: ACP rejects concurrent prompt (`agent_busy`) → holder queue + ordinary prompt | single-run positive; background route unmeasured; earlier r1/r2 partials retained |
+| OpenCode 2.0.23 (bridge 47a3b97d) | measured | **VERIFIED** scoped checkpoint (candidate `24a2355a`, recovery-only) | busy: inbox admission via V2 local adapter (2.0.22; admission only; old holders need controlled restart) | numbered wrapper omits final-newline byte exposure; home propagation qualified |
+
+Every runtime also has the composite `--steer-mode interrupt` path, and
+worker events are turn-boundary prompts (notify/wake/read) independent of
+steering: without real-time steering, results still arrive at the next turn
+boundary. Tool write/admission receipts never by themselves prove the Host
+adopted the input — adoption is judged from session output.
+
 ## Kaola Workflow integration
 
 [**Kaola Workflow**](https://github.com/KaolaBrother/Kaola-Workflow) provides the

@@ -135,6 +135,17 @@ Source: explicit owner request, 2026-10-04. Scope: the current lifecycle/state-m
 
 Completion report: answer all six items against the final integrated candidate, with mechanism, actual evidence/result, and remaining limitations. Exercise this requirement's record → relay → adoption → implementation/QA → final answer path using existing records and receipts, so progress remains aligned with the agreed goals. Reuse meaningful evidence; do not add a parallel ledger, scheduler or duplicate acceptance phase.
 
+## Host capability disclosure and table (owner requirement, 2026-10-06)
+
+Source: explicit owner request relayed through the dot main session (Sentinel_27d913395e90819199545f470d8c6421 / Sentinel_15c6ec9ed9b08191a982e2d62258f92a / Sentinel_e3b97d4346908191a717f86890655ad6; support-criterion clarification Sentinel_993c0853c4c08191843176126322f9b2). Scope: the maintained Host capability/limitation table, its pre-selection disclosure and its update convention, within existing #264/#263 scope; no new scheduler, framework or installation.
+
+- The platform Host capability-gap table is maintained in `README.md` (§ "Host runtime capabilities and limits") with gaps explicitly marked; this section and that table are the authoritative sync pair; `docs/host-compact-capabilities.md` holds the measured detail with original evidence.
+- The Skill source templates disclose a runtime's Host limitations before that runtime is selected as a Host (`templates/orchestrator/references/host-entry-matrix.md` § "Before selecting a Host runtime"); generated files change only through render, never by hand.
+- Steer is a table dimension distinguishing: busy real-time native non-interrupting steer; after-turn holder queue / idle send; worker-result notify/wake/read; and tool write/admission versus the Host actually adopting the input. Worker events are turn-boundary prompts independent of steer — lacking real-time steer never means results are not received.
+- Support criterion: information with an actual consumption path delivered to the same Host without stopping or restarting the Host runtime counts as supported; native real-time steer is not required; a file write with no consumption path is not support. Do not mark a whole capability unsupported merely for lacking native real-time steer.
+- Update convention: re-check a row only against actual runtime version, adapter and measured evidence (including `platforms/<id>.yaml` steering summaries and docs evidence); fill a gap only when verified; unverified is never written as unsupported or fully supported. Reuse valid original evidence; no ten-platform rerun merely to produce an answer.
+- Retained as an explicit user requirement for this run's dot main thread + Claude Code Fable final personal review PASS; incomplete, not retired.
+
 ## Delegator special requirements — issue 259 final acceptance
 
 Source: explicit owner appointment, clarified 2026-10-06 (#259). Scope: this run's outer supervision and user communication. Only owner requests or owner-confirmed proposals belong here; replace superseded requirements when the owner changes them.

@@ -33,6 +33,30 @@ exists (`mutation_performed: false`, exit 1); its holder still refuses
 `worker_event`. As an ordinary worker it is unaffected. A row is filled only
 from measured trigger evidence.
 
+## Before selecting a Host runtime
+
+Read this matrix, then the checkout's capability and limitation table
+(`README.md` § "Host runtime capabilities and limits"; authoritative sync in
+`AGENTS.md` § "Host capability disclosure and table"; measured detail in
+`docs/host-compact-capabilities.md`), and disclose that runtime's measured
+limits and gaps to the user BEFORE starting it as a Host. Selection keeps
+the explicit user choice; the disclosure adds no gate, ranking or switch.
+
+Steer rows in that table distinguish four facts per runtime: busy real-time
+native non-interrupting steer; after-turn holder queue or idle send;
+worker-result notify/wake/read; and tool write/admission versus the Host
+actually adopting the input. Worker events are turn-boundary prompts
+independent of steer: without real-time steer, results still arrive at the
+next turn boundary. A capability counts as supported when information has an
+actual consumption path delivered to the same Host without stopping or
+restarting the Host runtime; native real-time steer is not required, and a
+file write with no consumption path is not support.
+
+Update convention: re-check a row only against actual runtime version,
+adapter and measured evidence (`platforms/<id>.yaml` steering summaries,
+docs evidence); fill a gap only when verified. Unverified is never written
+as unsupported or fully supported.
+
 ## Matrix
 
 | Platform | `host_skill_entry` | User Skill roots discovered |
