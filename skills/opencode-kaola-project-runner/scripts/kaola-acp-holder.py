@@ -3719,11 +3719,13 @@ class Holder:
                      f"`{state} view --role sideagent --file {shlex.quote(str(state_file))}` reads it.")
         lines.append("As this batch's fresh maintenance node: read the related tasks and real receipts, "
                      "apply each input with the state tool or retain it at a current record that names "
-                     "its next reader, then record one checkpoint naming every input: "
+                     "its next reader. `applied` names only current records this node's holder wrote "
+                     "through an authorized state operation, or `retired:<kind>/<id>` for its authorized "
+                     "removal. Use `retained` for an unchanged Host record with `next`, `owner` or `wait`; "
+                     "do not rewrite it just for accounting. Record one checkpoint naming every input: "
                      f"`{state} checkpoint --file {shlex.quote(str(state_file))} --writer sideagent "
                      f"--source {batch} --batch {batch} --through-host-revision {through} "
-                     f"--entries '[{{\"input\": ID, \"applied\": "
-                     f"[\"tasks/ID\"]}} or {{\"input\": ID, \"retained\": \"tasks/ID\" or \"section/NAME\"}}, ...]'`.")
+                     f"--entries '[{{\"input\": ID, \"retained\": \"tasks/ID\" or \"section/NAME\"}}, ...]'`.")
         if recovery:
             lines.append(f"Recovery input recovery#{recovery['seq']}: {json.dumps(recovery, sort_keys=True)}. "
                          f"Use --recovery-seq {recovery['seq']} in this batch's checkpoint. Read original current "
@@ -3745,7 +3747,9 @@ class Holder:
                      "recorded. Do not author or allocate tasks, and grant, accept, "
                      "retire or decide nothing the Host has not recorded. Put anything that needs a Host "
                      "judgment in a decision or alert owned by the Host. Do not wait for workers or the "
-                     "Host. End the turn after the checkpoint; the carrier stops this node.")
+                     "Host. Checkpoint once, report any partial result in your final reply, then end "
+                     "the turn; the carrier stops this node. Do not write a second empty or replayed "
+                     "checkpoint or prolong the turn with script-source investigation.")
         return "\n".join(lines)
 
     def _state_tool(self) -> str | None:
