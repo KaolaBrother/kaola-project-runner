@@ -3718,7 +3718,7 @@ def _granted_ids(authorization: dict[str, Any] | None) -> set[str]:
 
 
 def _owner_grant(authorization: dict[str, Any] | None, owner: str | None) -> dict[str, Any] | None:
-    """The granted row that names this preset. No second permission list."""
+    """The granted row that names this preset. No second grant lookup."""
     if not owner or not isinstance(authorization, dict) or not isinstance(authorization.get("grants"), list):
         return None
     for grant in authorization["grants"]:
