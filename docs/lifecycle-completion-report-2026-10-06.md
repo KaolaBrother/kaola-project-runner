@@ -1,18 +1,13 @@
 # Lifecycle implementation completion report — six owner requirements
 
-Scope: the final integrated candidate on `workflow/issue-264` —
-`f562560f` (QA-r2 integration: on-demand capability projection,
-binding-independent recovery-input visibility, handled-decision retire
-reconciliation, scoped count-2 fixture, `t259:1248` repair), `082da503`
-(Host capability-gap table: README § "Host runtime capabilities and
-limits", AGENTS.md authoritative sync, `host-entry-matrix` pre-selection
-disclosure, edge r3 folded with hashed durable evidence), `544b58c5` (this
-report), `0b3af748` (steer cells from #263 ADOPTED originals), `19faebfd`
-(dot corrections), `c44e87a7` (Fable R1–R4 wording corrections), `2c3d253b`
-(Fable D1 byte), `e4cf481b` (assertion truth) and `aa659981` (dot recheck
-proof: whole-object authorization equality + rich fixture), plus the body-
-capability removal decision implemented with its focused tests (plain body
-and holder recomputation carry no capability; on-demand view keeps it). Requirements source: `.kw/worktrees/issue-264/AGENTS.md` §
+Scope: the final integrated candidate on `workflow/issue-264` at `ff5a5383` — `f562560f` (QA-r2 integration),
+`082da503` (capability-gap table), `544b58c5` (this report), `0b3af748` (steer cells), `19faebfd` (dot corrections),
+`c44e87a7`/`2c3d253b`/`e4cf481b` (review-round fixes), `94f62785` (E1 Class A+B+C), `ec90bb02`/`4d919d24` (#267
+integration + closed-contract proof), `72257366` (#268 integration), `3a58b431` (#268 boundary fixes + B-delta),
+`aa659981` (dot recheck proof), `b5472308` (E1 lane fix + lane-integrity regression), `984cdd48` (#267 mask+gap1-3),
+`5e462f4a` (#133 docstring fix), `d4de8685` (#267 effort-order + production-bind), `ff5a5383` (explicit
+effort-limitation docs; the body-capability removal decision is `a1e98b38`).
+Requirements source: `.kw/worktrees/issue-264/AGENTS.md` §
 "Project special requirements — lifecycle implementation (#255)" at
 `3c7e7417`, plus owner clarifications relayed 2026-10-06 through the dot main
 session (capability table Sentinel_27d913395e90819199545f470d8c6421 /
@@ -212,7 +207,7 @@ evidence-reuse rules in the matrix. The grouped-grant reader proof is a
 scratch/source check (docs/conventions.md), not an all-runtime installed
 upgrade result.
 
-**Limitations.** #267 effort raise: a reset requires a catalog-DECLARED semantic strength order; no current platform catalog declares one, so the automatic effort-raise reset is effectively unavailable today — a documented limitation, NOT a claim of cross-platform automatic effort-upgrade recognition; evidence-backed responsibility handoff (one verified index transition) still resets; ordinary Runner receipts without task_id bind through existing dispatch/item/session/index locators (native live sample: the i268-b-delta index row); conservative unknown keeps count and pending duties. Consumer-side install UAT is intentionally not performed
+**Limitations.** #267 effort raise: the reset-on-effort path is not implemented (no catalog field declares an order; the raise branch is unreachable), so a same-preset effort change never resets a segment today; a preset change is a responsibility handoff and does reset with index evidence; record a repair with the delivery evidence locator and dispatch item in the same write — a bare verdict is counted as unknown; ordinary Runner receipts without task_id bind through existing dispatch/item/session/index locators (native live sample: the i268-b-delta index row); conservative unknown keeps count and pending duties. Consumer-side install UAT is intentionally not performed
 (no-install boundary): installed runtime Skills remain at the prior release
 until the authorized PATCH release/install step; relay across holder death
 and timer read-back remain unproven as above. The delegator consumer view
@@ -234,24 +229,15 @@ at 1101). Fable's base/candidate reproduction logs:
 
 ## Gate status
 
-CODE CANDIDATE BOUNDING: the code candidate is `a1e98b38`; every commit
-after it is a pure-documentation delta (this gate update is one). Final
-review state: dot's affected-code review PASSED `aa659981` and `a1e98b38`
-(read in full, with the independent 60/128 evidence); Fable's r2 delta
-review found the delta `e4cf481b..a1e98b38` itself PASS, and returned
-FAIL for final integrated acceptance on E1 alone — the declared Test
-command `./scripts/validate.sh` exits 1 at `a1e98b38` with twelve
-deterministic suite failures (all pass at `main` `dad228e4`), previously
-undisclosed because no full-inventory run existed for this candidate.
-Full review: `/tmp/kpr-i264-final-fable-r2-delta-20261006.md`. E1
-successor frontier: deliberate per-assertion keep-or-update decisions for
-the six reworded-text suites (several guard owner obligations), the
-`test_issue_87` Holder-fixture repair, per-suite harness-vs-product
-triage of the launch-broker-path failures (broker path lacks the
-`child_record` receipt fact; broker-absent runs go green), and one
-recorded full-inventory run at the successor commit with Bash >= 4 first
-on PATH. Root's actual final PASS is pending and is not granted by the
-affected-code pass. Engineering evidence: `render-skills.py --check`
+CODE CANDIDATE / GATE STATUS (final, at `ff5a5383`): all root rounds 1-6 integrated; the release-gate full
+inventory is GREEN on this SHA (85 suites EXIT 0, zero SKIPPED/FAILED, 99 elapsed, ~809 s;
+/tmp/kpr-final-inventory-v6.log; the prior green at `d4de8685` is /tmp/kpr-final-inventory-v5.log). History: the
+full review of `0b3af748` returned FAIL on E1 (twelve no-log SKIPs, all green at `main` `dad228e4`) — E1 was
+root-caused (four suites registered in the replay list but never in an execution lane; the `--suite` narrowing
+masked it), fixed (`204456e9`), and pinned by the lane-integrity regression (`b5472308`). dot/root scoped PASSes:
+the two E1 product functions, `#268` A + B + B-delta, `#267` binding/replay/conflict/pending, and the effort3
+three segments; those are root verdicts. The earlier "E1 as open successor frontier" text is superseded history.
+Engineering evidence: `render-skills.py --check`
 PASS; `t255` full 128 OK; `t259` full 60/60; generated+progressive
 suites 15 OK — these cover the AFFECTED checks only; the full inventory
 is red as described above. Regression scope, precisely: at

@@ -21,7 +21,9 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 VALIDATE = REPO / "scripts" / "validate.sh"
-BASH = "/Users/ylmacstudio/.local/bin/bash"
+BASH = next((str(Path(p)) for p in (
+    Path.home() / ".local/bin/bash", Path("/usr/local/bin/bash"), Path("/opt/homebrew/bin/bash"))
+    if p.is_file()), "bash")
 
 
 def arrays() -> dict[str, list[str]]:
