@@ -50,7 +50,7 @@ def load(name: str) -> Any:
 
 def hermetic_env(**extra: str) -> dict[str, str]:
     """No inherited KAOLA_* Host/dispatcher facts, so a live Host cannot leak in."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_") or (k == "KAOLA_LAUNCH_BACKEND" and v == "direct")}
     env.update(extra)
     return env
 

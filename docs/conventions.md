@@ -149,6 +149,34 @@ is outside this repository and is not verified here.
 
 ### State-format updates and migration
 
+Grouped grant update (#259, 2026-10-06): update the reader before migrating a
+supported schema 1 or previous schema 2 authorization to one `preset_ids` row
+per shared grant. Load the matching generated Project Runner tool, record its
+build/source hash, plan `state migrate`, then write at the safe boundary. Preserve
+original count, switch permission, restrictions and current duties. A repeat is
+`current`; an ambiguity writes nothing. A sourced null-only aggregate removal
+through `state update --section authorization` works before schema 1 migration
+and on schema 2; use the original owner decision and actual file revision.
+
+The previous issue 255 reader at `1acf4b12` requires a string `id` in each stored grant and
+safely refuses grouped state with `each grant needs a string id`; generated
+compatibility rows in `body` do not fix a reader of `state.authorization`.
+On that refusal, use the matching new `skills/kaola-project-runner/scripts/kaola-dispatch.py`
+with the same original record. Do not flatten groups, invent counts or reset the
+project. Coordinate the installed reader and loaded Skill before adoption; a
+holder update is required only for an affected holder capability. Installation
+needs its existing authorization and is not performed by a migration command.
+The old v0.9.0 id-row checks cover that format only. This update's grouped-reader
+proof is a scratch/source check, not an all-runtime installed upgrade result.
+
+Current-only retirement returns the resolved outcome in the command receipt and
+removes the stored row. It does not require a historical tombstone. Reconcile an
+absent resolved row against the original operation and the tool version that
+performed it; an older installed tool or another checkout is not that source.
+Keep unresolved stop, handoff, grant and recovery duties current. An empty later
+batch proves only its selected range, not settlement of an earlier partial input.
+
+
 Any version that changes project state formats or the rules interpreting them must ship an
 explicit, verified upgrade path for existing projects. This includes the Delegator and Host
 JSON files, authorization and role semantics, and their heartbeat entry templates. Document

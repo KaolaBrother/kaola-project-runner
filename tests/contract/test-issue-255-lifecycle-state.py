@@ -805,7 +805,7 @@ class StateTool(StateProject):
 LEGACY_BODY = {
     "project": {"repo": "/abs/kt", "code": "KT", "goal": "close issues", "stop": "backlog empty",
                 "requirements_source": "AGENTS.md"},
-    "authorization": AUTH,
+    "authorization": {**AUTH, "elite_cap": 4, "classes": {"Elite": "execution", "Expert": "review", "Worker": "pool"}},
     "active": [{"ref": "#12", "session": "claude-code-KT-i12-fix", "next": "accept", "evidence": "wt-12"},
                {"ref": "#12", "session": "codex-KT-i12-qa", "next": "qa"}],
     "pending": [{"duty": "integration QA", "scope": "#12", "owner": "Host", "evidence": "not run"},

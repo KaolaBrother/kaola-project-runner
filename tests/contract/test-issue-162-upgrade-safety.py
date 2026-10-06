@@ -79,6 +79,7 @@ class UpgradeSafetyTests(unittest.TestCase):
             "PATH": "/usr/bin:/bin",
             "TMPDIR": str(self.root),
             "KAOLA_ACP_RECORD_ROOT": str(self.records),
+            "KAOLA_LAUNCH_BACKEND": "direct",
             "PYTHONUNBUFFERED": "1",
             "LANG": "C",
         }

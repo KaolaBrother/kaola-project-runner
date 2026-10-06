@@ -365,7 +365,7 @@ def current_authorization(auth: dict[str, Any]) -> dict[str, Any]:
                 catalog.get(ident, {}).get("class") == "Expert" and expiry is not None
                 and expiry <= datetime.now(timezone.utc)))
             if ended:
-                if catalog.get(ident, {}).get("class") == "Worker":
+                if catalog.get(ident, {}).get("class") in (None, "Worker"):
                     exclusions.add(ident)
             else:
                 current.append(ident)
@@ -378,7 +378,7 @@ def current_authorization(auth: dict[str, Any]) -> dict[str, Any]:
             kept.append(grant)
     if "grants" in auth:
         auth["grants"] = kept
-    exclusions.update(ident for ident in revoked if catalog.get(ident, {}).get("class") == "Worker")
+    exclusions.update(ident for ident in revoked if catalog.get(ident, {}).get("class") in (None, "Worker"))
     auth.pop("revoked", None)
     if exclusions:
         auth["exclusions"] = sorted(exclusions)
@@ -791,7 +791,9 @@ def delegator_seats(args: argparse.Namespace, document: dict[str, Any], path: Pa
             auth["grants"] = []
             for key in ("elite_grants", "expert_task_grants"):
                 for grant in source.get(key) or []:
-                    row = {field: grant[field] for field in ("preset_ids", "count", "state", "lifetime", "expires", "special_requirements") if field in grant}
+                    row = {field: grant[field] for field in ("preset_ids", "count", "state", "lifetime", "expires") if field in grant}
+                    if isinstance(grant.get("special_requirements"), dict):
+                        row["special_requirements"] = grant["special_requirements"]
                     if grant.get("preset_id"):
                         row["id"] = grant["preset_id"]
                     row.setdefault("state", "granted")
@@ -3507,7 +3509,6 @@ def empty_state() -> dict[str, Any]:
     state["sideagent"] = None
     for kind in RECORD_KINDS:
         state[kind] = {}
-    state["retired"] = []
     state["maintenance"] = {}
     return state
 
@@ -3585,7 +3586,8 @@ def host_view(doc: dict[str, Any], path: Path) -> dict[str, Any]:
     """Projected Host view from the shared contract, field by field."""
     view = RECORD.host_view(doc, path)
     try:
-        catalog = catalog_from_files(platform_paths(Path(__file__), None))
+        catalog_paths = platform_paths(Path(__file__), None)
+        catalog = catalog_from_files(catalog_paths)
         auth = doc["state"].get("authorization") or {}
         grants = normalize_grants(auth)
         availability_path = path.parent / "dispatch-availability.json"
@@ -3594,7 +3596,9 @@ def host_view(doc: dict[str, Any], path: Path) -> dict[str, Any]:
         view["capability"] = {**capability_summary(candidates),
                               "shared_seats": [{"seat": seat, "count": count} for seat, count in shared_seat_capacities(grants).items()],
                               "withheld": withheld,
-                              "catalog_source": [str(p) for p in platform_paths(Path(__file__), None)]}
+                              "catalog_source": str(catalog_paths[0].parent) if catalog_paths else None,
+                              "catalog_sha256": hashlib.sha256(b"".join(p.read_bytes() for p in catalog_paths)).hexdigest()}
+        view["capability"].pop("text", None)
         profiles = Path(__file__).resolve().parent.parent / "references" / "worker-profiles.md"
         if not profiles.is_file():
             profiles = Path(__file__).resolve().parent.parent / "templates" / "orchestrator" / "references" / "worker-profiles.md.tmpl"
@@ -4116,7 +4120,15 @@ def apply_section_update(args: argparse.Namespace, doc: dict[str, Any], patch: A
         if section == "project":
             blocked = RECORD.project_blockers(merged_section)
         elif section == "authorization":
-            blocked = RECORD.authorization_blockers(merged_section)
+            blocked = []
+            if patch and all(value is None for value in patch.values()) and set(patch) <= {"elite_cap", "total_cap", "worker_pool_cap"}:
+                merged_section, blocked, args._authorization_removed = RECORD.migrate_authorization_limits(merged_section)
+                if not blocked:
+                    had_revoked = "revoked" in merged_section
+                    merged_section = current_authorization(merged_section)
+                    if had_revoked:
+                        args._authorization_removed.append("authorization.revoked -> current grants/exclusions")
+            blocked += RECORD.authorization_blockers(merged_section)
         elif section == "recovery":
             blocked = []
             if isinstance(merged_section, dict):
@@ -4136,7 +4148,7 @@ def apply_section_update(args: argparse.Namespace, doc: dict[str, Any], patch: A
             first = blocked[0]
             raise StateRefusal("invalid-input", first["detail"], path=first["path"],
                                allowed=first["allowed"], recovery=first["recovery"], unapplied=patch)
-    state[section] = merge_patch(state.get(section) or {}, patch)
+    state[section] = merged_section if section in ("project", "authorization", "recovery", "unverified") else merge_patch(state.get(section) or {}, patch)
     if section == "authorization":
         state[section] = current_authorization(state[section])
     note_section_source(state, args, section)
@@ -4393,11 +4405,32 @@ def write_state(path: Path, doc: dict[str, Any], *, unchecked_live: bool = False
     return sizes
 
 
-def state_mutation(args: argparse.Namespace, change) -> int:
+def state_mutation(args: argparse.Namespace, change, limit_removal: dict[str, Any] | None = None) -> int:
     path = Path(args.file)
     try:
         with StateLock(path):
             doc, _ = read_state_file(path)
+            if doc and doc.get("schema") in (None, LEGACY_STATE_SCHEMA) and limit_removal:
+                # A sourced aggregate removal can precede migration. Keep the
+                # schema 1 body and every other original field unchanged.
+                body = json.loads(doc.get("body") or "null")
+                if not isinstance(body, dict) or not isinstance(body.get("authorization"), dict):
+                    raise StateRefusal("legacy-unreadable", "legacy authorization is unreadable; the file was not changed")
+                if args.writer != "host":
+                    raise StateRefusal("host-only", "the Host removes legacy authorization limits")
+                check_writer(args, body)
+                before = doc.get("revision", 0)
+                if args.expect_revision != before:
+                    raise StateRefusal("conflict", f"file is at revision {before}", current_revision=before)
+                body["authorization"] = merge_patch(body["authorization"], limit_removal)
+                doc["body"] = json.dumps(body, ensure_ascii=False)
+                doc["revision"] = before + 1
+                doc["updated_at"] = observed_at()
+                atomic_write(path, json.dumps(doc, ensure_ascii=False, sort_keys=True, indent=1) + "\n")
+                return emit({"result": "written", "revision": doc["revision"], "previous_revision": before,
+                             "source": args.source, "value": body["authorization"],
+                             "removed": [f"authorization.{key}" for key in limit_removal],
+                             "next": "run state migrate with this matching tool; no count was inferred"})
             doc = require_current(doc, path)
             before = doc.get("revision")
             caller = check_writer(args, doc["state"])
@@ -4415,6 +4448,7 @@ def state_mutation(args: argparse.Namespace, change) -> int:
     except (OSError, ValueError) as exc:
         return fail("invalid-input", str(exc))
     return emit({"result": "written", "revision": doc["revision"], "previous_revision": before,
+                 **({"removed": args._authorization_removed} if hasattr(args, "_authorization_removed") else {}),
                  **({"host_revision": doc["host_revision"]} if doc.get("host_revision") else {}),
                  "value": changed, **({"index_mirror": mirrored} if mirrored else {}), **sizes})
 
@@ -4520,7 +4554,10 @@ def command_state_update(args: argparse.Namespace) -> int:
         if not isinstance(patch, dict):
             return fail("invalid-input", "a record update is a JSON merge patch object")
         return state_mutation(args, lambda doc, caller: apply_record_update(args, doc, patch, caller))
-    return state_mutation(args, lambda doc, caller: apply_section_update(args, doc, patch, caller))
+    removal = patch if (args.section == "authorization" and isinstance(patch, dict) and patch
+                        and set(patch) <= {"elite_cap", "total_cap", "worker_pool_cap"}
+                        and all(value is None for value in patch.values())) else None
+    return state_mutation(args, lambda doc, caller: apply_section_update(args, doc, patch, caller), removal)
 
 
 def command_state_retire(args: argparse.Namespace) -> int:
@@ -5616,7 +5653,7 @@ def command_delegator_update(args: argparse.Namespace) -> int:
             return fail("invalid-input", "a delegator update is a JSON object")
         auth_patch = patch.get("authorization")
         if isinstance(auth_patch, dict):
-            limits = RECORD.aggregate_limit_blockers({key: value for key, value in auth_patch.items() if value is not None})
+            limits = RECORD.aggregate_limit_blockers({key: value for key, value in auth_patch.items() if value is not None}, delegator=True)
             if limits:
                 return emit({"result": "refused", "reason": "invalid-input", **limits[0], "blockers": limits}, 2)
         for key, value in patch.items():
@@ -5661,7 +5698,7 @@ def command_delegator_update(args: argparse.Namespace) -> int:
         return emit(refusal.payload, 2)
     except (OSError, ValueError) as exc:
         return fail("invalid-input", str(exc))
-    return emit({"result": "written", "revision": merged["revision"]})
+    return emit({"result": "written", "revision": merged["revision"], "removed": _dropped})
 
 
 def main(argv: list[str] | None = None) -> int:

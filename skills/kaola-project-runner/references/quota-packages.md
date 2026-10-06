@@ -1,6 +1,6 @@
 # Quota packages
 
-Read this when receipts, captures, or events show an explicit limit or an account refusal. Package shape and display rules live in checkout `docs/api.md`. The pool is the refusal text or a receipt's `quotaPool`; an unmapped pool proves neither way. This file does not change the count cap and has no account-repair procedure.
+Read this when receipts, captures, or events show an explicit limit or an account refusal. Package shape and display rules live in checkout `docs/api.md`. The pool is the refusal text or a receipt's `quotaPool`; an unmapped pool proves neither way. This file does not change granted counts and has no account-repair procedure.
 
 ## Confirmed exhaustion
 
@@ -10,7 +10,7 @@ Read this when receipts, captures, or events show an explicit limit or an accoun
 
 **Elite.** Preserve the output and locator, and safely reclaim (exact-stop) the seat. Revoke this run-seat: remove its availability from this run's heartbeat snapshot. Hand the task to another suitable, already-authorized Elite that is not on the known limited pool, within granted/shared counts and current resource limits. Never restart it under the old grant or switch its model to get around the limit; only the user reauthorizes.
 
-**Worker.** Another suitable Worker takes the task under the pool permission. The cap exemption is kept and real limits apply. Never cycle seats of a known limited shared pool.
+**Worker.** Another suitable Worker takes the task under the pool permission. Pool permission and real limits apply. Never cycle seats of a known limited shared pool.
 
 **No eligible same-class replacement.** Report with evidence and ask. Never cross classes, create grants, or discard work.
 

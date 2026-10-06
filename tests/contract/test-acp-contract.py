@@ -202,7 +202,7 @@ class AcpSessionFixture:
     # -- helpers -------------------------------------------------------------
 
     def env(self) -> dict[str, str]:
-        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
+        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_") or (k == "KAOLA_LAUNCH_BACKEND" and v == "direct")}
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         env["MOCK_ACP_LOG"] = str(self.mock_log)
         return env
@@ -2408,7 +2408,7 @@ class Issue22KimiDefaultYoloAcpTests(unittest.TestCase):
             self._run("stop", "--force")
 
     def env(self) -> dict[str, str]:
-        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
+        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_") or (k == "KAOLA_LAUNCH_BACKEND" and v == "direct")}
         env.pop(CANONICAL_KEY, None)
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         env["MOCK_ACP_LOG"] = str(self.mock_log)

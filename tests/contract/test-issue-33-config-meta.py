@@ -119,7 +119,7 @@ class Issue33ConfigMetaTests(unittest.TestCase):
     # -- helpers -------------------------------------------------------------
 
     def env(self, config: dict | None = None, pages: list[dict] | None = None) -> dict[str, str]:
-        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
+        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_") or (k == "KAOLA_LAUNCH_BACKEND" and v == "direct")}
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         env["MOCK_ACP_LOG"] = str(self.mock_log)
         if config is not None:

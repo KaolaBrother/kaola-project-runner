@@ -303,7 +303,7 @@ class BoundedAcpCapture(unittest.TestCase):
 
     @classmethod
     def cli(cls, command: str, *args: str, check: bool = True) -> dict:
-        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
+        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_") or (k == "KAOLA_LAUNCH_BACKEND" and v == "direct")}
         env.update(KAOLA_ACP_RECORD_ROOT=str(cls.root / "records"), MOCK_ACP_LOG=str(cls.root / "mock.jsonl"))
         argv = [sys.executable, str(ACP_CLI), "grok", command, "--repo", str(cls.repo), "--session", cls.session,
                 "--command", f"{sys.executable} {MOCK_ACP_AGENT} --scenario follow_flood", *args]
@@ -381,7 +381,7 @@ class BoundedAcpObserveAndStatus(unittest.TestCase):
 
     @classmethod
     def cli(cls, command: str, *args: str, check: bool = True) -> dict:
-        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
+        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_") or (k == "KAOLA_LAUNCH_BACKEND" and v == "direct")}
         env.update(KAOLA_ACP_RECORD_ROOT=str(cls.root / "records"), MOCK_ACP_LOG=str(cls.root / "mock.jsonl"),
                    MOCK_ACP_CONFIG=json.dumps({"new": cls.options}))
         argv = [sys.executable, str(ACP_CLI), "grok", command, "--repo", str(cls.repo), "--session", cls.session,

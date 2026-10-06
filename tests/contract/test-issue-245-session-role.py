@@ -174,7 +174,7 @@ class SessionRoleWire(unittest.TestCase):
         self.started.clear()
 
     def env(self, extra: dict[str, str] | None = None) -> dict[str, str]:
-        env = {key: value for key, value in os.environ.items() if not key.startswith("KAOLA_")}
+        env = {key: value for key, value in os.environ.items() if not key.startswith("KAOLA_") or (key == "KAOLA_LAUNCH_BACKEND" and value == "direct")}
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         env["MOCK_ACP_LOG"] = str(self.mock_log)
         env["CODEX_BIN"] = str(self.root / "no-such-codex")
@@ -500,8 +500,7 @@ class SessionRoleDispatch(unittest.TestCase):
         }}), encoding="utf-8")
         self.env["FAKE_SPEC"] = str(self.spec_path)
         auth = {
-            "grants": [{"id": "codex/luna", "state": "granted"}],
-            "classes": {"Expert": "e", "Elite": "l", "Worker": "w"},
+            "grants": [{"id": "codex/luna", "state": "granted", "count": 4}],
         }
         plan = {
             "scope": "research",
@@ -562,9 +561,7 @@ class SessionRoleDispatch(unittest.TestCase):
         }}), encoding="utf-8")
         self.env["FAKE_SPEC"] = str(self.spec_path)
         auth = {
-            "grants": [{"id": "claude-code/opus-xhigh", "state": "granted"}],
-            "classes": {"Expert": "e", "Elite": "l", "Worker": "w"},
-            "elite_cap": 1,
+            "grants": [{"id": "claude-code/opus-xhigh", "state": "granted", "count": 1}],
         }
         item = {
             "item_id": "opus", "preset": "claude-code/opus-xhigh",
@@ -579,7 +576,7 @@ class SessionRoleDispatch(unittest.TestCase):
                 "host_class": False,
             }]},
         )
-        self.assertEqual(blocked["items"][0]["reason"], "seat-cap")
+        self.assertEqual(blocked["items"][0]["reason"], "count")
         self.log.write_text("", encoding="utf-8")
         admitted = self.execute(
             {"scope": "research", "repo": repo, "items": [item]},
@@ -638,9 +635,8 @@ class SessionRoleDispatch(unittest.TestCase):
                 ],
             },
             {
-                "grants": [{"id": "codex/luna", "state": "granted"}],
-                "classes": {"Expert": "e", "Elite": "l", "Worker": "w"},
-            },
+                "grants": [{"id": "codex/luna", "state": "granted", "count": 1}],
+                },
             live={"rows": []},
             prior={
                 "items": [
@@ -688,7 +684,7 @@ class SessionRoleAdapter(unittest.TestCase):
         self.tmp.cleanup()
 
     def forwarded(self, runner: Path, args: list[str]) -> list[str]:
-        env = {key: value for key, value in os.environ.items() if not key.startswith("KAOLA_")}
+        env = {key: value for key, value in os.environ.items() if not key.startswith("KAOLA_") or (key == "KAOLA_LAUNCH_BACKEND" and value == "direct")}
         env["PYTHON_BIN"] = str(self.recorder)
         env["KAOLA_ACP_ARGV_RECORD"] = str(self.record)
         if self.record.exists():

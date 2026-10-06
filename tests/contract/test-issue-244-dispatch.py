@@ -186,13 +186,11 @@ class DispatchEntry(unittest.TestCase):
         self.tmp.cleanup()
 
     def authorization(self, grants=None, **extra) -> Path:
-        # Current positive fixtures grant one seat unless the case supplies another count.
+        # Every positive fixture states its granted count at the call site.
         # Legacy-limit refusal cases write their raw original JSON directly.
-        grants = [{"count": 1, **grant} for grant in (grants or [])]
+        grants = list(grants or [])
         body = {"grants": grants}
         body.update(extra)
-        for key in ("elite_cap", "worker_pool_cap"):
-            body.pop(key, None)
         switches = body.pop("model_switches", [])
         for grant in grants:
             if grant.get("id") in switches:
@@ -318,7 +316,7 @@ class DispatchEntry(unittest.TestCase):
             }
         })
         auth = self.authorization([
-            {"id": "codex/luna", "special_requirements": {"task_scope": "visual QA"}},
+            {"count": 1, "id": "codex/luna", "special_requirements": {"task_scope": "visual QA"}},
         ])
         plan = self.plan([{
             "item_id": "tier",
@@ -350,7 +348,7 @@ class DispatchEntry(unittest.TestCase):
                 "send": sent("fp-role"),
             }
         })
-        auth = self.authorization([{"id": "codex/luna", "state": "granted"}])
+        auth = self.authorization([{"count": 1, "id": "codex/luna", "state": "granted"}])
         plan = self.plan([{
             "item_id": "sideagent",
             "preset": "codex/luna",
@@ -487,7 +485,7 @@ class DispatchEntry(unittest.TestCase):
                 "send": sent("fp-no"),
             },
         })
-        auth = self.authorization([{"id": "cursor-cli/opus", "state": "revoked"}])
+        auth = self.authorization([{"count": 1, "id": "cursor-cli/opus", "state": "revoked"}])
         plan = self.plan([
             {"item_id": "ok", "preset": "zcode/default", "session": "zcode-KPR-i244-ok", "prompt": "a"},
             {"item_id": "bad", "preset": "codex/luna", "session": "codex-KPR-i244-bad", "prompt": "b"},
@@ -670,7 +668,7 @@ class DispatchEntry(unittest.TestCase):
         auth = self.authorization([
             {"id": preset, "state": "granted", "shared_seat": "droid", "count": 2}
             for preset in presets
-        ], elite_cap=4)
+        ])
         plan = self.plan([
             {"item_id": preset, "preset": preset,
              "session": f"droid-KPR-i261-{preset.split('/')[-1]}", "prompt": preset}
@@ -694,7 +692,7 @@ class DispatchEntry(unittest.TestCase):
         auth = self.authorization([
             {"id": preset, "state": "granted", "shared_seat": "droid", "count": 2}
             for preset in presets
-        ], elite_cap=4)
+        ])
         plan = self.plan([
             {"item_id": "default", "preset": "droid/default",
              "session": "droid-KPR-i261-live-combined-default", "prompt": "default"},
@@ -748,8 +746,8 @@ class DispatchEntry(unittest.TestCase):
         })
         install_fake(self.skills, ["codex", "cursor-cli", "zcode", "opencode"])
         auth = self.authorization([
-            {"id": "codex/default", "state": "granted"},
-            {"id": "cursor-cli/default", "state": "granted"},
+            {"count": 1, "id": "codex/default", "state": "granted"},
+            {"count": 1, "id": "cursor-cli/default", "state": "granted"},
         ])
         plan = self.plan([
             {
@@ -953,8 +951,8 @@ class DispatchEntry(unittest.TestCase):
             },
         })
         auth = self.authorization([
-            {"id": "codex/luna", "state": "granted"},
-            {"id": "cursor-cli/default", "state": "granted"},
+            {"count": 1, "id": "codex/luna", "state": "granted"},
+            {"count": 1, "id": "cursor-cli/default", "state": "granted"},
         ])
         plan = self.plan([
             {"item_id": "sol", "preset": "codex/luna", "session": "codex-KPR-i244-sol", "prompt": "a"},
@@ -1231,10 +1229,10 @@ class DispatchEntry(unittest.TestCase):
 
     def test_grant_state_cap_and_owner_precedence(self) -> None:
         auth = self.authorization([
-            {"id": "claude-code/opus-xhigh", "state": "expired"},
-            {"id": "claude-code/sonnet", "state": "withdrawn"},
-            {"id": "zcode/default", "state": "unknown"},
-            {"id": "codex/default", "state": "0 live"},
+            {"count": 1, "id": "claude-code/opus-xhigh", "state": "expired"},
+            {"count": 1, "id": "claude-code/sonnet", "state": "withdrawn"},
+            {"count": 1, "id": "zcode/default", "state": "unknown"},
+            {"count": 1, "id": "codex/default", "state": "0 live"},
         ])
         payload = self.project(auth, self.availability([
             "claude-code/opus-xhigh", "claude-code/sonnet", "zcode/default", "codex/default",
@@ -1317,14 +1315,14 @@ class DispatchEntry(unittest.TestCase):
         self.assertEqual(commands(self.log), [])
 
         omitted = self.authorization([
-            {"id": "claude-code/opus-xhigh", "state": "granted"},
-        ], elite_cap=1)
+            {"count": 1, "id": "claude-code/opus-xhigh", "state": "granted"},
+        ])
         self.log.write_text("", encoding="utf-8")
         payload = self.execute(single, omitted, self.availability(["claude-code/opus-xhigh"]), live="omit")
         self.assertEqual(payload["items"][0]["reason"], "occupancy-unknown")
 
         owner = self.authorization([
-            {"id": "codex/luna", "state": "granted", "special_requirements": {"effort": "high", "task_scope": "visual QA"}},
+            {"count": 1, "id": "codex/luna", "state": "granted", "special_requirements": {"effort": "high", "task_scope": "visual QA"}},
         ])
         owner_plan = self.plan([{
             "item_id": "owner",
@@ -1353,7 +1351,7 @@ class DispatchEntry(unittest.TestCase):
         start = next(row for row in commands(self.log) if row["command"] == "start")
         self.assertEqual(start["argv"][start["argv"].index("--effort") + 1], "high")
 
-        bare = self.authorization([{"id": "codex/default", "state": "granted"}])
+        bare = self.authorization([{"count": 1, "id": "codex/default", "state": "granted"}])
         bare_plan = self.plan([{
             "item_id": "bare",
             "preset": "codex/default",
@@ -1387,9 +1385,9 @@ class DispatchEntry(unittest.TestCase):
 
     def test_summary_does_not_advertise_denied_visual(self) -> None:
         auth = self.authorization([
-            {"id": "devin/fable", "state": "granted"},
-            {"id": "claude-code/opus-xhigh", "state": "granted"},
-            {"id": "claude-code/sonnet", "state": "granted"},
+            {"count": 1, "id": "devin/fable", "state": "granted"},
+            {"count": 1, "id": "claude-code/opus-xhigh", "state": "granted"},
+            {"count": 1, "id": "claude-code/sonnet", "state": "granted"},
         ])
         payload = self.project(auth, self.availability([
             "devin/fable", "claude-code/opus-xhigh", "claude-code/sonnet", "claude-code/fable",
@@ -1405,7 +1403,7 @@ class DispatchEntry(unittest.TestCase):
         self.assertEqual(fable["class"], "Expert")
 
     def test_authorization_keys_resources_and_launch_edges(self) -> None:
-        prose = self.authorization([{"id": "claude-code/opus-xhigh", "state": "已撤销"}])
+        prose = self.authorization([{"count": 1, "id": "claude-code/opus-xhigh", "state": "已撤销"}])
         payload = self.project(prose, self.availability(["claude-code/opus-xhigh"]))
         prose_row = next(row for row in payload["withheld"] if row["id"] == "claude-code/opus-xhigh")
         self.assertEqual(prose_row["reason"], "state-unreadable")
@@ -1426,7 +1424,7 @@ class DispatchEntry(unittest.TestCase):
         self.assertNotIn("claude-code/opus-xhigh", {item["id"] for item in payload["candidates"]})
 
         excluded = self.authorization(
-            [{"id": "codex/default", "state": "granted"}],
+            [{"count": 1, "id": "codex/default", "state": "granted"}],
             exclusions=["codex/default"],
             paused=["zcode/default"],
         )
@@ -1602,7 +1600,7 @@ class DispatchEntry(unittest.TestCase):
             "host_class": True,
         }]})
         capped = self.authorization(
-            [{"id": "claude-code/opus-xhigh", "state": "granted"}], elite_cap=1,
+            [{"count": 1, "id": "claude-code/opus-xhigh", "state": "granted"}],
         )
         plan = self.plan([{
             "item_id": "opus", "preset": "claude-code/opus-xhigh",
@@ -1623,7 +1621,7 @@ class DispatchEntry(unittest.TestCase):
         self.assertNotEqual(payload["items"][0]["reason"], "occupancy-unknown")
 
         shared = self.authorization([
-            {"id": "codex/default", "state": "granted", "shared_seat": "codex"},
+            {"count": 1, "id": "codex/default", "state": "granted", "shared_seat": "codex"},
         ])
         payload = self.execute(one, shared, self.availability(["codex/default"]), live=host)
         self.assertEqual(payload["items"][0]["status"], "in-flight")
@@ -1683,7 +1681,7 @@ class DispatchEntry(unittest.TestCase):
         self.assertEqual(payload["items"][0]["reason"], "count", payload)
         self.assertNotIn("send", {row["command"] for row in commands(self.log)})
 
-    def test_a_held_seat_still_meets_the_global_cap_and_shared_seat(self) -> None:
+    def test_a_held_seat_still_meets_grant_count_and_shared_seat(self) -> None:
         install_fake(self.skills, ["codex"])
         repo = str(self.repo)
         row_a, status_a = self.prestarted("codex-KPR-i255-a", "gpt-6.1-sol", "high", "h-a")
@@ -1695,7 +1693,7 @@ class DispatchEntry(unittest.TestCase):
         live = write_json(self.root, "prestarted.json", {"rows": [row_a]})
         items = [{"item_id": item, "preset": "codex/default", "session": f"codex-KPR-i255-{item}", "prompt": item}
                  for item in ("a", "c")]
-        capped = self.authorization([{"id": "codex/default", "state": "granted"}], elite_cap=1)
+        capped = self.authorization([{"count": 1, "id": "codex/default", "state": "granted"}])
         capped = capped.rename(self.root / "capped.json")
         payload = self.execute(self.plan(items), capped, self.availability(["codex/default"]), live=live)
         by_id = {item["item_id"]: item for item in payload["items"]}
@@ -1703,7 +1701,7 @@ class DispatchEntry(unittest.TestCase):
         self.assertEqual(by_id["c"]["reason"], "count")
         self.assertNotIn("start", {row["command"] for row in commands(self.log)})
 
-        shared = self.authorization([{"id": "codex/default", "state": "granted", "shared_seat": "codex"}])
+        shared = self.authorization([{"count": 1, "id": "codex/default", "state": "granted", "shared_seat": "codex"}])
         shared = shared.rename(self.root / "shared.json")
         self.log.write_text("", encoding="utf-8")
         payload = self.execute(self.plan(items[:1]), shared, self.availability(["codex/default"]), live=live)
@@ -1771,7 +1769,7 @@ class DispatchEntry(unittest.TestCase):
         self.assertEqual(payload["items"][0]["status"], "unknown", payload)
         self.assertNotIn("send", {row["command"] for row in commands(self.log)})
 
-    def test_skeleton_example_sets_effective_cap(self) -> None:
+    def test_skeleton_example_sets_shared_grant_count(self) -> None:
         text = (REPO / "templates/orchestrator/references/heartbeat-skeleton.txt").read_text(encoding="utf-8")
         example = json.loads(re.search(r"例：(\{.*\})", text).group(1))
         self.assertNotIn("elite_cap", example["authorization"])
@@ -2051,9 +2049,9 @@ class DispatchEntry(unittest.TestCase):
         )
         self.assertEqual(payload["items"][0]["reason"], "shared-occupied")
         shared_auth = self.authorization([
-            {"id": "droid/opus", "state": "granted", "shared_seat": "seat-alpha"},
-            {"id": "codex/default", "state": "granted", "shared_seat": "codex"},
-        ], elite_cap=4)
+            {"count": 1, "id": "droid/opus", "state": "granted", "shared_seat": "seat-alpha"},
+            {"count": 1, "id": "codex/default", "state": "granted", "shared_seat": "codex"},
+        ])
         shared_rows = [workers[0], {
             "platform": "droid", "session": "droid-KPR-i244-live-opus", "repo": repo,
             "state": "ready", "holder_instance_id": "h-droid",
@@ -2067,7 +2065,7 @@ class DispatchEntry(unittest.TestCase):
         self.assertNotEqual(by_id["label"]["reason"], "shared-occupied")
         self.assertEqual(by_id["seat"]["reason"], "shared-occupied")
 
-    def test_admitted_assignment_keeps_its_index_at_an_occupied_cap(self) -> None:
+    def test_admitted_assignment_keeps_its_index_at_an_occupied_grant(self) -> None:
         install_fake(self.skills, ["claude-code", "droid"])
         repo = str(self.repo)
         prompt = "stay"
@@ -2115,9 +2113,9 @@ class DispatchEntry(unittest.TestCase):
         ]})
         auth = self.authorization([
             {"id": "claude-code/opus-xhigh", "state": "granted", "count": 1},
-            {"id": "claude-code/sonnet", "state": "granted"},
+            {"count": 1, "id": "claude-code/sonnet", "state": "granted"},
             {"id": "droid/opus", "state": "granted", "shared_seat": "seat-alpha", "count": 1},
-        ], elite_cap=1)
+        ])
         plan = self.plan([
             {"item_id": "kept", "preset": "claude-code/opus-xhigh", "session": "claude-code-KPR-i244-kept", "prompt": prompt},
             {"item_id": "cap", "preset": "claude-code/sonnet", "session": "claude-code-KPR-i244-cap", "prompt": "new"},
@@ -2179,8 +2177,8 @@ class DispatchEntry(unittest.TestCase):
         }]})
         auth = self.authorization([
             {"id": "dsh/default", "state": "granted", "count": 1},
-            {"id": "claude-code/opus-xhigh", "state": "granted"},
-        ], elite_cap=1)
+            {"count": 1, "id": "claude-code/opus-xhigh", "state": "granted"},
+        ])
         plan = self.plan([
             {"item_id": "elite", "preset": "claude-code/opus-xhigh", "session": elite, "prompt": "design"},
             {"item_id": "extra", "preset": "dsh/default", "session": extra, "prompt": "another"},
@@ -2238,9 +2236,9 @@ class DispatchEntry(unittest.TestCase):
             "state": "ready", "holder_instance_id": "holder-droid",
         }]})
         auth = self.authorization([
-            {"id": "claude-code/opus-xhigh", "state": "granted"},
-            {"id": "droid/opus", "state": "granted"},
-        ], elite_cap=1)
+            {"count": 1, "id": "claude-code/opus-xhigh", "state": "granted"},
+            {"count": 1, "id": "droid/opus", "state": "granted"},
+        ])
         plan = self.plan([
             {"item_id": "kept", "preset": "claude-code/opus-xhigh", "session": kept_session, "prompt": prompt},
         ])
@@ -2302,8 +2300,8 @@ class DispatchEntry(unittest.TestCase):
             }],
         })
         auth = self.authorization([
-            {"id": "claude-code/opus-xhigh", "state": "granted"},
-        ], elite_cap=1)
+            {"count": 1, "id": "claude-code/opus-xhigh", "state": "granted"},
+        ])
         plan = self.plan([
             {"item_id": "kept", "preset": "claude-code/opus-xhigh", "session": session, "prompt": prompt},
         ])
@@ -2390,8 +2388,8 @@ class DispatchEntry(unittest.TestCase):
                     "state": "ready", "holder_instance_id": "holder-live",
                 }]})
                 auth = self.authorization([
-                    {"id": "claude-code/opus-xhigh", "state": "granted"},
-                ], elite_cap=1)
+                    {"count": 1, "id": "claude-code/opus-xhigh", "state": "granted"},
+                ])
                 plan = self.plan([
                     {"item_id": "stuck", "preset": "claude-code/opus-xhigh", "session": session, "prompt": prompt},
                 ])
@@ -2485,8 +2483,8 @@ class DispatchEntry(unittest.TestCase):
             "state": "ready", "holder_instance_id": "holder-live",
         }]})
         auth = self.authorization([
-            {"id": "claude-code/opus-xhigh", "state": "granted"},
-        ], elite_cap=1)
+            {"count": 1, "id": "claude-code/opus-xhigh", "state": "granted"},
+        ])
         plan = self.plan([
             {"item_id": "stuck", "preset": "claude-code/opus-xhigh", "session": session, "prompt": prompt},
         ])
@@ -2555,7 +2553,7 @@ class DispatchEntry(unittest.TestCase):
                     experts.append(preset)
                 else:
                     presets.append(preset)
-        auth = self.authorization([{"id": preset, "state": "granted"} for preset in presets])
+        auth = self.authorization([{"count": 1, "id": preset, "state": "granted"} for preset in presets])
         payload = self.project(auth, self.availability(presets))
         text = payload["capability_summary"]["text"]
         self.assertLess(len(text), 1200, text)
@@ -2969,7 +2967,7 @@ class DispatchEntry(unittest.TestCase):
         repo = str(self.repo)
         self.use_spec({"claude-code-KPR-i252-opus": {
             "status": absent(repo), "start": started(repo, "opus", "xhigh"), "send": sent("fp-opus")}})
-        capped = self.authorization([{"id": "claude-code/opus-xhigh", "state": "granted"}], elite_cap=1)
+        capped = self.authorization([{"count": 1, "id": "claude-code/opus-xhigh", "state": "granted"}])
         plan = self.plan([{"item_id": "opus", "preset": "claude-code/opus-xhigh",
                            "session": "claude-code-KPR-i252-opus", "prompt": "a"}])
         payload = self.execute(plan, capped, self.availability(["claude-code/opus-xhigh"]), live="omit")
@@ -2978,7 +2976,7 @@ class DispatchEntry(unittest.TestCase):
     def test_seats_view_binds_identity_and_retains_grant_states(self):
         auth = self.authorization([
             {"id": "droid/opus", "state": "revoked", "shared_seat": "droid", "count": 1},
-            {"id": "codex/luna", "state": "granted"}], elite_cap=2)
+            {"count": 1, "id": "codex/luna", "state": "granted"}])
         rows = [
             {"repo": str(self.repo), "identity": "verified", "holder_instance_id": "h1",
              "platform": "droid", "preset": "droid/opus", "session": "droid-KPR-i252-qa", "state": "ready"},
@@ -3024,21 +3022,21 @@ class DispatchEntry(unittest.TestCase):
 
     def test_expert_lifetime_is_task_unless_the_grant_says_standing(self) -> None:
         avail = self.availability(["codex/astra", "codex/default", "zcode/default"])
-        none = self.project(self.authorization([{"id": "codex/astra", "state": "granted"}]), avail)
+        none = self.project(self.authorization([{"count": 1, "id": "codex/astra", "state": "granted"}]), avail)
         self.assertEqual(self.candidate(none, "codex/astra")["lifetime"], "task")
         self.assertNotIn("expires", self.candidate(none, "codex/astra"))
         task = self.project(self.authorization([
-            {"id": "codex/astra", "state": "granted", "lifetime": "task"}]), avail)
+            {"count": 1, "id": "codex/astra", "state": "granted", "lifetime": "task"}]), avail)
         self.assertEqual(self.candidate(task, "codex/astra")["lifetime"], "task")
         standing = self.project(self.authorization([
-            {"id": "codex/astra", "state": "granted", "lifetime": "standing"}]), avail)
+            {"count": 1, "id": "codex/astra", "state": "granted", "lifetime": "standing"}]), avail)
         self.assertEqual(self.candidate(standing, "codex/astra")["lifetime"], "standing")
         other = self.project(self.authorization([
-            {"id": "codex/astra", "state": "granted", "lifetime": "forever"}]), avail)
+            {"count": 1, "id": "codex/astra", "state": "granted", "lifetime": "forever"}]), avail)
         self.assertIsNone(self.candidate(other, "codex/astra"))
         self.assertEqual(self.withheld(other, "codex/astra"), "lifetime-unreadable")
         code, payload = run(["project", "--authorization", str(self.authorization([
-            {"id": "codex/astra", "state": "granted", "lifetime": 3}])),
+            {"count": 1, "id": "codex/astra", "state": "granted", "lifetime": 3}])),
             "--platforms", str(PLATFORMS)], self.env)
         self.assertNotEqual(code, 0, payload)
 
@@ -3046,11 +3044,11 @@ class DispatchEntry(unittest.TestCase):
         avail = self.availability(["codex/default", "zcode/default"])
         plain = self.project(self.authorization([
             {"id": "codex/default", "state": "granted", "count": 1},
-            {"id": "zcode/default", "state": "granted"}]), avail)
+            {"count": 1, "id": "zcode/default", "state": "granted"}]), avail)
         keyed = self.project(self.authorization([
             {"id": "codex/default", "state": "granted", "count": 1,
              "lifetime": "standing", "expires": "2000-01-01T00:00:00+00:00"},
-            {"id": "zcode/default", "state": "granted",
+            {"count": 1, "id": "zcode/default", "state": "granted",
              "lifetime": "bogus", "expires": "not a time"}]), avail)
         self.assertEqual(plain["candidates"], keyed["candidates"])
         self.assertEqual(plain["withheld"], keyed["withheld"])
@@ -3077,8 +3075,7 @@ class DispatchEntry(unittest.TestCase):
         for expires, reason in cases:
             with self.subTest(expires=expires):
                 auth = self.authorization([
-                    {"id": "codex/astra", "state": "granted", "lifetime": "standing", "expires": expires}],
-                    elite_cap=1)
+                    {"count": 1, "id": "codex/astra", "state": "granted", "lifetime": "standing", "expires": expires}])
                 payload = self.project(auth, avail)
                 self.assertIsNone(self.candidate(payload, "codex/astra"))
                 self.assertEqual(self.withheld(payload, "codex/astra"), reason)
@@ -3089,26 +3086,26 @@ class DispatchEntry(unittest.TestCase):
                 self.assertEqual(run_payload["items"][0]["reason"], reason)
         self.assertEqual(commands(self.log), [])
         future = self.authorization([
-            {"id": "codex/astra", "state": "granted", "lifetime": "standing",
-             "expires": "2999-01-01T00:00:00+08:00"}], elite_cap=1)
+            {"count": 1, "id": "codex/astra", "state": "granted", "lifetime": "standing",
+             "expires": "2999-01-01T00:00:00+08:00"}])
         row = self.candidate(self.project(future, avail), "codex/astra")
         self.assertEqual(row["lifetime"], "standing")
         self.assertEqual(row["expires"], "2999-01-01T00:00:00+08:00")
         revoked = self.authorization([
-            {"id": "codex/astra", "state": "revoked", "lifetime": "standing",
+            {"count": 1, "id": "codex/astra", "state": "revoked", "lifetime": "standing",
              "expires": "2000-01-01T00:00:00+00:00"}])
         self.assertEqual(self.withheld(self.project(revoked, avail), "codex/astra"), "revoked")
 
     def test_no_expert_is_exposed_without_its_own_grant(self) -> None:
         avail = self.availability(["codex/astra", "codex/default", "claude-code/fable"])
         payload = self.project(self.authorization([
-            {"id": "codex/default", "state": "granted", "model_switch": True, "lifetime": "standing"},
+            {"count": 1, "id": "codex/default", "state": "granted", "model_switch": True, "lifetime": "standing"},
         ], model_switches=["codex/default"]), avail)
         ids = {row["id"] for row in payload["candidates"]}
         self.assertNotIn("codex/astra", ids)
         self.assertNotIn("claude-code/fable", ids)
         self.assertNotIn("codex/astra", payload["capability_summary"]["presets"])
-        task = self.project(self.authorization([{"id": "codex/astra", "state": "granted"}]), avail)
+        task = self.project(self.authorization([{"count": 1, "id": "codex/astra", "state": "granted"}]), avail)
         self.assertNotEqual(self.candidate(task, "codex/astra")["lifetime"], "standing")
 
     def test_standing_grant_outlives_its_session_and_a_new_name_admits(self) -> None:
@@ -3121,7 +3118,7 @@ class DispatchEntry(unittest.TestCase):
         })
         avail = self.availability(["codex/astra"])
         auth = self.authorization([
-            {"id": "codex/astra", "state": "granted", "count": 1, "lifetime": "standing"}], elite_cap=1)
+            {"id": "codex/astra", "state": "granted", "count": 1, "lifetime": "standing"}])
         self.assertEqual(self.candidate(self.project(auth, avail), "codex/astra")["lifetime"], "standing")
         stopped = write_json(self.root, "stopped-live.json", {"rows": [{
             "repo": os.path.realpath(repo), "state": "stopped", "session": "codex-KPR-i252-first"}]})
@@ -3140,7 +3137,7 @@ class DispatchEntry(unittest.TestCase):
         self.assertIsNone(self.candidate(removed, "codex/astra"))
 
     def test_seats_view_without_the_new_keys_is_unchanged(self) -> None:
-        auth = self.authorization([{"id": "codex/default", "state": "granted", "count": 1}], elite_cap=1)
+        auth = self.authorization([{"id": "codex/default", "state": "granted", "count": 1}])
         live = write_json(self.root, "empty-live.json", {"rows": []})
         code, view = run(["project", "--seats", "--repo", str(self.repo), "--authorization", str(auth),
                           "--platforms", str(PLATFORMS), "--live", str(live)], self.env)
@@ -3172,9 +3169,9 @@ class DispatchEntry(unittest.TestCase):
             "preset": "codex/default", "platform": "codex", "repo": real, "state": "running",
             "session": "codex-KPR-i252-held", "identity": "verified", "holder_instance_id": "h-held"}]})
         auth = self.authorization([
-            {"id": "codex/default", "state": "granted"},
+            {"count": 1, "id": "codex/default", "state": "granted"},
             {"id": "codex/astra", "state": "granted", "count": 1, "lifetime": "standing"},
-        ], elite_cap=1)
+        ])
         items = [
             {"item_id": preset, "preset": preset, "session": session, "prompt": "gather " + preset}
             for preset, session, _ in pool
@@ -3190,7 +3187,7 @@ class DispatchEntry(unittest.TestCase):
         self.assertEqual(by_id["elite"]["reason"], "count")
 
         roomy = self.authorization([
-            {"id": "codex/astra", "state": "granted", "count": 1, "lifetime": "standing"}], elite_cap=2)
+            {"id": "codex/astra", "state": "granted", "count": 1, "lifetime": "standing"}])
         two = self.plan([
             {"item_id": "e1", "preset": "codex/astra", "session": "codex-KPR-i252-astra1", "prompt": "a"},
             {"item_id": "e2", "preset": "codex/astra", "session": "codex-KPR-i252-astra2", "prompt": "b"},
@@ -3224,12 +3221,12 @@ class DispatchEntry(unittest.TestCase):
             "holder_instance_id": "holder-kept", "preset": "codex/astra"}]})
         avail = self.availability(["codex/astra", "zcode/default"])
         for grant, reason in (
-            ({"id": "codex/astra", "state": "granted", "lifetime": "standing",
+            ({"id": "codex/astra", "count": 1, "state": "granted", "lifetime": "standing",
               "expires": "2000-01-01T00:00:00+00:00"}, "expired"),
-            ({"id": "codex/astra", "state": "revoked", "lifetime": "standing"}, "revoked"),
+            ({"id": "codex/astra", "count": 1, "state": "revoked", "lifetime": "standing"}, "revoked"),
         ):
             with self.subTest(reason=reason):
-                auth = self.authorization([grant], elite_cap=1)
+                auth = self.authorization([grant])
                 plan = self.plan([
                     {"item_id": "kept", "preset": "codex/astra", "session": session, "prompt": prompt},
                     {"item_id": "free", "preset": "zcode/default", "session": "zcode-KPR-i252-free", "prompt": "w"},
@@ -3251,8 +3248,8 @@ class DispatchEntry(unittest.TestCase):
         fresh = self.plan([{
             "item_id": "new", "preset": "codex/astra", "session": "codex-KPR-i252-new", "prompt": "n"}])
         payload = self.execute(fresh, self.authorization([
-            {"id": "codex/astra", "state": "granted", "lifetime": "standing",
-             "expires": "2000-01-01T00:00:00+00:00"}], elite_cap=1), avail)
+            {"count": 1, "id": "codex/astra", "state": "granted", "lifetime": "standing",
+             "expires": "2000-01-01T00:00:00+00:00"}]), avail)
         self.assertEqual(payload["items"][0]["reason"], "expired")
 
     def test_first_publish_does_not_stamp_missing_before_the_executor(self) -> None:
@@ -3477,7 +3474,7 @@ class DispatchEntry(unittest.TestCase):
                 "send": sent("fp-next", 4),
             },
         })
-        auth = self.authorization([{"id": "codex/default", "state": "granted"}])
+        auth = self.authorization([{"count": 1, "id": "codex/default", "state": "granted"}])
         avail = self.availability(["codex/default"])
         plan = self.plan([{
             "item_id": "next-plan",
@@ -3608,7 +3605,7 @@ class DispatchEntry(unittest.TestCase):
                 "send": sent("fp-next2", 5),
             },
         })
-        auth = self.authorization([{"id": "codex/default", "state": "granted"}])
+        auth = self.authorization([{"count": 1, "id": "codex/default", "state": "granted"}])
         plan = self.plan([{
             "item_id": "next-plan",
             "preset": "codex/default",

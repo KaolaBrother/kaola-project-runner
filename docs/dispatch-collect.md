@@ -186,7 +186,7 @@ The user report shows:
 - Currently occupied seats and their linked tasks.
 - Idle, available capacity within each effective grant; held/unavailable/unknown shown separately.
 
-Count a shared seat group once across its permitted tiers. Idle but unreclaimed/reserved sessions are not automatically available. Capacity derives only from effective grant/shared counts and occupancy. Service/quota/fault restrictions remain in their proper roles; there is no separate authorization concurrency cap. This sentence adopts the latest owner951 correction. Host and Sideagent roles do not consume worker seats. Show no Expert authorization as none, without implying a grant.
+Count a shared seat group once across its permitted tiers. Idle but unreclaimed/reserved sessions are not automatically available. Capacity derives only from effective grant/shared counts and occupancy. Service/quota/fault restrictions remain in their proper roles; there is no separate authorization concurrency cap. Host and Sideagent roles do not consume worker seats. Show no Expert authorization as none, without implying a grant.
 
 Derive the report from existing current authorization and verified occupancy/task links. Do not create a second writable seat table, copy occupancy into Delegator JSON, retain historical seat rows, or inject complete model profiles. Reuse the existing Host dispatch view when needed; no new mandatory Host reading or reporting cycle.
 
@@ -252,10 +252,15 @@ A legacy integer must be at least the sum of all explicit shared counts, counted
 once, with every count known. Total-only, smaller, malformed or Worker-pool
 limits stay actionable blockers. Active work, original duty links and grants stay
 unchanged. Resolve from original owner evidence, then use the existing Host
-`state update --section authorization --set '{"elite_cap":null}'` or Delegator
+`state update --file FILE --writer host --source ORIGINAL_OWNER_DECISION
+--section authorization --expect-revision REV --set '{"elite_cap":null}'` or Delegator
 `update --expect-revision REV --set '{"authorization":{"elite_cap":null}}'`
 with the exact file, writer and source. Repeat the read-only migration plan
-before `--write`. Do not move the old limit to a note or renamed field.
+before `--write`. This Host null-only aggregate removal also works on a schema 1
+body (use revision 0 when absent); it keeps that schema, grants and duties intact.
+For a current file it maps known legacy copies through the existing migration
+before section validation. It does not infer missing counts or discard a pause.
+Do not move the old limit to a note or renamed field.
 A missing Elite/Expert count is `count-unreadable`; source the exact count.
 Worker pool defaults and grant-specific restrictions remain unchanged.
 

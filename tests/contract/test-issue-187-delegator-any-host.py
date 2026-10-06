@@ -220,6 +220,7 @@ class NonZCodeHostLifecycle(unittest.TestCase):
 
     def env(self, **extra: str) -> dict[str, str]:
         base = {"HOME": str(self.home), "PATH": "/usr/bin:/bin", "TMPDIR": str(self.root),
+                "KAOLA_LAUNCH_BACKEND": "direct",
                 "KAOLA_ACP_RECORD_ROOT": str(self.records), "PYTHON_BIN": PYTHON,
                 "PYTHONUNBUFFERED": "1", "LANG": "C", "MOCK_ACP_LOG": str(self.mock_log)}
         base.update(extra)

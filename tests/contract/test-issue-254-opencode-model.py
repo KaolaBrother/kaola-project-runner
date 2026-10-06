@@ -76,7 +76,7 @@ class OpenCodeModelAdvertisement(unittest.TestCase):
         self._tmp.cleanup()
 
     def env(self, extra: dict[str, str] | None = None) -> dict[str, str]:
-        env = {key: value for key, value in os.environ.items() if not key.startswith("KAOLA_")}
+        env = {key: value for key, value in os.environ.items() if not key.startswith("KAOLA_") or (key == "KAOLA_LAUNCH_BACKEND" and value == "direct")}
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         env["MOCK_ACP_LOG"] = str(self.mock_log)
         env["OPENCODE_BIN"] = str(self.stub)

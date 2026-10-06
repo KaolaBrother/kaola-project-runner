@@ -388,15 +388,14 @@ Workers run only under authorization, and what you authorize depends on the
 
 - **Worker presets** — the five Worker rows of the catalog — need nothing more than an
   authorized project task: no per-seat or per-preset approval and no priority order.
-  Their live seats neither count toward nor are limited by the general worker
-  concurrency cap. Membership is exactly those five rows; `claude-code/sonnet` is
+  Their live seats use pool permission; Elite/Expert grant counts do not limit them. Membership is exactly those five rows; `claude-code/sonnet` is
   Elite and is not a member. Being a runtime's `default`
   preset does not make a preset a Worker. Actual account/token/service and resource
   limits still apply (an unspecified quota is not unlimited), and any explicit owner
   restriction wins.
 - **Elite presets** need your explicit grant naming the runtime/preset and count.
   `claude-code/sonnet` uses that same grant: no default seat and no preset-specific
-  cap, and this move does not raise the general worker cap. `claude-code/opus-xhigh`
+  cap; shared grant counts still apply. `claude-code/opus-xhigh`
   is the thinking-only Opus preset. Moving that role off `claude-code/default` does
   not grant `claude-code/default` and does not add a seat. Grants you already gave
   stay valid within their scope. The authorized count is a

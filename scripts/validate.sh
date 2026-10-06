@@ -225,6 +225,9 @@ for name in $(compgen -e); do
     scrubbed_names+=("$name")
   fi
 done
+# Mock holders need their fixture environment (MOCK_ACP_*). Production broker
+# filtering stays unchanged; the explicit 266 suites exercise auto/broker below.
+export KAOLA_LAUNCH_BACKEND=direct
 
 python_suites_all=(
   "test-issue-78-heredoc-deadlock.py"
@@ -538,6 +541,10 @@ run_suite_lane() {
   local status=0 rc
   for suite in "$@"; do
     rc=0
+    case "$suite" in
+      test-issue-266-launch-broker.py|test-issue-266-launch-broker-composed.py) export KAOLA_LAUNCH_BACKEND=auto ;;
+      *) export KAOLA_LAUNCH_BACKEND=direct ;;
+    esac
     if [[ "$suite" == *.sh ]]; then
       watched "$suite" bash "$repo_root/tests/contract/$suite" >"$validate_tmp/$suite.log" 2>&1 || rc=$?
     else

@@ -386,14 +386,21 @@ def count_ok(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
-def aggregate_limit_blockers(auth: dict[str, Any], prefix: str = "authorization") -> list[dict[str, str]]:
-    return [refusal(f"{prefix}.{key}", "exact preset/shared grant counts; no independent aggregate limit",
-                    "Owner: resolve this legacy limit against the original grants. Use the existing "
-                    "revision-bound authorization update to remove it with null after explicit owner "
-                    "revocation or confirmed unchanged grant authority; otherwise retain the original "
-                    "evidence through the current decision/watch route. Do not infer counts, copy this "
-                    "limit to prose or another field, or stop active work. Then repeat migration.")
-            for key in ("elite_cap", "total_cap", "worker_pool_cap") if key in auth]
+def aggregate_limit_blockers(auth: dict[str, Any], prefix: str = "authorization", *, delegator: bool = False) -> list[dict[str, str]]:
+    found = []
+    for key in ("elite_cap", "total_cap", "worker_pool_cap"):
+        if key not in auth:
+            continue
+        command = (f"delegator update --file FILE --writer delegator --source ORIGINAL_OWNER_DECISION "
+                   f"--expect-revision REV --set '{{\"authorization\":{{\"{key}\":null}}}}'" if delegator else
+                   f"state update --file FILE --writer host --source ORIGINAL_OWNER_DECISION "
+                   f"--section authorization --expect-revision REV --set '{{\"{key}\":null}}' (also before schema 1 migration)")
+        found.append(refusal(f"{prefix}.{key}", "exact preset/shared grant counts; no independent aggregate limit",
+                             f"Owner: resolve this legacy limit against the original grants. Use `{command}` "
+                             "after explicit owner revocation or confirmed unchanged grant authority. Otherwise retain "
+                             "original evidence through the current decision/watch route. Do not infer counts, copy "
+                             "the limit to another field or stop active work. Then repeat migration."))
+    return found
 
 
 def migrate_authorization_limits(auth: Any, delegator: bool = False, expert_ids: frozenset[str] = frozenset()) -> tuple[Any, list[dict[str, str]], list[str]]:
@@ -431,7 +438,11 @@ def migrate_authorization_limits(auth: Any, delegator: bool = False, expert_ids:
                              and value >= sum(counts.values())):
             del out[key]
             removed.append(f"authorization.{key}")
-    blockers = aggregate_limit_blockers(out)
+    blockers = aggregate_limit_blockers(out, delegator=delegator)
+    for key in keys:
+        blockers.extend(duplicate_preset_blockers(auth.get(key), f"authorization.{key}", "preset_id" if delegator else "id"))
+    if delegator:
+        blockers.extend(duplicate_preset_blockers([row for key in keys for row in (auth.get(key) if isinstance(auth.get(key), list) else [])], "authorization.grants", "preset_id"))
     if not delegator:
         for key in ("classes", "capability_summary"):
             if key in out:
@@ -479,7 +490,11 @@ def migrate_authorization_limits(auth: Any, delegator: bool = False, expert_ids:
                     else:
                         row["model_switch"] = True
                 if isinstance(paused, list) and any(ident in paused for ident in ids):
-                    if not all(ident in paused for ident in ids):
+                    if (row.get("state") in ("revoked", "excluded")
+                            or any(ident in (out.get("revoked") or []) + (out.get("exclusions") or []) for ident in ids)):
+                        blockers.append(refusal("authorization.paused", "no weaker state over a revocation/exclusion",
+                                                "Host: reconcile the conflicting pause from original owner evidence; keep the stronger restriction"))
+                    elif not all(ident in paused for ident in ids):
                         blockers.append(refusal("authorization.paused", "one applicable grant pause",
                                                 "Host: resolve partial group pause from original evidence"))
                     else:
@@ -529,7 +544,8 @@ def migrate_authorization_limits(auth: Any, delegator: bool = False, expert_ids:
                                             "Delegator: resolve original intent before migration"))
         else:
             pool = set(out.get("worker_pool") or []) if _string_list_ok(out.get("worker_pool", [])) else set()
-            known = set(pool)
+            known = set(pool) | set(out.get("exclusions") or []) if _string_list_ok(out.get("exclusions", [])) else set(pool)
+            granted_ids = set()
             for key in ("elite_grants", "expert_task_grants"):
                 kept = []
                 rows = out.get(key) or []
@@ -546,6 +562,10 @@ def migrate_authorization_limits(auth: Any, delegator: bool = False, expert_ids:
                         kept.append(row)
                         continue
                     known.update(ids)
+                    granted_ids.update(ids)
+                    if row.get("class") in ("Elite", "Expert", "Worker"):
+                        del row["class"]
+                        removed.append(f"authorization.{key}[{row_index}].class derived from catalog")
                     if row.get("state") == "revoked":
                         revoked = list(set(revoked) | set(ids))
                     expired = False
@@ -564,7 +584,10 @@ def migrate_authorization_limits(auth: Any, delegator: bool = False, expert_ids:
                         removed.append(f"authorization.{key} ended grant")
                         continue
                     if any(ident in paused for ident in current):
-                        if not all(ident in paused for ident in current):
+                        if row.get("state") == "excluded" or any(ident in (out.get("exclusions") or []) for ident in current):
+                            blockers.append(refusal("authorization.paused", "no weaker state over an exclusion",
+                                                    "Delegator: reconcile the conflicting pause from original owner evidence; keep the exclusion"))
+                        elif not all(ident in paused for ident in current):
                             blockers.append(refusal("authorization.paused", "one applicable group pause",
                                                     "Delegator: resolve partial group pause from original owner evidence"))
                         else:
@@ -577,6 +600,14 @@ def migrate_authorization_limits(auth: Any, delegator: bool = False, expert_ids:
             if (set(revoked) | set(paused)) - known:
                 blockers.append(refusal("authorization.revoked/paused", "original known grant/default pool ids",
                                         "Delegator: reconcile unmatched original recovery duties; do not infer new grants"))
+            if set(paused) - granted_ids - set(out.get("exclusions") or []) - set(revoked):
+                blockers.append(refusal("authorization.paused", "paused grant or explicit current exclusion/Host hold",
+                                        "Delegator: retain the pause. From original owner evidence, use the revision-bound "
+                                        "delegator authorization update to add the exact id to exclusions, or relay a "
+                                        "Host hold with its reason and reopening route before removing this legacy pause; no grant is invented"))
+            if set(paused) & set(revoked):
+                blockers.append(refusal("authorization.paused", "no pause over a revocation",
+                                        "Delegator: reconcile the conflicting pause from original evidence; retain the revocation"))
             if not blockers:
                 exclusions = set(out.get("exclusions") or []) | (pool & set(revoked))
                 if exclusions:
@@ -585,7 +616,28 @@ def migrate_authorization_limits(auth: Any, delegator: bool = False, expert_ids:
                     if key in out:
                         del out[key]
                         removed.append(f"authorization.{key} -> current grants/exclusions")
+    for key in keys:
+        blockers.extend(duplicate_preset_blockers(out.get(key), f"authorization.{key}", "preset_id" if delegator else "id"))
     return out, blockers, removed
+
+
+def duplicate_preset_blockers(rows: Any, path: str, id_key: str) -> list[dict[str, str]]:
+    if not isinstance(rows, list):
+        return []
+    seen = set()
+    found = []
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        ids = row.get("preset_ids") or [row.get(id_key)]
+        if not _string_list_ok(ids):
+            continue
+        for ident in ids:
+            if ident in seen:
+                found.append(refusal(f"{path}[{index}]", "one authoritative row per preset",
+                                     f"Owner: reconcile duplicate preset {ident} from original grants; retain its restrictions and exact count"))
+            seen.add(ident)
+    return found
 
 
 def expanded_grants(grants: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -624,7 +676,10 @@ def delegator_authorization_blockers(auth: Any) -> list[dict[str, str]]:
         return []
     if not isinstance(auth, dict):
         return [refusal("authorization", "object", "rehome the current grants and limits; the file was not written")]
-    found = aggregate_limit_blockers(auth)
+    found = aggregate_limit_blockers(auth, delegator=True)
+    found.extend(duplicate_preset_blockers([row for key in ("elite_grants", "expert_task_grants")
+                                           for row in (auth.get(key) if isinstance(auth.get(key), list) else [])],
+                                          "authorization.grants", "preset_id"))
 
     def bad(path: str, allowed: str, recovery: str = "rehome this fact from its source; the file was not written") -> None:
         found.append(refusal(path, allowed, recovery))
@@ -649,6 +704,7 @@ def delegator_authorization_blockers(auth: Any) -> list[dict[str, str]]:
         found.extend(_closed_strings("authorization.sideagent", sideagent, DELEGATOR_SIDEAGENT_KEYS))
     for key in ("elite_grants", "expert_task_grants"):
         grants = auth.get(key)
+        found.extend(duplicate_preset_blockers(grants, f"authorization.{key}", "preset_id"))
         if grants is None:
             continue
         if not isinstance(grants, list):
@@ -661,7 +717,10 @@ def delegator_authorization_blockers(auth: Any) -> list[dict[str, str]]:
                 continue
             for field in sorted(grant):
                 if field not in DELEGATOR_GRANT_KEYS:
-                    bad(f"{path}.{field}", ", ".join(sorted(DELEGATOR_GRANT_KEYS)))
+                    bad(f"{path}.{field}", ", ".join(sorted(DELEGATOR_GRANT_KEYS)),
+                        "Delegator: run delegator migrate; catalog Class copies Elite/Expert/Worker are removed. "
+                        "For other class text, resolve original intent and remove class from the grant with the sourced revision-bound authorization update"
+                        if field == "class" else "rehome this fact from its source; the file was not written")
             if not grant.get("preset_id") and not grant.get("preset_ids"):
                 bad(path, "preset_id or nonempty preset_ids, plus count")
             if "preset_id" in grant and (not isinstance(grant["preset_id"], str) or not grant["preset_id"]):
@@ -724,6 +783,7 @@ def authorization_blockers(auth: Any, prefix: str = "authorization") -> list[dic
             found.append(refusal(f"{prefix}.{key}", "array of preset ids",
                                  "set this field to an array of preset ids; the file was not written"))
     grants = auth.get("grants") or []
+    found.extend(duplicate_preset_blockers(grants, f"{prefix}.grants", "id"))
     if "grants" in auth and not isinstance(grants, list):
         found.append(refusal(f"{prefix}.grants", "array of grant objects",
                              "rehome grants into that array; the file was not written"))

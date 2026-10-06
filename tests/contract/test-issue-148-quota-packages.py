@@ -377,7 +377,7 @@ class QuotaQueryCliTest(unittest.TestCase):
 
     def env(self) -> dict[str, str]:
         env = {key: value for key, value in os.environ.items()
-               if not key.startswith("KAOLA_") and not key.endswith("_BIN")}
+               if (not key.startswith("KAOLA_") and not key.endswith("_BIN")) or (key == "KAOLA_LAUNCH_BACKEND" and value == "direct")}
         env["PATH"] = "/usr/bin:/bin"
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         return env
@@ -511,7 +511,7 @@ class QuotaEmissionCliTest(unittest.TestCase):
             subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
             records = root / "records"
             env = {key: value for key, value in os.environ.items()
-                   if not key.startswith("KAOLA_")}
+                   if not key.startswith("KAOLA_") or (key == "KAOLA_LAUNCH_BACKEND" and value == "direct")}
             env["KAOLA_ACP_RECORD_ROOT"] = str(records)
             # Issue #200: opencode's default tier pins the model, so a plain
             # start applies it; the agent reports the same native options.
