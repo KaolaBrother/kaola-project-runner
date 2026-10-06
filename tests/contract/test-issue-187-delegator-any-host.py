@@ -106,8 +106,9 @@ class GeneratedDelegator(unittest.TestCase):
 
     def test_host_platform_is_not_worker_authorization(self) -> None:
         self.assertIn("the Host platform; authorized worker platforms", flat(self.skill))
-        self.assertIn("apart from `authorized_platforms`", flat(self.platforms))
-        self.assertIn("being the Host authorizes no worker seat", flat(self.platforms))
+        # Issue #187: Host platform is not worker authorization. The wording
+        # moved (2a954b0c): the Host platform fact and worker grants are separate.
+        self.assertIn("Host choice and worker grants are separate", flat(self.platforms))
         block = handoff_block()
         self.assertIn("platform=<PLATFORM>", block)
         # Issue #218: authorization entries name seats by exact preset id.

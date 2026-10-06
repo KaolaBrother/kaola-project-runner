@@ -349,14 +349,15 @@ def test_generated_entry_matrix_and_no_engine_leak() -> None:
           "generated adapter copy has no overlay-less setModel fallback")
     check("setModel after overlay-less create" not in adapter,
           "adapter does not swallow overlay-less setModel errors")
-    # Issue #217: the one authorized Delegator file is its own snapshot; Host
-    # identity still comes from fresh Runner status, never that file.
+    # Issue #217/#74: the one authorized Delegator file is its own snapshot; Host
+    # identity still comes from fresh Runner status, never that file. cefcda13
+    # reworded the heartbeat-prompt.json ownership sentence.
     snapshot_one = re.sub(r"\s+", " ", (EXTERNAL / "references" / "snapshot.md").read_text(encoding="utf-8"))
     check("There is no Delegator continuation file" not in skill_one
           and "(references/snapshot.md)" in skill_one
           and "`<repo>/.kaola/delegator-heartbeat.json` on the bound target" in snapshot_one
           and "verify `host` by fresh Runner `status`" in snapshot_one
-          and "only the Host and its bound Sideagent write `heartbeat-prompt.json`" in snapshot_one,
+          and "Host and its bound Sideagent own `heartbeat-prompt.json`" in snapshot_one,
           "Skill links the one Delegator snapshot; identity stays with Runner status")
     # The daily close pauses new claims only and needs Host ack plus claim evidence.
     check(all(term in snapshot_one for term in (

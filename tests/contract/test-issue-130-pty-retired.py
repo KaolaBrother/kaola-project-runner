@@ -262,7 +262,10 @@ def live_surfaces() -> list[Path]:
             if not path.is_file() or path.suffix in (".pyc",):
                 continue
             rel = path.relative_to(PROJECT).as_posix()
-            if base == "docs" and (DATED.search(path.name) or "/decisions/" in f"/{rel}"):
+            # docs/evidence holds archived raw run transcripts that quote
+            # history; they are evidence, not live option surfaces.
+            if base == "docs" and (DATED.search(path.name) or "/decisions/" in f"/{rel}"
+                                   or "/evidence/" in f"/{rel}"):
                 continue
             if rel.startswith("templates/grok-golden/"):
                 continue  # frozen (AGENTS.md); not a live option surface

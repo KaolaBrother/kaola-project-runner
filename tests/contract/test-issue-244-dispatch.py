@@ -3776,7 +3776,11 @@ class RenderedGuidance(unittest.TestCase):
         self.assertNotIn("capability_summary", skeleton)
         self.assertIn("单一 JSON 对象", skeleton)
         self.assertIn("dispatch-collect.md", profiles)
-        self.assertIn("compact capability summary", snapshot)
+        # c44e87a7 (dot decision): the Delegator snapshot audits typed current
+        # facts; Class definitions and capability are on-demand projections,
+        # never stored in the Host body.
+        self.assertIn("capability text are", snapshot)
+        self.assertIn("on-demand projections, never in that body", snapshot)
         self.assertNotIn("ID/Class/profile row per authorized preset", snapshot)
         generated = (ORCHESTRATOR / "scripts" / "kaola-dispatch.py").read_bytes()
         self.assertEqual(generated, SCRIPT.read_bytes())

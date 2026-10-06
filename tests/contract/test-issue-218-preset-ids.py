@@ -211,7 +211,8 @@ class AuthorizationNotationTest(unittest.TestCase):
     def test_host_authorization_guidance_names_seats_by_exact_id(self) -> None:
         profiles = (ORCHESTRATOR / "references" / "worker-profiles.md").read_text(encoding="utf-8")
         self.assertIn("## Preset IDs in authorization", profiles)
-        self.assertIn("named by its exact catalog Preset ID", profiles)
+        # be04bd09/291b33b5 moved the wording; seats are still named by exact id.
+        self.assertIn("by exact Preset ID", profiles)
         self.assertIn("`<platform>/<tier>`", profiles)
 
     def test_delegator_snapshot_names_seats_by_exact_id(self) -> None:
@@ -236,7 +237,7 @@ class AuthorizationNotationTest(unittest.TestCase):
             (DELEGATOR / "references" / "host-platforms.md",
              ["absent `special_requirements` means none"]),
             (ORCHESTRATOR / "references" / "heartbeat-skeleton.md",
-             ["仅当 owner 确实给出偏差时", "缺省即省略该键"]),
+             ["只留显式 owner 偏差", "不复制默认 profile"]),
         ):
             text = flat(path.read_text(encoding="utf-8"))
             for needle in needles:
@@ -249,51 +250,60 @@ class AuthorizationNotationTest(unittest.TestCase):
         self.assertIsNotNone(example)
         body = json.loads(example.group(1))
         self.assertNotIn("special_requirements", json.dumps(body))
-        # The teaching sentence carries the two issue-named deviation shapes.
-        self.assertIn('{"effort":"high"}', skeleton)
-        self.assertIn('{"task_scope":"visual QA"}', skeleton)
+        # be04bd09 moved the two issue-named deviation shapes to the Host
+        # guidance (worker-profiles.md §Preset IDs in authorization); the
+        # skeleton keeps only the default (absent key).
+        profiles = (ORCHESTRATOR / "references" / "worker-profiles.md").read_text(encoding="utf-8")
+        self.assertIn('{"effort":"high"}', profiles)
+        self.assertIn('{"task_scope":"visual QA"}', profiles)
 
     def test_heartbeat_authorization_names_seats_by_preset_id(self) -> None:
         skeleton = (ORCHESTRATOR / "references" / "heartbeat-skeleton.md").read_text(encoding="utf-8")
-        self.assertIn("精确 preset id", skeleton)
-        self.assertIn("<platform>/<tier>", skeleton)
-        self.assertIn("claude-code/default", skeleton)
+        # be04bd09 moved the notation to the Host guidance; the stored body
+        # carries exact ids / preset_ids only.
+        self.assertIn("精确 id 或 preset_ids", skeleton)
+        example = re.search(r"例：(\{.*\})", skeleton)
+        self.assertIsNotNone(example)
+        auth = json.loads(example.group(1))["authorization"]
+        for grant in auth["grants"]:
+            for preset in (grant.get("preset_ids") or [grant["id"]]):
+                self.assertRegex(preset, r"^[a-z0-9-]+/[a-z0-9-]+$")
+        profiles = (ORCHESTRATOR / "references" / "worker-profiles.md").read_text(encoding="utf-8")
+        self.assertIn("`<platform>/<tier>`", profiles)
         self.assertNotIn("claude-code opus", skeleton)
 
     def test_heartbeat_example_rows_and_class_definitions(self) -> None:
-        """#223 kept the three Class definitions once. #244 stops copying the
-        profile roster into the routine example: grants keep exact preset ids."""
+        """#259 (be04bd09/291b33b5): the stored body keeps no separately
+        writable class definitions, capability summary or aggregate cap; grants
+        name exact preset ids, and Class/profile facts stay on-demand."""
         skeleton = (ORCHESTRATOR / "references" / "heartbeat-skeleton.md").read_text(encoding="utf-8")
         self.assertNotIn("或其指针", skeleton)
         example = re.search(r"例：(\{.*\})", skeleton)
         self.assertIsNotNone(example)
         auth = json.loads(example.group(1))["authorization"]
-        self.assertEqual(sorted(auth["classes"]), ["Elite", "Expert", "Worker"])
-        for definition in auth["classes"].values():
-            self.assertEqual(skeleton.count(definition), 1, definition)
-        self.assertNotIn("rows", auth)
-        self.assertIn("capability_summary", auth)
-        # The tool derives the capability view. The stored example has only
-        # current preset IDs and no handwritten capability text or roster.
-        self.assertEqual(sorted(auth), ["capability_summary", "classes", "elite_cap", "grants"])
-        self.assertEqual(sorted(auth["capability_summary"]), ["presets"])
-        self.assertEqual(auth["capability_summary"]["presets"], ["droid/opus", "devin/default"])
-        self.assertEqual([grant["id"] for grant in auth["grants"]],
-                         auth["capability_summary"]["presets"])
-        self.assertEqual(auth["elite_cap"], 4)
-        self.assertEqual(auth["grants"][0]["count"], 2)
-        self.assertEqual(auth["grants"][0]["shared_seat"], "droid")
-        self.assertNotIn("computer_interaction", auth["capability_summary"])
+        for absent in ("classes", "capability_summary", "elite_cap", "rows"):
+            self.assertNotIn(absent, auth)
         catalog = {}
         for line in (ORCHESTRATOR / "references" / "profile-catalog.md").read_text(encoding="utf-8").splitlines():
             match = ROW.match(line)
             if match:
                 catalog[match["preset"]] = match["profile"]
+        ids = [preset for grant in auth["grants"]
+               for preset in (grant.get("preset_ids") or [grant["id"]])]
+        self.assertTrue(ids)
+        for preset in ids:
+            self.assertIn(preset, catalog)
         for grant in auth["grants"]:
-            self.assertIn(grant["id"], catalog)
             self.assertEqual(grant["state"], "granted")
             self.assertNotIn("profile", grant)
-            self.assertNotIn(catalog[grant["id"]], json.dumps(auth))
+        # The tool derives the capability view; no profile text is copied in.
+        for preset in ids:
+            self.assertNotIn(catalog[preset], json.dumps(auth))
+        # Count is the sole capacity; the grouped Droid grant keeps one count.
+        grouped = auth["grants"][0]
+        self.assertEqual(sorted(grouped["preset_ids"]),
+                         ["droid/core", "droid/default", "droid/opus"])
+        self.assertEqual(grouped["count"], 2)
 
     def test_catalog_teaches_configured_not_running_caveat(self) -> None:
         catalog = flat((ORCHESTRATOR / "references" / "profile-catalog.md")
@@ -329,8 +339,13 @@ class AuthorizationNotationTest(unittest.TestCase):
         self.assertNotIn("`claude-code/default` does not perform implementation", pool)
         skeleton = (ORCHESTRATOR / "references" / "heartbeat-skeleton.md").read_text(encoding="utf-8")
         example = json.loads(re.search(r"例：(\{.*\})", skeleton).group(1))
-        self.assertNotIn("claude-code/sonnet", [row["id"] for row in example["authorization"]["grants"]])
-        self.assertIn("五个池", skeleton)
+        grant_ids = [preset for grant in example["authorization"]["grants"]
+                     for preset in (grant.get("preset_ids") or [grant["id"]])]
+        self.assertNotIn("claude-code/sonnet", grant_ids)
+        # be04bd09 moved the pool statement; the skeleton keeps the
+        # current-only "Worker pool unchanged" rule.
+        self.assertIn("Worker 池不变", skeleton)
+        self.assertIn("The Worker pool is exactly:", pool)
         stale = (
             "six Worker", "Six Worker", "six-preset", "these six presets",
             "Disciplined implementation", "strongest in Worker Class",
