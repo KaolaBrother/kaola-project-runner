@@ -2502,6 +2502,14 @@ class MaintenanceCheckpoint(StateProject):
             self.assertEqual(code, 2, out)
             self.assertEqual(self.file.read_bytes(), before)
         self.assertEqual(self.doc()["state"]["maintenance"]["recovery_input"]["evidence"], item["evidence"])
+        # An invalid container stays inspectable; the view names the source path.
+        doc = self.doc(); doc["state"]["maintenance"] = [doc["state"]["maintenance"]]
+        self.file.write_text(json.dumps(doc)); before = self.file.read_bytes()
+        for role in ("host", "delegator", "sideagent"):
+            code, out = self.state("view", "--file", str(self.file), "--role", role)
+            self.assertEqual(code, 0, out)
+            self.assertIn({"path": "state.maintenance"}, out["unknown"])
+            self.assertEqual(self.file.read_bytes(), before)
 
     def test_recovery_kind_requires_original_completed_session_bound_host_signal(self) -> None:
         self.init()

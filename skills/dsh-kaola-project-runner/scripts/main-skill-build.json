@@ -1,5 +1,5 @@
 {
-  "build": "bdc0ad772af3",
+  "build": "c03e22512649",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "ceabbc4071f13d9e5ff9731b964c017a7b8c657e3d9ed8a83450a4913a2de08c",
@@ -22,8 +22,8 @@
     "references/workflow-worktree.md": "814df8b1c8278771381fd683ad1961a6c7afe1244affa0891b28cf6cc14f7ce7",
     "references/zcode-host-dispatch.md": "8ea2c0c95378c4ac24ae70066829e1d2217d5a2adf68d01913ff96a3d3ab6565",
     "references/zcode-native-skill-entry.md": "22f5e4ce50d92a0e264c71252616a9c2db8473817be1c5eb99d0a415f814918f",
-    "scripts/kaola-dispatch.py": "01ad8e11a533c9a059ccb2d0e4bb4d97b5a0c6174e8572cbc5e8ac9d26b298f7",
-    "scripts/kaola-record-contract.py": "b6bb2cb13bee0ba59cd1839bbff6ef6f7114d1f129aa39cedced59235cc1d848"
+    "scripts/kaola-dispatch.py": "33cf7c89096742e534540e8f1b6b3c2e57e8a1ec0bd6327f555468a5d0668302",
+    "scripts/kaola-record-contract.py": "0b76dd76113230b24775db6907a878fc11deb51b9169b687edcd2a9bc1bc3d1e"
   },
   "skill": "kaola-project-runner"
 }

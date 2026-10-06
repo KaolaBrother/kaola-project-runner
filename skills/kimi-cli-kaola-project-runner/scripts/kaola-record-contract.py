@@ -1582,7 +1582,7 @@ def host_view(doc: dict[str, Any], path: Path | None) -> dict[str, Any]:
                                **({"locator": value.get("locator")} if value.get("locator") is not None else {})})
         else:
             unverified.append({"id": key, "summary": "unreadable"})
-    maintenance = state.get("maintenance") or {}
+    maintenance = state.get("maintenance") if isinstance(state.get("maintenance"), dict) else {}
     brief = {key: maintenance[key] for key in ("last_verified", "acked_host_revision", "handled_host_revision",
                                           "recovery_seq", "recovery_input")
              if isinstance(maintenance, dict) and maintenance.get(key) is not None}

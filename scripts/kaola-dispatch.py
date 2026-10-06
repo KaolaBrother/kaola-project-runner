@@ -3440,7 +3440,7 @@ def host_view(doc: dict[str, Any], path: Path) -> dict[str, Any]:
 def maintenance_brief(state: dict[str, Any]) -> dict[str, Any]:
     """The last checkpoint identity and time beside current obligations, so
     a reader can see whether maintenance is progressing. No history."""
-    maintenance = state.get("maintenance") or {}
+    maintenance = state.get("maintenance") if isinstance(state.get("maintenance"), dict) else {}
     brief = {key: maintenance[key] for key in ("last_verified", "acked_host_revision",
                                                "handled_host_revision", "recovery_seq", "recovery_input") if maintenance.get(key) is not None}
     last = maintenance.get("last_checkpoint")
@@ -4685,7 +4685,8 @@ def command_state_view(args: argparse.Namespace) -> int:
     if args.role == "delegator":
         repo = Path(args.repo).resolve() if args.repo else repo_of_state_file(path)
         return emit(delegator_view(doc, path, repo))
-    maintenance = doc["state"].get("maintenance") or {}
+    maintenance = doc["state"].get("maintenance")
+    maintenance = maintenance if isinstance(maintenance, dict) else {}
     handled = int(maintenance.get("handled_host_revision") or 0)
     current = int(doc.get("host_revision") or 0)
     return emit({"view": "sideagent", "revision": doc.get("revision"), "as_of": doc.get("updated_at"),
