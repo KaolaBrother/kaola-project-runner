@@ -234,8 +234,27 @@ at 1101). Fable's base/candidate reproduction logs:
 
 ## Gate status
 
-Engineering evidence: `render-skills.py --check` PASS; `t255` full 128 OK;
-generated+progressive suites 15 OK. Regression scope, precisely: at
+CODE CANDIDATE BOUNDING: the code candidate is `a1e98b38`; every commit
+after it is a pure-documentation delta (this gate update is one). Final
+review state: dot's affected-code review PASSED `aa659981` and `a1e98b38`
+(read in full, with the independent 60/128 evidence); Fable's r2 delta
+review found the delta `e4cf481b..a1e98b38` itself PASS, and returned
+FAIL for final integrated acceptance on E1 alone — the declared Test
+command `./scripts/validate.sh` exits 1 at `a1e98b38` with twelve
+deterministic suite failures (all pass at `main` `dad228e4`), previously
+undisclosed because no full-inventory run existed for this candidate.
+Full review: `/tmp/kpr-i264-final-fable-r2-delta-20261006.md`. E1
+successor frontier: deliberate per-assertion keep-or-update decisions for
+the six reworded-text suites (several guard owner obligations), the
+`test_issue_87` Holder-fixture repair, per-suite harness-vs-product
+triage of the launch-broker-path failures (broker path lacks the
+`child_record` receipt fact; broker-absent runs go green), and one
+recorded full-inventory run at the successor commit with Bash >= 4 first
+on PATH. Root's actual final PASS is pending and is not granted by the
+affected-code pass. Engineering evidence: `render-skills.py --check`
+PASS; `t255` full 128 OK; `t259` full 60/60; generated+progressive
+suites 15 OK — these cover the AFFECTED checks only; the full inventory
+is red as described above. Regression scope, precisely: at
 `0b3af748` the full `t259` file had 7 failures, each already present at
 clean `3c7e7417` under the same stash-controlled, same-machine runs (8
 there; `1248` was repaired by `f562560f`); no new regression within the
@@ -256,7 +275,8 @@ README + Skill capability-wording alignment, the Kimi matrix-row
 self-contradiction, steer-cell qualifiers, completed-handoff retirement
 from live state), and a delta re-review of those hunks was requested; the
 residual grant-derived `capability` preset list in the injected body is
-recorded as a pending owner decision (Fable §6). Pending: dot main-thread personal PASS, Claude Code Fable
+decided by dot within the owner's standing rule and implemented at
+`a1e98b38` (this paragraph is the resolved history of that question). Pending: dot main-thread personal PASS, Claude Code Fable
 personal PASS (owner decision Sentinel_76e2d799: Claude authentication is
 fixed — the real Fable review starts when this report makes the candidate
 review-ready; no probe start, no authentication investigation, existing
