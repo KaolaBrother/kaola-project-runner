@@ -3458,6 +3458,8 @@ class Holder:
         return None
 
     def _node_recovery_pending(self, doc: dict[str, Any] | None) -> dict[str, Any] | None:
+        if self.session_role != "host":
+            return None
         state = (doc or {}).get("state") or {}
         item = (state.get("maintenance") or {}).get("recovery_input")
         if not isinstance(item, dict) or not isinstance(item.get("seq"), int):

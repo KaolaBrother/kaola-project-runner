@@ -2849,6 +2849,16 @@ class HolderNodeMode(HolderFixture):
         self.holder._observe_compact_signal(start)
         self.assertNotIn("recovery_input", self.holder._lifecycle_state()["state"]["maintenance"])
         self.assertNotIn("host_compact_maintenance_registered", self.log_kinds())
+        # A legacy holder with an unknown role cannot select an earlier Host's duty.
+        self.holder.session_role = None
+        doc = self.holder._lifecycle_state()
+        doc["state"]["maintenance"].update(recovery_seq=1, recovery_input={"seq": 1, "kind": "request",
+            "occurrence_id": None, "source": "old-Host-inquiry", "holder": "old-host", "at": "2026-10-06",
+            "evidence": "original-inquiry"})
+        (self.repo / ".kaola/heartbeat-prompt.json").write_text(json.dumps(doc))
+        self.assertIsNone(self.holder._node_recovery_pending(self.holder._lifecycle_state()))
+        self.boundary(); self.assertEqual(self.node_count(), 0)
+        self.assertEqual(self.holder._lifecycle_state()["state"]["maintenance"]["recovery_input"]["seq"], 1)
 
     def test_native_owned_reload_does_not_clear_host_maintenance(self) -> None:
         args = argparse.Namespace(**vars(self.holder.args))
