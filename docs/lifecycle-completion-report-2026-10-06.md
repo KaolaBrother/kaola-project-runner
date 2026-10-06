@@ -8,7 +8,9 @@ reconciliation, scoped count-2 fixture, `t259:1248` repair), `082da503`
 limits", AGENTS.md authoritative sync, `host-entry-matrix` pre-selection
 disclosure, edge r3 folded with hashed durable evidence), `544b58c5` (this
 report), `0b3af748` (steer cells from #263 ADOPTED originals), `19faebfd`
-(dot corrections) and `c44e87a7` (Fable R1–R4 wording corrections). Requirements source: `.kw/worktrees/issue-264/AGENTS.md` §
+(dot corrections), `c44e87a7` (Fable R1–R4 wording corrections), `2c3d253b`
+(Fable D1 byte), `e4cf481b` (assertion truth) and `aa659981` (dot recheck
+proof: whole-object authorization equality + rich fixture). Requirements source: `.kw/worktrees/issue-264/AGENTS.md` §
 "Project special requirements — lifecycle implementation (#255)" at
 `3c7e7417`, plus owner clarifications relayed 2026-10-06 through the dot main
 session (capability table Sentinel_27d913395e90819199545f470d8c6421 /
