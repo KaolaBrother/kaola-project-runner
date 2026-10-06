@@ -2826,7 +2826,7 @@ class HolderNodeMode(HolderFixture):
         self.assertEqual(self.holder._lifecycle_state()["state"]["maintenance"]["recovery_input"], item)
         self.assertEqual(self.node_count(), 0)
 
-    def test_worker_foreign_start_precompact_and_unknown_role_register_no_recovery(self) -> None:
+    def test_worker_foreign_start_and_unknown_role_register_no_recovery(self) -> None:
         self.prepare_recovery_host()
         signal = self.compact_signal()
         for role in ("worker", "sideagent", None):

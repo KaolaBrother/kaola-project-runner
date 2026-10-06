@@ -76,6 +76,15 @@ class Notice(unittest.TestCase):
         admission = next(e for e in events if e["kind"] == "compact_project_notice_admitted")
         self.assertEqual(admission["read_use"], "unverified")
 
+    def test_host_precompact_owes_reload_only_without_completed_maintenance(self):
+        self.holder.session_role = "host"
+        receipt = self.notice()
+        self.assertTrue(receipt["notice_pending"])
+        self.assertTrue(self.holder.compact_reload.pending)
+        self.assertNotIn("registration_cursor", self.holder.node)
+        self.assertNotIn("host_compact_maintenance_registered",
+                         [event["kind"] for event in self.holder.events.read_since(0, None)])
+
     def test_duplicate_notice_coalesces_current_pending(self):
         self.notice()
         seq = self.holder.compact_reload.pending_seq
