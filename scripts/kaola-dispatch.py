@@ -3624,10 +3624,8 @@ DIGEST_SKIP = (*RECORD_META, "count", "last_seen", "ack")
 # Heartbeat schema stays kaola-heartbeat-prompt/2. Do not bump it: a writer
 # that sees /3 refuses the whole file. Absent count is unknown, never zero.
 REJECTION_VERSION = 1
-# Orders two effort tokens only after the incoming one is proven applied and
-# permitted. Not a platform profile. A renamed string never consults it to
-# reset a segment, and a token outside it is not promoted.
-EFFORT_RANK = {"low": 1, "medium": 2, "high": 3, "xhigh": 4, "max": 5}
+# Effort order is the agent's advertised option list on the receipt, not a
+# universal ladder. Catalog profile effort is the authorization.
 
 
 def judgment_digest(record: dict[str, Any]) -> str:
@@ -3719,10 +3717,10 @@ def _granted_ids(authorization: dict[str, Any] | None) -> set[str]:
     return found
 
 
-def _effort_permitted(authorization: dict[str, Any] | None, owner: str | None, effort: str) -> bool:
-    """True when this owner's granted row names that effort."""
+def _owner_grant(authorization: dict[str, Any] | None, owner: str | None) -> dict[str, Any] | None:
+    """The granted row that names this preset. No second permission list."""
     if not owner or not isinstance(authorization, dict) or not isinstance(authorization.get("grants"), list):
-        return False
+        return None
     for grant in authorization["grants"]:
         if not isinstance(grant, dict) or grant.get("state") not in (None, "granted"):
             continue
@@ -3731,12 +3729,56 @@ def _effort_permitted(authorization: dict[str, Any] | None, owner: str | None, e
             ids.append(grant["id"])
         if isinstance(grant.get("preset_ids"), list):
             ids.extend(item for item in grant["preset_ids"] if isinstance(item, str))
-        if owner not in ids:
+        if owner in ids:
+            return grant
+    return None
+
+
+def _profile_effort(row: dict[str, Any] | None) -> str | None:
+    selection = row.get("selection") if isinstance(row, dict) else None
+    effort = selection.get("effort") if isinstance(selection, dict) else None
+    if isinstance(effort, str) and effort.strip():
+        return effort.strip().lower()
+    return None
+
+
+def _platform_coverage(catalog: dict[str, Any], row: dict[str, Any]) -> set[str]:
+    """Efforts the catalog already declares for this platform."""
+    platform = row.get("platform")
+    found: set[str] = set()
+    for item in catalog.values():
+        if not isinstance(item, dict) or item.get("platform") != platform:
             continue
-        special = grant.get("special_requirements")
-        if isinstance(special, dict) and special.get("effort") == effort:
-            return True
-    return False
+        token = _profile_effort(item)
+        if token:
+            found.add(token)
+    return found
+
+
+def _effort_permitted(authorization: dict[str, Any] | None, owner: str | None, effort: str,
+                      catalog: dict[str, Any] | None) -> bool:
+    """The catalog profile effort is the authorization.
+
+    ``special_requirements.effort``, when the owner supplied one, only restates
+    that same already-covered effort. It does not authorize a token the
+    profile does not name, and a seat is not required to carry one.
+    """
+    if not isinstance(catalog, dict):
+        return False
+    grant = _owner_grant(authorization, owner)
+    row = catalog.get(owner) if isinstance(owner, str) else None
+    profile = _profile_effort(row if isinstance(row, dict) else None)
+    if grant is None or not isinstance(row, dict) or not profile or effort != profile:
+        return False
+    if effort not in _platform_coverage(catalog, row):
+        return False
+    special = grant.get("special_requirements")
+    if not isinstance(special, dict) or "effort" not in special:
+        return True
+    required = special.get("effort")
+    if not isinstance(required, str) or not required.strip():
+        return False
+    return required.strip().lower() == effort
 
 
 def _applied_effort(requested: str, receipt: Any) -> str | None:
@@ -3754,19 +3796,165 @@ def _applied_effort(requested: str, receipt: Any) -> str | None:
     return applied
 
 
-def _handoff_resets(current: dict[str, Any] | None, merged: dict[str, Any],
-                    authorization: dict[str, Any] | None) -> bool:
-    """A new segment is a real responsibility change.
+def _task_holders(task: dict[str, Any]) -> set[str]:
+    found: set[str] = set()
+    direct = task.get("holder_instance_id")
+    if isinstance(direct, str) and direct.strip():
+        found.add(direct.strip())
+    for key in ("sessions", "assignments"):
+        rows = task.get(key)
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            holder = row.get("holder_instance_id")
+            if isinstance(holder, str) and holder.strip():
+                found.add(holder.strip())
+    return found
 
-    The disposition must newly be handed-off, the dispatch ids must gain one,
-    and the responsible owner must change to a different granted preset.
-    Re-shelling the same owner, or naming an owner the authorization does not
-    grant, does not reset.
+
+def _receipt_binds(receipt: Any, task_id: str | None, task: dict[str, Any]) -> bool:
+    """The receipt names this task and a holder the task already records.
+
+    A start receipt does not carry the task id unless the caller includes it.
+    This update does not look up another session, so a missing or different
+    name is not proof.
     """
+    if not isinstance(receipt, dict) or not task_id:
+        return False
+    named = nested(receipt, "task_id")
+    if not isinstance(named, str) or named.strip() != task_id:
+        return False
+    holder = holder_of(receipt)
+    if not isinstance(holder, str) or not holder.strip():
+        return False
+    return holder.strip() in _task_holders(task)
+
+
+def _config_options(receipt: dict[str, Any]) -> list[Any] | None:
+    """Advertised config options already carried on a Runner receipt."""
+    sources: list[Any] = [receipt]
+    evidence = receipt.get("start_evidence")
+    if isinstance(evidence, dict):
+        sources.append(evidence)
+    record = receipt.get("record")
+    if isinstance(record, dict):
+        sources.append(record)
+        saved = record.get("start_evidence")
+        if isinstance(saved, dict):
+            sources.append(saved)
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        direct = source.get("initial_config_options")
+        if isinstance(direct, list):
+            return direct
+        meta = source.get("session_meta")
+        if isinstance(meta, dict) and isinstance(meta.get("configOptions"), list):
+            return meta["configOptions"]
+    return None
+
+
+def _select_values(option: dict[str, Any]) -> list[Any]:
+    """One-level select expansion, the same shape as ``config_option_values``."""
+    values: list[Any] = []
+    for entry in option.get("options") or []:
+        if not isinstance(entry, dict):
+            continue
+        nested_options = entry.get("options")
+        if isinstance(nested_options, list):
+            for member in nested_options:
+                if isinstance(member, dict) and member.get("value") is not None:
+                    values.append(member.get("value"))
+        elif entry.get("value") is not None:
+            values.append(entry.get("value"))
+    return values
+
+
+def _advertised_effort_order(receipt: Any) -> list[str] | None:
+    """The effort option's own values, in the order the agent advertised.
+
+    The slot's ``config_id`` selects the option. A receipt that does not
+    carry that list is not a platform order.
+    """
+    if not isinstance(receipt, dict):
+        return None
+    block, _source = application_of(receipt)
+    slot, state = application_slot(block, "effort")
+    if state != "applied" or not isinstance(slot, dict):
+        return None
+    config_id = slot.get("config_id")
+    if not isinstance(config_id, str) or not config_id.strip():
+        return None
+    options = _config_options(receipt)
+    if not isinstance(options, list):
+        return None
+    option = next((item for item in options
+                   if isinstance(item, dict) and item.get("id") == config_id), None)
+    if not isinstance(option, dict):
+        return None
+    order: list[str] = []
+    for value in _select_values(option):
+        if isinstance(value, str) and value.strip():
+            token = value.strip().lower()
+            if token not in order:
+                order.append(token)
+    return order or None
+
+
+def _index_items(path: str, repo: str | None) -> list[dict[str, Any]] | None:
+    """One read of the dispatch index this update was given. Unreadable is no proof."""
+    try:
+        index = load_object(Path(path))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(index, dict) or index.get("schema") != "kaola-dispatch-index/1":
+        return None
+    if isinstance(index.get("repo"), str) and repo and not same_repo(index.get("repo"), repo):
+        return None
+    rows = index.get("items")
+    if not isinstance(rows, list):
+        return None
+    return [row for row in rows if isinstance(row, dict)]
+
+
+def _row_is_owner(row: dict[str, Any] | None, task_id: str, owner: str) -> bool:
+    return isinstance(row, dict) and row.get("task_id") == task_id and row.get("preset") == owner
+
+
+def _row_taken_over(row: dict[str, Any] | None, task_id: str, owner: str) -> bool:
+    """The new dispatch row is this task, this owner, and a seat that took it."""
+    if not isinstance(row, dict):
+        return False
+    holder = row.get("holder_instance_id")
+    session = row.get("session")
+    return (row.get("task_id") == task_id and row.get("preset") == owner
+            and row.get("status") in ("in-flight", "returned")
+            and isinstance(holder, str) and bool(holder.strip())
+            and isinstance(session, str) and bool(session.strip()))
+
+
+def _handoff_resets(current: dict[str, Any] | None, merged: dict[str, Any],
+                    authorization: dict[str, Any] | None, task_id: str | None,
+                    index_items: list[dict[str, Any]] | None) -> bool:
+    """One responsibility transition, proven from the dispatch index.
+
+    ``state update`` does not guarantee an index. Without ``--index``, or when
+    that file is not the dispatch index, the disposition, the new id, and the
+    preset are three fields and do not reset. With the index, one read must
+    show the handed-off item still belonging to the counted owner and the one
+    new dispatch id in flight or returned for the new granted owner on this
+    same task. Anything missing keeps the count and that owner.
+    """
+    if not task_id or not isinstance(index_items, list):
+        return False
     old = (current or {}).get("dispositions") if isinstance((current or {}).get("dispositions"), dict) else {}
     new = merged.get("dispositions") if isinstance(merged.get("dispositions"), dict) else {}
-    handed = [key for key, value in new.items() if value == "handed-off" and old.get(key) != "handed-off"]
-    if not handed or not (_dispatch_ids(merged) - _dispatch_ids(current)):
+    handed = [key for key, value in new.items()
+              if value == "handed-off" and old.get(key) != "handed-off" and isinstance(key, str) and key]
+    added = _dispatch_ids(merged) - _dispatch_ids(current)
+    if len(handed) != 1 or len(added) != 1 or handed[0] not in _dispatch_ids(current):
         return False
     owner = _owner_of(merged)
     if not owner or owner not in _granted_ids(authorization):
@@ -3778,37 +3966,52 @@ def _handoff_resets(current: dict[str, Any] | None, merged: dict[str, Any],
     counted = rejection.get("owner")
     if not isinstance(counted, str) or not counted.strip():
         counted = _owner_of(current) if isinstance(current, dict) else None
-    return isinstance(counted, str) and bool(counted.strip()) and owner != counted.strip()
+    if not isinstance(counted, str) or not counted.strip() or owner == counted.strip():
+        return False
+    counted = counted.strip()
+    rows: dict[str, dict[str, Any]] = {}
+    for row in index_items:
+        item_id = row.get("item_id")
+        if isinstance(item_id, str) and item_id not in rows:
+            rows[item_id] = row
+    return (_row_is_owner(rows.get(handed[0]), task_id, counted)
+            and _row_taken_over(rows.get(next(iter(added))), task_id, owner))
 
 
 def _effort_action(patch: dict[str, Any], rejection: dict[str, Any], writer: str,
-                   authorization: dict[str, Any] | None, task: dict[str, Any]) -> str | None:
-    """Record a first Host effort token. Raise only on a proven higher one.
+                   authorization: dict[str, Any] | None, task: dict[str, Any],
+                   task_id: str | None, catalog: dict[str, Any] | None) -> tuple[str | None, str | None]:
+    """Record a proven applied effort. Raise only above a proven baseline.
 
-    A bare string never replaces a stored effort and never resets. A raise
-    needs a Host writer, an application receipt that matches the requested
-    token, and that token on the owner's grant. ``EFFORT_RANK`` only orders
-    those two proven tokens. It is not a platform profile.
+    A bare string is not a baseline. The receipt has to name this task and a
+    holder the task records, and ``effort_applied_verdict`` has to match.
+    An older stored token without ``effort_applied`` is unproven: this receipt
+    becomes the baseline and the count stays. A raise also needs the catalog
+    profile effort, any owner effort constraint already inside that coverage,
+    and both tokens on the receipt's advertised effort option, with the new
+    one later. Otherwise the count and any pending duty stay.
     """
     if writer != "host" or not isinstance(patch.get("effort"), str):
-        return None
+        return None, None
     requested = patch["effort"].strip().lower()
     if not requested:
-        return None
+        return None, None
+    receipt = patch.get("effort_receipt")
+    applied = _applied_effort(requested, receipt)
+    if applied is None or not _receipt_binds(receipt, task_id, task):
+        return None, None
     previous = rejection.get("effort")
     previous_token = previous.strip().lower() if isinstance(previous, str) and previous.strip() else None
-    applied = _applied_effort(requested, patch.get("effort_receipt"))
-    if applied is None:
-        if previous_token or requested not in EFFORT_RANK:
-            return None
-        return "record"
-    if applied not in EFFORT_RANK or not _effort_permitted(authorization, _owner_of(task), applied):
-        return None
-    if previous_token not in EFFORT_RANK:
-        return "record"
-    if EFFORT_RANK[applied] > EFFORT_RANK[previous_token]:
-        return "raise"
-    return None
+    if rejection.get("effort_applied") is not True or previous_token is None:
+        return "record", applied
+    if not _effort_permitted(authorization, _owner_of(task), applied, catalog):
+        return None, None
+    order = _advertised_effort_order(receipt)
+    if not order or previous_token not in order or applied not in order:
+        return None, None
+    if order.index(applied) <= order.index(previous_token):
+        return None, None
+    return "raise", applied
 
 
 def _incoming_binding(task: dict[str, Any], previous: dict[str, Any], patch: dict[str, Any],
@@ -3900,7 +4103,10 @@ def _keep_prior_repair(current: dict[str, Any] | None, merged: dict[str, Any]) -
 
 def apply_task_rejection(current: dict[str, Any] | None, merged: dict[str, Any],
                          patch: dict[str, Any], writer: str,
-                         authorization: dict[str, Any] | None = None) -> None:
+                         authorization: dict[str, Any] | None = None,
+                         task_id: str | None = None,
+                         index_items: list[dict[str, Any]] | None = None,
+                         catalog: dict[str, Any] | None = None) -> None:
     """Keep the current owner's repair count at the verdict transition.
 
     The binding is the dispatch item, the delivery receipt, and the review
@@ -3911,7 +4117,8 @@ def apply_task_rejection(current: dict[str, Any] | None, merged: dict[str, Any],
     be determined, after a positive count, stays a pending-binding duty: the
     count and the old binding remain as a lower bound, and the new verdict is
     kept. The projection publishes that duty. A later complete binding of a
-    new delivery increments once.
+    new delivery increments once. An effort comparison that is unknown, or a
+    handoff this update cannot prove, leaves that duty and the count.
     """
     for key in ("review", "effort", "effort_receipt"):
         if key in patch:
@@ -3924,18 +4131,24 @@ def apply_task_rejection(current: dict[str, Any] | None, merged: dict[str, Any],
         rejection["open_review"] = base + 1
     verdict = patch.get("verdict") if isinstance(patch.get("verdict"), dict) else None
     is_repair = bool(verdict and verdict.get("value") == "repair")
-    effort_action = _effort_action(patch, previous, writer, authorization, merged)
-    resets = _handoff_resets(current, merged, authorization) or effort_action == "raise"
+    effort_action, effort_token = _effort_action(
+        patch, previous, writer, authorization, merged, task_id, catalog)
+    resets = (_handoff_resets(current, merged, authorization, task_id, index_items)
+              or effort_action == "raise")
     if resets:
         for key in ("count", "dispatch", "receipt", "review", "pending"):
             rejection.pop(key, None)
+        if effort_action != "raise":
+            rejection.pop("effort", None)
+            rejection.pop("effort_applied", None)
         owner = _owner_of(merged)
         if owner:
             rejection["owner"] = owner
         else:
             rejection.pop("owner", None)
-    if effort_action in ("record", "raise") and isinstance(patch.get("effort"), str):
-        rejection["effort"] = patch["effort"].strip().lower()
+    if effort_action in ("record", "raise") and effort_token:
+        rejection["effort"] = effort_token
+        rejection["effort_applied"] = True
     incoming = _incoming_binding(merged, previous, patch, rejection) if is_repair else None
     # A segment reset drops the old binding first, so this repair is judged
     # against the new segment. Otherwise the comparison is the stored one.
@@ -4454,9 +4667,20 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
         if "verdict" in patch:
             merged["verdict"] = {**merged["verdict"], "by": "host"}
     if kind == "tasks":
+        catalog = None
+        if isinstance(patch.get("effort"), str):
+            try:
+                catalog = catalog_from_files(platform_paths(Path(__file__), None))
+            except (OSError, ValueError):
+                catalog = None
+        index_items = None
+        index_path = getattr(args, "index", None)
+        if index_path and any(key in patch for key in ("dispositions", "dispatch", "preset")):
+            index_items = _index_items(str(index_path), str(repo_of_state_file(Path(args.file))))
         apply_task_rejection(
             current if isinstance(current, dict) else None, merged, patch, args.writer,
-            state.get("authorization") if isinstance(state.get("authorization"), dict) else None)
+            state.get("authorization") if isinstance(state.get("authorization"), dict) else None,
+            record_id, index_items, catalog)
     merged["rev"] = int((current or {}).get("rev") or 0) + 1
     merged["updated_at"] = observed_at()
     merged["source"] = args.source
@@ -5925,7 +6149,7 @@ def build_parser() -> argparse.ArgumentParser:
     retire.add_argument("--handoff", help="current task that takes over its seats and dispatch")
     retire.set_defaults(func=command_state_retire)
 
-    update.add_argument("--index", help="dispatch index to mirror this task's dispositions onto")
+    update.add_argument("--index", help="dispatch index: mirror dispositions, and the only handoff locator this update reads")
 
     recovery = actions.add_parser("recovery-input", help="register a bounded Host recovery duty without a business write")
     recovery.add_argument("--file", required=True)

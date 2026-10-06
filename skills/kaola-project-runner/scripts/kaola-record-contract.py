@@ -68,7 +68,7 @@ VERDICT_KEYS = frozenset({"value", "by", "host_turn", "why"})
 # lives inside the object as `v`.
 REJECTION_KEYS = frozenset({
     "v", "count", "owner", "dispatch", "receipt", "review", "open_review", "effort",
-    "pending",
+    "effort_applied", "pending",
 })
 TRANSCRIBED_KEYS = frozenset({"host_turn", "fields"})
 UNVERIFIED_KEYS = frozenset({"summary", "locator", "session", "live", "v1", "unchecked", "source"})

@@ -8,8 +8,8 @@ be bound do not double-count. A new repair whose order cannot be determined,
 after a positive count, is a pending-binding duty: the count stays as a
 lower bound and the old binding stays visible. The count is absent when it
 is unknown; it is never stored as zero. No second ledger or history list is
-created. A segment restarts only for a real responsibility handoff or a
-permitted effort that was actually applied.
+created. A segment restarts only for one proven dispatch handoff or a
+catalog-profile effort that was actually applied.
 """
 
 from __future__ import annotations
@@ -233,7 +233,7 @@ class RejectionCount(unittest.TestCase):
         self.assertNotIn("history", unbound)
         self.assertNotIn("attempts", unbound)
 
-    def test_a_new_owner_segment_does_not_escalate_on_the_first_repair(self) -> None:
+    def test_a_field_combination_is_not_a_handoff(self) -> None:
         self.open_task()
         self.reject(why="one", evidence="receipt-1", dispositions={"item-1": "repair"})
         self.reopen()
@@ -261,17 +261,9 @@ class RejectionCount(unittest.TestCase):
                                      "--expect-rev", rev)
         self.assertEqual(code, 0, (out, err))
         stored = self.rejection()
-        self.assertNotIn("count", stored)
-        self.assertNotEqual(stored.get("count"), 0)
-        self.assertEqual(stored["owner"], "elite-b")
-        self.reopen()
-        first = self.reject(why="elite first delivery", evidence="receipt-9",
-                            dispositions={"item-9": "repair"})
-        self.assertEqual(first["rejection"]["count"], 1)
-        self.assertEqual(first["rejection"]["owner"], "elite-b")
-        shown = self.view("host")["tasks"][0]["rejection"]
-        self.assertEqual(shown["escalation"], "same-assignment")
-        self.assertEqual(self.view("delegator")["doing"][0]["rejection"]["escalation"], "same-assignment")
+        self.assertEqual(stored["count"], 2, "handed-off, a new id, and a new preset are not one transition")
+        self.assertEqual(stored["owner"], "worker-a", "the unfinished responsibility stays")
+        self.assertNotIn("effort_receipt", self.task())
 
     def test_renames_acceptance_edits_and_internal_work_do_not_count(self) -> None:
         self.open_task(session="shell-1", candidate="package-a")
@@ -311,9 +303,11 @@ class RejectionCount(unittest.TestCase):
         rev = str(self.task()["rev"])
         code, out, err = self.update("host", "tasks", "gate", {"effort": "high"}, "--expect-rev", rev)
         self.assertEqual(code, 0, (out, err))
-        self.assertEqual(self.rejection()["effort"], "high")
-        self.assertNotIn("count", self.rejection())
         self.assertNotIn("effort", self.task())
+        opened = self.task().get("rejection") or {}
+        self.assertNotIn("effort", opened, "a first string with no receipt is not a baseline")
+        self.assertNotIn("effort_applied", opened)
+        self.assertNotIn("count", opened)
         self.reject(why="one", evidence="receipt-1", dispositions={"item-1": "repair"})
         self.reopen()
         self.reject(why="two", evidence="receipt-2", dispositions={"item-2": "repair"})
@@ -323,12 +317,13 @@ class RejectionCount(unittest.TestCase):
             code, out, err = self.update("host", "tasks", "gate", {"effort": effort}, "--expect-rev", rev)
             self.assertEqual(code, 0, (out, err))
             self.assertEqual(self.rejection()["count"], 2, effort)
-            self.assertEqual(self.rejection()["effort"], "high", effort)
+            self.assertNotIn("effort", self.rejection(), effort)
+            self.assertNotIn("effort_applied", self.rejection(), effort)
         rev = str(self.task()["rev"])
         code, out, err = self.update("sideagent", "tasks", "gate", {"effort": "xhigh"}, "--expect-rev", rev)
         self.assertEqual(code, 0, (out, err))
         self.assertEqual(self.rejection()["count"], 2, "a Sideagent does not raise effort")
-        self.assertEqual(self.rejection()["effort"], "high")
+        self.assertNotIn("effort", self.rejection())
 
     def test_roles_cannot_write_the_count_or_judge(self) -> None:
         self.open_task()
@@ -795,6 +790,61 @@ class RejectionCount(unittest.TestCase):
         self.assertEqual(opened[0]["status"], "pending-binding")
         self.assertEqual(opened[0]["submission"]["receipt"], "receipt-1")
 
+    def _effort_receipt(self, effort: str, *, task: str = "gate", holder: str = "holder-1",
+                        applied: bool = True, options: list[str] | None = None) -> dict:
+        choices = ["low", "medium", "high", "xhigh", "max"] if options is None else options
+        return {
+            "task_id": task,
+            "holder_instance_id": holder,
+            "session_meta": {"configOptions": [{
+                "id": "effort",
+                "type": "select",
+                "options": [{"value": item, "name": item} for item in choices],
+            }]},
+            "config_application": {"effort": {
+                "applied": applied, "value": effort, "config_id": "effort",
+            }},
+        }
+
+    def _apply_effort(self, ident: str, effort: str, receipt: dict, writer: str = "host") -> None:
+        rev = str(self.task(ident)["rev"])
+        code, out, err = self.update(writer, "tasks", ident,
+                                     {"effort": effort, "effort_receipt": receipt},
+                                     "--expect-rev", rev)
+        self.assertEqual(code, 0, (out, err))
+
+    def _write_index(self, items: list[dict]) -> Path:
+        path = self.repo / ".kaola" / "dispatch-index.json"
+        path.write_text(json.dumps({
+            "schema": "kaola-dispatch-index/1",
+            "repo": str(self.repo),
+            "items": items,
+        }) + "\n", encoding="utf-8")
+        return path
+
+    def _plant_unproven(self, ident: str) -> None:
+        doc = self.doc()
+        rejection = doc["state"]["tasks"][ident]["rejection"]
+        rejection["effort"] = "high"
+        rejection.pop("effort_applied", None)
+        rejection["pending"] = "binding"
+        self.file.write_text(json.dumps(doc) + "\n", encoding="utf-8")
+
+    def _plant_pending(self, ident: str) -> None:
+        doc = self.doc()
+        doc["state"]["tasks"][ident]["rejection"]["pending"] = "binding"
+        self.file.write_text(json.dumps(doc) + "\n", encoding="utf-8")
+
+    def _two_repairs(self, ident: str, *, preset: str = "worker-a", holder: str | None = None) -> None:
+        extra: dict[str, object] = {"preset": preset}
+        if holder:
+            extra["holder_instance_id"] = holder
+        self.open_task(ident, **extra)
+        self.reject(ident=ident, why="one", evidence="receipt-1", dispositions={"item-1": "repair"})
+        self.reopen(ident)
+        self.reject(ident=ident, why="two", evidence="receipt-2", dispositions={"item-2": "repair"})
+        self.assertEqual(self.rejection(ident)["count"], 2)
+
     def _set_grants(self, grants: list[dict]) -> None:
         code, out, err = self.state(
             "update", "--file", str(self.file), "--writer", "host", "--source", "grant",
@@ -827,72 +877,171 @@ class RejectionCount(unittest.TestCase):
         self.assertEqual(self.rejection()["count"], 2, "an owner outside the grants does not reset")
         self.assertEqual(self.rejection()["owner"], "worker-a")
 
-    def test_a_permitted_applied_effort_raise_starts_a_segment(self) -> None:
-        self.open_task()
-        rev = str(self.task()["rev"])
-        code, out, err = self.update("host", "tasks", "gate", {"effort": "high"}, "--expect-rev", rev)
-        self.assertEqual(code, 0, (out, err))
-        self.reject(why="one", evidence="receipt-1", dispositions={"item-1": "repair"})
-        self.reopen()
-        self.reject(why="two", evidence="receipt-2", dispositions={"item-2": "repair"})
-        self.assertEqual(self.rejection()["count"], 2)
-        receipt = {"config_application": {"effort": {"applied": True, "value": "xhigh"}}}
-        rev = str(self.task()["rev"])
-        code, out, err = self.update("host", "tasks", "gate",
-                                     {"effort": "xhigh", "effort_receipt": receipt}, "--expect-rev", rev)
-        self.assertEqual(code, 0, (out, err))
-        self.assertEqual(self.rejection()["count"], 2, "a receipt the grant does not permit does not reset")
-        self.assertEqual(self.rejection()["effort"], "high")
-        self.assertNotIn("effort_receipt", self.task())
-        self._set_grants([
+    def test_catalog_profile_effort_uses_applied_evidence(self) -> None:
+        """A normal preset raises from applied evidence. Special effort only restates it."""
+        claude = "claude-code/opus-xhigh"
+        base = [
             {"id": "zcode/default", "state": "granted", "count": 1},
+            {"id": claude, "state": "granted", "count": 1},
             {"id": "worker-a", "state": "granted", "count": 1,
              "special_requirements": {"effort": "xhigh"}},
             {"id": "elite-b", "state": "granted", "count": 1},
-        ])
-        unapplied = {"config_application": {"effort": {"applied": False, "value": "xhigh"}}}
-        rev = str(self.task()["rev"])
-        code, out, err = self.update("host", "tasks", "gate",
-                                     {"effort": "xhigh", "effort_receipt": unapplied}, "--expect-rev", rev)
+        ]
+        self._set_grants(base)
+        self._two_repairs("legacy", preset=claude, holder="holder-1")
+        self._plant_unproven("legacy")
+        self._apply_effort("legacy", "xhigh", self._effort_receipt("xhigh", task="legacy"))
+        legacy = self.rejection("legacy")
+        self.assertEqual(legacy["count"], 2, "an unproven stored string is not a baseline that can reset")
+        self.assertEqual(legacy["pending"], "binding")
+        self.assertEqual(legacy["effort"], "xhigh")
+        self.assertIs(legacy["effort_applied"], True)
+        shown = self._row(self.view("host"), "legacy")["rejection"]
+        self.assertEqual(shown["status"], "pending-binding")
+        self.assertEqual(shown["count_bound"], "lower")
+        self.assertNotIn("effort_applied", shown)
+
+        self._two_repairs("gate", preset=claude, holder="holder-1")
+        self.assertNotIn("effort", self.rejection("gate"))
+        self._apply_effort("gate", "high", self._effort_receipt("high"))
+        proven = self.rejection("gate")
+        self.assertEqual(proven["count"], 2, "the first proven receipt is the baseline, not a raise")
+        self.assertEqual(proven["effort"], "high")
+        self.assertIs(proven["effort_applied"], True)
+        self.assertNotIn("pending", proven)
+        self._plant_pending("gate")
+
+        def stays(note: str) -> None:
+            stored = self.rejection("gate")
+            self.assertEqual(stored["count"], 2, note)
+            self.assertEqual(stored["effort"], "high", note)
+            self.assertIs(stored["effort_applied"], True, note)
+            self.assertEqual(stored["pending"], "binding", note)
+            self.assertEqual(stored["owner"], claude, note)
+            self.assertNotIn("effort_receipt", self.task("gate"))
+
+        self._apply_effort("gate", "xhigh", self._effort_receipt("xhigh", applied=False))
+        stays("an unapplied receipt is not applied evidence")
+        self._apply_effort("gate", "xhigh", self._effort_receipt("xhigh"), writer="sideagent")
+        stays("a Sideagent receipt does not raise")
+        self._apply_effort("gate", "xhigh", self._effort_receipt("xhigh", task="other"))
+        stays("a receipt for another task does not bind")
+        self._apply_effort("gate", "xhigh", self._effort_receipt("xhigh", holder="holder-other"))
+        stays("a receipt for another holder does not bind")
+        self._apply_effort("gate", "xhigh", self._effort_receipt(
+            "xhigh", options=["xhigh", "medium", "high"]))
+        stays("the advertised order is the platform order, not the generic rank")
+        self._apply_effort("gate", "xhigh", self._effort_receipt(
+            "xhigh", options=["low", "high", "max"]))
+        stays("a legal set that has no xhigh is not comparable")
+        self._apply_effort("gate", "ultra", self._effort_receipt(
+            "ultra", options=["low", "high", "ultra", "xhigh"]))
+        stays("a token the catalog profile does not name does not raise")
+
+        rev = str(self.task("gate")["rev"])
+        code, out, err = self.update("host", "tasks", "gate", {"preset": "worker-a"}, "--expect-rev", rev)
         self.assertEqual(code, 0, (out, err))
-        self.assertEqual(self.rejection()["count"], 2)
-        self.assertEqual(self.rejection()["effort"], "high")
-        self._set_grants([
+        self._apply_effort("gate", "xhigh", self._effort_receipt("xhigh"))
+        stays("special_requirements.effort on a preset the catalog does not name does not grant")
+        rev = str(self.task("gate")["rev"])
+        code, out, err = self.update("host", "tasks", "gate", {"preset": claude}, "--expect-rev", rev)
+        self.assertEqual(code, 0, (out, err))
+        constrained = [
             {"id": "zcode/default", "state": "granted", "count": 1},
-            {"id": "worker-a", "state": "granted", "count": 1,
-             "special_requirements": {"effort": "ultra"}},
+            {"id": claude, "state": "granted", "count": 1,
+             "special_requirements": {"effort": "high"}},
+            {"id": "worker-a", "state": "granted", "count": 1},
             {"id": "elite-b", "state": "granted", "count": 1},
+        ]
+        self._set_grants(constrained)
+        self._apply_effort("gate", "xhigh", self._effort_receipt("xhigh"))
+        stays("a special effort that is not the catalog profile only constrains")
+        self._set_grants(base)
+        self._apply_effort("gate", "xhigh", self._effort_receipt("xhigh"))
+        raised = self.rejection("gate")
+        self.assertNotIn("count", raised)
+        self.assertNotIn("pending", raised)
+        self.assertEqual(raised["effort"], "xhigh")
+        self.assertIs(raised["effort_applied"], True)
+        self.assertEqual(raised["owner"], claude)
+        self.assertNotIn("effort_receipt", self.task("gate"))
+        self.reopen("gate")
+        self.reject(ident="gate", why="after the raise", evidence="receipt-3",
+                    dispositions={"item-3": "repair"})
+        self.assertEqual(self.rejection("gate")["count"], 1)
+        self.assertEqual(self.rejection("gate")["owner"], claude)
+        for role in ("host", "delegator"):
+            row = self._row(self.view(role), "gate")["rejection"]
+            self.assertEqual(row["count"], 1)
+            self.assertEqual(row["escalation"], "same-assignment")
+            self.assertEqual(row["owner"], claude)
+
+    def test_a_proven_handoff_is_one_transition(self) -> None:
+        """Handed-off, a new id, and a new owner reset only as one index transition."""
+
+        def attempt(ident: str, index: Path) -> None:
+            rev = str(self.task(ident)["rev"])
+            code, out, err = self.update(
+                "host", "tasks", ident,
+                {"preset": "elite-b", "dispatch": ["item-1", "item-9"],
+                 "dispositions": {"item-1": "handed-off"}},
+                "--expect-rev", rev, "--index", str(index))
+            self.assertEqual(code, 0, (out, err))
+
+        def unchanged(ident: str, note: str) -> None:
+            stored = self.rejection(ident)
+            self.assertEqual(stored["count"], 2, note)
+            self.assertEqual(stored["owner"], "worker-a", note)
+
+        self._two_repairs("dark")
+        attempt("dark", self.repo / ".kaola" / "missing-index.json")
+        unchanged("dark", "a missing index is not proof, and the write still lands")
+
+        def seat(item: str, task: str, preset: str, status: str, holder: str) -> dict:
+            return {"item_id": item, "task_id": task, "preset": preset, "status": status,
+                    "session": "seat-" + holder, "holder_instance_id": holder}
+
+        self._two_repairs("miss")
+        cold = self._write_index([
+            seat("item-1", "miss", "worker-a", "returned", "holder-a"),
+            seat("item-9", "miss", "elite-b", "not-run", "holder-b"),
         ])
-        ultra = {"config_application": {"effort": {"applied": True, "value": "ultra"}}}
-        rev = str(self.task()["rev"])
-        code, out, err = self.update("host", "tasks", "gate",
-                                     {"effort": "ultra", "effort_receipt": ultra}, "--expect-rev", rev)
-        self.assertEqual(code, 0, (out, err))
-        self.assertEqual(self.rejection()["count"], 2, "a permitted token outside the compared pair does not reset")
-        self.assertEqual(self.rejection()["effort"], "high")
-        self._set_grants([
-            {"id": "zcode/default", "state": "granted", "count": 1},
-            {"id": "worker-a", "state": "granted", "count": 1,
-             "special_requirements": {"effort": "xhigh"}},
-            {"id": "elite-b", "state": "granted", "count": 1},
+        attempt("miss", cold)
+        unchanged("miss", "the new dispatch was not taken over")
+
+        self._two_repairs("alien")
+        elsewhere = self._write_index([
+            seat("item-1", "alien", "worker-a", "returned", "holder-a"),
+            seat("item-9", "elsewhere", "elite-b", "in-flight", "holder-b"),
         ])
-        rev = str(self.task()["rev"])
-        code, out, err = self.update("sideagent", "tasks", "gate",
-                                     {"effort": "xhigh", "effort_receipt": receipt}, "--expect-rev", rev)
-        self.assertEqual(code, 0, (out, err))
-        self.assertEqual(self.rejection()["count"], 2)
-        self.assertEqual(self.rejection()["effort"], "high")
-        rev = str(self.task()["rev"])
-        code, out, err = self.update("host", "tasks", "gate",
-                                     {"effort": "xhigh", "effort_receipt": receipt}, "--expect-rev", rev)
-        self.assertEqual(code, 0, (out, err))
-        self.assertNotIn("count", self.rejection())
-        self.assertEqual(self.rejection()["effort"], "xhigh")
-        self.assertNotIn("effort_receipt", self.task())
-        self.reopen()
-        self.reject(why="after the raise", evidence="receipt-3", dispositions={"item-3": "repair"})
-        self.assertEqual(self.rejection()["count"], 1)
-        self.assertEqual(self.view("host")["tasks"][0]["rejection"]["escalation"], "same-assignment")
+        attempt("alien", elsewhere)
+        unchanged("alien", "the new dispatch belongs to another task")
+
+        self._two_repairs("gate")
+        planted = self.doc()
+        planted["state"]["tasks"]["gate"]["rejection"]["effort"] = "high"
+        planted["state"]["tasks"]["gate"]["rejection"]["effort_applied"] = True
+        self.file.write_text(json.dumps(planted) + "\n", encoding="utf-8")
+        proven = self._write_index([
+            seat("item-1", "gate", "worker-a", "returned", "holder-a"),
+            seat("item-9", "gate", "elite-b", "in-flight", "holder-b"),
+        ])
+        attempt("gate", proven)
+        stored = self.rejection("gate")
+        self.assertNotIn("count", stored)
+        self.assertEqual(stored["owner"], "elite-b")
+        self.assertNotIn("effort", stored, "the new owner does not inherit the old baseline")
+        self.assertNotIn("effort_applied", stored)
+        self.reopen("gate")
+        self.reject(ident="gate", why="after the handoff", evidence="receipt-3",
+                    dispositions={"item-3": "repair"})
+        self.assertEqual(self.rejection("gate")["count"], 1)
+        self.assertEqual(self.rejection("gate")["owner"], "elite-b")
+        for role in ("host", "delegator"):
+            row = self._row(self.view(role), "gate")["rejection"]
+            self.assertEqual(row["count"], 1)
+            self.assertEqual(row["escalation"], "same-assignment")
+            self.assertEqual(row["owner"], "elite-b")
 
     def test_two_bound_repairs_still_reach_count_two(self) -> None:
         self.open_task()
