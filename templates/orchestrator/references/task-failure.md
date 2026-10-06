@@ -16,6 +16,8 @@ The first `repair` stays with that owner. No timer and no failure classifier run
 
 Escalation means a different authorized owner now diagnoses or executes the obligation, or a higher effort where the Elite branch below allows it. The voucher is the dispatch or the effort receipt. `next` says what that owner does differently. Research may accompany the change. It does not replace a change of owner or effort ([public-research.md](public-research.md)).
 
+An effort raise resets a segment only when the platform catalog declares an explicit semantic strength order for both tokens and the really-applied token is strictly later. No current platform catalog declares one, so the automatic effort-raise reset is effectively unavailable today; this is a documented limitation, not a claim of cross-platform automatic effort-upgrade recognition. A responsibility handoff with index evidence still resets.
+
 When no suitable authorized seat or effort exists, record a local hold with `resume_when` and leave the count. Say that escalation is not done. The same seat may run only a pre-declared scoped experiment until the hold lifts. Substantive new scope is a new obligation. The old unresolved responsibility stays with its count.
 
 The Host records the verdict and chooses the handoff. The Delegator supervises: it may tell the Host that escalation is owed, and it does not dispatch or name a seat. The Sideagent transcribes Host verdicts and does not judge them. The tool keeps the count. It does not choose the next owner and it does not block a dispatch.

@@ -212,7 +212,7 @@ evidence-reuse rules in the matrix. The grouped-grant reader proof is a
 scratch/source check (docs/conventions.md), not an all-runtime installed
 upgrade result.
 
-**Limitations.** Consumer-side install UAT is intentionally not performed
+**Limitations.** #267 effort raise: a reset requires a catalog-DECLARED semantic strength order; no current platform catalog declares one, so the automatic effort-raise reset is effectively unavailable today — a documented limitation, NOT a claim of cross-platform automatic effort-upgrade recognition; evidence-backed responsibility handoff (one verified index transition) still resets; ordinary Runner receipts without task_id bind through existing dispatch/item/session/index locators (native live sample: the i268-b-delta index row); conservative unknown keeps count and pending duties. Consumer-side install UAT is intentionally not performed
 (no-install boundary): installed runtime Skills remain at the prior release
 until the authorized PATCH release/install step; relay across holder death
 and timer read-back remain unproven as above. The delegator consumer view
