@@ -1,0 +1,103 @@
+{
+ "lane": "hooks (Droid, Cursor CLI, DSH)",
+ "run": "DSH positive-chain counterpart",
+ "date": "2026-10-06",
+ "runtime": "dsh 0.2.0-rc.2; agent deepseek-harness-acp/0.0.1",
+ "candidate": {
+  "commit": "4b247a2dbae9006be71962da32b31e5c5eb05629",
+  "holder_sha256": "d8cc9dc147f69db50dc5be5c7cf1f7efced677c19813155792a191aedb72f280",
+  "dsh_adapter_sha256": "b1879fca1791845608ce00fa162c122f0729cdb105516d0d4f27dbe69c506e6a",
+  "dispatch_sha256": "140d13992f1749b003c69222c3d6f714bdf8e5e9c7db19ed7e84c05245c6fbfd"
+ },
+ "host": {
+  "session": "dsh-KPR264H2-orchestrator-main",
+  "holder_instance_id": "f9d9d2344dae9b4d0c919dac478d55ad",
+  "acp_session_id": "0722b754-2773-40fe-ab41-61d448f9eab4",
+  "role": "host",
+  "repo": "/private/tmp/kpr-i264-host-chain-1035/hooks/dsh-pos/consumer"
+ },
+ "native_compaction": {
+  "occurrence_id": "506d74ee-f23c-4d34-848a-9cf64e4af77b",
+  "source_command_id": "4427aebe-6fc8-49c8-8d02-df59675f0c8a",
+  "summary_seq": 26,
+  "end_seq": 28,
+  "shadowed_range": [
+   8,
+   19
+  ],
+  "shadowed_token_count": 4083,
+  "detected_cursor": 22,
+  "route": "explicit /compact"
+ },
+ "business_batch_pre_signal": {
+  "batch": "b-1bbb78d27b63",
+  "node_holder": "79ae3825081f16bef4cf0f7a857dd229",
+  "through": 4,
+  "checkpoint": "verified",
+  "started_cursor": 13,
+  "batch_cursor": 14,
+  "settled_cursor": 15,
+  "stopped_cursor": 20
+ },
+ "registration": {
+  "event": "host_compact_maintenance_registered",
+  "cursor": 25,
+  "recovery_seq": 1,
+  "kind": "host-compaction",
+  "source": "completed-host-signal",
+  "signal_cursor": 22,
+  "business_revision_effect": "none (maintenance section only)"
+ },
+ "host_reload": {
+  "event": "compact_reload_delivered",
+  "cursor": 24,
+  "installed_reads": [
+   {
+    "path": "/Users/ylmacstudio/.agents/skills/kaola-project-runner/SKILL.md",
+    "bytes": 17407,
+    "lines": 264,
+    "sha256": "1af732f378a11bd04e4533a3e1fe38cef9b9b48b393360748d0a8030f5524df7",
+    "read_cursor": 36,
+    "result_cursor": 38
+   },
+   {
+    "path": "/Users/ylmacstudio/.agents/skills/dsh-kaola-project-runner/SKILL.md",
+    "bytes": 10450,
+    "lines": 165,
+    "sha256": "ea2ccfbd2c523baebb6f6ff7a5b41654b08922bd379f52f35770d7c00098db22",
+    "read_cursor": 37,
+    "result_cursor": 39
+   }
+  ],
+  "task_continuation": "qa/progress.md re-read (cursor 145/161) and updated (result cursor 162, 17 lines); TASK-B continued"
+ },
+ "recovery_batch": {
+  "batch": "b-cd58270db6d3",
+  "node_holder": "4d56cdc70f155f3b56692c79a9bf4ab6",
+  "through": 6,
+  "recovery_input_seq": 1,
+  "checkpoint": "verified",
+  "verified": true,
+  "scopes_checked": [
+   "authorization",
+   "duties",
+   "links"
+  ],
+  "unavailable": {},
+  "started_cursor": 167,
+  "batch_cursor": 168,
+  "settled_cursor": 169,
+  "stopped_cursor": 174,
+  "receipt_stopped": true
+ },
+ "host_stop": {
+  "stopped": true,
+  "agent_exit_code": 0,
+  "residual_pids": [],
+  "swept_child_pgids": []
+ },
+ "raw": {
+  "host_events_sha256": "27e184fba1a18f7d1b171d66b333d3b6675dea8a1ec6f4e3c736efdbc062e025",
+  "node_events_sha256": "caf92471cb2ee726a219d8501eab2b2a97fea072bcb9f121be161958c82e332b"
+ }
+}

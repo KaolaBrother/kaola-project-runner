@@ -1,0 +1,326 @@
+{
+  "candidate:scripts/kaola-acp-holder.py": {
+    "sha256": "d8cc9dc147f69db50dc5be5c7cf1f7efced677c19813155792a191aedb72f280",
+    "matches_current264": true
+  },
+  "candidate:scripts/kaola-compact-recovery.py": {
+    "sha256": "c45662a4297047bd860a46157e950b4aac460b3e9df1a889abe99ca687e90f27",
+    "matches_current264": true
+  },
+  "candidate:scripts/kaola-dsh-acp.py": {
+    "sha256": "b1879fca1791845608ce00fa162c122f0729cdb105516d0d4f27dbe69c506e6a",
+    "matches_current264": true
+  },
+  "candidate:scripts/kaola-dispatch.py": {
+    "sha256": "140d13992f1749b003c69222c3d6f714bdf8e5e9c7db19ed7e84c05245c6fbfd",
+    "matches_current264": true
+  },
+  "candidate:scripts/kaola-tmux.sh": {
+    "sha256": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b",
+    "matches_current264": true
+  },
+  "full_read:kaola-project-runner": {
+    "cursor": 38,
+    "lines": 264,
+    "expected": 264,
+    "all_numbered_lines_match": true,
+    "end_marker": true,
+    "sha256": "1af732f378a11bd04e4533a3e1fe38cef9b9b48b393360748d0a8030f5524df7"
+  },
+  "full_read:dsh-kaola-project-runner": {
+    "cursor": 39,
+    "lines": 165,
+    "expected": 165,
+    "all_numbered_lines_match": true,
+    "end_marker": true,
+    "sha256": "ea2ccfbd2c523baebb6f6ff7a5b41654b08922bd379f52f35770d7c00098db22"
+  },
+  "recovery": {
+    "native_signal": "completed",
+    "holder": "f9d9d2344dae9b4d0c919dac478d55ad",
+    "registration_input": {
+      "at": "2026-10-06T09:38:20.213221+00:00",
+      "evidence": "/tmp/kpr-i264-host-chain-1035/hooks/dsh-pos/records/dsh/dsh-KPR264H2-orchestrator-main/83e4a1519fae3b2d/events.jsonl#22",
+      "holder": "f9d9d2344dae9b4d0c919dac478d55ad",
+      "kind": "host-compaction",
+      "occurrence_id": "506d74ee-f23c-4d34-848a-9cf64e4af77b",
+      "seq": 1,
+      "source": "completed-host-signal"
+    },
+    "batch": "b-cd58270db6d3",
+    "checkpoint": "verified",
+    "checked_counts": {
+      "authorization": 4,
+      "duties": 6,
+      "links": 7
+    },
+    "unavailable": {},
+    "settled": [
+      "host:tasks/qa-observe@6",
+      "recovery#1"
+    ],
+    "node_reclaim": {
+      "stopped": true
+    },
+    "no_registration_business_edit": true
+  },
+  "original_links": [
+    {
+      "path": "/tmp/kpr-i264-913-dsh-live/record-root/dsh/dsh-KPR-i264-913-compact/4205542dccbdba35/record.json",
+      "exists": true,
+      "sha256": "f17461899b584e806de917e654c9f1b5969132724f09c003e54e40754f311288"
+    },
+    {
+      "path": "/tmp/kpr-i264-913-dsh-live/evidence/final-capture.json",
+      "exists": true,
+      "sha256": "b7796a819f10a5da7289a61758921c51ff9912e4eb25b1f6ab1ab57fe5d12d22"
+    },
+    {
+      "path": "/tmp/kpr-i264-913-dsh-live-proof.md",
+      "exists": true,
+      "sha256": "3d5ed0ec5d0470f9d993b9a41bc78c19e9065dbc443077e96ac98cdec4273247"
+    },
+    {
+      "path": "/tmp/kpr-i264-913-dsh-live/evidence/compact-send.json",
+      "exists": true,
+      "sha256": "e01804e19c4fb4751b08d5871e2ccf5e78dc8cfbdd87d11672805b9be569973e"
+    },
+    {
+      "path": "/tmp/kpr-i264-913-dsh-live/evidence/start.json",
+      "exists": true,
+      "sha256": "c48b597c13915be4ac0b985b7914bd5633ab0897aebc01c4f063245f58100d65"
+    },
+    {
+      "path": "/tmp/kpr-i264-host-chain-1035/hooks/assignment.txt",
+      "exists": true,
+      "sha256": "55d3238355e439dd885b7025da19db7803a0cf3a3f4a2ac37d808eb960fe626f"
+    }
+  ],
+  "prior_original_identity": {
+    "repo": "/private/tmp/kpr-i264-913-dsh-live/consumer",
+    "session": "dsh-KPR-i264-913-compact",
+    "state": "stopped",
+    "agent_exit_code": null,
+    "residual_pids": null,
+    "holder_instance_id": "8b007c73aca37df782af04199909549e"
+  },
+  "cleanup": {
+    "dsh-pos/receipts/host-stop.json": {
+      "session": "dsh-KPR264H2-orchestrator-main",
+      "stopped": true,
+      "agent_exit_code": 0,
+      "residual_pids": []
+    },
+    "droid/host/receipts/host-stop.json": {
+      "session": "droid-KPR264HD-orchestrator-main",
+      "stopped": true,
+      "agent_exit_code": 0,
+      "residual_pids": []
+    },
+    "droid/probe/receipts/host-stop.json": {
+      "session": "droid-KPR264HD2-orchestrator-main",
+      "stopped": true,
+      "agent_exit_code": 0,
+      "residual_pids": []
+    },
+    "cursor/host/receipts/host-stop.json": {
+      "session": "cursor-cli-KPR264HC-orchestrator-main",
+      "stopped": true,
+      "agent_exit_code": 0,
+      "residual_pids": []
+    },
+    "cursor/host/receipts/host-stop-r0.json": {
+      "session": "cursor-KPR264HC-orchestrator-main",
+      "stopped": true,
+      "agent_exit_code": 0,
+      "residual_pids": []
+    }
+  },
+  "droid/host": {
+    "record_identity": {
+      "session": "droid-KPR264HD-orchestrator-main",
+      "holder_instance_id": "fbc5e43941d311b51933918a2af68ac4",
+      "acp_session_id": "04d98bf9-6c68-4bd2-8602-8646df495b43",
+      "session_role": "host",
+      "role": null,
+      "state": "ready",
+      "agent_alive": true
+    },
+    "update_variants": [
+      "agent_message_chunk",
+      "available_commands_update",
+      "config_option_update",
+      "current_mode_update",
+      "tool_call",
+      "tool_call_update"
+    ],
+    "compact_detected_events": 0,
+    "commands": 33,
+    "compact_commands": [],
+    "raw_sha256": "b0df1c6b1012a066c12209d13e74954578eca8ef364a4ff6bd22dfb35daeefba",
+    "settings": {
+      "assistantActiveTimeMs": 18731,
+      "model": "auto",
+      "reasoningEffort": "none",
+      "interactionMode": "auto",
+      "autonomyLevel": "high",
+      "autonomyMode": "auto-high",
+      "compactionThresholdCheckEnabled": true,
+      "allowSubagentsInScripts": false,
+      "toolExecutionMode": "direct_only",
+      "toolExecutionModeModelId": "gpt-6-luna",
+      "tokenUsage": {
+        "inputTokens": 20706,
+        "outputTokens": 888,
+        "cacheCreationTokens": 0,
+        "cacheReadTokens": 19942,
+        "thinkingTokens": 274,
+        "factoryCredits": 5125
+      },
+      "childInclusiveTokenUsageBySessionId": {},
+      "inclusiveTokenUsage": {
+        "inputTokens": 20706,
+        "outputTokens": 888,
+        "cacheCreationTokens": 0,
+        "cacheReadTokens": 19942,
+        "thinkingTokens": 274,
+        "factoryCredits": 5125
+      },
+      "effectiveFactoryRouterModel": {
+        "modelId": "gpt-6-luna",
+        "reasoningEffort": "xhigh",
+        "reason": "routine",
+        "fallbacks": [
+          {
+            "modelId": "minimax-m3",
+            "reasoningEffort": "high"
+          },
+          {
+            "modelId": "deepseek-v4.1-flash",
+            "reasoningEffort": "high"
+          },
+          {
+            "modelId": "glm-5.3",
+            "reasoningEffort": "max"
+          },
+          {
+            "modelId": "gpt-6.1-sol",
+            "reasoningEffort": "medium"
+          },
+          {
+            "modelId": "kimi-k3",
+            "reasoningEffort": "high"
+          },
+          {
+            "modelId": "claude-opus-5-5",
+            "reasoningEffort": "medium"
+          }
+        ]
+      },
+      "lastCallTokenUsage": {
+        "inputTokens": 5241,
+        "outputTokens": 25,
+        "cacheReadTokens": 8166
+      },
+      "providerLock": "openai",
+      "providerLockTimestamp": "2026-10-06T09:48:24.588Z",
+      "apiProviderLock": "openai"
+    },
+    "final_record_identity": {
+      "session": "droid-KPR264HD-orchestrator-main",
+      "holder_instance_id": "fbc5e43941d311b51933918a2af68ac4",
+      "acp_session_id": "04d98bf9-6c68-4bd2-8602-8646df495b43",
+      "session_role": "host",
+      "state": "stopped",
+      "agent_alive": false
+    },
+    "actual_events_path": "/tmp/kpr-i264-host-chain-1035/hooks/droid/host/records/droid/droid-KPR264HD-orchestrator-main/24d9c35ac2169130/events.jsonl",
+    "actual_events_sha256": "3ed27037620c9c9651361ef0d05223b800568e85bca1b02611f1a5409b4d3364",
+    "actual_variants": [
+      "agent_message_chunk",
+      "available_commands_update",
+      "config_option_update",
+      "current_mode_update",
+      "tool_call",
+      "tool_call_update"
+    ],
+    "actual_commands": 33,
+    "actual_compaction_events": [],
+    "terminal_turns": [
+      {
+        "cursor": 26,
+        "outcome": "turn_completed",
+        "stop_reason": "end_turn",
+        "prompt_fingerprint": "sha256:f4ad2808f4aa80692f11a97cc1bc8d62c29146a7587efa538a2af52530b7d8a4"
+      }
+    ]
+  },
+  "cursor/host": {
+    "record_identity": {
+      "session": "cursor-KPR264HC-orchestrator-main",
+      "holder_instance_id": "db96800f12802db2150f3223fa651d4d",
+      "acp_session_id": "fb8af4b5-f8c8-45c3-83a7-2670f1e5b896",
+      "session_role": "elite",
+      "role": null,
+      "state": "stopped",
+      "agent_alive": false
+    },
+    "update_variants": [
+      "available_commands_update"
+    ],
+    "compact_detected_events": 0,
+    "commands": 56,
+    "compact_commands": [],
+    "raw_sha256": "de6800c7428c599535f985cec1a64466aa74d976a80b20ff39ca0e1de9e1d3c1",
+    "final_record_identity": {
+      "session": "cursor-cli-KPR264HC-orchestrator-main",
+      "holder_instance_id": "2d550c936613df3ad7a913bcbba5c6ed",
+      "acp_session_id": "4d82cf8e-dbb7-4f71-83d4-569cbd2f37b8",
+      "session_role": "host",
+      "state": "stopped",
+      "agent_alive": false
+    },
+    "actual_events_path": "/tmp/kpr-i264-host-chain-1035/hooks/cursor/host/records/cursor-cli/cursor-cli-KPR264HC-orchestrator-main/af5cacf1299005e8/events.jsonl",
+    "actual_events_sha256": "941a65da4e11ce1022b512901ca1f870c61b2e543dacf40579aa335ae4fb2ee1",
+    "actual_variants": [
+      "agent_message_chunk",
+      "agent_thought_chunk",
+      "available_commands_update",
+      "session_info_update",
+      "tool_call",
+      "tool_call_update"
+    ],
+    "actual_commands": 56,
+    "actual_compaction_events": [],
+    "terminal_turns": [
+      {
+        "cursor": 45,
+        "outcome": "turn_completed",
+        "stop_reason": "end_turn",
+        "prompt_fingerprint": "sha256:208b74175737c99f9e30598cde84302ad0f6bea3cb0684071af989b72071448f"
+      }
+    ],
+    "raw_snapshot_binding_error": "receipts/raw files belong to earlier elite/no-prompt cursor-KPR264HC, not actual host cursor-cli-KPR264HC; preserved, actual holder originals used instead"
+  },
+  "prototype": {
+    "adapter_base_sha256": "73a1059b0f0d04a017600280583ba3516896ef0ed642a6d867436d233bc5ba51",
+    "adapter_experimental_sha256": "6c831ad3b65995c4bfde515910fdd04df5873072f1b5a5d79e1e28c6b3a87a28",
+    "changed_files": [
+      "platforms/droid.yaml",
+      "scripts/adapters/droid.sh"
+    ]
+  },
+  "raw_hashes": {
+    "dsh-pos/receipts/raw/host-events.jsonl": "27e184fba1a18f7d1b171d66b333d3b6675dea8a1ec6f4e3c736efdbc062e025",
+    "dsh-pos/receipts/raw/node-events.jsonl": "caf92471cb2ee726a219d8501eab2b2a97fea072bcb9f121be161958c82e332b"
+  },
+  "original_r1_preserved": true,
+  "DSH_scope": "Explicit native /compact; automatic KPR reload/typed recovery/node; simulated disposable QA state references real prior-run receipts by diagnostic alias, not an actual child dispatch originating in this new consumer. Scoped verification, not universal identity validation. No Workflow execution was assigned.",
+  "DSH_taskB_correction": "Write tool145; successful updated content returned162 (a read result), not write162. Both are original Host actions after full Skill results38/39.",
+  "verdict": {
+    "DSH": "accepted qualified explicit complete chain; background-native forwarding unverified",
+    "Droid": "accepted actual finite experimental Host attempt; three compaction stages remain unverified",
+    "Cursor": "accepted actual finite Host attempt from correct holder originals; three compaction stages remain unverified; r2 raw binding requires correction",
+    "remaining": "Same assignment source-led finite native-trigger and completion-carrier investigation for Droid/Cursor; no repeated DSH test."
+  }
+}

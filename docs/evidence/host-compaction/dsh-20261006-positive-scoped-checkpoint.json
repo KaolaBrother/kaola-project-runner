@@ -1,0 +1,58 @@
+{
+  "at": "2026-10-06T09:45:09.107864+00:00",
+  "batch": "b-cd58270db6d3",
+  "host_revision": {
+    "current": 6,
+    "from": 4,
+    "through": 6
+  },
+  "node": {
+    "holder_instance_id": "4d56cdc70f155f3b56692c79a9bf4ab6",
+    "session": "dsh-KPR-I264H2-DSH-sideagent"
+  },
+  "recovery": {
+    "checked": {
+      "authorization": [
+        "/private/tmp/kpr-i264-host-chain-1035/hooks/dsh-pos/consumer/AGENTS.md#KPR-USER-REQUIREMENTS-START",
+        "/private/tmp/kpr-i264-host-chain-1035/hooks/dsh-pos/consumer/.kaola/heartbeat-prompt.json#state.project",
+        "/private/tmp/kpr-i264-host-chain-1035/hooks/dsh-pos/consumer/.kaola/heartbeat-prompt.json#state.authorization",
+        "/private/tmp/kpr-i264-host-chain-1035/hooks/dsh-pos/consumer/.kaola/delegator-heartbeat.json#authorization"
+      ],
+      "duties": [
+        "/private/tmp/kpr-i264-host-chain-1035/hooks/dsh-pos/consumer/.kaola/heartbeat-prompt.json#state.tasks/qa-observe",
+        "/private/tmp/kpr-i264-host-chain-1035/hooks/dsh-pos/consumer/.kaola/heartbeat-prompt.json#state.decisions+state.holds",
+        "/private/tmp/kpr-i264-host-chain-1035/hooks/dsh-pos/consumer/kaola-workflow/kaola-project-runner/workflow-state.md",
+        "/private/tmp/kpr-i264-host-chain-1035/hooks/dsh-pos/consumer/kaola-workflow/.ledger/issue-264.jsonl",
+        "/private/tmp/kpr-i264-host-chain-1035/hooks/dsh-pos/consumer/qa/progress.md",
+        "/tmp/kpr-i264-host-chain-1035/hooks/dsh-pos/records/dsh/dsh-KPR264H2-orchestrator-main/83e4a1519fae3b2d/events.jsonl#22"
+      ],
+      "links": [
+        "/private/tmp/kpr-i264-host-chain-1035/hooks/dsh-pos/consumer/.kaola/dispatch-index.json#items/qa-prior-reclaim-1",
+        "/tmp/kpr-i264-913-dsh-live/record-root/dsh/dsh-KPR-i264-913-compact/4205542dccbdba35/record.json",
+        "/tmp/kpr-i264-913-dsh-live/evidence/final-capture.json",
+        "/tmp/kpr-i264-913-dsh-live-proof.md",
+        "/tmp/kpr-i264-913-dsh-live/evidence/compact-send.json",
+        "/tmp/kpr-i264-913-dsh-live/evidence/start.json",
+        "/tmp/kpr-i264-host-chain-1035/hooks/assignment.txt"
+      ]
+    },
+    "input": {
+      "at": "2026-10-06T09:38:20.213221+00:00",
+      "evidence": "/tmp/kpr-i264-host-chain-1035/hooks/dsh-pos/records/dsh/dsh-KPR264H2-orchestrator-main/83e4a1519fae3b2d/events.jsonl#22",
+      "holder": "f9d9d2344dae9b4d0c919dac478d55ad",
+      "kind": "host-compaction",
+      "occurrence_id": "506d74ee-f23c-4d34-848a-9cf64e4af77b",
+      "seq": 1,
+      "source": "completed-host-signal"
+    },
+    "seq": 1,
+    "unavailable": {}
+  },
+  "returned_to_host": {},
+  "settled": [
+    "host:tasks/qa-observe@6",
+    "recovery#1"
+  ],
+  "source": "b-cd58270db6d3",
+  "verified": true
+}
