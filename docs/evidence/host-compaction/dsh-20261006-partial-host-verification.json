@@ -1,0 +1,101 @@
+{
+  "source": "/tmp/kpr-i264-host-chain-1035/hooks/dsh-host/receipts/dsh-chain3-receipt.json",
+  "candidate": "4b247a2dbae9006be71962da32b31e5c5eb05629",
+  "current_264_boundary_bindings": {
+    "scripts/kaola-acp-holder.py": true,
+    "scripts/kaola-compact-recovery.py": true,
+    "scripts/kaola-dsh-acp.py": true,
+    "scripts/kaola-dispatch.py": true,
+    "scripts/kaola-tmux.sh": true
+  },
+  "installed_full_reads": [
+    {
+      "path": "/Users/ylmacstudio/.agents/skills/kaola-project-runner/SKILL.md",
+      "call": 237,
+      "result": 239,
+      "full_returned_payload": true,
+      "end_marker": true,
+      "bytes": 17407,
+      "sha256": "1af732f378a11bd04e4533a3e1fe38cef9b9b48b393360748d0a8030f5524df7"
+    },
+    {
+      "path": "/Users/ylmacstudio/.agents/skills/dsh-kaola-project-runner/SKILL.md",
+      "call": 238,
+      "result": 240,
+      "full_returned_payload": true,
+      "end_marker": true,
+      "bytes": 10450,
+      "sha256": "ea2ccfbd2c523baebb6f6ff7a5b41654b08922bd379f52f35770d7c00098db22"
+    }
+  ],
+  "signal_role": "host",
+  "signal_occurrence": "87869cae-8656-4cd1-8838-2dd31b38235a",
+  "duty": {
+    "at": "2026-10-06T09:19:09.961055+00:00",
+    "evidence": "/tmp/kpr-i264-host-chain-1035/hooks/dsh-host/records/dsh/dsh-KPR264HD-orchestrator-main/421b630c42c4a3bd/events.jsonl#207",
+    "holder": "ead1bd2a2ed8810d9b011399e55cb27a",
+    "kind": "host-compaction",
+    "occurrence_id": "87869cae-8656-4cd1-8838-2dd31b38235a",
+    "seq": 1,
+    "source": "completed-host-signal"
+  },
+  "auto_node_start": {
+    "cursor": 337,
+    "holder": "9e8f12adeaa351f61316436c00cffc9f",
+    "kind": "sideagent_node_started",
+    "session": "dsh-KPR-I264H-DSH-sideagent",
+    "ts": 1791278596.088
+  },
+  "checkpoint_partial": true,
+  "checkpoint_recovery": {
+    "checked": {
+      "authorization": [
+        "/private/tmp/kpr-i264-host-chain-1035/hooks/dsh-host/consumer/.kaola/heartbeat-prompt.json#state.project (goal KPR-I264H-DSH finite Host-compaction maintenance QA; section source qa-seed:init @1)",
+        "/private/tmp/kpr-i264-host-chain-1035/hooks/dsh-host/consumer/.kaola/heartbeat-prompt.json#state.authorization (grant qa-node count 1 granted; section source qa-seed:init @1)"
+      ],
+      "duties": [
+        "/private/tmp/kpr-i264-host-chain-1035/hooks/dsh-host/consumer/.kaola/heartbeat-prompt.json#state.tasks/qa-observe (rev 3 stage doing writer host:dsh-KPR264HD-orchestrator-main source events.jsonl#207)",
+        "/private/tmp/kpr-i264-host-chain-1035/hooks/dsh-host/consumer/.kaola/heartbeat-prompt.json#state.decisions+state.holds (no pending decisions or holds)",
+        "/tmp/kpr-i264-host-chain-1035/hooks/dsh-host/records/dsh/dsh-KPR264HD-orchestrator-main/421b630c42c4a3bd/events.jsonl#207"
+      ]
+    },
+    "input": {
+      "at": "2026-10-06T09:19:09.961055+00:00",
+      "evidence": "/tmp/kpr-i264-host-chain-1035/hooks/dsh-host/records/dsh/dsh-KPR264HD-orchestrator-main/421b630c42c4a3bd/events.jsonl#207",
+      "holder": "ead1bd2a2ed8810d9b011399e55cb27a",
+      "kind": "host-compaction",
+      "occurrence_id": "87869cae-8656-4cd1-8838-2dd31b38235a",
+      "seq": 1,
+      "source": "completed-host-signal"
+    },
+    "seq": 1,
+    "unavailable": {
+      "links": "tasks/qa-observe names dispatch qa-gap-missing, but no original index row or Runner record exists for it (state check: dispatch-ref-missing); only qa-prior-reclaim-1 has an original record in .kaola/dispatch-index.json"
+    }
+  },
+  "stop_events": {
+    "cursor": 345,
+    "holder": "9e8f12adeaa351f61316436c00cffc9f",
+    "kind": "sideagent_node_stopped",
+    "receipt": {
+      "stopped": true
+    },
+    "ts": 1791278719.696
+  },
+  "host_cleanup": {
+    "stopped": true,
+    "agent_exit_code": 0,
+    "residual_pids": []
+  },
+  "raw_hash_bindings": {
+    "host-events.jsonl": {
+      "sha256": "3ed0bc2cc0b9c8ebb71014e498a378523fd588e0e5b7e1794c0445b037ef4954",
+      "matches": true
+    },
+    "node-events.jsonl": {
+      "sha256": "bfef3bd838951da5323a5ebe07e3cb302b6c41d6213825e205742f0ebc90ea3b",
+      "matches": true
+    }
+  },
+  "verdict": "Actual DSH explicit-route signal/full reload plus automatic activation/partial failure checkpoint/exact reclaim accepted in scope. Verified successful recovery checkpoint missing; Droid/Cursor actual Host attempts missing. Same assignment repair required; no full chain PASS."
+}

@@ -1,0 +1,102 @@
+{
+ "lane": "hooks (Droid, Cursor CLI, DSH)",
+ "date": "2026-10-06",
+ "runtime": "dsh 0.2.0-rc.2 (installed /Users/ylmacstudio/.local/bin/dsh); agent deepseek-harness-acp/0.0.1",
+ "candidate": {
+  "commit": "4b247a2dbae9006be71962da32b31e5c5eb05629",
+  "holder_sha256": "d8cc9dc147f69db50dc5be5c7cf1f7efced677c19813155792a191aedb72f280",
+  "dsh_adapter_sha256": "b1879fca1791845608ce00fa162c122f0729cdb105516d0d4f27dbe69c506e6a",
+  "compact_recovery_sha256": "c45662a4297047bd860a46157e950b4aac460b3e9df1a889abe99ca687e90f27",
+  "dispatch_sha256": "140d13992f1749b003c69222c3d6f714bdf8e5e9c7db19ed7e84c05245c6fbfd",
+  "tmux_sha256": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b"
+ },
+ "host": {
+  "session": "dsh-KPR264HD-orchestrator-main",
+  "holder_instance_id": "ead1bd2a2ed8810d9b011399e55cb27a",
+  "acp_session_id": "1791b6f9-6293-4d36-bd0a-38b929933e6b",
+  "role": "host",
+  "repo": "/private/tmp/kpr-i264-host-chain-1035/hooks/dsh-host/consumer"
+ },
+ "native_compaction": {
+  "occurrence_id": "87869cae-8656-4cd1-8838-2dd31b38235a",
+  "source_command_id": "c0627f70-6bbf-4b10-9e63-127d0e9a3745",
+  "summary_seq": 237,
+  "end_seq": 239,
+  "shadowed_range": [
+   8,
+   230
+  ],
+  "shadowed_token_count": 140103,
+  "detected_cursor": 207,
+  "source": "acp-compaction-update",
+  "route": "explicit /compact"
+ },
+ "registration": {
+  "event": "host_compact_maintenance_registered",
+  "cursor": 210,
+  "recovery_seq": 1,
+  "kind": "host-compaction",
+  "source": "completed-host-signal",
+  "holder": "ead1bd2a2ed8810d9b011399e55cb27a",
+  "evidence": "events.jsonl#207",
+  "business_revision_effect": "none (maintenance section only)"
+ },
+ "business_batch": {
+  "batch": "b-5de4c7c027a1",
+  "node_holder": "29389aa4f5979a84cf4daf5e3da743ac",
+  "through": 8,
+  "checkpoint": "verified",
+  "stopped": true,
+  "stopped_cursor": 234
+ },
+ "recovery_batch": {
+  "batch": "b-c8903ff408e1",
+  "node_holder": "9e8f12adeaa351f61316436c00cffc9f",
+  "through": 10,
+  "recovery_input_seq": 1,
+  "checkpoint": "partial",
+  "verified": false,
+  "unavailable": {
+   "links": "dispatch ref qa-gap-missing has no original index row or Runner record"
+  },
+  "settled_cursor": 339,
+  "alert": "maintenance-returned",
+  "stopped": true,
+  "stopped_cursor": 345,
+  "stop_receipt": {
+   "stopped": true
+  }
+ },
+ "host_reload": {
+  "event": "compact_reload_delivered",
+  "cursor": 209,
+  "prompt_fingerprint": "sha256:bf48d26d7fa8f500c056d7e7891d81ab8acc2c5ef37193f6db46403b993a779a",
+  "installed_reads": [
+   {
+    "path": "/Users/ylmacstudio/.agents/skills/kaola-project-runner/SKILL.md",
+    "bytes": 17407,
+    "lines": 264,
+    "sha256": "1af732f378a11bd04e4533a3e1fe38cef9b9b48b393360748d0a8030f5524df7"
+   },
+   {
+    "path": "/Users/ylmacstudio/.agents/skills/dsh-kaola-project-runner/SKILL.md",
+    "bytes": 10450,
+    "lines": 165,
+    "sha256": "ea2ccfbd2c523baebb6f6ff7a5b41654b08922bd379f52f35770d7c00098db22"
+   }
+  ]
+ },
+ "host_stop": {
+  "stopped": true,
+  "agent_exit_code": 0,
+  "residual_pids": [],
+  "swept_child_pgids": []
+ },
+ "node_stop": {
+  "stopped": true
+ },
+ "raw": {
+  "host_events_sha256": "3ed0bc2cc0b9c8ebb71014e498a378523fd588e0e5b7e1794c0445b037ef4954",
+  "node_events_sha256": "bfef3bd838951da5323a5ebe07e3cb302b6c41d6213825e205742f0ebc90ea3b"
+ }
+}
