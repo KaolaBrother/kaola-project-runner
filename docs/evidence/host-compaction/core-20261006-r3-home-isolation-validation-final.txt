@@ -1,0 +1,40 @@
+validate: scrubbed inherited env: KAOLA_ACP_CHILD_RECORD KAOLA_ACP_DISPATCHER KAOLA_ZCODE_ENTRY KAOLA_ZCODE_NODE
+validate: coverage: SUBSET RUN (1 of 82 suites selected; not full-inventory coverage)
+validate: selected: test-issue-247-codex-child.py
+validate: candidate: 9f778981 (dirty) - execution context, not complete input identity
+render-skills: PASS (10 workers + kaola-project-runner + kaola-delegator + grok-bot host: 1 bridge skill, 2555 B, content stage, unpinned (not saveable); budgets OK)
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 0.133s
+
+OK
+kaola-grok-bot-verify: PASS /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-264/hosts/grok-bot (1 bridge skill, 2555 B, stage content, manifest, guide; no canonical content; generated state)
+validate: elapsed render-check                                 0.058 s
+validate: elapsed validate-skill.claude-code-kaola-project-runner 0.026 s
+validate: elapsed validate-skill.codex-kaola-project-runner    0.025 s
+validate: elapsed validate-skill.cursor-cli-kaola-project-runner 0.026 s
+validate: elapsed validate-skill.devin-kaola-project-runner    0.026 s
+validate: elapsed validate-skill.droid-kaola-project-runner    0.026 s
+validate: elapsed validate-skill.dsh-kaola-project-runner      0.025 s
+validate: elapsed validate-skill.grok-kaola-project-runner     0.025 s
+validate: elapsed validate-skill.kaola-project-runner          0.025 s
+validate: elapsed validate-skill.kimi-cli-kaola-project-runner 0.025 s
+validate: elapsed validate-skill.opencode-kaola-project-runner 0.025 s
+validate: elapsed validate-skill.zcode-kaola-project-runner    0.026 s
+validate: elapsed validate-skill.kaola-delegator               0.026 s
+validate: elapsed test-issue-247-codex-child.py                0.181 s
+validate: elapsed grok-bot-verify                              0.047 s
+{"killed_group_members": [], "matched_pids": [], "pgid_identity_unverified": [], "residual_pids": [], "results": [], "root": "/tmp/kaola-val.FnHPhE", "swept_groups": []}
+validate: total wall: 0.785106 s

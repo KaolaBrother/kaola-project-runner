@@ -1,0 +1,485 @@
+{
+  "judgment": "Codex/Grok fixed candidate qualified verified; OpenCode recovery settled but whole checkpoint PARTIAL and role metadata omitted by native Skill tool",
+  "runs": {
+    "codex": {
+      "candidate": "9f7789812424b484e1e26a529a7b212f1ea6bd4a",
+      "started_at": "2026-10-06T11:44:17Z",
+      "finished_at": "2026-10-06T11:53:44Z",
+      "host": "9a2739a31e224035fd808aabf761c955",
+      "signal": 97,
+      "reload": 100,
+      "duty": 102,
+      "node": 401,
+      "batch": 402,
+      "checkpoint_cursor": 403,
+      "reclaim_cursor": 408,
+      "raw_entry_cursor": 961,
+      "raw_entries": [
+        {
+          "input": "host:tasks/qa-observe@4",
+          "retained": "tasks/qa-observe"
+        },
+        {
+          "input": "recovery#1",
+          "checked": {
+            "authorization": [
+              "AGENTS.md#KPR-USER-REQUIREMENTS",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/.kaola/heartbeat-prompt.json#state.project",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/.kaola/heartbeat-prompt.json#state.authorization",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/.kaola/delegator-heartbeat.json#project",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/.kaola/delegator-heartbeat.json#authorization",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/kaola-workflow/.ledger/issue-264.jsonl"
+            ],
+            "duties": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/.kaola/heartbeat-prompt.json#state.decisions",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/.kaola/heartbeat-prompt.json#state.alerts",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/.kaola/heartbeat-prompt.json#state.holds"
+            ],
+            "links": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/.kaola/dispatch-index.json#qa-prior-reclaim-1",
+              "/tmp/kpr-i264-862-core/oc/receipt.json",
+              "/tmp/kpr-i264-862-core-runtime-proof.md",
+              "/tmp/kpr-i264-862-core/oc/record/record.json",
+              "/tmp/kpr-i264-862-core/oc/record/events.jsonl"
+            ]
+          }
+        }
+      ],
+      "checkpoint": {
+        "at": "2026-10-06T11:52:35.917262+00:00",
+        "batch": "b-9b614a237e56",
+        "host_revision": {
+          "current": 4,
+          "from": 3,
+          "through": 4
+        },
+        "node": {
+          "holder_instance_id": "15bc0fafc1ffe74feff7beaad4f00491",
+          "session": "codex-KPR1035C-sideagent"
+        },
+        "recovery": {
+          "checked": {
+            "authorization": [
+              "AGENTS.md#KPR-USER-REQUIREMENTS",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/.kaola/heartbeat-prompt.json#state.project",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/.kaola/heartbeat-prompt.json#state.authorization",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/.kaola/delegator-heartbeat.json#project",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/.kaola/delegator-heartbeat.json#authorization",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/kaola-workflow/.ledger/issue-264.jsonl"
+            ],
+            "duties": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/.kaola/heartbeat-prompt.json#state.decisions",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/.kaola/heartbeat-prompt.json#state.alerts",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/.kaola/heartbeat-prompt.json#state.holds"
+            ],
+            "links": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/.kaola/dispatch-index.json#qa-prior-reclaim-1",
+              "/tmp/kpr-i264-862-core/oc/receipt.json",
+              "/tmp/kpr-i264-862-core-runtime-proof.md",
+              "/tmp/kpr-i264-862-core/oc/record/record.json",
+              "/tmp/kpr-i264-862-core/oc/record/events.jsonl"
+            ]
+          },
+          "input": {
+            "at": "2026-10-06T11:48:27.963350+00:00",
+            "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/records/codex/codex-KPR1035C-orchestrator-main/ff97c03e644d7a01/events.jsonl#97",
+            "holder": "9a2739a31e224035fd808aabf761c955",
+            "kind": "host-compaction",
+            "occurrence_id": "01a1110a-f459-7572-ae74-fd27630fc565",
+            "seq": 1,
+            "source": "completed-host-signal"
+          },
+          "seq": 1,
+          "unavailable": {}
+        },
+        "returned_to_host": {},
+        "settled": [
+          "host:tasks/qa-observe@4",
+          "recovery#1"
+        ],
+        "source": "b-9b614a237e56",
+        "verified": true
+      },
+      "reads": {
+        "kaola-project-runner": [
+          {
+            "cursor": 130,
+            "payload": "full current installed file",
+            "bytes": 17407,
+            "sha256": "1af732f378a11bd04e4533a3e1fe38cef9b9b48b393360748d0a8030f5524df7"
+          }
+        ],
+        "codex-kaola-project-runner": [
+          {
+            "cursor": 135,
+            "payload": "full current installed file",
+            "bytes": 10298,
+            "sha256": "5c2b028d710053375924f80933fd79b70f4d16dc68a3c3b4d4e4ea84ae0c1bb5"
+          }
+        ]
+      },
+      "host_stop": {
+        "agent_exit_code": 0,
+        "detail": null,
+        "error": null,
+        "holder_exit": null,
+        "reason": null,
+        "residual_pids": [],
+        "result": null,
+        "stopped": true,
+        "swept_child_pgids": []
+      },
+      "route": "explicit controller compact request; native signal form differs, not spontaneous threshold proof"
+    },
+    "grok": {
+      "candidate": "9f7789812424b484e1e26a529a7b212f1ea6bd4a",
+      "started_at": "2026-10-06T11:54:39Z",
+      "finished_at": "2026-10-06T12:05:29Z",
+      "host": "fe9c62d512e38f7afc68e8e2a7a6b3a4",
+      "signal": 153,
+      "reload": 161,
+      "duty": 163,
+      "node": 554,
+      "batch": 555,
+      "checkpoint_cursor": 564,
+      "reclaim_cursor": 569,
+      "raw_entry_cursor": 895,
+      "raw_entries": [
+        {
+          "input": "recovery#1",
+          "checked": {
+            "authorization": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo/.kaola/heartbeat-prompt.json#state.project",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo/.kaola/heartbeat-prompt.json#state.authorization",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo/AGENTS.md#KPR-USER-REQUIREMENTS",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo/.kaola/delegator-heartbeat.json#project,authorization"
+            ],
+            "duties": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo/.kaola/heartbeat-prompt.json#state.tasks,decisions,alerts,holds,recovery",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/kaola-workflow/.ledger/issue-264.jsonl",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo/.kaola/delegator-heartbeat.json#watch",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/records/grok/grok-KPR1035C-orchestrator-main/30aee3742f8109fd/events.jsonl#153"
+            ],
+            "links": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe.dispatch",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo/.kaola/dispatch-index.json#items[qa-prior-reclaim-1]",
+              "/tmp/kpr-i264-862-core/oc/receipt.json",
+              "/tmp/kpr-i264-862-core-runtime-proof.md",
+              "/tmp/kpr-i264-862-core/oc/record/record.json",
+              "/tmp/kpr-i264-862-core/oc/record/events.jsonl"
+            ]
+          }
+        }
+      ],
+      "checkpoint": {
+        "at": "2026-10-06T12:03:43.969479+00:00",
+        "batch": "b-bb40068a7a55",
+        "host_revision": {
+          "current": 3,
+          "from": 3,
+          "through": 3
+        },
+        "node": {
+          "holder_instance_id": "69e648ed94f573307902351d6fc06269",
+          "session": "codex-KPR1035C-sideagent"
+        },
+        "recovery": {
+          "checked": {
+            "authorization": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo/.kaola/heartbeat-prompt.json#state.project",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo/.kaola/heartbeat-prompt.json#state.authorization",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo/AGENTS.md#KPR-USER-REQUIREMENTS",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo/.kaola/delegator-heartbeat.json#project,authorization"
+            ],
+            "duties": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo/.kaola/heartbeat-prompt.json#state.tasks,decisions,alerts,holds,recovery",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/kaola-workflow/.ledger/issue-264.jsonl",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo/.kaola/delegator-heartbeat.json#watch",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/records/grok/grok-KPR1035C-orchestrator-main/30aee3742f8109fd/events.jsonl#153"
+            ],
+            "links": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe.dispatch",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo/.kaola/dispatch-index.json#items[qa-prior-reclaim-1]",
+              "/tmp/kpr-i264-862-core/oc/receipt.json",
+              "/tmp/kpr-i264-862-core-runtime-proof.md",
+              "/tmp/kpr-i264-862-core/oc/record/record.json",
+              "/tmp/kpr-i264-862-core/oc/record/events.jsonl"
+            ]
+          },
+          "input": {
+            "at": "2026-10-06T11:58:05.721455+00:00",
+            "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/records/grok/grok-KPR1035C-orchestrator-main/30aee3742f8109fd/events.jsonl#153",
+            "holder": "fe9c62d512e38f7afc68e8e2a7a6b3a4",
+            "kind": "host-compaction",
+            "occurrence_id": null,
+            "seq": 1,
+            "source": "completed-host-signal"
+          },
+          "seq": 1,
+          "unavailable": {}
+        },
+        "returned_to_host": {},
+        "settled": [
+          "recovery#1"
+        ],
+        "source": "b-bb40068a7a55",
+        "verified": true
+      },
+      "reads": {
+        "kaola-project-runner": [
+          {
+            "cursor": 277,
+            "payload": "full current installed file",
+            "bytes": 17407,
+            "sha256": "1af732f378a11bd04e4533a3e1fe38cef9b9b48b393360748d0a8030f5524df7"
+          }
+        ],
+        "grok-kaola-project-runner": [
+          {
+            "cursor": 279,
+            "payload": "full current installed file",
+            "bytes": 10193,
+            "sha256": "8328baf72c89ada26bd0ce04f70f06bd2b9382604c5b9e761a674fa8c9272730"
+          }
+        ]
+      },
+      "host_stop": {
+        "agent_exit_code": 0,
+        "detail": null,
+        "error": null,
+        "holder_exit": null,
+        "reason": null,
+        "residual_pids": [],
+        "result": null,
+        "stopped": true,
+        "swept_child_pgids": []
+      },
+      "route": "explicit controller compact request; native signal form differs, not spontaneous threshold proof"
+    },
+    "opencode": {
+      "candidate": "9f7789812424b484e1e26a529a7b212f1ea6bd4a",
+      "started_at": "2026-10-06T11:54:59Z",
+      "finished_at": "2026-10-06T12:06:28Z",
+      "host": "787fbe5f79d5ea50cb4133903ed2498d",
+      "signal": 35,
+      "reload": 37,
+      "duty": 38,
+      "node": 236,
+      "batch": 237,
+      "checkpoint_cursor": 238,
+      "reclaim_cursor": 245,
+      "raw_entry_cursor": 1108,
+      "raw_entries": [
+        {
+          "input": "qa-observe",
+          "retained": "tasks/qa-observe"
+        },
+        {
+          "input": "recovery#1",
+          "checked": {
+            "authorization": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/AGENTS.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/delegator-heartbeat.json",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/heartbeat-prompt.json#state.project+authorization",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/kaola-workflow/.ledger/issue-264.jsonl",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/record.json",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35"
+            ],
+            "duties": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/heartbeat-prompt.json#state.decisions+holds+alerts+tasks/qa-observe",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/qa/task-skill.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/qa/progress.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/kaola-workflow/.ledger/issue-264.jsonl",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#223-235"
+            ],
+            "links": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/heartbeat-prompt.json#state.tasks/qa-observe.dispatch",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/dispatch-index.json#qa-prior-reclaim-1",
+              "/tmp/kpr-i264-862-core/oc/receipt.json",
+              "/tmp/kpr-i264-862-core/oc/record/record.json",
+              "/tmp/kpr-i264-862-core-runtime-proof.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#103"
+            ]
+          },
+          "unavailable": {}
+        }
+      ],
+      "checkpoint": {
+        "at": "2026-10-06T12:05:07.774825+00:00",
+        "batch": "b-b0d493bc52ae",
+        "host_revision": {
+          "current": 3,
+          "from": 3,
+          "through": 3
+        },
+        "node": {
+          "holder_instance_id": "0ad589eb80abb75aa92ab696ad84d261",
+          "session": "codex-KPR1035C-sideagent"
+        },
+        "recovery": {
+          "checked": {
+            "authorization": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/AGENTS.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/delegator-heartbeat.json",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/heartbeat-prompt.json#state.project+authorization",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/kaola-workflow/.ledger/issue-264.jsonl",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/record.json",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35"
+            ],
+            "duties": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/heartbeat-prompt.json#state.decisions+holds+alerts+tasks/qa-observe",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/qa/task-skill.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/qa/progress.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/kaola-workflow/.ledger/issue-264.jsonl",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#223-235"
+            ],
+            "links": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/heartbeat-prompt.json#state.tasks/qa-observe.dispatch",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/dispatch-index.json#qa-prior-reclaim-1",
+              "/tmp/kpr-i264-862-core/oc/receipt.json",
+              "/tmp/kpr-i264-862-core/oc/record/record.json",
+              "/tmp/kpr-i264-862-core-runtime-proof.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#103"
+            ]
+          },
+          "input": {
+            "at": "2026-10-06T11:58:15.563971+00:00",
+            "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+            "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+            "kind": "host-compaction",
+            "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+            "seq": 1,
+            "source": "completed-host-signal"
+          },
+          "seq": 1,
+          "unavailable": {}
+        },
+        "returned_to_host": {
+          "qa-observe": "not-in-batch"
+        },
+        "settled": [
+          "recovery#1"
+        ],
+        "source": "b-b0d493bc52ae",
+        "verified": false
+      },
+      "reads": {
+        "kaola-project-runner": [
+          {
+            "cursor": 58,
+            "payload": "complete current Skill body; native wrapper omits YAML metadata",
+            "file_byte_equality": "unverified",
+            "bytes_of_installed_file": 17407
+          }
+        ],
+        "opencode-kaola-project-runner": [
+          {
+            "cursor": 128,
+            "payload": "full current installed file",
+            "bytes": 10597,
+            "sha256": "d71a297994686577484de0057c94b745c19d123117d99f6966d2bdcccd4e7981"
+          }
+        ]
+      },
+      "host_stop": {
+        "agent_exit_code": 0,
+        "detail": null,
+        "error": null,
+        "holder_exit": null,
+        "reason": null,
+        "residual_pids": [],
+        "result": null,
+        "stopped": true,
+        "swept_child_pgids": []
+      },
+      "route": "explicit controller compact request; native signal form differs, not spontaneous threshold proof"
+    }
+  },
+  "isolation_gap": "CODEX_HOME absent from broker protected environment on all Host platforms; native project trust auto-persistence was outside lane. Do not accept blanket no-global-write claim. Focused broker preservation and selected-id guidance repair now pending actual verification/review.",
+  "probe_auth_copy_absent": true,
+  "copies": [
+    {
+      "original": "/tmp/kpr-i264-host-chain-1035/core/codex-r3/receipt.json",
+      "durable": "docs/evidence/host-compaction/core-20261006-codex-r3-receipt.json",
+      "sha256": "bab0647c69928ba02272dfb98622ac014c8d12ebfea78aa5d1233688399280ab"
+    },
+    {
+      "original": "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/records/codex/codex-KPR1035C-orchestrator-main/ff97c03e644d7a01/events.jsonl",
+      "durable": "docs/evidence/host-compaction/core-20261006-codex-r3-host-events.jsonl",
+      "sha256": "d096a1ee76c319a1044c61f2bf46e18e814a63cb1a10d5f9afb20f26e12ea75e"
+    },
+    {
+      "original": "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/records/codex/codex-KPR1035C-sideagent/ff97c03e644d7a01/events.jsonl",
+      "durable": "docs/evidence/host-compaction/core-20261006-codex-r3-node-events.jsonl",
+      "sha256": "3f9dd2314e40c5aadcaad5a652243a09a64c51312f7d397b81361161ce22a120"
+    },
+    {
+      "original": "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/AGENTS.md",
+      "durable": "docs/evidence/host-compaction/core-20261006-codex-r3-fixture-AGENTS.md",
+      "sha256": "22102cf74233453b115547f8d19857c56fcf2084a6e644e3e12f8dc6e70e6dda"
+    },
+    {
+      "original": "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo/qa/progress.md",
+      "durable": "docs/evidence/host-compaction/core-20261006-codex-r3-progress.md",
+      "sha256": "e3a1284c3314de3128657d6530926a66ab30f53b1de1d603bf31179687441398"
+    },
+    {
+      "original": "/tmp/kpr-i264-host-chain-1035/core/grok-r3/receipt.json",
+      "durable": "docs/evidence/host-compaction/core-20261006-grok-r3-receipt.json",
+      "sha256": "2ec5b0e07bc69ed1f70a11bfe5be57c45153291fa507e62c3c3403f64e432c92"
+    },
+    {
+      "original": "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/records/grok/grok-KPR1035C-orchestrator-main/30aee3742f8109fd/events.jsonl",
+      "durable": "docs/evidence/host-compaction/core-20261006-grok-r3-host-events.jsonl",
+      "sha256": "bffeb10d3dd4a5e4007a6c26e9fb2fde3e85fee505dd424d96b8d270ed10e80e"
+    },
+    {
+      "original": "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/records/codex/codex-KPR1035C-sideagent/30aee3742f8109fd/events.jsonl",
+      "durable": "docs/evidence/host-compaction/core-20261006-grok-r3-node-events.jsonl",
+      "sha256": "f940c907fc0f8cfd70f1335dd825c93168f518f35af52363eb55cd943c77430f"
+    },
+    {
+      "original": "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo/AGENTS.md",
+      "durable": "docs/evidence/host-compaction/core-20261006-grok-r3-fixture-AGENTS.md",
+      "sha256": "d9d5dff2e1856cc61002e8f6cb7b7943630cfa3e46a84de838b701cfcae81b4d"
+    },
+    {
+      "original": "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo/qa/progress.md",
+      "durable": "docs/evidence/host-compaction/core-20261006-grok-r3-progress.md",
+      "sha256": "ff899b58dc7b7c1adaf12e4dfe4cef7b8108d14d6bc6b3b9b04d04791eef8a60"
+    },
+    {
+      "original": "/tmp/kpr-i264-host-chain-1035/core/opencode-r3/receipt.json",
+      "durable": "docs/evidence/host-compaction/core-20261006-opencode-r3-receipt.json",
+      "sha256": "8c884cc58147e09ea69719a87db230c7fb8085a715f893625464ea18c22fcbc3"
+    },
+    {
+      "original": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl",
+      "durable": "docs/evidence/host-compaction/core-20261006-opencode-r3-host-events.jsonl",
+      "sha256": "a6ec89836e5ab021ce988f700bf2f829a757639cf4ab52035bd3bf6da6b4c513"
+    },
+    {
+      "original": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/codex/codex-KPR1035C-sideagent/a0516d7102dcfd39/events.jsonl",
+      "durable": "docs/evidence/host-compaction/core-20261006-opencode-r3-node-events.jsonl",
+      "sha256": "662208f7030f26f2cfbd1ba3971acf63a8190b15e8dba01b0e210105f6b02e63"
+    },
+    {
+      "original": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/AGENTS.md",
+      "durable": "docs/evidence/host-compaction/core-20261006-opencode-r3-fixture-AGENTS.md",
+      "sha256": "61f397e183682cd549c8c26d31fd0b74d68229699caf2708aad6116237e3432c"
+    },
+    {
+      "original": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/qa/progress.md",
+      "durable": "docs/evidence/host-compaction/core-20261006-opencode-r3-progress.md",
+      "sha256": "b4c7fc98b68d61b45e661b2603029d8d4ec0a44e2d0792e43c657ea794a6cb06"
+    }
+  ]
+}

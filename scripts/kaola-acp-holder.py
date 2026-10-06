@@ -3716,6 +3716,8 @@ class Holder:
                  else "python3 <Project Runner>/scripts/kaola-dispatch.py state")
         lines.append(f"State file: {state_file}. State tool: `{state} ... --file {shlex.quote(str(state_file))}`; "
                      f"`{state} view --role sideagent --file {shlex.quote(str(state_file))}` reads it.")
+        lines.append("Checkpoint only this batch's selected input ids, verbatim. Task ids read as recovery "
+                     "sources are not extra inputs. With no selected business changes, emit no business entries.")
         lines.append("For ordinary Host business inputs, read the related tasks and real receipts, "
                      "apply each input with the state tool or retain it at a current record that names "
                      "its next reader. `applied` names only current records this node's holder wrote "

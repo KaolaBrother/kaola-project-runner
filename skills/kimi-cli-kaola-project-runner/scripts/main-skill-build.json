@@ -1,5 +1,5 @@
 {
-  "build": "23279a2851c6",
+  "build": "8e966aa50298",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "ceabbc4071f13d9e5ff9731b964c017a7b8c657e3d9ed8a83450a4913a2de08c",
@@ -16,7 +16,7 @@
     "references/public-research.md": "86e2ad1cd11840fd58900cde429e9b45457f149b67fa91a32e5fe6429a58407c",
     "references/qa-evidence.md": "6793efce6a91c9348188c277c801fdabb068c0c9189fe586b0543a6e45dd9c0b",
     "references/quota-packages.md": "57f207ac3ca3814929befdf9b824a60598be8b23f88bcc20508d451cf31b5b57",
-    "references/sideagent-node.md": "2bdb886c3373cb5de7092a0958609a6ab30dacb11b4445a4e44c50f8adb33d61",
+    "references/sideagent-node.md": "82e79574e08a12920be0e679e11f27503d82d31fd9d2a1efc1f9d1df7168c8ce",
     "references/task-failure.md": "c3726ca63b29ef01213043589cd3579ee27e6b6ba8eb7d143edb35c75da84a5b",
     "references/worker-profiles.md": "dbb78b103d61f6a8224d8b1ff0f73be622d493343d50b377e7b92092dbad6f9b",
     "references/workflow-worktree.md": "814df8b1c8278771381fd683ad1961a6c7afe1244affa0891b28cf6cc14f7ce7",

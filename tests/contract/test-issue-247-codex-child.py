@@ -73,6 +73,32 @@ class CodexChildPathTests(unittest.TestCase):
             self.assertEqual(child["CODEX_PATH"], str(binary))
             self.assertNotIn(str(decoy / "codex"), child["CODEX_PATH"])
 
+    def test_non_codex_outside_host_keeps_codex_home_for_nodes_without_extra_caller_env(self) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "kaola_broker_issue247", PROJECT / "scripts" / "kaola-launchd-broker.py")
+        broker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(broker)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            isolated = str(root / "isolated-codex-home")
+            args = self.args(platform="grok", manifest=self.acp.load_manifest("grok"),
+                             session="grok-test-home", launch_backend="auto")
+            env = {"HOME": str(root / "home"), "CODEX_HOME": isolated,
+                   "UNRELATED_CALLER_BINDING": "must-not-reach-holder"}
+            with mock.patch.object(self.acp.subprocess, "run") as launch:
+                launch.return_value = subprocess.CompletedProcess([], 0, '{"result":"ready"}', '')
+                result = self.acp.spawn_holder_outside(
+                    args, str(root), root / "record", ["holder"], env,
+                    root / "holder.log", root / "holder.sock")
+            self.assertIn("launch", result)
+            command = launch.call_args.args[0]
+            allow = {command[i + 1] for i, token in enumerate(command) if token == "--env-allow"}
+            child = broker.filter_env(launch.call_args.kwargs["env"], allow)
+            self.assertEqual(child["CODEX_HOME"], isolated)
+            self.assertEqual(child["HOME"], env["HOME"])
+            self.assertNotIn("UNRELATED_CALLER_BINDING", child)
+            self.assertEqual(list((root / "record" / "launch").glob("argv-*.json")), [])
+
     def test_unset_child_path_resolves_codex_bin_before_path(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             binary = Path(directory) / "chosen codex"

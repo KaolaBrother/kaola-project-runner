@@ -1,0 +1,3761 @@
+{
+ "compact_turn": {
+  "context_usage": null,
+  "error": null,
+  "mutation_status": "completed",
+  "outcome": "turn_completed",
+  "prompt_fingerprint": "sha256:52e657bd1470bb75a808df9dbe93b8f82606f0b614db4d82e9a09dd291bf3f74",
+  "stop_reason": "end_turn",
+  "turn_request_id": null
+ },
+ "compact_usage": {
+  "after": null,
+  "before": {
+   "size": 1000000,
+   "used": 10225
+  }
+ },
+ "final_state": {
+  "alerts": {
+   "maintenance-returned": {
+    "created_at": "2026-10-06T12:05:07.774991+00:00",
+    "evidence": [
+     "checkpoint:b-b0d493bc52ae",
+     "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#238"
+    ],
+    "inputs": {
+     "qa-observe": {
+      "batch": "b-b0d493bc52ae",
+      "why": "not-in-batch"
+     },
+     "recovery#1": {
+      "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#238",
+      "host_revision_through": 3,
+      "next": "Host: reconcile the original node and stop receipts; repair the binding; request a bounded check",
+      "why": "checkpoint-partial"
+     }
+    },
+    "level": "warn",
+    "next": "Host: reconcile the original node and stop receipts; repair the binding; request a bounded check",
+    "owner": "host",
+    "rev": 2,
+    "source": "carrier-maintenance-failure",
+    "summary": "maintenance needs Host recovery from original receipts",
+    "updated_at": "2026-10-06T12:06:23.913148+00:00",
+    "writer": "tool:carrier",
+    "writer_holder": "787fbe5f79d5ea50cb4133903ed2498d"
+   }
+  },
+  "host_revision": 3,
+  "maintenance": {
+   "acked_host_revision": 3,
+   "handled_host_revision": 3,
+   "last_checkpoint": {
+    "at": "2026-10-06T12:05:07.774825+00:00",
+    "batch": "b-b0d493bc52ae",
+    "host_revision": {
+     "current": 3,
+     "from": 3,
+     "through": 3
+    },
+    "node": {
+     "holder_instance_id": "0ad589eb80abb75aa92ab696ad84d261",
+     "session": "codex-KPR1035C-sideagent"
+    },
+    "recovery": {
+     "checked": {
+      "authorization": [
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/AGENTS.md",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/delegator-heartbeat.json",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/heartbeat-prompt.json#state.project+authorization",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/kaola-workflow/.ledger/issue-264.jsonl",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/record.json",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35"
+      ],
+      "duties": [
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/heartbeat-prompt.json#state.decisions+holds+alerts+tasks/qa-observe",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/qa/task-skill.md",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/qa/progress.md",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/kaola-workflow/.ledger/issue-264.jsonl",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#223-235"
+      ],
+      "links": [
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/heartbeat-prompt.json#state.tasks/qa-observe.dispatch",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/dispatch-index.json#qa-prior-reclaim-1",
+       "/tmp/kpr-i264-862-core/oc/receipt.json",
+       "/tmp/kpr-i264-862-core/oc/record/record.json",
+       "/tmp/kpr-i264-862-core-runtime-proof.md",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#103"
+      ]
+     },
+     "input": {
+      "at": "2026-10-06T11:58:15.563971+00:00",
+      "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+      "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+      "kind": "host-compaction",
+      "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+      "seq": 1,
+      "source": "completed-host-signal"
+     },
+     "seq": 1,
+     "unavailable": {}
+    },
+    "returned_to_host": {
+     "qa-observe": "not-in-batch"
+    },
+    "settled": [
+     "recovery#1"
+    ],
+    "source": "b-b0d493bc52ae",
+    "verified": false
+   },
+   "last_verified": {
+    "at": "2026-10-06T11:56:52.105822+00:00",
+    "batch": "b-ba0673b56ae3",
+    "node": {
+     "holder_instance_id": "18c86e5feb5d08fa2df84c682939ea45",
+     "session": "codex-KPR1035C-sideagent"
+    }
+   },
+   "recovery_seq": 1
+  },
+  "revision": 7
+ },
+ "finished_at": "2026-10-06T12:06:28Z",
+ "fixture": {
+  "commit_rc": 0,
+  "git_head": "0c71c66a6f86fd3794e9c898e29760cd0f904635",
+  "hook_prepare": {},
+  "host_revision": 3,
+  "repo": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo",
+  "seeds": {
+   "binding": "written",
+   "init": "written",
+   "task": "written"
+  },
+  "state_file": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/heartbeat-prompt.json",
+  "state_revision": 3
+ },
+ "holder_instance_id": "787fbe5f79d5ea50cb4133903ed2498d",
+ "host_record_dir": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39",
+ "host_socket": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kaola-501-acp/66764c0db188f73210d400ff.sock",
+ "host_start": {
+  "acp_session_id": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+  "agent_info": null,
+  "cli_version": null,
+  "detail": null,
+  "error": null,
+  "holder_instance_id": "787fbe5f79d5ea50cb4133903ed2498d",
+  "host_entry": null,
+  "reason": null,
+  "result": null,
+  "session_role": "host",
+  "start_evidence_recorded": true,
+  "start_selection": null
+ },
+ "host_state": {
+  "acp_session_id": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+  "agent_alive": true,
+  "agent_info": {
+   "name": "OpenCode",
+   "version": "2.0.23"
+  },
+  "agent_pid": 70695,
+  "capabilities": {
+   "_meta": {
+    "opencode/child-session-updates": true
+   },
+   "loadSession": true,
+   "mcpCapabilities": {
+    "http": true,
+    "sse": false
+   },
+   "promptCapabilities": {
+    "embeddedContext": true,
+    "image": true
+   },
+   "sessionCapabilities": {
+    "additionalDirectories": {},
+    "close": {},
+    "delete": {},
+    "fork": {},
+    "list": {},
+    "resume": {}
+   }
+  },
+  "cli_version": null,
+  "holder_instance_id": "787fbe5f79d5ea50cb4133903ed2498d",
+  "host_skill_entry": null,
+  "initial_config_options": [
+   {
+    "category": "model",
+    "currentValue": "opencode/fledge-alpha-free",
+    "id": "model",
+    "name": "Model",
+    "options": [
+     {
+      "name": "opencode/Big Pickle",
+      "value": "opencode/big-pickle"
+     },
+     {
+      "name": "opencode/Claude Fable 5",
+      "value": "opencode/claude-fable-5"
+     },
+     {
+      "name": "opencode/Claude Fable 5.1",
+      "value": "opencode/claude-fable-5-1"
+     },
+     {
+      "name": "opencode/Claude Haiku 4.5",
+      "value": "opencode/claude-haiku-4-5"
+     },
+     {
+      "name": "opencode/Claude Opus 4.5",
+      "value": "opencode/claude-opus-4-5"
+     },
+     {
+      "name": "opencode/Claude Opus 4.6",
+      "value": "opencode/claude-opus-4-6"
+     },
+     {
+      "name": "opencode/Claude Opus 4.7",
+      "value": "opencode/claude-opus-4-7"
+     },
+     {
+      "name": "opencode/Claude Opus 4.8",
+      "value": "opencode/claude-opus-4-8"
+     },
+     {
+      "name": "opencode/Claude Opus 5",
+      "value": "opencode/claude-opus-5"
+     },
+     {
+      "name": "opencode/Claude Opus 5.5",
+      "value": "opencode/claude-opus-5-5"
+     },
+     {
+      "name": "opencode/Claude Sonnet 4",
+      "value": "opencode/claude-sonnet-4"
+     },
+     {
+      "name": "opencode/Claude Sonnet 4.5",
+      "value": "opencode/claude-sonnet-4-5"
+     },
+     {
+      "name": "opencode/Claude Sonnet 4.6",
+      "value": "opencode/claude-sonnet-4-6"
+     },
+     {
+      "name": "opencode/Claude Sonnet 5",
+      "value": "opencode/claude-sonnet-5"
+     },
+     {
+      "name": "opencode/Claude Sonnet 5.5",
+      "value": "opencode/claude-sonnet-5-5"
+     },
+     {
+      "name": "opencode/DeepSeek V4 Flash",
+      "value": "opencode/deepseek-v4-flash"
+     },
+     {
+      "name": "opencode/DeepSeek V4 Flash Vision Exp",
+      "value": "opencode/deepseek-v4-flash-vision-exp"
+     },
+     {
+      "name": "opencode/DeepSeek V4 Pro",
+      "value": "opencode/deepseek-v4-pro"
+     },
+     {
+      "name": "opencode/DeepSeek V4.1 Flash",
+      "value": "opencode/deepseek-v4.1-flash"
+     },
+     {
+      "name": "opencode/Fledge Alpha Free",
+      "value": "opencode/fledge-alpha-free"
+     },
+     {
+      "name": "opencode/Gemini 3 Flash",
+      "value": "opencode/gemini-3-flash"
+     },
+     {
+      "name": "opencode/Gemini 3.1 Pro Preview",
+      "value": "opencode/gemini-3.1-pro"
+     },
+     {
+      "name": "opencode/Gemini 3.5 Flash",
+      "value": "opencode/gemini-3.5-flash"
+     },
+     {
+      "name": "opencode/Gemini 3.5 Flash Lite",
+      "value": "opencode/gemini-3.5-flash-lite"
+     },
+     {
+      "name": "opencode/Gemini 3.6 Flash",
+      "value": "opencode/gemini-3.6-flash"
+     },
+     {
+      "name": "opencode/Gemini 3.7 Flash",
+      "value": "opencode/gemini-3.7-flash"
+     },
+     {
+      "name": "opencode/Gemini 3.8 Flash",
+      "value": "opencode/gemini-3.8-flash"
+     },
+     {
+      "name": "opencode/GLM-5",
+      "value": "opencode/glm-5"
+     },
+     {
+      "name": "opencode/GLM-5.1",
+      "value": "opencode/glm-5.1"
+     },
+     {
+      "name": "opencode/GLM-5.2",
+      "value": "opencode/glm-5.2"
+     },
+     {
+      "name": "opencode/GLM-5.3",
+      "value": "opencode/glm-5.3"
+     },
+     {
+      "name": "opencode/GLM-5.3-Flash",
+      "value": "opencode/glm-5.3-flash"
+     },
+     {
+      "name": "opencode/GPT-5",
+      "value": "opencode/gpt-5"
+     },
+     {
+      "name": "opencode/GPT-5 Codex",
+      "value": "opencode/gpt-5-codex"
+     },
+     {
+      "name": "opencode/GPT-5 Nano",
+      "value": "opencode/gpt-5-nano"
+     },
+     {
+      "name": "opencode/GPT-5.1",
+      "value": "opencode/gpt-5.1"
+     },
+     {
+      "name": "opencode/GPT-5.1 Codex",
+      "value": "opencode/gpt-5.1-codex"
+     },
+     {
+      "name": "opencode/GPT-5.1 Codex Max",
+      "value": "opencode/gpt-5.1-codex-max"
+     },
+     {
+      "name": "opencode/GPT-5.1 Codex Mini",
+      "value": "opencode/gpt-5.1-codex-mini"
+     },
+     {
+      "name": "opencode/GPT-5.2",
+      "value": "opencode/gpt-5.2"
+     },
+     {
+      "name": "opencode/GPT-5.2 Codex",
+      "value": "opencode/gpt-5.2-codex"
+     },
+     {
+      "name": "opencode/GPT-5.3 Codex",
+      "value": "opencode/gpt-5.3-codex"
+     },
+     {
+      "name": "opencode/GPT-5.3 Codex Spark",
+      "value": "opencode/gpt-5.3-codex-spark"
+     },
+     {
+      "name": "opencode/GPT-5.4",
+      "value": "opencode/gpt-5.4"
+     },
+     {
+      "name": "opencode/GPT-5.4 Mini",
+      "value": "opencode/gpt-5.4-mini"
+     },
+     {
+      "name": "opencode/GPT-5.4 Nano",
+      "value": "opencode/gpt-5.4-nano"
+     },
+     {
+      "name": "opencode/GPT-5.4 Pro",
+      "value": "opencode/gpt-5.4-pro"
+     },
+     {
+      "name": "opencode/GPT-5.5",
+      "value": "opencode/gpt-5.5"
+     },
+     {
+      "name": "opencode/GPT-5.5 Pro",
+      "value": "opencode/gpt-5.5-pro"
+     },
+     {
+      "name": "opencode/GPT-5.6 Luna",
+      "value": "opencode/gpt-5.6-luna"
+     },
+     {
+      "name": "opencode/GPT-5.6 Sol",
+      "value": "opencode/gpt-5.6-sol"
+     },
+     {
+      "name": "opencode/GPT-5.6 Terra",
+      "value": "opencode/gpt-5.6-terra"
+     },
+     {
+      "name": "opencode/GPT-6 Astra",
+      "value": "opencode/gpt-6-astra"
+     },
+     {
+      "name": "opencode/GPT-6 Luna",
+      "value": "opencode/gpt-6-luna"
+     },
+     {
+      "name": "opencode/GPT-6 Sol",
+      "value": "opencode/gpt-6-sol"
+     },
+     {
+      "name": "opencode/GPT-6.1 Sol",
+      "value": "opencode/gpt-6.1-sol"
+     },
+     {
+      "name": "opencode/Grok 4.5",
+      "value": "opencode/grok-4.5"
+     },
+     {
+      "name": "opencode/Grok 4.6",
+      "value": "opencode/grok-4.6"
+     },
+     {
+      "name": "opencode/Grok 4.7",
+      "value": "opencode/grok-4.7"
+     },
+     {
+      "name": "opencode/Grok Build 0.1",
+      "value": "opencode/grok-build-0.1"
+     },
+     {
+      "name": "opencode/Kimi K2.5",
+      "value": "opencode/kimi-k2.5"
+     },
+     {
+      "name": "opencode/Kimi K2.6",
+      "value": "opencode/kimi-k2.6"
+     },
+     {
+      "name": "opencode/Kimi K2.7 Code",
+      "value": "opencode/kimi-k2.7-code"
+     },
+     {
+      "name": "opencode/Kimi K3",
+      "value": "opencode/kimi-k3"
+     },
+     {
+      "name": "opencode/Ling 3.0 Flash Fin Free",
+      "value": "opencode/ling-3.0-flash-fin-free"
+     },
+     {
+      "name": "opencode/Ling 3.1 Flash Free",
+      "value": "opencode/ling-3.1-flash-free"
+     },
+     {
+      "name": "opencode/LongCat 2.5 Preview Free",
+      "value": "opencode/longcat-2.5-preview-free"
+     },
+     {
+      "name": "opencode/MiMo-V2.6-Flash Free",
+      "value": "opencode/mimo-v2.6-flash-free"
+     },
+     {
+      "name": "opencode/MiniMax-M2.5",
+      "value": "opencode/minimax-m2.5"
+     },
+     {
+      "name": "opencode/MiniMax-M2.7",
+      "value": "opencode/minimax-m2.7"
+     },
+     {
+      "name": "opencode/MiniMax-M3",
+      "value": "opencode/minimax-m3"
+     },
+     {
+      "name": "opencode/Muse Spark 1.2",
+      "value": "opencode/muse-spark-1.2"
+     },
+     {
+      "name": "opencode/Muse Spark 1.3",
+      "value": "opencode/muse-spark-1.3"
+     },
+     {
+      "name": "opencode/Muse Spark 1.3 Free",
+      "value": "opencode/muse-spark-1.3-contributor-free"
+     },
+     {
+      "name": "opencode/Nemotron 3 Ultra Free",
+      "value": "opencode/nemotron-3-ultra-free"
+     },
+     {
+      "name": "opencode/Nemotron 3.5 Lightning Free",
+      "value": "opencode/nemotron-3.5-lightning-free"
+     },
+     {
+      "name": "opencode/Qwen3.5 Plus",
+      "value": "opencode/qwen3.5-plus"
+     },
+     {
+      "name": "opencode/Qwen3.6 Plus",
+      "value": "opencode/qwen3.6-plus"
+     },
+     {
+      "name": "opencode/Qwen3.8 Flash",
+      "value": "opencode/qwen3.8-flash"
+     },
+     {
+      "name": "opencode/Qwen3.8 Max",
+      "value": "opencode/qwen3.8-max"
+     },
+     {
+      "name": "opencode/Space Bunny Free",
+      "value": "opencode/space-bunny-free"
+     }
+    ],
+    "type": "select"
+   },
+   {
+    "category": "thought_level",
+    "currentValue": "default",
+    "description": "Available effort levels for this model",
+    "id": "effort",
+    "name": "Effort",
+    "options": [
+     {
+      "name": "Low",
+      "value": "low"
+     },
+     {
+      "name": "High",
+      "value": "high"
+     },
+     {
+      "name": "Max",
+      "value": "max"
+     },
+     {
+      "name": "Default",
+      "value": "default"
+     }
+    ],
+    "type": "select"
+   },
+   {
+    "category": "mode",
+    "currentValue": "build",
+    "id": "mode",
+    "name": "Session Mode",
+    "options": [
+     {
+      "description": "The default agent. Executes tools based on configured permissions.",
+      "name": "Build",
+      "value": "build"
+     },
+     {
+      "description": "Read-only agent for exploring the codebase and planning work before implementation.",
+      "name": "Plan",
+      "value": "plan"
+     }
+    ],
+    "type": "select"
+   }
+  ],
+  "protocol_version": 1,
+  "session_meta": {
+   "configOptions": [
+    {
+     "category": "model",
+     "currentValue": "opencode-go/deepseek-v4.1-flash",
+     "id": "model",
+     "name": "Model",
+     "options": [
+      {
+       "name": "opencode/Big Pickle",
+       "value": "opencode/big-pickle"
+      },
+      {
+       "name": "opencode/Claude Fable 5.1",
+       "value": "opencode/claude-fable-5-1"
+      },
+      {
+       "name": "opencode/Claude Haiku 4.5",
+       "value": "opencode/claude-haiku-4-5"
+      },
+      {
+       "name": "opencode/Claude Opus 5.5",
+       "value": "opencode/claude-opus-5-5"
+      },
+      {
+       "name": "opencode/Claude Sonnet 5",
+       "value": "opencode/claude-sonnet-5"
+      },
+      {
+       "name": "opencode/Claude Sonnet 5.5",
+       "value": "opencode/claude-sonnet-5-5"
+      },
+      {
+       "name": "opencode/DeepSeek V4 Pro",
+       "value": "opencode/deepseek-v4-pro"
+      },
+      {
+       "name": "opencode/DeepSeek V4.1 Flash",
+       "value": "opencode/deepseek-v4.1-flash"
+      },
+      {
+       "name": "opencode/Fledge Alpha Free",
+       "value": "opencode/fledge-alpha-free"
+      },
+      {
+       "name": "opencode/Gemini 3.1 Pro Preview",
+       "value": "opencode/gemini-3.1-pro"
+      },
+      {
+       "name": "opencode/Gemini 3.5 Flash Lite",
+       "value": "opencode/gemini-3.5-flash-lite"
+      },
+      {
+       "name": "opencode/Gemini 3.8 Flash",
+       "value": "opencode/gemini-3.8-flash"
+      },
+      {
+       "name": "opencode/GLM-5.3",
+       "value": "opencode/glm-5.3"
+      },
+      {
+       "name": "opencode/GLM-5.3-Flash",
+       "value": "opencode/glm-5.3-flash"
+      },
+      {
+       "name": "opencode/GPT-5.3 Codex",
+       "value": "opencode/gpt-5.3-codex"
+      },
+      {
+       "name": "opencode/GPT-5.3 Codex Spark",
+       "value": "opencode/gpt-5.3-codex-spark"
+      },
+      {
+       "name": "opencode/GPT-5.4 Mini",
+       "value": "opencode/gpt-5.4-mini"
+      },
+      {
+       "name": "opencode/GPT-5.4 Nano",
+       "value": "opencode/gpt-5.4-nano"
+      },
+      {
+       "name": "opencode/GPT-5.5",
+       "value": "opencode/gpt-5.5"
+      },
+      {
+       "name": "opencode/GPT-5.5 Pro",
+       "value": "opencode/gpt-5.5-pro"
+      },
+      {
+       "name": "opencode/GPT-5.6 Terra",
+       "value": "opencode/gpt-5.6-terra"
+      },
+      {
+       "name": "opencode/GPT-6 Astra",
+       "value": "opencode/gpt-6-astra"
+      },
+      {
+       "name": "opencode/GPT-6 Luna",
+       "value": "opencode/gpt-6-luna"
+      },
+      {
+       "name": "opencode/GPT-6 Sol",
+       "value": "opencode/gpt-6-sol"
+      },
+      {
+       "name": "opencode/GPT-6.1 Sol",
+       "value": "opencode/gpt-6.1-sol"
+      },
+      {
+       "name": "opencode/Grok 4.7",
+       "value": "opencode/grok-4.7"
+      },
+      {
+       "name": "opencode/Grok Build 0.1",
+       "value": "opencode/grok-build-0.1"
+      },
+      {
+       "name": "opencode/Kimi K2.7 Code",
+       "value": "opencode/kimi-k2.7-code"
+      },
+      {
+       "name": "opencode/Kimi K3",
+       "value": "opencode/kimi-k3"
+      },
+      {
+       "name": "opencode/Ling 3.0 Flash Fin Free",
+       "value": "opencode/ling-3.0-flash-fin-free"
+      },
+      {
+       "name": "opencode/Ling 3.1 Flash Free",
+       "value": "opencode/ling-3.1-flash-free"
+      },
+      {
+       "name": "opencode/LongCat 2.5 Preview Free",
+       "value": "opencode/longcat-2.5-preview-free"
+      },
+      {
+       "name": "opencode/MiMo-V2.6-Flash Free",
+       "value": "opencode/mimo-v2.6-flash-free"
+      },
+      {
+       "name": "opencode/MiniMax-M3",
+       "value": "opencode/minimax-m3"
+      },
+      {
+       "name": "opencode/Muse Spark 1.3",
+       "value": "opencode/muse-spark-1.3"
+      },
+      {
+       "name": "opencode/Muse Spark 1.3 Free",
+       "value": "opencode/muse-spark-1.3-contributor-free"
+      },
+      {
+       "name": "opencode/Nemotron 3 Ultra Free",
+       "value": "opencode/nemotron-3-ultra-free"
+      },
+      {
+       "name": "opencode/Nemotron 3.5 Lightning Free",
+       "value": "opencode/nemotron-3.5-lightning-free"
+      },
+      {
+       "name": "opencode/Qwen3.6 Plus",
+       "value": "opencode/qwen3.6-plus"
+      },
+      {
+       "name": "opencode/Qwen3.8 Flash",
+       "value": "opencode/qwen3.8-flash"
+      },
+      {
+       "name": "opencode/Qwen3.8 Max",
+       "value": "opencode/qwen3.8-max"
+      },
+      {
+       "name": "opencode/Space Bunny Free",
+       "value": "opencode/space-bunny-free"
+      },
+      {
+       "name": "opencode-go/DeepSeek V4 Flash",
+       "value": "opencode-go/deepseek-v4-flash"
+      },
+      {
+       "name": "opencode-go/DeepSeek V4 Flash Vision Exp",
+       "value": "opencode-go/deepseek-v4-flash-vision-exp"
+      },
+      {
+       "name": "opencode-go/DeepSeek V4 Pro (New)",
+       "value": "opencode-go/deepseek-v4-pro"
+      },
+      {
+       "name": "opencode-go/DeepSeek V4.1 Flash",
+       "value": "opencode-go/deepseek-v4.1-flash"
+      },
+      {
+       "name": "opencode-go/GLM-5.2",
+       "value": "opencode-go/glm-5.2"
+      },
+      {
+       "name": "opencode-go/GLM-5.3",
+       "value": "opencode-go/glm-5.3"
+      },
+      {
+       "name": "opencode-go/GLM-5.3-Flash",
+       "value": "opencode-go/glm-5.3-flash"
+      },
+      {
+       "name": "opencode-go/GPT-5.6 Luna",
+       "value": "opencode-go/gpt-5.6-luna"
+      },
+      {
+       "name": "opencode-go/GPT-6 Luna",
+       "value": "opencode-go/gpt-6-luna"
+      },
+      {
+       "name": "opencode-go/Grok 4.6",
+       "value": "opencode-go/grok-4.6"
+      },
+      {
+       "name": "opencode-go/Grok 4.7",
+       "value": "opencode-go/grok-4.7"
+      },
+      {
+       "name": "opencode-go/Hy3",
+       "value": "opencode-go/hy3"
+      },
+      {
+       "name": "opencode-go/Hy4 preview",
+       "value": "opencode-go/hy4-preview"
+      },
+      {
+       "name": "opencode-go/Kimi K2.7 Code",
+       "value": "opencode-go/kimi-k2.7-code"
+      },
+      {
+       "name": "opencode-go/Kimi K3",
+       "value": "opencode-go/kimi-k3"
+      },
+      {
+       "name": "opencode-go/LongCat 2.5 Preview Free",
+       "value": "opencode-go/longcat-2.5-preview-free"
+      },
+      {
+       "name": "opencode-go/LongCat-2.0",
+       "value": "opencode-go/longcat-2.0"
+      },
+      {
+       "name": "opencode-go/MiMo V2.5",
+       "value": "opencode-go/mimo-v2.5"
+      },
+      {
+       "name": "opencode-go/MiMo V2.5 Pro",
+       "value": "opencode-go/mimo-v2.5-pro"
+      },
+      {
+       "name": "opencode-go/MiMo-V2.6-Flash",
+       "value": "opencode-go/mimo-v2.6-flash"
+      },
+      {
+       "name": "opencode-go/MiMo-V2.6-Pro",
+       "value": "opencode-go/mimo-v2.6-pro"
+      },
+      {
+       "name": "opencode-go/MiniMax-M2.7",
+       "value": "opencode-go/minimax-m2.7"
+      },
+      {
+       "name": "opencode-go/MiniMax-M3",
+       "value": "opencode-go/minimax-m3"
+      },
+      {
+       "name": "opencode-go/Muse Spark 1.2 Contributor",
+       "value": "opencode-go/muse-spark-1.2-contributor"
+      },
+      {
+       "name": "opencode-go/Muse Spark 1.3 Contributor",
+       "value": "opencode-go/muse-spark-1.3-contributor"
+      },
+      {
+       "name": "opencode-go/Qwen3.7 Plus",
+       "value": "opencode-go/qwen3.7-plus"
+      },
+      {
+       "name": "opencode-go/Qwen3.8 Flash",
+       "value": "opencode-go/qwen3.8-flash"
+      },
+      {
+       "name": "opencode-go/Qwen3.8 Max",
+       "value": "opencode-go/qwen3.8-max"
+      },
+      {
+       "name": "opencode-go/Space Bunny",
+       "value": "opencode-go/space-bunny"
+      }
+     ],
+     "type": "select"
+    },
+    {
+     "category": "thought_level",
+     "currentValue": "default",
+     "description": "Available effort levels for this model",
+     "id": "effort",
+     "name": "Effort",
+     "options": [
+      {
+       "name": "Low",
+       "value": "low"
+      },
+      {
+       "name": "High",
+       "value": "high"
+      },
+      {
+       "name": "Max",
+       "value": "max"
+      },
+      {
+       "name": "Default",
+       "value": "default"
+      }
+     ],
+     "type": "select"
+    },
+    {
+     "category": "mode",
+     "currentValue": "build",
+     "id": "mode",
+     "name": "Session Mode",
+     "options": [
+      {
+       "description": "The default agent. Executes tools based on configured permissions.",
+       "name": "Build",
+       "value": "build"
+      },
+      {
+       "description": "Read-only agent for exploring the codebase and planning work before implementation.",
+       "name": "Plan",
+       "value": "plan"
+      }
+     ],
+     "type": "select"
+    }
+   ],
+   "sessionId": "ses_eeeeed1c6ffecvdcxvYt8yv9tG"
+  },
+  "session_role": "host",
+  "start_selection": {
+   "effort": null,
+   "fast": "off",
+   "launch_backend": "auto",
+   "mode": null,
+   "model": null,
+   "session_role": "host",
+   "tier": null
+  },
+  "state": "ready"
+ },
+ "host_stop": {
+  "agent_exit_code": 0,
+  "detail": null,
+  "error": null,
+  "holder_exit": null,
+  "reason": null,
+  "residual_pids": [],
+  "result": null,
+  "stopped": true,
+  "swept_child_pgids": []
+ },
+ "lane_dir": "/tmp/kpr-i264-host-chain-1035/core/opencode-r3",
+ "negotiation": {
+  "agent_capabilities": {
+   "_meta": {
+    "opencode/child-session-updates": true
+   },
+   "loadSession": true,
+   "mcpCapabilities": {
+    "http": true,
+    "sse": false
+   },
+   "promptCapabilities": {
+    "embeddedContext": true,
+    "image": true
+   },
+   "sessionCapabilities": {
+    "additionalDirectories": {},
+    "close": {},
+    "delete": {},
+    "fork": {},
+    "list": {},
+    "resume": {}
+   }
+  },
+  "sent_client_capabilities": [
+   {
+    "fs": {
+     "readTextFile": false,
+     "writeTextFile": false
+    },
+    "terminal": false
+   }
+  ]
+ },
+ "node1": {
+  "host_revision": 3,
+  "maintenance": {
+   "acked_host_revision": 3,
+   "handled_host_revision": 3,
+   "last_checkpoint": {
+    "at": "2026-10-06T11:56:52.105822+00:00",
+    "batch": "b-ba0673b56ae3",
+    "host_revision": {
+     "current": 3,
+     "from": 0,
+     "through": 3
+    },
+    "node": {
+     "holder_instance_id": "18c86e5feb5d08fa2df84c682939ea45",
+     "session": "codex-KPR1035C-sideagent"
+    },
+    "returned_to_host": {},
+    "settled": [
+     "host:section/authorization@1",
+     "host:section/project@1",
+     "host:section/sideagent@2",
+     "host:tasks/qa-observe@3"
+    ],
+    "source": "b-ba0673b56ae3",
+    "verified": true
+   },
+   "last_verified": {
+    "at": "2026-10-06T11:56:52.105822+00:00",
+    "batch": "b-ba0673b56ae3",
+    "node": {
+     "holder_instance_id": "18c86e5feb5d08fa2df84c682939ea45",
+     "session": "codex-KPR1035C-sideagent"
+    }
+   }
+  },
+  "phase": "cycle-complete",
+  "sideagent_node_batch": [
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "cursor": 26,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:cce6ef160120bc6a321184ee7eccd431a1b8e55f0998c440ccf2348a5f6e0d58",
+    "target_holder": "18c86e5feb5d08fa2df84c682939ea45"
+   }
+  ],
+  "sideagent_node_lost": null,
+  "sideagent_node_settled": [
+   {
+    "batch": "b-ba0673b56ae3",
+    "checkpoint": "verified",
+    "checkpoint_through": 3,
+    "cursor": 27,
+    "holder": "18c86e5feb5d08fa2df84c682939ea45",
+    "host_revision_through": 3,
+    "host_woken": false,
+    "kind": "sideagent_node_settled"
+   },
+   {
+    "batch": "b-ba0673b56ae3",
+    "checkpoint": "verified",
+    "checkpoint_through": 3,
+    "cursor": 27,
+    "holder": "18c86e5feb5d08fa2df84c682939ea45",
+    "host_revision_through": 3,
+    "host_woken": false,
+    "kind": "sideagent_node_settled"
+   }
+  ],
+  "sideagent_node_start_failed": null,
+  "sideagent_node_stopped": [
+   {
+    "cursor": 32,
+    "holder": "18c86e5feb5d08fa2df84c682939ea45",
+    "kind": "sideagent_node_stopped",
+    "receipt": {
+     "stopped": true
+    }
+   }
+  ]
+ },
+ "node2": {
+  "host_revision": 3,
+  "maintenance": {
+   "acked_host_revision": 3,
+   "handled_host_revision": 3,
+   "last_checkpoint": {
+    "at": "2026-10-06T12:05:07.774825+00:00",
+    "batch": "b-b0d493bc52ae",
+    "host_revision": {
+     "current": 3,
+     "from": 3,
+     "through": 3
+    },
+    "node": {
+     "holder_instance_id": "0ad589eb80abb75aa92ab696ad84d261",
+     "session": "codex-KPR1035C-sideagent"
+    },
+    "recovery": {
+     "checked": {
+      "authorization": [
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/AGENTS.md",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/delegator-heartbeat.json",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/heartbeat-prompt.json#state.project+authorization",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/kaola-workflow/.ledger/issue-264.jsonl",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/record.json",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35"
+      ],
+      "duties": [
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/heartbeat-prompt.json#state.decisions+holds+alerts+tasks/qa-observe",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/qa/task-skill.md",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/qa/progress.md",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/kaola-workflow/.ledger/issue-264.jsonl",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#223-235"
+      ],
+      "links": [
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/heartbeat-prompt.json#state.tasks/qa-observe.dispatch",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/.kaola/dispatch-index.json#qa-prior-reclaim-1",
+       "/tmp/kpr-i264-862-core/oc/receipt.json",
+       "/tmp/kpr-i264-862-core/oc/record/record.json",
+       "/tmp/kpr-i264-862-core-runtime-proof.md",
+       "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#103"
+      ]
+     },
+     "input": {
+      "at": "2026-10-06T11:58:15.563971+00:00",
+      "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+      "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+      "kind": "host-compaction",
+      "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+      "seq": 1,
+      "source": "completed-host-signal"
+     },
+     "seq": 1,
+     "unavailable": {}
+    },
+    "returned_to_host": {
+     "qa-observe": "not-in-batch"
+    },
+    "settled": [
+     "recovery#1"
+    ],
+    "source": "b-b0d493bc52ae",
+    "verified": false
+   },
+   "last_verified": {
+    "at": "2026-10-06T11:56:52.105822+00:00",
+    "batch": "b-ba0673b56ae3",
+    "node": {
+     "holder_instance_id": "18c86e5feb5d08fa2df84c682939ea45",
+     "session": "codex-KPR1035C-sideagent"
+    }
+   },
+   "recovery_seq": 1
+  },
+  "phase": "cycle-complete",
+  "sideagent_node_batch": [
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "cursor": 237,
+    "host_holder": "787fbe5f79d5ea50cb4133903ed2498d",
+    "host_revision_through": 3,
+    "kind": "sideagent_node_batch",
+    "prompt_fingerprint": "sha256:bb2e1cf38a918ebb21b27d66bd5453e47c3ec3fb3f8f6b3a1621e6c15e8b7fab",
+    "recovery_input": {
+     "at": "2026-10-06T11:58:15.563971+00:00",
+     "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+     "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+     "kind": "host-compaction",
+     "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+     "seq": 1,
+     "source": "completed-host-signal"
+    },
+    "target_holder": "0ad589eb80abb75aa92ab696ad84d261"
+   }
+  ],
+  "sideagent_node_lost": null,
+  "sideagent_node_settled": [
+   {
+    "batch": "b-b0d493bc52ae",
+    "checkpoint": "partial",
+    "checkpoint_through": 3,
+    "cursor": 238,
+    "holder": "0ad589eb80abb75aa92ab696ad84d261",
+    "host_revision_through": 3,
+    "host_woken": true,
+    "kind": "sideagent_node_settled"
+   },
+   {
+    "batch": "b-b0d493bc52ae",
+    "checkpoint": "partial",
+    "checkpoint_through": 3,
+    "cursor": 238,
+    "holder": "0ad589eb80abb75aa92ab696ad84d261",
+    "host_revision_through": 3,
+    "host_woken": true,
+    "kind": "sideagent_node_settled"
+   }
+  ],
+  "sideagent_node_start_failed": null,
+  "sideagent_node_stopped": [
+   {
+    "cursor": 245,
+    "holder": "0ad589eb80abb75aa92ab696ad84d261",
+    "kind": "sideagent_node_stopped",
+    "receipt": {
+     "stopped": true
+    }
+   }
+  ]
+ },
+ "node_event_count": 2047,
+ "node_record_dir": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/codex/codex-KPR1035C-sideagent/a0516d7102dcfd39",
+ "node_state_final": {
+  "error": {
+   "code": "holder-unreachable",
+   "message": "[Errno 61] Connection refused"
+  }
+ },
+ "platform": "opencode",
+ "pre_compact_quiet": "quiet",
+ "recovery_registration": {
+  "cursor": 38,
+  "input": {
+   "at": "2026-10-06T11:58:15.563971+00:00",
+   "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/records/opencode/opencode-KPR1035C-orchestrator-main/a0516d7102dcfd39/events.jsonl#35",
+   "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+   "kind": "host-compaction",
+   "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+   "seq": 1,
+   "source": "completed-host-signal"
+  },
+  "kind": "host_compact_maintenance_registered",
+  "signal_cursor": 35,
+  "ts": 1791287895.571
+ },
+ "reload": {
+  "cursor": 37,
+  "kind": "compact_reload_delivered",
+  "prompt_fingerprint": "sha256:bf48d26d7fa8f500c056d7e7891d81ab8acc2c5ef37193f6db46403b993a779a",
+  "session_role": "host",
+  "skill_path": null,
+  "ts": 1791287895.504
+ },
+ "reload_turn": {
+  "final_text_head": "",
+  "outcome": "turn_completed",
+  "stop_reason": "end_turn"
+ },
+ "residuals": [],
+ "session": "opencode-KPR1035C-orchestrator-main",
+ "setup_turn": {
+  "send_outcome": "in_progress",
+  "stop_reason": "end_turn",
+  "turn_outcome": "turn_completed"
+ },
+ "signal": {
+  "cursor": 35,
+  "holder": "787fbe5f79d5ea50cb4133903ed2498d",
+  "kind": "compact_reload_detected",
+  "occurrence_id": "msg_111141a56001x4OgkGnxQyOBSf",
+  "role": "host",
+  "session_id": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+  "signal": {
+   "method": "session/update",
+   "params": {
+    "sessionId": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+    "update": {
+     "_meta": {
+      "opencode/compaction": {
+       "messageId": "msg_111141a56001x4OgkGnxQyOBSf",
+       "reason": "manual",
+       "status": "completed"
+      }
+     },
+     "sessionUpdate": "session_info_update"
+    }
+   }
+  },
+  "source": "opencode-compaction-meta",
+  "ts": 1791287895.494
+ },
+ "skill_reads": [
+  {
+   "cursor": 58,
+   "session": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+   "ts": 1791287899.65,
+   "update_head": "{\"content\": [{\"content\": {\"text\": \"<skill_content name=\\\"kaola-project-runner\\\">\\n# Skill: kaola-project-runner\\n\\n# Project Runner\\n\\nThis Skill is the main control-plane Skill. It is not a platform Runner and has\\nno transport adapter. The ten platform Runner Skills are workers: they only\\nidentify, start, send, wait, permit, observe, capture, and stop an exact owned\\nsession. Kaola-Workflow, when used, owns worker-side claim, mission ledger,\\nchild worktree, finalize, archive, and sink.\\n\\nOne Host owns the plan, acceptance and QA.\\nHelpers do bounded planning, research, QA, synthesis, expl"
+  },
+  {
+   "cursor": 89,
+   "session": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+   "ts": 1791287904.607,
+   "update_head": "{\"kind\": \"execute\", \"locations\": [{\"path\": \"/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo\"}], \"rawInput\": {\"command\": \"find .kaola kaola-workflow -type f | head -50; echo \\\"---NAME---\\\"; ls /Users/ylmacstudio/.config/opencode/skills/ | grep -i opencode\", \"cwd\": \"/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo\"}, \"sessionUpdate\": \"tool_call_update\", \"status\": \"in_progress\", \"title\": \"find .kaola kaola-workflow -type f | head -50; echo \\\"---NAME---\\\"; ls /Users/ylmacstudio/.config/opencode/skills/ | grep -i opencode\", \"toolCallId\": \"call_00_paz1n0k5iw3abzr2eub5j"
+  },
+  {
+   "cursor": 91,
+   "session": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+   "ts": 1791287904.609,
+   "update_head": "{\"kind\": \"execute\", \"locations\": [{\"path\": \"/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo\"}], \"rawInput\": {\"command\": \"find .kaola kaola-workflow -type f | head -50; echo \\\"---NAME---\\\"; ls /Users/ylmacstudio/.config/opencode/skills/ | grep -i opencode\", \"cwd\": \"/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo\"}, \"sessionUpdate\": \"tool_call_update\", \"status\": \"in_progress\", \"title\": \"find .kaola kaola-workflow -type f | head -50; echo \\\"---NAME---\\\"; ls /Users/ylmacstudio/.config/opencode/skills/ | grep -i opencode\", \"toolCallId\": \"call_00_paz1n0k5iw3abzr2eub5j"
+  },
+  {
+   "cursor": 99,
+   "session": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+   "ts": 1791287907.585,
+   "update_head": "{\"kind\": \"execute\", \"locations\": [{\"path\": \"/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo\"}], \"rawInput\": {\"command\": \"ls -R /Users/ylmacstudio/.config/opencode/skills/opencode-kaola-project-runner | head -60\", \"cwd\": \"/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo\"}, \"sessionUpdate\": \"tool_call_update\", \"status\": \"in_progress\", \"title\": \"ls -R /Users/ylmacstudio/.config/opencode/skills/opencode-kaola-project-runner | head -60\", \"toolCallId\": \"call_01_3mqgriu3di238xd0rkc4e84o\"}"
+  },
+  {
+   "cursor": 101,
+   "session": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+   "ts": 1791287907.589,
+   "update_head": "{\"kind\": \"execute\", \"locations\": [{\"path\": \"/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo\"}], \"rawInput\": {\"command\": \"ls -R /Users/ylmacstudio/.config/opencode/skills/opencode-kaola-project-runner | head -60\", \"cwd\": \"/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo\"}, \"sessionUpdate\": \"tool_call_update\", \"status\": \"in_progress\", \"title\": \"ls -R /Users/ylmacstudio/.config/opencode/skills/opencode-kaola-project-runner | head -60\", \"toolCallId\": \"call_01_3mqgriu3di238xd0rkc4e84o\"}"
+  },
+  {
+   "cursor": 102,
+   "session": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+   "ts": 1791287907.598,
+   "update_head": "{\"content\": [{\"content\": {\"text\": \"SKILL.md\\nagents\\nreferences\\nscripts\\n\\n/Users/ylmacstudio/.config/opencode/skills/opencode-kaola-project-runner/agents:\\nopenai.yaml\\n\\n/Users/ylmacstudio/.config/opencode/skills/opencode-kaola-project-runner/references:\\nacp.md\\nplatform.md\\nsteering.md\\n\\n/Users/ylmacstudio/.config/opencode/skills/opencode-kaola-project-runner/scripts:\\nadapters\\nkaola-acp-holder.py\\nkaola-acp.py\\nkaola-model-policy.py\\nkaola-quota.py\\nkaola-tmux.sh\\nmain-skill-build.json\\nplatform.yaml\\nruntime-tmux.sh\\n\\n/Users/ylmacstudio/.config/opencode/skills/opencode-kaola-project-"
+  },
+  {
+   "cursor": 107,
+   "session": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+   "ts": 1791287910.297,
+   "update_head": "{\"content\": {\"text\": \"/task Skill (kaola-project-runner \\u2014 loaded) and installed platform Skill (opencode-kaola-project-runner/SKILL.md).\\n\\nThen record the read result: paths, byte counts, last lines. Then\", \"type\": \"text\"}, \"messageId\": \"msg_11114553c001pYgUQ4z7CrQMfe:reasoning:0\", \"sessionUpdate\": \"agent_thought_chunk\"}"
+  },
+  {
+   "cursor": 125,
+   "session": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+   "ts": 1791287913.151,
+   "update_head": "{\"kind\": \"read\", \"locations\": [{\"path\": \"/Users/ylmacstudio/.config/opencode/skills/opencode-kaola-project-runner/SKILL.md\"}], \"rawInput\": {\"path\": \"/Users/ylmacstudio/.config/opencode/skills/opencode-kaola-project-runner/SKILL.md\"}, \"sessionUpdate\": \"tool_call_update\", \"status\": \"in_progress\", \"title\": \"read\", \"toolCallId\": \"call_00_71daxqolk1v2sbv5c1x3mipq\"}"
+  },
+  {
+   "cursor": 126,
+   "session": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+   "ts": 1791287913.152,
+   "update_head": "{\"kind\": \"execute\", \"locations\": [{\"path\": \"/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo\"}], \"rawInput\": {\"command\": \"for f in /Users/ylmacstudio/.config/opencode/skills/kaola-project-runner/SKILL.md /Users/ylmacstudio/.config/opencode/skills/opencode-kaola-project-runner/SKILL.md; do echo \\\"=== $f ===\\\"; echo \\\"bytes=$(wc -c < \\\"$f\\\") lines=$(wc -l < \\\"$f\\\") sha=$(shasum -a 256 \\\"$f\\\" | cut -d' ' -f1)\\\"; echo \\\"lastline: $(tail -1 \\\"$f\\\")\\\"; done\", \"cwd\": \"/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo\"}, \"sessionUpdate\": \"tool_call_update\", \"status\": \"in_p"
+  },
+  {
+   "cursor": 127,
+   "session": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+   "ts": 1791287913.153,
+   "update_head": "{\"kind\": \"execute\", \"locations\": [{\"path\": \"/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo\"}], \"rawInput\": {\"command\": \"for f in /Users/ylmacstudio/.config/opencode/skills/kaola-project-runner/SKILL.md /Users/ylmacstudio/.config/opencode/skills/opencode-kaola-project-runner/SKILL.md; do echo \\\"=== $f ===\\\"; echo \\\"bytes=$(wc -c < \\\"$f\\\") lines=$(wc -l < \\\"$f\\\") sha=$(shasum -a 256 \\\"$f\\\" | cut -d' ' -f1)\\\"; echo \\\"lastline: $(tail -1 \\\"$f\\\")\\\"; done\", \"cwd\": \"/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo\"}, \"sessionUpdate\": \"tool_call_update\", \"status\": \"in_p"
+  },
+  {
+   "cursor": 128,
+   "session": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+   "ts": 1791287913.156,
+   "update_head": "{\"content\": [{\"content\": {\"text\": \"Read file /Users/ylmacstudio/.config/opencode/skills/opencode-kaola-project-runner/SKILL.md, lines 1-166\\n1: ---\\n2: name: opencode-kaola-project-runner\\n3: description: Use when the controlling Agent should communicate with an OpenCode main conversation through an exact owned ACP session by starting it, reading evidence, sending Agent-selected prompts or keys, reading replies, and stopping only that session.\\n4: ---\\n5: \\n6: # OpenCode Kaola Project Runner\\n7: \\n8: This Skill is a communication driver for OpenCode. It gives the controlling Agent a\\n9: measur"
+  },
+  {
+   "cursor": 129,
+   "session": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+   "ts": 1791287913.197,
+   "update_head": "{\"content\": [{\"content\": {\"text\": \"=== /Users/ylmacstudio/.config/opencode/skills/kaola-project-runner/SKILL.md ===\\nbytes=   17407 lines=     264 sha=1af732f378a11bd04e4533a3e1fe38cef9b9b48b393360748d0a8030f5524df7\\nlastline: machine, quota engine, or close-out dashboard or ledger.\\n=== /Users/ylmacstudio/.config/opencode/skills/opencode-kaola-project-runner/SKILL.md ===\\nbytes=   10597 lines=     166 sha=d71a297994686577484de0057c94b745c19d123117d99f6966d2bdcccd4e7981\\nlastline: and [references/acp.md](references/acp.md) for the structured ACP command surface.\\n\", \"type\": \"text\"}, \"type\": \"c"
+  },
+  {
+   "cursor": 167,
+   "session": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+   "ts": 1791287919.89,
+   "update_head": "{\"content\": {\"text\": \" of installed Skills: kaola-project-runner/SKILL.md (174\", \"type\": \"text\"}, \"messageId\": \"msg_111146b07001DMZJgKMKbK3fat:reasoning:0\", \"sessionUpdate\": \"agent_thought_chunk\"}"
+  },
+  {
+   "cursor": 168,
+   "session": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+   "ts": 1791287920.05,
+   "update_head": "{\"content\": {\"text\": \"07 bytes, 264 lines, sha256 1af7...) last line \\\"...\\\"; opencode-kaola-project-runner/SKILL.md (10597 bytes, 166 lines\", \"type\": \"text\"}, \"messageId\": \"msg_111146b07001DMZJgKMKbK3fat:reasoning:0\", \"sessionUpdate\": \"agent_thought_chunk\"}"
+  },
+  {
+   "cursor": 199,
+   "session": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+   "ts": 1791287927.137,
+   "update_head": "{\"kind\": \"edit\", \"locations\": [{\"path\": \"/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo/qa/progress.md\"}], \"rawInput\": {\"newString\": \"- step2 TASK-B: CURRENT. At the next maintained boundary, the Host records its\\n  post-compaction installed-Skill read result (paths, byte counts, last lines)\\n  and continues this duty from durable records.\\n- 2026-10-06 TASK-B: verified post-compaction full re-read of the installed Skills \\u2014 kaola-project-runner/SKILL.md (17407 bytes, 264 lines, sha256 1af732f3\\u202624df7; last line \\\"machine, quota engine, or close-out dashboard or ledger"
+  },
+  {
+   "cursor": 200,
+   "session": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+   "ts": 1791287927.143,
+   "update_head": "{\"content\": [{\"content\": {\"text\": \"Edited qa/progress.md (1 replacement)\", \"type\": \"text\"}, \"type\": \"content\"}, {\"newText\": \"- step2 TASK-B: CURRENT. At the next maintained boundary, the Host records its\\n  post-compaction installed-Skill read result (paths, byte counts, last lines)\\n  and continues this duty from durable records.\\n- 2026-10-06 TASK-B: verified post-compaction full re-read of the installed Skills \\u2014 kaola-project-runner/SKILL.md (17407 bytes, 264 lines, sha256 1af732f3\\u202624df7; last line \\\"machine, quota engine, or close-out dashboard or ledger.\\\") and opencode-kaola-pr"
+  },
+  {
+   "cursor": 205,
+   "session": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+   "ts": 1791287930.067,
+   "update_head": "{\"content\": [{\"content\": {\"text\": \"Read file qa/progress.md, lines 1-7\\n1: # QA progress (scratch)\\n2: \\n3: - step1 TASK-A: fixture seeded by controller. DONE.\\n4: - step2 TASK-B: CURRENT. At the next maintained boundary, the Host records its\\n5:   post-compaction installed-Skill read result (paths, byte counts, last lines)\\n6:   and continues this duty from durable records.\\n7: - 2026-10-06 TASK-B: verified post-compaction full re-read of the installed Skills \\u2014 kaola-project-runner/SKILL.md (17407 bytes, 264 lines, sha256 1af732f3\\u202624df7; last line \\\"machine, quota engine, or close-o"
+  },
+  {
+   "cursor": 218,
+   "session": "ses_eeeeed1c6ffecvdcxvYt8yv9tG",
+   "ts": 1791287933.454,
+   "update_head": "{\"content\": {\"text\": \"` |\\n| `\\u2026/skills/opencode-kaola-project-runner/SKILL.md` (inst\", \"type\": \"text\"}, \"messageId\": \"msg_11114acf2001e65hUbwwP6wfP8\", \"sessionUpdate\": \"agent_message_chunk\"}"
+  }
+ ],
+ "started_at": "2026-10-06T11:54:59Z"
+}

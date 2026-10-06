@@ -1,0 +1,16 @@
+{
+  "observed_project_paths": [
+    "/private/tmp/kpr-i264-host-chain-1035/core/codex-r3/run/repo",
+    "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo",
+    "/private/tmp/kpr-i264-host-chain-1035/core/grok-r3/run/repo",
+    "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo",
+    "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r2/run/repo",
+    "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r3/run/repo",
+    "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo"
+  ],
+  "count": 7,
+  "config_bytes": 6959,
+  "mtime_ns": 1791287875152984083,
+  "preimage": "unavailable; native auto-persistence attribution remains source/capture qualified",
+  "mutation": "none; no config contents or credential values copied"
+}

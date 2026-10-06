@@ -74,6 +74,9 @@ checkpoint. Older bundles without the selector keep revision-only selection.
 
 For ordinary Host business inputs, the node writes once:
 
+Use selected input ids verbatim. Task ids read as recovery sources are not extra
+inputs; a recovery-only batch has no business entries.
+
 ```bash
 $S checkpoint --writer sideagent --source B --batch B --through-host-revision R \
   --entries '[{"input":"<id>","applied":["tasks/t1"]},{"input":"<id>","retained":"tasks/t2"}]'

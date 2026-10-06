@@ -61,7 +61,10 @@ UNIT_PREFIX = "kaola-runner-launch-"
 
 # The only environment names that may reach the holder. Everything else from the
 # caller is dropped: no caller-app ownership variable and no unlisted credential.
-PASS_ALWAYS = ("HOME", "USER", "LOGNAME", "SHELL", "PATH", "TMPDIR", "LANG", "LC_ALL")
+# A non-Codex Host may launch a Codex maintenance node. Preserve its explicit
+# runtime home across both outside launches; dropping it changes configuration
+# location and can make an isolated run persist trust in the user's real home.
+PASS_ALWAYS = ("HOME", "USER", "LOGNAME", "SHELL", "PATH", "TMPDIR", "LANG", "LC_ALL", "CODEX_HOME")
 PASS_PROXY = ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY",
               "http_proxy", "https_proxy", "no_proxy", "all_proxy")
 # Named Runner keys only. A blanket ``KAOLA_*`` would forward unrelated or caller
