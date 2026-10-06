@@ -23,6 +23,7 @@ import hashlib
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -143,6 +144,29 @@ def label_for(session: str, repo: str) -> str:
     return LABEL_PREFIX + sha(f"claude-code\0{session}\0{repo}")[:16]
 
 
+def rollback_source_check() -> None:
+    """The repaired rejected-configuration rollback must not raise on proc=None."""
+    import ast
+    text = (ROOT / "scripts" / "kaola-acp.py").read_text()
+    tree = ast.parse(text)
+    function = next((node for node in tree.body
+                     if isinstance(node, ast.FunctionDef) and node.name == "stop_started_holder"), None)
+    check(function is not None, "the composed source exposes stop_started_holder")
+    module = ast.Module(body=[function], type_ignores=[])
+    globs = {"subprocess": subprocess, "os": os, "signal": signal,
+             "pid_alive": lambda pid: False,
+             "socket_request": lambda *a, **k: {"stopped": True, "residual_pids": []},
+             "Path": Path}
+    exec(compile(module, "<stop_started_holder>", "exec"), globs)  # noqa: S102
+    result = globs["stop_started_holder"](Path("/nonexistent.sock"), None, 4242)
+    check(result.get("host_session_stopped") is True and result.get("residual_pids") == []
+          and result.get("holder_alive") is False,
+          "stop_started_holder(proc=None) returns honest facts without an exception", result=result)
+    for marker in ("stop_started_holder(sock, proc, holder_pid_hint)",
+                   "**stop_started_holder(sock, proc, holder_pid_hint)"):
+        check(marker in text, f"both rollback call sites pass the holder pid hint ({marker})")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evidence-out")
@@ -165,6 +189,7 @@ def main() -> int:
     sessions = [host, worker]
     failures: list[str] = []
     try:
+        rollback_source_check()
         host_start = sb.cli("start", host, "--launch-backend", "launchd")
         host_pid = host_start.get("holder_pid")
         sb.track(host_pid)
@@ -178,10 +203,13 @@ def main() -> int:
               selection=sb.record(host).get("start_selection"))
 
         # The Host dispatches a Worker: the outer agent environment carries the
-        # Host's child record, exactly as a live Host turn would.
+        # Host's child record and the backend the Host exported, exactly as a
+        # live Host turn would. The Worker passes NO explicit flag: it must
+        # inherit the outside backend.
         child_record = sb.record_dir(host) / "children.jsonl"
-        worker_start = sb.cli("start", worker, "--launch-backend", "launchd",
+        worker_start = sb.cli("start", worker,
                               KAOLA_ACP_CHILD_RECORD=str(child_record),
+                              KAOLA_LAUNCH_BACKEND="launchd",
                               **{"KAOLA_ACP_DISPATCHER": json.dumps({
                                   "holder_instance_id": host_start.get("holder_instance_id"),
                                   "platform": "claude-code", "repo": str(sb.repo), "session": host})})
@@ -189,6 +217,13 @@ def main() -> int:
         sb.track(worker_pid)
         check(worker_start.get("state") == "ready", "the dispatched Worker starts ready outside the caller",
               receipt={k: worker_start.get(k) for k in ("state", "holder_pid", "holder_instance_id")})
+        worker_ppid = subprocess.run(["ps", "-o", "ppid=", "-p", str(worker_pid)],
+                                     capture_output=True, text=True).stdout.strip()
+        check(worker_ppid == "1", "the Worker inherits the outside backend and is re-parented",
+              worker_pid=worker_pid)
+        check(sb.record(worker).get("start_selection", {}).get("launch_backend") == "launchd",
+              "the inherited backend is recorded in the Worker start selection",
+              selection=sb.record(worker).get("start_selection"))
         entries = [json.loads(l) for l in child_record.read_text().splitlines() if l.strip()] \
             if child_record.exists() else []
         check(any(e.get("pid") == worker_pid for e in entries),

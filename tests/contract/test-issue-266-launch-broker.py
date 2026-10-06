@@ -95,13 +95,13 @@ def write_private(path: Path, data: str) -> Path:
 
 
 class Sandbox:
-    def __init__(self, name: str):
+    def __init__(self, name: str, space: bool = False):
         base = Path(tempfile.mkdtemp(prefix=f"k266{name}."))
         self.dir = Path(canonical(base))
         self.tmp = Path(tempfile.mkdtemp(prefix="k266.", dir="/tmp"))
         self.home = self.dir / "home"
         self.repo = self.dir / "repo"
-        self.record_root = self.dir / "records"
+        self.record_root = self.dir / ("re cords" if space else "records")
         self.launch_base = self.dir / "launch-base"
         for path in (self.home, self.repo, self.record_root, self.launch_base):
             path.mkdir(parents=True, exist_ok=True)
@@ -144,13 +144,14 @@ class Sandbox:
     def broker(self, *args: str, timeout: float = 90, env: dict | None = None) -> dict:
         result = subprocess.run([PYTHON, str(BROKER), *args], capture_output=True,
                                 text=True, timeout=timeout,
-                                env={**os.environ, **(env if env is not None else self.env())})
+                                env=(env if env is not None else self.env()))
         try:
             return json.loads(result.stdout)
         except ValueError as exc:  # noqa: F841
             raise AssertionError(f"broker printed no JSON: {result.stdout[-400:]} {result.stderr[-400:]}")
 
-    def submit(self, command: str, *, timeout: float = 60, child_record: bool = False) -> dict:
+    def submit(self, command: str, *, timeout: float = 60, child_record: bool = False,
+               backend: str | None = None) -> dict:
         argv_file = write_private(self.dir / f"argv-{uuid.uuid4().hex[:6]}.json",
                                   json.dumps(self.holder_argv(command)))
         args = ["submit", "--platform", self.platform, "--session", self.session,
@@ -158,19 +159,21 @@ class Sandbox:
                 "--log", str(self.dir / "holder.log"), "--cwd", str(self.repo),
                 "--run-base", str(self.launch_base), "--ready-timeout", str(timeout),
                 "--env-allow", "MOCK_ACP_LOG", "--argv-json", str(argv_file)]
+        if backend:
+            args += ["--backend", backend]
         if child_record:
             args += ["--child-record", str(self.child_record)]
         return self.broker(*args, timeout=timeout + 30)
 
     def stop(self) -> dict:
-        return self.broker("stop", "--platform", self.platform, "--session", self.session,
+        return self.broker("cleanup", "--platform", self.platform, "--session", self.session,
                            "--repo", self.repo.as_posix(), "--run-base", str(self.launch_base))
 
     def client(self, command: str, *args: str, timeout: float = 60) -> dict:
         argv = [PYTHON, str(CLIENT), self.platform, command, "--repo", self.repo.as_posix(),
                 "--session", self.session, *args]
         result = subprocess.run(argv, capture_output=True, text=True, timeout=timeout,
-                                env={**os.environ, **self.env()})
+                                env=self.env())
         try:
             return json.loads(result.stdout)
         except ValueError as exc:  # noqa: F841
@@ -363,12 +366,39 @@ def test_failed_start_cleanup(sb: Sandbox) -> None:
     check(stale == [], "no stale spec or plist remains", stale=[str(p) for p in stale])
 
 
+def test_spaces_in_record_path(sb: Sandbox) -> None:
+    check(" " in str(sb.record_dir), "the record path under test contains a space",
+          record_dir=str(sb.record_dir))
+    receipt = sb.submit(sb.mock_command("--scenario", "normal"))
+    check(receipt.get("result") == "ready",
+          "a record path with a space still reaches a verified ready holder", receipt=receipt)
+    holder_pid = receipt.get("holder_pid")
+    sb.track(holder_pid)
+    check(pid_alive(holder_pid), "the holder with a spaced record path is alive")
+    sb.client("stop", "--force")
+    wait_until(lambda: not pid_alive(holder_pid), 10, "spaced-path holder gone")
+
+
+def test_systemd_user_refusal(sb: Sandbox) -> None:
+    receipt = sb.submit(sb.mock_command("--scenario", "normal"), backend="systemd-user", timeout=5)
+    check(receipt.get("result") == "refused"
+          and receipt.get("reason") == "launch-backend-unsupported",
+          "a forced systemd-user backend on macOS refuses cleanly, with no OS call",
+          receipt=receipt)
+    check(receipt.get("holder_may_exist") is False,
+          "the refusal reports no holder may exist")
+    stale = list(sb.launch_base.rglob("*"))
+    check(stale == [], "the refused backend leaves no run-dir artifact", stale=[str(p) for p in stale])
+
+
 TESTS = (
-    ("literal_argv_structure", test_literal_argv_structure),
-    ("foreign_identity_rejected", test_foreign_identity_rejected),
-    ("reconcile_and_running_job", test_reconcile_and_running_job),
-    ("survival_control_and_child_record", test_survival_control_and_child_record),
-    ("failed_start_cleanup", test_failed_start_cleanup),
+    ("literal_argv_structure", test_literal_argv_structure, False),
+    ("foreign_identity_rejected", test_foreign_identity_rejected, False),
+    ("reconcile_and_running_job", test_reconcile_and_running_job, False),
+    ("survival_control_and_child_record", test_survival_control_and_child_record, False),
+    ("failed_start_cleanup", test_failed_start_cleanup, False),
+    ("spaces_in_record_path", test_spaces_in_record_path, True),
+    ("systemd_user_refusal", test_systemd_user_refusal, False),
 )
 
 
@@ -382,10 +412,10 @@ def main() -> int:
         return 0
     results: list[dict] = []
     failures: list[str] = []
-    for name, fn in TESTS:
+    for name, fn, space in TESTS:
         if args.only and args.only != name:
             continue
-        sb = Sandbox(name.split("_")[0][:4])
+        sb = Sandbox(name.split("_")[0][:4], space=space)
         try:
             fn(sb)
             results.append({"test": name, "result": "pass"})
