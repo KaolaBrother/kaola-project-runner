@@ -8,13 +8,17 @@ be bound do not double-count. A new repair whose order cannot be determined,
 after a positive count, is a pending-binding duty: the count stays as a
 lower bound and the old binding stays visible. The count is absent when it
 is unknown; it is never stored as zero. No second ledger or history list is
-created. A segment restarts only for one proven dispatch handoff or a
-catalog-profile effort that was actually applied.
+created. A segment restarts only for one proven dispatch handoff, or for a
+catalog-profile effort the platform explicitly ranks above the baseline.
+Current catalogs declare no effort order, so an applied receipt records and
+does not reset.
 """
 
 from __future__ import annotations
 
 import hashlib
+import importlib.util
+import itertools
 import json
 import os
 import subprocess
@@ -806,21 +810,93 @@ class RejectionCount(unittest.TestCase):
             }},
         }
 
-    def _apply_effort(self, ident: str, effort: str, receipt: dict, writer: str = "host") -> None:
+    def _apply_effort(self, ident: str, effort: str, receipt: dict, writer: str = "host",
+                      index: Path | None = None) -> None:
         rev = str(self.task(ident)["rev"])
+        extra = ["--expect-rev", rev]
+        if index is not None:
+            extra.extend(["--index", str(index)])
         code, out, err = self.update(writer, "tasks", ident,
                                      {"effort": effort, "effort_receipt": receipt},
-                                     "--expect-rev", rev)
+                                     *extra)
         self.assertEqual(code, 0, (out, err))
+
+    def _index_row(self, item: str, task: str | None, preset: str, status: str, holder: str,
+                   session: str | None = None) -> dict:
+        """One ``kaola-dispatch-index/1`` item in the shape ``execute`` writes.
+
+        ``task_id`` is included only when the caller supplies it. ``dispatch_links``
+        copies that field from the plan item; a row without it is still a legal
+        correlation row.
+        """
+        session_name = session or f"claude-code-KPR-{item}"
+        prompt = "sha256:" + "ab" * 32
+        row = {
+            "acceptance": "pending",
+            "evidence": {
+                "status": {
+                    "exit_code": 0,
+                    "holder_instance_id": holder,
+                    "mutation_status": "in_progress" if status == "in-flight" else "completed",
+                    "outcome": "in_progress" if status == "in-flight" else "stopped",
+                    "repo": str(self.repo),
+                }
+            },
+            "holder_instance_id": holder,
+            "item_id": item,
+            "output": f"/tmp/{item}-report.md",
+            "platform": "claude-code",
+            "preset": preset,
+            "prompt_sha256": prompt,
+            "prompt_source": {"kind": "full", "prompt_sha256": prompt},
+            "reason": "admitted" if status in ("in-flight", "returned") else status,
+            "repo": str(self.repo),
+            "session": session_name,
+            "status": status,
+        }
+        if task is not None:
+            row["task_id"] = task
+        return row
 
     def _write_index(self, items: list[dict]) -> Path:
         path = self.repo / ".kaola" / "dispatch-index.json"
         path.write_text(json.dumps({
             "schema": "kaola-dispatch-index/1",
+            "correlation_only": True,
+            "phase": "admission",
             "repo": str(self.repo),
+            "scope": "implementation",
+            "occupancy": "known",
             "items": items,
-        }) + "\n", encoding="utf-8")
+        }, indent=2) + "\n", encoding="utf-8")
         return path
+
+    def _runner_receipt(self, effort: str, *, session: str, holder: str,
+                        options: list[str] | None = None) -> dict:
+        """An ordinary Runner receipt. It has a session and a holder, and no task id."""
+        choices = ["low", "medium", "high", "xhigh", "max"] if options is None else options
+        return {
+            "schema_version": 3,
+            "platform": "claude-code",
+            "session": session,
+            "repo": str(self.repo),
+            "holder_instance_id": holder,
+            "transport": {"selected": "acp"},
+            "record": {
+                "platform": "claude-code",
+                "session": session,
+                "holder_instance_id": holder,
+                "repo": str(self.repo),
+            },
+            "session_meta": {"configOptions": [{
+                "id": "effort",
+                "type": "select",
+                "options": [{"value": item, "name": item} for item in choices],
+            }]},
+            "config_application": {"effort": {
+                "applied": True, "value": effort, "config_id": "effort",
+            }},
+        }
 
     def _plant_unproven(self, ident: str) -> None:
         doc = self.doc()
@@ -878,7 +954,7 @@ class RejectionCount(unittest.TestCase):
         self.assertEqual(self.rejection()["owner"], "worker-a")
 
     def test_catalog_profile_effort_uses_applied_evidence(self) -> None:
-        """A normal preset raises from applied evidence. Special effort only restates it."""
+        """Applied evidence records. Special effort only restates the profile. No catalog order raises."""
         claude = "claude-code/opus-xhigh"
         base = [
             {"id": "zcode/default", "state": "granted", "count": 1},
@@ -930,7 +1006,7 @@ class RejectionCount(unittest.TestCase):
         stays("a receipt for another holder does not bind")
         self._apply_effort("gate", "xhigh", self._effort_receipt(
             "xhigh", options=["xhigh", "medium", "high"]))
-        stays("the advertised order is the platform order, not the generic rank")
+        stays("configOptions order is presentation order, not a strength ladder")
         self._apply_effort("gate", "xhigh", self._effort_receipt(
             "xhigh", options=["low", "high", "max"]))
         stays("a legal set that has no xhigh is not comparable")
@@ -957,24 +1033,91 @@ class RejectionCount(unittest.TestCase):
         self._apply_effort("gate", "xhigh", self._effort_receipt("xhigh"))
         stays("a special effort that is not the catalog profile only constrains")
         self._set_grants(base)
-        self._apply_effort("gate", "xhigh", self._effort_receipt("xhigh"))
-        raised = self.rejection("gate")
-        self.assertNotIn("count", raised)
-        self.assertNotIn("pending", raised)
-        self.assertEqual(raised["effort"], "xhigh")
-        self.assertIs(raised["effort_applied"], True)
-        self.assertEqual(raised["owner"], claude)
-        self.assertNotIn("effort_receipt", self.task("gate"))
-        self.reopen("gate")
-        self.reject(ident="gate", why="after the raise", evidence="receipt-3",
-                    dispositions={"item-3": "repair"})
-        self.assertEqual(self.rejection("gate")["count"], 1)
-        self.assertEqual(self.rejection("gate")["owner"], claude)
-        for role in ("host", "delegator"):
-            row = self._row(self.view(role), "gate")["rejection"]
-            self.assertEqual(row["count"], 1)
-            self.assertEqual(row["escalation"], "same-assignment")
-            self.assertEqual(row["owner"], claude)
+        # The same tokens in presentation order and in reverse. A list index
+        # would call only the first a raise. Both keep the count and the duty.
+        comparable = ["low", "high", "xhigh", "max"]
+        seen: set[tuple] = set()
+        for order in itertools.permutations(comparable):
+            self._apply_effort("gate", "xhigh", self._effort_receipt("xhigh", options=list(order)))
+            stays(f"permutation {order} is not a platform order")
+            stored = self.rejection("gate")
+            seen.add((stored["count"], stored["effort"], stored["pending"], stored["owner"]))
+        self.assertEqual(len(seen), 1, "permutations of one option set have one conclusion")
+        self._apply_effort("gate", "xhigh", self._effort_receipt(
+            "xhigh", options=["max", "high", "medium", "low"]))
+        stays("a reversed [max, high, medium, low] list does not rank high below low")
+        noisy = ["high", "xhigh", "fast"]
+        noisy_seen: set[tuple] = set()
+        for order in itertools.permutations(noisy):
+            self._apply_effort("gate", "xhigh", self._effort_receipt("xhigh", options=list(order)))
+            stays(f"non-strength permutation {order} is not a ladder")
+            stored = self.rejection("gate")
+            noisy_seen.add((stored["count"], stored["effort"], stored["pending"]))
+        self.assertEqual(len(noisy_seen), 1, "non-strength entries do not create an order")
+
+    def test_current_catalogs_declare_no_effort_order(self) -> None:
+        """Preset effort is one token. No loaded catalog carries a semantic order."""
+        spec = importlib.util.spec_from_file_location("kaola_dispatch_i267_effort", SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        catalog = module.catalog_from_files(module.platform_paths(SCRIPT, None))
+        self.assertGreaterEqual(len(catalog), 1)
+        for preset, row in sorted(catalog.items()):
+            effort = row["selection"]["effort"]
+            self.assertIsInstance(effort, str, preset)
+            self.assertIsNone(module._declared_effort_order(catalog, preset), preset)
+
+    def test_a_runner_receipt_binds_through_dispatch_locators(self) -> None:
+        """A legal Runner receipt has no task_id. The task names the dispatch item."""
+        self.open_task("reach", dispatch=["i267-bind"])
+        opened = self.task("reach")
+        for absent in ("holder_instance_id", "sessions", "assignments", "session"):
+            self.assertNotIn(absent, opened)
+        self.reject(ident="reach", why="one", evidence="receipt-1",
+                    dispositions={"i267-bind": "repair"})
+        self.reopen("reach")
+        self.reject(ident="reach", why="two", evidence="receipt-2",
+                    dispositions={"item-2": "repair"})
+        self.assertEqual(self.rejection("reach")["count"], 2)
+        self.assertEqual(self.task("reach")["dispatch"], ["i267-bind"])
+        for absent in ("holder_instance_id", "sessions", "assignments"):
+            self.assertNotIn(absent, self.task("reach"))
+
+        session = "claude-code-KPR-i267-bind"
+        holder = "054ea741b1dac43f8f99beff5c2340a5"
+        index = self._write_index([
+            self._index_row("i267-bind", None, "worker-a", "in-flight", holder, session=session),
+        ])
+        document = json.loads(index.read_text(encoding="utf-8"))
+        self.assertEqual(document["schema"], "kaola-dispatch-index/1")
+        self.assertIs(document["correlation_only"], True)
+        self.assertNotIn("task_id", document["items"][0])
+        self.assertEqual(document["items"][0]["session"], session)
+        self.assertEqual(document["items"][0]["holder_instance_id"], holder)
+
+        def quiet(note: str) -> None:
+            stored = self.rejection("reach")
+            self.assertEqual(stored["count"], 2, note)
+            self.assertNotIn("effort", stored, note)
+            self.assertNotIn("effort_applied", stored, note)
+
+        unmatched = self._runner_receipt("high", session="claude-code-KPR-other", holder=holder)
+        self.assertNotIn("task_id", unmatched)
+        self._apply_effort("reach", "high", unmatched, index=index)
+        quiet("a session the dispatch row does not name does not bind")
+        self._apply_effort("reach", "high", self._runner_receipt(
+            "high", session=session, holder="holder-other"), index=index)
+        quiet("a holder the dispatch row does not name does not bind")
+        bound = self._runner_receipt("high", session=session, holder=holder)
+        self.assertNotIn("task_id", bound)
+        self._apply_effort("reach", "high", bound, index=index)
+        stored = self.rejection("reach")
+        self.assertEqual(stored["count"], 2, "recording the baseline is not a reset")
+        self.assertEqual(stored["effort"], "high")
+        self.assertIs(stored["effort_applied"], True)
+        self.assertEqual(stored["owner"], "worker-a")
+        self.assertNotIn("effort_receipt", self.task("reach"))
 
     def test_a_proven_handoff_is_one_transition(self) -> None:
         """Handed-off, a new id, and a new owner reset only as one index transition."""
@@ -998,8 +1141,8 @@ class RejectionCount(unittest.TestCase):
         unchanged("dark", "a missing index is not proof, and the write still lands")
 
         def seat(item: str, task: str, preset: str, status: str, holder: str) -> dict:
-            return {"item_id": item, "task_id": task, "preset": preset, "status": status,
-                    "session": "seat-" + holder, "holder_instance_id": holder}
+            return self._index_row(item, task, preset, status, holder,
+                                   session=f"claude-code-KPR-{item}")
 
         self._two_repairs("miss")
         cold = self._write_index([

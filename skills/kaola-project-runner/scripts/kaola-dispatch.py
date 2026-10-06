@@ -3624,8 +3624,9 @@ DIGEST_SKIP = (*RECORD_META, "count", "last_seen", "ack")
 # Heartbeat schema stays kaola-heartbeat-prompt/2. Do not bump it: a writer
 # that sees /3 refuses the whole file. Absent count is unknown, never zero.
 REJECTION_VERSION = 1
-# Effort order is the agent's advertised option list on the receipt, not a
-# universal ladder. Catalog profile effort is the authorization.
+# Catalog profile effort is the authorization. Strength is only an explicit
+# order the loaded platform catalog declares. Current manifests declare none.
+# ACP configOptions order is presentation order and is not that declaration.
 
 
 def judgment_digest(record: dict[str, Any]) -> str:
@@ -3814,93 +3815,112 @@ def _task_holders(task: dict[str, Any]) -> set[str]:
     return found
 
 
-def _receipt_binds(receipt: Any, task_id: str | None, task: dict[str, Any]) -> bool:
-    """The receipt names this task and a holder the task already records.
-
-    A start receipt does not carry the task id unless the caller includes it.
-    This update does not look up another session, so a missing or different
-    name is not proof.
-    """
-    if not isinstance(receipt, dict) or not task_id:
-        return False
-    named = nested(receipt, "task_id")
-    if not isinstance(named, str) or named.strip() != task_id:
-        return False
-    holder = holder_of(receipt)
-    if not isinstance(holder, str) or not holder.strip():
-        return False
-    return holder.strip() in _task_holders(task)
-
-
-def _config_options(receipt: dict[str, Any]) -> list[Any] | None:
-    """Advertised config options already carried on a Runner receipt."""
-    sources: list[Any] = [receipt]
-    evidence = receipt.get("start_evidence")
-    if isinstance(evidence, dict):
-        sources.append(evidence)
-    record = receipt.get("record")
-    if isinstance(record, dict):
-        sources.append(record)
-        saved = record.get("start_evidence")
-        if isinstance(saved, dict):
-            sources.append(saved)
-    for source in sources:
-        if not isinstance(source, dict):
-            continue
-        direct = source.get("initial_config_options")
-        if isinstance(direct, list):
-            return direct
-        meta = source.get("session_meta")
-        if isinstance(meta, dict) and isinstance(meta.get("configOptions"), list):
-            return meta["configOptions"]
+def _plain(value: Any) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
     return None
 
 
-def _select_values(option: dict[str, Any]) -> list[Any]:
-    """One-level select expansion, the same shape as ``config_option_values``."""
-    values: list[Any] = []
-    for entry in option.get("options") or []:
-        if not isinstance(entry, dict):
+def _holder_agrees(receipt_holder: str | None, other: Any) -> bool:
+    """Both sides named a holder and they differ. A missing side is not a contradiction."""
+    named = _plain(other)
+    return not (receipt_holder and named and receipt_holder != named)
+
+
+def _task_dispatch_rows(task: dict[str, Any], task_id: str | None,
+                        index_items: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """Index rows this task already names, by its dispatch ids or by a plan task_id."""
+    if not isinstance(index_items, list):
+        return []
+    ids = _dispatch_ids(task)
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in index_items:
+        item_id = _plain(row.get("item_id"))
+        named_task = _plain(row.get("task_id"))
+        if not ((item_id and item_id in ids) or (named_task and task_id and named_task == task_id)):
             continue
-        nested_options = entry.get("options")
-        if isinstance(nested_options, list):
-            for member in nested_options:
-                if isinstance(member, dict) and member.get("value") is not None:
-                    values.append(member.get("value"))
-        elif entry.get("value") is not None:
-            values.append(entry.get("value"))
-    return values
+        key = item_id or named_task or ""
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        rows.append(row)
+    return rows
 
 
-def _advertised_effort_order(receipt: Any) -> list[str] | None:
-    """The effort option's own values, in the order the agent advertised.
+def _row_matches(row: dict[str, Any], item: str | None, session: str | None,
+                 holder: str | None) -> bool:
+    """The receipt's item id or session is this row, and a named holder agrees."""
+    row_item = _plain(row.get("item_id"))
+    row_session = _plain(row.get("session"))
+    item_hit = bool(item and row_item == item)
+    session_hit = bool(session and row_session == session)
+    if not item_hit and not session_hit:
+        return False
+    if item and row_item and item != row_item:
+        return False
+    if session and row_session and session != row_session:
+        return False
+    return _holder_agrees(holder, row.get("holder_instance_id"))
 
-    The slot's ``config_id`` selects the option. A receipt that does not
-    carry that list is not a platform order.
+
+def _receipt_binds(receipt: Any, task_id: str | None, task: dict[str, Any],
+                   index_items: list[dict[str, Any]] | None = None) -> bool:
+    """The receipt is this task's seat through a locator that already exists.
+
+    A runner receipt carries ``session`` and ``holder_instance_id`` and does
+    not carry ``task_id``. A canonical task stores dispatch item ids and does
+    not store ``holder_instance_id``, ``sessions``, or ``assignments``. When
+    both sides do name a task id or a holder, a different value does not bind.
+    Otherwise the join is the dispatch item id on the task, the session the
+    task itself names, or the session on a dispatch-index row for that item
+    or for this task when the plan row already carries ``task_id``.
     """
-    if not isinstance(receipt, dict):
+    if not isinstance(receipt, dict) or not isinstance(task, dict) or not task_id:
+        return False
+    named_task = _plain(nested(receipt, "task_id"))
+    if named_task and named_task != task_id:
+        return False
+    holder = _plain(holder_of(receipt))
+    stored = _task_holders(task)
+    if stored and holder and holder not in stored:
+        return False
+    if named_task == task_id and holder and holder in stored:
+        return True
+    item = _plain(nested(receipt, "item_id"))
+    session = _plain(nested(receipt, "session"))
+    rows = _task_dispatch_rows(task, task_id, index_items)
+    if item and item in _dispatch_ids(task):
+        linked = [row for row in rows if _plain(row.get("item_id")) == item]
+        if not linked:
+            return True
+        return any(_row_matches(row, item, session, holder) for row in linked)
+    for name, recorded in seat_entries(task):
+        if session and session == name and _holder_agrees(holder, recorded):
+            return True
+    return any(_row_matches(row, item, session, holder) for row in rows)
+
+
+def _declared_effort_order(catalog: dict[str, Any] | None, owner: str | None) -> list[str] | None:
+    """The platform's explicit semantic effort order, or None when it declares none.
+
+    ``catalog_from_files`` stores ``selection.effort`` as one token. That token
+    is the authorized effort. The other presets on the platform are the coverage
+    set, not a sequence. No loaded field is an ordered list of effort tokens.
+    A string, including the empty string some manifests store, is not an order
+    between two tokens. The receipt's ``configOptions`` sequence is not read.
+    """
+    if not isinstance(catalog, dict) or not isinstance(owner, str):
         return None
-    block, _source = application_of(receipt)
-    slot, state = application_slot(block, "effort")
-    if state != "applied" or not isinstance(slot, dict):
+    row = catalog.get(owner)
+    if not isinstance(row, dict):
         return None
-    config_id = slot.get("config_id")
-    if not isinstance(config_id, str) or not config_id.strip():
+    selection = row.get("selection")
+    raw = selection.get("effort") if isinstance(selection, dict) else None
+    # The only effort fact on the row. It does not rank this token against another.
+    if isinstance(raw, str) or raw in (None, ""):
         return None
-    options = _config_options(receipt)
-    if not isinstance(options, list):
-        return None
-    option = next((item for item in options
-                   if isinstance(item, dict) and item.get("id") == config_id), None)
-    if not isinstance(option, dict):
-        return None
-    order: list[str] = []
-    for value in _select_values(option):
-        if isinstance(value, str) and value.strip():
-            token = value.strip().lower()
-            if token not in order:
-                order.append(token)
-    return order or None
+    return None
 
 
 def _index_items(path: str, repo: str | None) -> list[dict[str, Any]] | None:
@@ -3980,16 +4000,18 @@ def _handoff_resets(current: dict[str, Any] | None, merged: dict[str, Any],
 
 def _effort_action(patch: dict[str, Any], rejection: dict[str, Any], writer: str,
                    authorization: dict[str, Any] | None, task: dict[str, Any],
-                   task_id: str | None, catalog: dict[str, Any] | None) -> tuple[str | None, str | None]:
-    """Record a proven applied effort. Raise only above a proven baseline.
+                   task_id: str | None, catalog: dict[str, Any] | None,
+                   index_items: list[dict[str, Any]] | None = None) -> tuple[str | None, str | None]:
+    """Record a proven applied effort. Raise only on an explicit higher order.
 
-    A bare string is not a baseline. The receipt has to name this task and a
-    holder the task records, and ``effort_applied_verdict`` has to match.
-    An older stored token without ``effort_applied`` is unproven: this receipt
-    becomes the baseline and the count stays. A raise also needs the catalog
-    profile effort, any owner effort constraint already inside that coverage,
-    and both tokens on the receipt's advertised effort option, with the new
-    one later. Otherwise the count and any pending duty stay.
+    A bare string is not a baseline. The receipt has to bind to this task,
+    and ``effort_applied_verdict`` has to match. An older stored token without
+    ``effort_applied`` is unproven: this receipt becomes the baseline and the
+    count stays. A raise also needs the catalog profile effort and any owner
+    effort constraint already inside that coverage. The two tokens reset the
+    count only when the platform catalog declares an order that ranks the
+    applied token strictly above the baseline. Advertised configOptions order
+    is not that declaration. Otherwise the count and any pending duty stay.
     """
     if writer != "host" or not isinstance(patch.get("effort"), str):
         return None, None
@@ -3998,7 +4020,7 @@ def _effort_action(patch: dict[str, Any], rejection: dict[str, Any], writer: str
         return None, None
     receipt = patch.get("effort_receipt")
     applied = _applied_effort(requested, receipt)
-    if applied is None or not _receipt_binds(receipt, task_id, task):
+    if applied is None or not _receipt_binds(receipt, task_id, task, index_items):
         return None, None
     previous = rejection.get("effort")
     previous_token = previous.strip().lower() if isinstance(previous, str) and previous.strip() else None
@@ -4006,7 +4028,7 @@ def _effort_action(patch: dict[str, Any], rejection: dict[str, Any], writer: str
         return "record", applied
     if not _effort_permitted(authorization, _owner_of(task), applied, catalog):
         return None, None
-    order = _advertised_effort_order(receipt)
+    order = _declared_effort_order(catalog, _owner_of(task))
     if not order or previous_token not in order or applied not in order:
         return None, None
     if order.index(applied) <= order.index(previous_token):
@@ -4117,8 +4139,8 @@ def apply_task_rejection(current: dict[str, Any] | None, merged: dict[str, Any],
     be determined, after a positive count, stays a pending-binding duty: the
     count and the old binding remain as a lower bound, and the new verdict is
     kept. The projection publishes that duty. A later complete binding of a
-    new delivery increments once. An effort comparison that is unknown, or a
-    handoff this update cannot prove, leaves that duty and the count.
+    new delivery increments once. An effort pair the platform does not rank,
+    or a handoff this update cannot prove, leaves that duty and the count.
     """
     for key in ("review", "effort", "effort_receipt"):
         if key in patch:
@@ -4132,7 +4154,7 @@ def apply_task_rejection(current: dict[str, Any] | None, merged: dict[str, Any],
     verdict = patch.get("verdict") if isinstance(patch.get("verdict"), dict) else None
     is_repair = bool(verdict and verdict.get("value") == "repair")
     effort_action, effort_token = _effort_action(
-        patch, previous, writer, authorization, merged, task_id, catalog)
+        patch, previous, writer, authorization, merged, task_id, catalog, index_items)
     resets = (_handoff_resets(current, merged, authorization, task_id, index_items)
               or effort_action == "raise")
     if resets:
@@ -4675,7 +4697,10 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
                 catalog = None
         index_items = None
         index_path = getattr(args, "index", None)
-        if index_path and any(key in patch for key in ("dispositions", "dispatch", "preset")):
+        # Handoff proof and an effort receipt both read this one index. An
+        # effort patch carries no disposition, so the load cannot be limited
+        # to those keys or the receipt can never see the dispatch row.
+        if index_path and any(key in patch for key in ("dispositions", "dispatch", "preset", "effort")):
             index_items = _index_items(str(index_path), str(repo_of_state_file(Path(args.file))))
         apply_task_rejection(
             current if isinstance(current, dict) else None, merged, patch, args.writer,
