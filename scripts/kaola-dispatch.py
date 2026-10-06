@@ -26,6 +26,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -336,6 +337,34 @@ def parse_expiry(value: str) -> datetime | None:
     return moment if moment.tzinfo is not None and moment.utcoffset() is not None else None
 
 
+def current_authorization(auth: dict[str, Any]) -> dict[str, Any]:
+    """A sourced authorization write removes ended grants, keeping current stop restrictions."""
+    auth = json.loads(json.dumps(auth))
+    if not auth.get("grants") and not auth.get("revoked"):
+        return auth
+    revoked = set(as_id_list(auth.get("revoked")))
+    catalog = catalog_from_files(platform_paths(Path(__file__), None))
+    kept = []
+    for grant in auth.get("grants") or []:
+        ident = grant["id"]
+        expiry = parse_expiry(grant["expires"]) if isinstance(grant.get("expires"), str) else None
+        ended = (grant.get("state") == "revoked" or ident in revoked or (
+            catalog.get(ident, {}).get("class") == "Expert" and expiry is not None
+            and expiry <= datetime.now(timezone.utc)))
+        if ended:
+            revoked.add(ident)
+        else:
+            kept.append(grant)
+    if "grants" in auth:
+        auth["grants"] = kept
+    if revoked:
+        auth["revoked"] = sorted(revoked)
+    summary = auth.get("capability_summary")
+    if isinstance(summary, dict) and isinstance(summary.get("presets"), list):
+        summary["presets"] = [ident for ident in summary["presets"] if ident not in revoked]
+    return auth
+
+
 def availability_map(doc: dict[str, Any] | None) -> dict[str, str]:
     if doc is None:
         return {}
@@ -512,9 +541,10 @@ def observed_at() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def project_seats(args: argparse.Namespace, auth: dict[str, Any],
+def seat_projection(args: argparse.Namespace, auth: dict[str, Any],
                   grants: list[dict[str, Any]], catalog: dict[str, dict[str, Any]],
-                  binding: dict[str, Any] | None = None) -> int:
+                  binding: dict[str, Any] | None = None,
+                  document: dict[str, Any] | None = None) -> dict[str, Any]:
     """Read the existing occupancy facts; report limits without deciding authority."""
     repo = str(Path(args.repo).resolve())
     unknown: list[str] = []
@@ -539,11 +569,12 @@ def project_seats(args: argparse.Namespace, auth: dict[str, Any],
     bound = []
     sideagent_rows = []
     for row in rows:
-        if row.get("state") == "stopped" or row.get("host_class") is True:
+        if (row.get("state") == "stopped" or row.get("host_class") is True
+                or (row.get("session_role") == "host" and row.get("identity") == "verified")):
             continue
         if isinstance(row.get("repo"), str) and not same_repo(row["repo"], repo):
             continue
-        if binding_row(binding, row):
+        if binding_row(binding, row) or (row.get("session_role") in SIDEAGENT_ROLES and row.get("identity") == "verified"):
             sideagent_rows.append({"session": row.get("session"), "platform": row.get("platform"),
                                    "holder_instance_id": row.get("holder_instance_id"),
                                    "state": row.get("state"), "seat_exempt": True})
@@ -563,7 +594,7 @@ def project_seats(args: argparse.Namespace, auth: dict[str, Any],
     if state != "known":
         unknown.append("live-source-unavailable")
     listed = None if args.live else acp_runner(Path(__file__), skills)
-    return emit({
+    projection = {
         "schema": "kaola-dispatch-seats/1", "repo": repo,
         "source": {"authorization": args.authorization, "live": args.live or (str(listed) if listed else None),
                    "index": args.index, "as_of": observed_at()},
@@ -579,7 +610,154 @@ def project_seats(args: argparse.Namespace, auth: dict[str, Any],
                       **({"role": row["session_role"]} if row.get("session_role") in SIDEAGENT_ROLES else {})}
                      for row in bound],
         "bound_sideagent": sideagent_rows or None,
-    })
+    }
+    projection["summary"] = seat_summary(projection, args, auth, grants, catalog, bound, items, document)
+    return projection
+
+
+def project_seats(args: argparse.Namespace, auth: dict[str, Any],
+                  grants: list[dict[str, Any]], catalog: dict[str, dict[str, Any]],
+                  binding: dict[str, Any] | None = None) -> int:
+    return emit(seat_projection(args, auth, grants, catalog, binding))
+
+
+def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dict[str, Any],
+                 grants: list[dict[str, Any]], catalog: dict[str, dict[str, Any]],
+                 rows: list[dict[str, Any]], items: dict[str, dict[str, Any]],
+                 document: dict[str, Any] | None) -> dict[str, Any]:
+    """Current user report, from the same occupancy and admission facts. Never stored."""
+    if document is None:
+        try:
+            document = load_object(Path(args.repo) / ".kaola" / "heartbeat-prompt.json")
+        except ValueError:
+            document = None
+    tasks = ((document or {}).get("state") or {}).get("tasks") or {}
+    unknown_sources = list(projection["unknown_reasons"])
+    if document is None or document.get("schema") != STATE_SCHEMA:
+        unknown_sources.append("current-task-source-unavailable")
+    holds = preset_holds(document)
+    ceiling, ceiling_error = delegator_ceiling(projection["repo"])
+    effective = apply_ceiling_to_grants(grants, ceiling) if ceiling else grants
+    cap = auth.get("elite_cap")
+    if ceiling and _count_ok(ceiling.get("elite_cap")):
+        cap = min(cap, ceiling["elite_cap"]) if _count_ok(cap) else ceiling["elite_cap"]
+    availability = availability_map(load_object(Path(args.availability))) if getattr(args, "availability", None) else {}
+    _candidates, withheld = eligibility(catalog, auth, effective, availability)
+    reasons = {item["id"]: item["reason"] for item in withheld}
+    resolved = {row["session"]: row.get("preset") for row in projection["sessions"]}
+    occupied = []
+    for row in rows:
+        preset = resolved.get(row["session"])
+        if catalog.get(preset, {}).get("class") not in ("Elite", "Expert"):
+            continue
+        links = []
+        for ident, task in tasks.items():
+            if not isinstance(task, dict):
+                continue
+            exact = (row["session"], row["holder_instance_id"]) in seat_entries(task)
+            linked = any(ref in items and items[ref].get("session") == row["session"]
+                         and items[ref].get("holder_instance_id") == row["holder_instance_id"]
+                         and items[ref].get("task_id") == ident for ref in task.get("dispatch") or [])
+            if exact or linked:
+                links.append(ident)
+        mutation = row.get("mutation_status")
+        status = ("held/faulted" if row.get("state") in ("error", "failed") or preset in holds
+                  or row.get("agent_alive") is False or row.get("socket_ok") is False
+                  or mutation in ("failed", "refused") else
+                  "reserved" if mutation == "not_started" else
+                  "working" if mutation == "in_progress" and links else
+                  "idle-but-unreclaimed" if mutation in ("completed", "accepted") else "unknown")
+        occupied.append({"session": row["session"], "holder_instance_id": row["holder_instance_id"],
+                         "preset": preset, "tasks": sorted(links), "state": status,
+                         **({"links": "unknown"} if not links and mutation != "not_started" else {})})
+    groups: dict[str, dict[str, Any]] = {}
+    for grant in effective:
+        preset = grant["id"]
+        klass = catalog.get(preset, {}).get("class")
+        if klass not in ("Elite", "Expert") or grant.get("state") == "revoked" or preset in auth.get("revoked", []):
+            continue
+        if ceiling and ceiling_block(ceiling, preset, klass) in ("above-ceiling", "revoked"):
+            continue
+        shared_limit = next((group for group in (ceiling or {}).get("groups", []) if preset in group["ids"]), None)
+        group = ("grant:" + ",".join(sorted(shared_limit["ids"]))) if shared_limit else grant.get("shared_seat") or preset
+        entry = groups.setdefault(group, {"group": group, "presets": [], "authorized_count": None,
+                                          "occupied": [], "unavailable": [], "idle_available": None})
+        count = grant.get("count")
+        if _count_ok(count):
+            entry["authorized_count"] = max(entry["authorized_count"] or 0, count)
+            if shared_limit:
+                entry["authorized_count"] = min(entry["authorized_count"], shared_limit["count"])
+        entry["presets"].append({"id": preset, "class": klass, "count": count,
+                                  **({"lifetime": grant.get("lifetime") or "task"} if klass == "Expert" else {})})
+        reason = reasons.get(preset)
+        if ceiling:
+            reason = ceiling_block(ceiling, preset, klass) or reason
+        if preset in holds:
+            reason = "held:" + ",".join(holds[preset])
+        if ceiling_error:
+            reason = "ceiling-unreadable"
+        if reason:
+            entry["unavailable"].append({"id": preset, "reason": reason})
+    observed = projection["observed_elite_expert"]
+    cap_remaining = max(0, cap - observed) if _count_ok(cap) and observed is not None and not unknown_sources else None
+    for entry in groups.values():
+        ids = {item["id"] for item in entry["presets"]}
+        entry["occupied"] = [row for row in occupied if row["preset"] in ids]
+        blocked = {item["id"] for item in entry["unavailable"]}
+        available_ids = ids - blocked
+        availability_unknown = any(
+            availability.get(ident, "unknown") == "unknown" for ident in available_ids)
+        unknown = bool(unknown_sources) or ceiling_error is not None or any(row["state"] == "unknown" for row in entry["occupied"])
+        entry["occupancy_unknown"] = unknown
+        entry["availability_unknown"] = availability_unknown
+        count = entry["authorized_count"]
+        if not available_ids:
+            entry["idle_available"] = 0
+        elif not unknown and not availability_unknown and count is not None and cap_remaining is not None:
+            entry["idle_available"] = min(max(0, count - len(entry["occupied"])), cap_remaining)
+    return {"groups": list(groups.values()),
+            "expert_authorization": "present" if any(item["class"] == "Expert" for group in groups.values()
+                                                       for item in group["presets"]) else "none",
+            "occupied": occupied, "elite_cap": cap, "occupied_elite_expert": observed,
+            "cap_remaining": cap_remaining,
+            "idle_available_total": min(sum(group["idle_available"] for group in groups.values()), cap_remaining)
+                if cap_remaining is not None and all(group["idle_available"] is not None for group in groups.values()) else None,
+            "unknown_reasons": unknown_sources,
+            "resource_limits": {key: auth[key] for key in ("elite_cap", "account_token_quotas", "paused", "exclusions", "revoked") if key in auth},
+            "scope": "current project; external target/account capacity requires its original resource receipt",
+            "source": projection["source"]}
+
+
+def delegator_seats(args: argparse.Namespace, document: dict[str, Any], path: Path) -> dict[str, Any]:
+    repo = Path(args.repo).resolve() if getattr(args, "repo", None) else repo_of_state_file(path)
+    options = argparse.Namespace(repo=str(repo), authorization=str(path),
+                                 live=getattr(args, "live", None), index=getattr(args, "index", None),
+                                 skills_root=getattr(args, "skills_root", None), availability=getattr(args, "availability", None))
+    if options.index is None and (repo / ".kaola" / "dispatch-index.json").is_file():
+        options.index = str(repo / ".kaola" / "dispatch-index.json")
+    try:
+        catalog = catalog_from_files(platform_paths(Path(__file__), getattr(args, "platforms", None)))
+        if document.get("schema") == RECORD.DELEGATOR_SCHEMA:
+            source = document.get("authorization") or {}
+            problems = RECORD.delegator_authorization_blockers(source)
+            if problems:
+                raise ValueError(problems[0]["detail"])
+            auth = {key: source[key] for key in ("elite_cap", "paused", "revoked", "exclusions", "account_token_quotas") if key in source}
+            auth["grants"] = []
+            for key in ("elite_grants", "expert_task_grants"):
+                for grant in source.get(key) or []:
+                    ids = grant.get("preset_ids") or ([grant["preset_id"]] if grant.get("preset_id") else [])
+                    for ident in ids:
+                        auth["grants"].append({"id": ident, "state": "granted", "count": grant.get("count"),
+                                               **({"lifetime": grant["lifetime"]} if "lifetime" in grant else {}),
+                                               **({"shared_seat": ",".join(ids)} if len(ids) > 1 else {})})
+            document = None
+        else:
+            auth = authorization_object(document)
+        return seat_projection(options, auth, normalize_grants(auth), catalog,
+                               bound_sideagent(document), document)["summary"]
+    except (OSError, ValueError) as exc:
+        return {"unknown_reasons": [str(exc)], "expert_authorization": "unknown", "idle_available_total": None}
 
 
 def present_value(value: Any) -> Any:
@@ -3505,9 +3683,6 @@ def delegator_view(doc: dict[str, Any], path: Path, repo: Path) -> dict[str, Any
         for key, value in sorted((projected.get(kind) or {}).items()):
             if not isinstance(value, dict):
                 continue
-            if kind == "decisions" and value.get("status") == "settled" and not isinstance(
-                    value.get("transcribed"), dict):
-                continue
             found.append({"id": key, **{field: value.get(field) for field in fields if value.get(field) is not None}})
         return found
 
@@ -3703,9 +3878,31 @@ def validate_record(kind: str, record: dict[str, Any]) -> str | None:
         if record.get("status") not in (None, "pending", "settled"):
             return "status must be pending or settled"
     for key in ("dispatch", "evidence"):
-        if key in record and not isinstance(record[key], (list, str)):
+        if key in record and not (isinstance(record[key], str) or (
+                isinstance(record[key], list) and all(isinstance(ref, str) for ref in record[key]))):
             return f"{key} must be a reference string or a list of references"
     return None
+
+
+def record_recovery(args: argparse.Namespace, doc: dict[str, Any], current: dict[str, Any] | None) -> str:
+    """Name the existing operation. The Agent decides whether the duty is handled."""
+    target = f"{args.kind}/{args.id}"
+    if current is None:
+        return (f"{target} is absent at file revision {doc['revision']}. Do not create a handled or "
+                "inapplicable row or move its text to another field. If the matter is unresolved, "
+                "retain its original evidence and use the current decision/reconciliation route "
+                "until its proper type is established. Unknown is not resolved.")
+    command = shlex.join([sys.executable, str(Path(__file__).resolve()), "state", "retire",
+                          "--file", str(args.file), "--writer", args.writer, "--source", "ORIGINAL_SOURCE",
+                          "--kind", args.kind, "--id", args.id, "--expect-rev", str(current.get('rev')),
+                          "--evidence", "ORIGINAL_HANDLED_EVIDENCE"])
+    return (f"{target} exists at record revision {current.get('rev')}, file revision {doc['revision']}. "
+            f"If handled, remove it with: {command}. Use original evidence that ends this duty. "
+            "Run `state migrate` for known legacy mappings and read its removed list. "
+            "Tasks require the Host verdict and closed dispatch/reclaim links; accepted tasks also "
+            "require --cite. Decisions require owner settlement. Do not move settled text to another "
+            "field. If unresolved, keep the original evidence and use the current decision/reconciliation "
+            "route until its proper type is established.")
 
 
 def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: dict[str, Any],
@@ -3718,14 +3915,18 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
         raise StateRefusal("invalid-input", "id must be a stable short identifier")
     if any(key in patch for key in RECORD_META):
         raise StateRefusal("invalid-input", f"{', '.join(RECORD_META)} are kept by the tool")
+    records = state.setdefault(kind, {})
+    current = records.get(record_id)
+    if kind == "decisions" and patch.get("status") == "settled" and current is None:
+        raise StateRefusal("record-missing", "settlement removes an existing decision; it creates no row",
+                           recovery=record_recovery(args, doc, current), unapplied=patch)
     rejected = RECORD.reject_record_patch(kind, patch)
     if rejected:
         rejected["path"] = f"{kind}.{record_id}.{rejected['path'].removeprefix(kind + '.')}"
+        rejected["recovery"] = record_recovery(args, doc, current)
         raise StateRefusal("invalid-input", rejected["detail"], **{
             key: rejected[key] for key in ("path", "allowed", "recovery")
         }, unapplied=patch)
-    records = state.setdefault(kind, {})
-    current = records.get(record_id)
     stones = [stone for stone in state.get("retired") or []
               if isinstance(stone, dict) and stone.get("kind") == kind and stone.get("id") == record_id
               and (stone.get("seats") or stone.get("dispatch")) and not stone.get("handed_to")]
@@ -3739,8 +3940,8 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
     if current is None and args.expect_rev not in (None, 0):
         raise StateRefusal(
             "record-retired",
-            f"{kind}/{record_id} is not current. A new duty omits --expect-rev. "
-            "An old revision does not restore the settled record. The file was not changed.",
+            f"{kind}/{record_id} is not current. An old revision does not restore it. The file was not changed.",
+            recovery=record_recovery(args, doc, current),
             unapplied=patch,
         )
     if "prior_verdict" in patch:
@@ -3787,19 +3988,16 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
             f"{kind}.{record_id}.{unknown[0]} is not a current field.",
             path=f"{kind}.{record_id}.{unknown[0]}",
             allowed=", ".join(sorted(RECORD.RECORD_KEYS[kind])),
-            recovery="run `state migrate` for known legacy mappings and read its removed list. "
-                     "Rehome other current text before an explicit null removal. "
-                     "prior_verdict is tool-owned; an authoritative verdict supersedes it. "
-                     "The file was not changed.",
+            recovery=record_recovery(args, doc, current),
             unapplied=patch,
         )
     typed = RECORD.record_type_problem(kind, merged)
     if typed:
         raise StateRefusal("invalid-input", typed["detail"], path=typed["path"],
-                           allowed=typed["allowed"], recovery=typed["recovery"], unapplied=patch)
+                           allowed=typed["allowed"], recovery=record_recovery(args, doc, current), unapplied=patch)
     problem = validate_record(kind, merged)
     if problem:
-        raise StateRefusal("invalid-input", problem, unapplied=patch)
+        raise StateRefusal("invalid-input", problem, recovery=record_recovery(args, doc, current), unapplied=patch)
     if coalesce:
         merged["count"] = int(current.get("count") or 1) + 1
         merged["last_seen"] = observed_at()
@@ -3815,9 +4013,18 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
             raise StateRefusal("host-turn-required",
                                "a decision is settled by its owner: name the Host turn that "
                                "transcribed it and the evidence of the answer", unapplied=patch)
+        # The copied answer is a current Host adoption duty, not a settled row.
+        merged["status"] = "pending"
         merged["transcribed"] = {"host_turn": args.host_turn, "fields": ["status"]}
     elif kind == "decisions" and args.writer == "host":
         merged.pop("transcribed", None)
+        if patch.get("status") == "settled":
+            if current is None or merged.get("evidence") in (None, "", []):
+                raise StateRefusal("evidence-required", "settlement removes an existing decision and "
+                                   "names the original evidence of its owner's answer",
+                                   recovery=record_recovery(args, doc, current), unapplied=patch)
+            del records[record_id]
+            return {"kind": kind, "id": record_id, "removed": True}
     if kind == "tasks" and args.writer == "sideagent" and args.host_turn:
         owned = [key for key in (*HOST_OWNED_TASK_FIELDS, "verdict") if key in patch]
         if owned:
@@ -3922,6 +4129,8 @@ def apply_section_update(args: argparse.Namespace, doc: dict[str, Any], patch: A
             raise StateRefusal("invalid-input", first["detail"], path=first["path"],
                                allowed=first["allowed"], recovery=first["recovery"], unapplied=patch)
     state[section] = merge_patch(state.get(section) or {}, patch)
+    if section == "authorization":
+        state[section] = current_authorization(state[section])
     note_section_source(state, args, section)
     return state[section]
 
@@ -4071,12 +4280,19 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
         raise StateRefusal("invalid-input", f"kind must be one of {', '.join(RECORD_KINDS)}")
     current = state.get(kind, {}).get(record_id)
     if current is None:
-        raise StateRefusal("record-missing", f"{kind}/{record_id} is not current")
+        raise StateRefusal("record-missing", f"{kind}/{record_id} is not current",
+                           recovery=record_recovery(args, doc, current))
     if args.expect_rev != current.get("rev"):
         raise StateRefusal("conflict", f"{kind}/{record_id} is at rev {current.get('rev')}, not "
                            f"{args.expect_rev}", current=current)
     if not args.evidence:
-        raise StateRefusal("evidence-required", "retirement names the evidence that ends the duty")
+        raise StateRefusal("evidence-required", "retirement names the evidence that ends the duty",
+                           recovery=record_recovery(args, doc, current))
+    recovery = (state.get("maintenance") or {}).get("recovery_input") or {}
+    if kind == "alerts" and f"recovery#{recovery.get('seq')}" in (current.get("inputs") or {}):
+        raise StateRefusal("retire-unmet", "this alert still names the current pending recovery input; "
+                           "bind and checkpoint that exact input first", current=current,
+                           recovery=record_recovery(args, doc, current))
     verdict = current.get("verdict") if isinstance(current.get("verdict"), dict) else {}
     if kind == "tasks" and not (verdict.get("value") == "cancelled"
                                 or (current.get("stage") == "done" and verdict.get("value") == "accepted")):
@@ -4097,7 +4313,7 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
             raise StateRefusal("retire-unmet", "its dispatched work is not shown closed: "
                                + "; ".join(open_refs) + "; or --handoff it to a continuing task",
                                current=current)
-    if kind == "decisions" and current.get("status") != "settled":
+    if kind == "decisions" and current.get("status") != "settled" and args.writer != "host":
         raise StateRefusal("retire-unmet", "a pending decision stays until it is settled", current=current)
     if (kind in ("tasks", "decisions") and args.writer == "sideagent"
             and isinstance(current.get("transcribed"), dict)):
@@ -4270,7 +4486,7 @@ def command_state_init(args: argparse.Namespace) -> int:
                              "detail": "the Host creates the lifecycle state"}, 2)
             state = empty_state()
             state["project"] = project
-            state["authorization"] = authorization
+            state["authorization"] = current_authorization(authorization)
             note_section_source(state, args, "project")
             note_section_source(state, args, "authorization")
             doc = {"schema": STATE_SCHEMA, "revision": 0, "host_revision": 1, "state": state,
@@ -4684,7 +4900,9 @@ def command_state_view(args: argparse.Namespace) -> int:
         return emit(host_view(doc, path))
     if args.role == "delegator":
         repo = Path(args.repo).resolve() if args.repo else repo_of_state_file(path)
-        return emit(delegator_view(doc, path, repo))
+        view = delegator_view(doc, path, repo)
+        view["seats"] = delegator_seats(args, doc, path)
+        return emit(view)
     maintenance = doc["state"].get("maintenance")
     maintenance = maintenance if isinstance(maintenance, dict) else {}
     handled = int(maintenance.get("handled_host_revision") or 0)
@@ -5033,6 +5251,7 @@ def migrate_document(doc: dict[str, Any], raw: bytes, path: Path, index: dict[st
     new_doc: dict[str, Any] | None = None
     carrier, why = carrier_from_live(rows, repo)
     if not blockers:
+        state["authorization"] = current_authorization(state["authorization"])
         new_doc = {"schema": STATE_SCHEMA, "revision": 0, "state": state}
         if carrier:
             new_doc["carrier"] = carrier
@@ -5064,6 +5283,12 @@ def command_state_migrate(args: argparse.Namespace) -> int:
             backups = RECORD.assess_backups(path.parent, raw.decode("utf-8", errors="replace"))
             if doc.get("schema") == STATE_SCHEMA:
                 blockers, cleaned, changed, removed = RECORD.cleanup_current(doc["state"])
+                if not blockers:
+                    auth = current_authorization(cleaned.get("authorization") or {})
+                    if auth != cleaned.get("authorization"):
+                        removed.append("authorization.grants/capability_summary ended eligibility")
+                        cleaned["authorization"] = auth
+                        changed = True
                 report: dict[str, Any] = {
                     "result": "current", "revision": doc.get("revision"),
                     "overwrite_detection": RECORD.OVERWRITE_DETECTION, "backups": backups,
@@ -5228,6 +5453,8 @@ def build_parser() -> argparse.ArgumentParser:
     view.add_argument("--file", required=True)
     view.add_argument("--role", required=True, choices=("host", "sideagent", "delegator"))
     view.add_argument("--repo")
+    for flag in ("live", "index", "skills-root", "availability", "platforms"):
+        view.add_argument("--" + flag)
     view.set_defaults(func=command_state_view)
 
     check = actions.add_parser("check")
@@ -5266,6 +5493,9 @@ def build_parser() -> argparse.ArgumentParser:
     ):
         sub = delegator_actions.add_parser(name)
         sub.add_argument("--file", required=True)
+        if name == "view":
+            for flag in ("repo", "live", "index", "skills-root", "availability", "platforms"):
+                sub.add_argument("--" + flag)
         if name == "migrate":
             sub.add_argument("--write", action="store_true")
         if name == "update":
@@ -5298,7 +5528,43 @@ def command_delegator_view(args: argparse.Namespace) -> int:
         doc = _delegator_read(Path(args.file))
     except (OSError, ValueError) as exc:
         return fail("invalid-input", str(exc))
-    return emit(RECORD.delegator_file_view(doc))
+    view = RECORD.delegator_file_view(doc)
+    path = Path(args.file)
+    repo = Path(args.repo).resolve() if getattr(args, "repo", None) else repo_of_state_file(path)
+    try:
+        host_path = repo / ".kaola" / "heartbeat-prompt.json"
+        host = require_current(read_state_file(host_path)[0], host_path)
+    except (StateRefusal, OSError, ValueError):
+        view["seats"] = delegator_seats(args, doc, path)
+    else:
+        view["seats"] = delegator_seats(args, host, host_path)
+    return emit(view)
+
+
+def delegator_recovery(args: argparse.Namespace, doc: dict[str, Any], blockers: list[dict[str, str]]) -> None:
+    """Attach a scoped clear operation to watch refusals, without judging currentness."""
+    watch = doc.get("watch") or {}
+    revision = int(doc.get("revision") or 0)
+    for problem in blockers:
+        path = problem["path"]
+        if not path.startswith("watch."):
+            continue
+        ident = next((ident for ident in sorted(watch, key=len, reverse=True)
+                      if path == f"watch.{ident}" or path.startswith(f"watch.{ident}.")), None)
+        if ident is None:
+            problem["recovery"] = (f"{path} has no current row at revision {revision}. Do not create a handled "
+                                   "or inapplicable row or move its text to another field. Retain original "
+                                   "unresolved evidence through the current decision/reconciliation route.")
+        else:
+            command = shlex.join([sys.executable, str(Path(__file__).resolve()), "delegator", "update",
+                                  "--file", str(args.file), "--writer", "delegator", "--source",
+                                  "ORIGINAL_HANDLED_EVIDENCE", "--expect-revision", str(revision),
+                                  "--set", json.dumps({"watch": {ident: None}}, separators=(",", ":"))])
+            problem["recovery"] = (f"watch/{ident} exists at revision {revision}. If handled, clear it with: "
+                                   f"{command}. Source must name the original effect evidence. Do not move "
+                                   "handled text to another field. If unresolved, retain original evidence "
+                                   "through the current decision/reconciliation route until its proper type "
+                                   "is established. Unknown is not resolved.")
 
 
 def command_delegator_migrate(args: argparse.Namespace) -> int:
@@ -5308,6 +5574,7 @@ def command_delegator_migrate(args: argparse.Namespace) -> int:
             doc = _delegator_read(path)
             migrated, blockers, dropped = RECORD.delegator_migrated(doc)
             if blockers or migrated is None:
+                delegator_recovery(args, doc, blockers)
                 return emit({"result": "blocked", "writes": False, "blockers": blockers,
                              "dropped": dropped,
                              "detail": "unresolved critical mapping; the file was not written"}, 2)
@@ -5352,7 +5619,13 @@ def command_delegator_update(args: argparse.Namespace) -> int:
             merged["revision"] = actual + 1
             merged["updated_at"] = observed_at()
             normalized, blockers, _dropped = RECORD.delegator_migrated(merged)
+            for ident, item in (patch.get("watch") or {}).items() if isinstance(patch.get("watch"), dict) else []:
+                if (isinstance(item, dict) and item.get("status") in ("adopted", "settled")
+                        and ident not in (doc.get("watch") or {})):
+                    blockers.append(RECORD.refusal(f"watch.{ident}.status", "existing current duty",
+                                                  "do not create a handled row"))
             if blockers or normalized is None:
+                delegator_recovery(args, doc, blockers)
                 return emit({"result": "refused", "reason": "invalid-input", "blockers": blockers,
                              "detail": blockers[0]["detail"]}, 2)
             atomic_write(path, json.dumps(normalized, ensure_ascii=False, sort_keys=True, indent=1) + "\n")

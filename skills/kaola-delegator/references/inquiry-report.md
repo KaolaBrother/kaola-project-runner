@@ -28,8 +28,13 @@ python3 "$TOOL" delegator update --file "$FILE" --writer delegator --source '<so
   --expect-revision <current revision> --set '<typed current change>'
 ```
 
-For an old untyped file, plan the upgrade before `--write`. Keep unresolved
-owner text in typed `watch` duties (`summary`, `detail`, `source`, `next`).
+For an old untyped file, plan the upgrade before `--write`. Keep applicable unresolved
+owner duties in typed `watch` rows with original source references. A handled
+row leaves stored `watch`: `update --expect-revision REV --source ORIGINAL
+--set '{"watch":{"ID":null}}'`. `adopted` or `settled` with original effect
+evidence also removes it; `sent` remains pending. Do not move settled text to
+another field. An absent row is not created. An unresolved unclassified matter
+keeps original evidence on the current decision/reconciliation route.
 Use exact preset ids and integer counts. Do not infer counts or switch
 permission from a condition. The plan gives each blocked path, its allowed
 form, and recovery. A refusal leaves the file unchanged. Normal updates write
@@ -66,7 +71,20 @@ report has these five parts, in order. An empty part says
 
 1. User special requirements, listed in full from the `AGENTS.md` region
    (`user_requirements`). New owner direction replaces a conflicting old
-   requirement; a received message is not proof it was adopted.
+   requirement; a received message is not proof it was adopted. Include one
+   concise `seats` summary for the user: Elite/Expert exact preset ids, counts,
+   Expert task/standing lifetime, occupied linked tasks and idle available
+   capacity. Count each shared tier group once (Claude one; Droid count two
+   when granted). Working, idle-but-unreclaimed, reserved, held/faulted and
+   unknown are distinct; `ready` alone proves none of them. Unknown is not free.
+   Missing Expert authorization says “none”. Apply the total cap and current
+   resource limits; per-grant free counts are not additive. Host/Sideagent and
+   Pool seats are exempt. The view derives these facts from current grants,
+   dispatch/task links and fresh Runner records. Keep no occupancy table in
+   either JSON. External QA target capacity needs its original resource receipt.
+   Host reads the same `project --seats` facts only when needed for dispatch;
+   there is no compulsory Host report or added injection. Missing facts stay
+   explicit; `--live`, `--index` and `--availability` accept existing receipts.
 2. Special situations: holds, alerts (`watch`, `warn`, `severe`), major
    pending decisions and `unverified` items. Every unresolved one is reported
    again each time, coalesced, never escalated by elapsed time alone. With a

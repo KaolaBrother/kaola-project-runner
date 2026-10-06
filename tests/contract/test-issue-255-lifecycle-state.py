@@ -307,7 +307,9 @@ class StateTool(StateProject):
         code, out = self.state("retire", "--file", str(self.file), "--writer", "sideagent", "--source", "s",
                                "--kind", "decisions", "--id", "d1", "--expect-rev", "2", "--evidence", "x")
         self.assertEqual(out["reason"], "retire-unmet", "the Host sees the settlement first")
-        self.update("host", "decisions", "d1", {"answer": "yes"}, "--expect-rev", "2")
+        self.assertEqual(self.doc()["state"]["decisions"]["d1"]["status"], "pending")
+        self.update("host", "decisions", "d1", {"answer": "yes", "status": "settled"}, "--expect-rev", "2")
+        self.assertNotIn("d1", self.doc()["state"]["decisions"])
         body = json.loads(self.doc()["body"])
         self.assertEqual([row for row in body["attention"] if row["id"] == "d1"], [])
 

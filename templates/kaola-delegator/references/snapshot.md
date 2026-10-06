@@ -7,8 +7,7 @@ write `heartbeat-prompt.json`. One compact JSON object of current facts, never a
 history:
 
 - `project`; `host` (platform, exact `--session`, `holder_instance_id`,
-  attested native id); `authorization` a safe handoff needs — each granted,
-  paused, or revoked seat named by its exact catalog preset id
+  attested native id); `authorization` a safe handoff needs — each applicable grant and active restriction named by its exact catalog preset id
   (`<platform>/<tier>`, e.g. `cursor-cli/default` vs `grok/default`), with
   count, Class grant lifetime, cap, quota units, seat identity and switch
   authorization kept as separate facts, and an optional
@@ -28,8 +27,7 @@ history:
   the Delegator itself ends.
 
 The existing native timer is the only scheduler; its prompt stays static:
-Skill entry and locator sentence ([inquiry-report.md](inquiry-report.md)). A full sweep is one Delegator inquiry; one
-owned permission event needs no additional full sweep. Each inquiry of an
+Skill entry and locator sentence ([inquiry-report.md](inquiry-report.md)). One inquiry is a sweep; a permission event needs no extra sweep. Each inquiry of an
 already-verified unchanged Host uses the commands below: read this file,
 verify `host` by fresh Runner `status`, report the delegator view, audit the Host `body` (its `authorization` holds the
 three Class definitions, a compact capability summary, and durable grants named by exact preset id;
@@ -41,15 +39,16 @@ the Host JSON, copy its rows here, or select workers. Missing or unreadable: rep
 Runner and forge records before any `start`; never blank authorization.
 Start, resume, replace, or uncertain identity: [handoff.md](handoff.md).
 
-Keep independent scoped owner changes and source pointers in existing
-`watch` until adoption is evidenced. A trusted relay needs no verbatim quote.
-Direct delivery remains yours: idle send, native noninterrupting steer if
-supported, otherwise retain until idle. Urgent stop uses the existing interrupt
+Keep scoped owner changes and source pointers in
+`watch` until adoption is evidenced. No quote is required.
+Deliver by idle send or supported native steer; otherwise keep pending. Urgent stop uses the existing interrupt
 route immediately. Missing/unreadable snapshot is absent/unknown, never proof
 of no Delegator or no changes; direct relay still works. Host may read relevant
 changes at decision boundaries and adopts only into its own body. Observe a
 source-correlated adopted value/duty before confirming/compacting your record;
-read, admission, end-turn or Sideagent return alone is insufficient. One-shot
+then remove the handled row from stored `watch`. Keep unfinished effects only
+as concrete current duties; no settled row or alternate retrospective field.
+Read, admission, end-turn or Sideagent return alone is insufficient. One-shot
 actions need action evidence, urgent stops need cessation. Preserve partial
 effects; no exactly-once claim. Later explicit owner direction can reauthorize
 a stopped scope; stale proposals cannot overwrite newer grants/revocations. During an
@@ -124,9 +123,7 @@ effects; do not roll them back automatically.
 
 ## Timer handoff
 
-Any outer platform reads this file on the bound target and sets its existing
-native timer from `cadence`. On handoff read `timer_owner`, retire the previous
+The outer platform sets its existing native timer from `cadence` on this target. On handoff read `timer_owner`, retire the previous
 timer before the new one takes over (never two live Delegators), then update
 `timer_owner` once verified. If the old timer cannot be controlled, report that
-instead of polling twice. A schedule change updates this file and that one
-timer together.
+instead of polling twice. Update this file and its timer together.

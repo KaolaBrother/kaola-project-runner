@@ -337,6 +337,27 @@ def record_type_problem(kind: str, record: dict[str, Any]) -> dict[str, str] | N
         if "impact" in record and record["impact"] is not None and not _text(record["impact"]):
             return refusal("holds.impact", "string",
                            "set impact to a string; the file was not changed")
+    elif kind in ("alerts", "decisions"):
+        fields = ("level", "summary", "impact", "owner", "next") if kind == "alerts" else (
+            "owner", "question", "status", "next", "answer")
+        for key in fields:
+            if key in record and record[key] is not None and not _text(record[key]):
+                return refusal(f"{kind}.{key}", "string",
+                               "use a current typed value; the file was not changed")
+        if kind == "alerts" and "count" in record and record["count"] is not None and not count_ok(record["count"]):
+            return refusal("alerts.count", "nonnegative integer, excluding boolean",
+                           "use the actual occurrence count; the file was not changed")
+        inputs = record.get("inputs") if kind == "alerts" else None
+        if inputs is not None:
+            if not isinstance(inputs, dict):
+                return refusal("alerts.inputs", "object keyed by current input id", "retain original input receipts")
+            for ident, item in inputs.items():
+                allowed = {"why", "batch", "evidence", "next", "host_revision_through"}
+                if (not isinstance(item, dict) or set(item) - allowed or not isinstance(item.get("why"), str)
+                        or any(not isinstance(value, str) for key, value in item.items() if key != "host_revision_through")
+                        or ("host_revision_through" in item and not count_ok(item["host_revision_through"]))):
+                    return refusal(f"alerts.inputs.{ident}", ", ".join(sorted(allowed)),
+                                   "use the original current failure/input receipt; the file was not changed")
     return None
 
 
@@ -828,6 +849,25 @@ def cleanup_current(state: dict[str, Any]) -> tuple[list[dict[str, str]], dict[s
     cleaned = json.loads(json.dumps(state))
     changed = False
     removed: list[str] = []
+    for ident, decision in list((cleaned.get("decisions") or {}).items()):
+        if not isinstance(decision, dict) or decision.get("status") != "settled":
+            continue
+        evidence = decision.get("evidence")
+        if (record_type_problem("decisions", decision)
+                or decision.get("owner") not in ("host", "delegator", "user")
+                or not (isinstance(evidence, str) and evidence
+                        or _string_list_ok(evidence) and evidence)):
+            blockers.append(refusal(f"decisions.{ident}.evidence", "original owner answer evidence",
+                                    "keep the row visible; resolve it through the current owner decision route. "
+                                    "Unknown is not resolved; the file was not written"))
+        elif isinstance(decision.get("transcribed"), dict):
+            decision["status"] = "pending"
+            removed.append(f"decisions.{ident}.status settled -> pending Host adoption")
+            changed = True
+        else:
+            del cleaned["decisions"][ident]
+            removed.append(f"decisions.{ident}")
+            changed = True
     rec = cleaned.get("recovery") if isinstance(cleaned.get("recovery"), dict) else None
     if isinstance(rec, dict):
         legacy = rec.get("legacy") if isinstance(rec.get("legacy"), dict) else None
@@ -1018,8 +1058,9 @@ def section_shape_problems(section: str, value: Any) -> list[dict[str, str]]:
 def _legacy_bag_problem(path: str, value: Any, status: str | None = None) -> dict[str, str] | None:
     if value in (None, "", [], {}) or status in ("adopted", "settled"):
         return None
-    return refusal(path, "current text in watch.summary, watch.detail, or watch.evidence",
-                   "reconcile this pending or unadopted text from its source and rehome it in a typed duty. "
+    return refusal(path, "applicable unresolved typed duty",
+                   "retain the original evidence and use the current decision/reconciliation route until "
+                   "the proper type is established. Do not move handled text to another field. "
                    "Do not infer adoption or discard it; the file was not written")
 
 
@@ -1061,7 +1102,7 @@ def _delegator_nest_problems(doc: dict[str, Any], dropped: list[str]) -> list[di
             continue
         if key in LEGACY_BAG_KEYS:
             status = _watch_status(value)[0] if isinstance(value, dict) else None
-            if status == "adopted" and not (isinstance(value.get("evidence") or value.get("locator"), str)
+            if status in ("adopted", "settled") and not (isinstance(value.get("evidence") or value.get("locator"), str)
                                              and (value.get("evidence") or value.get("locator"))):
                 status = None
             problem = _legacy_bag_problem(key, value, status)
@@ -1155,11 +1196,11 @@ def delegator_blockers(doc: dict[str, Any]) -> tuple[list[dict[str, str]], list[
                 blockers.append(refusal(
                     f"watch.{ident}.{bad}",
                     "pending, sent, adopted, open, settled, or blocked",
-                    "reconcile this value from its source and rehome its text in summary, detail, or evidence; "
+                    "retain the original evidence and use the current decision/reconciliation route; "
                     "then set the status field to one token or remove the alias. The file was not written",
                 ))
             if ident in LEGACY_BAG_KEYS and not _watch_duty_shape(item):
-                if status == "adopted" and not (isinstance(item.get("evidence") or item.get("locator"), str)
+                if status in ("adopted", "settled") and not (isinstance(item.get("evidence") or item.get("locator"), str)
                                                  and (item.get("evidence") or item.get("locator"))):
                     status = None
                 problem = _legacy_bag_problem(f"watch.{ident}", item, status)
@@ -1176,13 +1217,14 @@ def delegator_blockers(doc: dict[str, Any]) -> tuple[list[dict[str, str]], list[
             if kind is not None and (not isinstance(kind, str) or kind not in WATCH_KIND):
                 blockers.append(refusal(f"watch.{ident}.kind", ", ".join(sorted(WATCH_KIND)),
                                         "set kind to one of those tokens; the file was not written"))
-            if status == "adopted":
+            if status in ("adopted", "settled"):
                 evidence = item.get("evidence") or item.get("locator")
                 if not isinstance(evidence, str) or not evidence:
                     blockers.append(refusal(
                         f"watch.{ident}.evidence",
                         "string that names the Host record or path",
-                        "adopted needs the Host evidence; sent does not. The file was not written",
+                        "adopted or settled removes the row and needs original effect evidence; "
+                        "sent stays pending. The file was not written",
                     ))
             for key, value in item.items():
                 if key in LEGACY_BAG_KEYS:
@@ -1197,7 +1239,9 @@ def delegator_blockers(doc: dict[str, Any]) -> tuple[list[dict[str, str]], list[
                         blockers.append(refusal(
                             f"watch.{ident}.{key}",
                             ", ".join(sorted(WATCH_KEYS)),
-                            "rehome this text onto summary, detail, or evidence; the file was not written",
+                            "retain original evidence through the current decision/reconciliation route until "
+                            "the proper type is established; do not move handled text to another field. "
+                            "The file was not written",
                         ))
                     else:
                         dropped.append(f"watch.{ident}.{key}")
@@ -1247,6 +1291,9 @@ def delegator_migrated(doc: dict[str, Any]) -> tuple[dict[str, Any] | None, list
                 dropped.append(f"watch.{ident}")
             continue
         status, _critical = _watch_status(item)
+        if status in ("adopted", "settled"):
+            dropped.append(f"watch.{ident}")
+            continue
         kind = item.get("kind") if item.get("kind") in WATCH_KIND else None
         if kind is None and ("relay_status" in item or "relay" in item):
             kind = "relay"
@@ -1266,6 +1313,27 @@ def delegator_migrated(doc: dict[str, Any]) -> tuple[dict[str, Any] | None, list
             dropped.append(f"watch.{ident}")
     out["watch"] = watch_out
     auth_out = out.get("authorization")
+    if isinstance(auth_out, dict):
+        auth_out = json.loads(json.dumps(auth_out))
+        out["authorization"] = auth_out
+        revoked = set(auth_out.get("revoked") or [])
+        if isinstance(auth_out.get("worker_pool"), list):
+            auth_out["worker_pool"] = [ident for ident in auth_out["worker_pool"] if ident not in revoked]
+        for key in ("elite_grants", "expert_task_grants"):
+            if isinstance(auth_out.get(key), list):
+                kept = []
+                for grant in auth_out[key]:
+                    grant = dict(grant)
+                    ids = grant.get("preset_ids") or ([grant["preset_id"]] if grant.get("preset_id") else [])
+                    current = [ident for ident in ids if ident not in revoked]
+                    if not current:
+                        if ids:
+                            dropped.append(f"authorization.{key} ended eligibility")
+                        continue
+                    if "preset_ids" in grant:
+                        grant["preset_ids"] = current
+                    kept.append(grant)
+                auth_out[key] = kept
     if isinstance(auth_out, dict) and "retired_pool_grants" in auth_out:
         auth_out.pop("retired_pool_grants")
         dropped.append("authorization.retired_pool_grants")
@@ -1559,12 +1627,10 @@ def host_view(doc: dict[str, Any], path: Path | None) -> dict[str, Any]:
     for decision_id, decision in sorted((state.get("decisions") or {}).items()):
         if not isinstance(decision, dict):
             continue
-        if decision.get("status") == "settled":
-            if isinstance(decision.get("transcribed"), dict):
-                attention.append({"kind": "decisions", "id": decision_id, "why": "transcribed-check",
-                                  "host_turn": decision["transcribed"].get("host_turn"),
-                                  "content": judgment_digest(decision)})
-            continue
+        if isinstance(decision.get("transcribed"), dict):
+            attention.append({"kind": "decisions", "id": decision_id, "why": "transcribed-check",
+                              "host_turn": decision["transcribed"].get("host_turn"),
+                              "content": judgment_digest(decision)})
         decisions.append({"id": decision_id, **{key: decision.get(key) if key in ("question", "options")
                                                 else short(decision.get(key)) for key in
                                                 ("owner", "question", "options", "next")

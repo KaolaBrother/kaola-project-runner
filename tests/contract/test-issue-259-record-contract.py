@@ -104,6 +104,281 @@ class RecordContract(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertEqual(self.doc()["state"]["tasks"]["t1"]["goal"], "repair")
 
+    def update(self, kind: str, ident: str, patch: dict, *args: str) -> tuple[int, dict]:
+        return self.state("update", "--file", str(self.file), "--writer", "host", "--source", "original-source",
+                          "--kind", kind, "--id", ident, "--set", json.dumps(patch), *args)
+
+    def test_current_exception_resolution_repeated_cli_views_and_newer_recovery(self) -> None:
+        self.init()
+        self.update("tasks", "actual-work", {"stage": "doing", "goal": "pending-goal-marker",
+                                            "dispatch": ["original-admission"], "next": "read actual result"})
+        doc = self.doc()
+        doc["state"]["maintenance"] = {"recovery_seq": 9, "recovery_input": {
+            "seq": 9, "kind": "request", "source": "original-inquiry", "occurrence_id": "original-inquiry",
+            "holder": "original-holder", "at": "2026-10-06T00:00:00Z", "evidence": "original-inquiry-receipt"}}
+        self.file.write_text(json.dumps(doc))
+        pending = self.doc()["state"]["maintenance"]
+        grants = self.doc()["state"]["authorization"]
+        ids = ("droid-shared-capacity", "record-contract-design-index-gone",
+               "writing-guidance-retire-unmet", "maintenance-returned")
+        for cycle in range(2):
+            for ident in ids:
+                marker = f"handled-marker-{cycle}-{ident}"
+                patch = {"level": "warn", "summary": marker, "owner": "host", "evidence": "README.md"}
+                code, out = self.update("alerts", ident, patch)
+                self.assertEqual(code, 0, out)
+                code, out = self.update("alerts", ident, {"ack": True}, "--expect-rev", "1")
+                self.assertEqual(code, 0, out)
+                self.assertIn(ident, self.doc()["state"]["alerts"], "acknowledged is not handled")
+                before = self.file.read_bytes()
+                code, out = self.state("retire", "--file", str(self.file), "--writer", "host", "--source",
+                                       "original-owner-disposition", "--kind", "alerts", "--id", ident,
+                                       "--expect-rev", "1", "--evidence", "README.md")
+                self.assertEqual(code, 3, out)
+                self.assertEqual(self.file.read_bytes(), before, "stale clear cannot remove a newer row")
+                code, out = self.state("retire", "--file", str(self.file), "--writer", "host", "--source",
+                                       "original-owner-disposition", "--kind", "alerts", "--id", ident,
+                                       "--expect-rev", "2", "--evidence", "README.md")
+                self.assertEqual(code, 0, out)
+                self.assertNotIn(ident, self.doc()["state"]["alerts"])
+                self.assertNotIn(marker, self.file.read_text())
+                for role in ("host", "sideagent", "delegator"):
+                    code, view = self.state("view", "--file", str(self.file), "--role", role,
+                                            "--repo", str(self.repo))
+                    self.assertEqual(code, 0, view)
+                    self.assertNotIn(marker, json.dumps(view))
+                self.assertNotIn(marker, self.doc()["body"])
+                code, out = self.update("alerts", ident, patch, "--expect-rev", "2")
+                self.assertNotEqual(code, 0, out)
+                self.assertIn("Do not create", out["recovery"])
+                self.assertIn(f"alerts/{ident}", out["recovery"])
+                self.assertNotIn("omits --expect-rev", out["recovery"])
+            self.update("decisions", "owner-answer", {"owner": "user", "question": "answer-marker",
+                                                      "status": "pending"})
+            before = self.file.read_bytes()
+            code, out = self.update("decisions", "owner-answer", {"status": "settled"}, "--expect-rev", "1")
+            self.assertNotEqual(code, 0, out)
+            self.assertEqual(self.file.read_bytes(), before)
+            code, out = self.update("decisions", "owner-answer", {"status": "settled", "answer": "yes",
+                                                                  "evidence": "original-user-answer"}, "--expect-rev", "1")
+            self.assertEqual(code, 0, out)
+            self.assertNotIn("owner-answer", self.doc()["state"]["decisions"])
+            self.assertNotIn("answer-marker", self.file.read_text())
+        self.update("alerts", "maintenance-returned", {"level": "warn", "summary": "new-recovery-marker",
+                                                       "inputs": {"recovery#9": {"why": "checkpoint-missing"}}})
+        before = self.file.read_bytes()
+        code, out = self.state("retire", "--file", str(self.file), "--writer", "host", "--source", "old-return",
+                               "--kind", "alerts", "--id", "maintenance-returned", "--expect-rev", "1",
+                               "--evidence", "old-judged-checkpoint")
+        self.assertEqual(out["reason"], "retire-unmet", out)
+        self.assertEqual(self.file.read_bytes(), before)
+        self.assertEqual(self.doc()["state"]["maintenance"], pending)
+        self.assertEqual(self.doc()["state"]["authorization"], grants)
+        self.assertEqual(self.doc()["state"]["tasks"]["actual-work"]["dispatch"], ["original-admission"])
+        self.assertIn("pending-goal-marker", self.file.read_text())
+
+    def test_refusal_names_current_clear_and_absent_terminal_is_not_created(self) -> None:
+        self.init()
+        self.update("alerts", "handled", {"level": "watch", "summary": "actual current fault"})
+        before = self.file.read_bytes()
+        code, out = self.update("alerts", "handled", {"resolved": True}, "--expect-rev", "1")
+        self.assertNotEqual(code, 0, out)
+        self.assertEqual(self.file.read_bytes(), before)
+        self.assertIn("alerts/handled", out["recovery"])
+        self.assertIn("--expect-rev 1", out["recovery"])
+        self.assertIn("state retire", out["recovery"])
+        self.assertIn("ORIGINAL_HANDLED_EVIDENCE", out["recovery"])
+        self.assertNotIn("rehome", out["recovery"])
+        code, out = self.update("decisions", "absent", {"owner": "host", "question": "past",
+                                                      "status": "settled", "evidence": "past"})
+        self.assertNotEqual(code, 0, out)
+        self.assertEqual(self.file.read_bytes(), before)
+        self.assertIn("Do not create", out["recovery"])
+        code, out = self.update("alerts", "handled", {"next": {"history": "past"}}, "--expect-rev", "1")
+        self.assertNotEqual(code, 0, out)
+        self.assertEqual(self.file.read_bytes(), before)
+        for patch in ({"evidence": [{"past": "history"}]},
+                      {"inputs": {"old-input": {"why": "past", "history": "resolved narrative"}}}):
+            code, out = self.update("alerts", "handled", patch, "--expect-rev", "1")
+            self.assertNotEqual(code, 0, out)
+            self.assertEqual(self.file.read_bytes(), before)
+        self.delegator.write_text(json.dumps({"revision": 4, "watch": {}}))
+        before = self.delegator.read_bytes()
+        code, out = run_dispatch(["delegator", "update", "--file", str(self.delegator), "--writer", "delegator",
+                                  "--source", "original-effect", "--expect-revision", "4", "--set",
+                                  '{"watch":{"absent":{"kind":"relay","status":"adopted","evidence":"effect"}}}'])
+        self.assertNotEqual(code, 0, out)
+        self.assertEqual(self.delegator.read_bytes(), before)
+        self.assertIn("Do not create", out["blockers"][0]["recovery"])
+
+    def test_terminal_migration_repeats_preserve_pending_adoption_and_grants(self) -> None:
+        self.init()
+        doc = self.doc()
+        doc["state"]["decisions"] = {
+            "past": {"owner": "user", "question": "handled-history-marker", "status": "settled", "evidence": "answer", "rev": 1},
+            "adoption": {"owner": "host", "question": "adopt original answer", "status": "settled", "evidence": "answer",
+                         "transcribed": {"host_turn": "original-turn", "fields": ["status"]}, "rev": 1},
+            "pending": {"owner": "user", "question": "still pending", "status": "pending", "rev": 1}}
+        self.file.write_text(json.dumps(doc))
+        code, out = self.state("migrate", "--file", str(self.file), "--write")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("handled-history-marker", self.file.read_text())
+        self.assertNotIn("past", self.doc()["state"]["decisions"])
+        self.assertEqual(self.doc()["state"]["decisions"]["adoption"]["status"], "pending")
+        self.assertIn("transcribed-check", self.doc()["body"])
+        self.assertIn("pending", self.doc()["state"]["decisions"])
+        before = self.file.read_bytes()
+        code, out = self.state("migrate", "--file", str(self.file), "--write")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.file.read_bytes(), before)
+        doc = self.doc()
+        doc["state"]["decisions"]["unknown"] = {"owner": "user", "question": "unknown answer", "status": "settled", "rev": 1}
+        self.file.write_text(json.dumps(doc))
+        before = self.file.read_bytes()
+        code, out = self.state("migrate", "--file", str(self.file), "--write")
+        self.assertEqual(code, 2, out)
+        self.assertEqual(self.file.read_bytes(), before)
+        self.assertIn("Unknown is not resolved", out["blockers"][0]["recovery"])
+        self.delegator.write_text(json.dumps({"revision": 0, "watch": {
+            "latest": {"status": "settled", "report": "unverified original matter"}}}))
+        before = self.delegator.read_bytes()
+        code, out = run_dispatch(["delegator", "migrate", "--file", str(self.delegator), "--write"])
+        self.assertEqual(code, 2, out)
+        self.assertEqual(self.delegator.read_bytes(), before, "a terminal token alone is not original effect evidence")
+
+    def test_ended_eligibility_leaves_grants_without_restoring_pool_or_losing_work(self) -> None:
+        self.init()
+        self.update("tasks", "pending-stop", {"stage": "doing", "goal": "exact reclaim", "dispatch": ["original"]})
+        revision = self.doc()["revision"]
+        code, out = self.state("update", "--file", str(self.file), "--writer", "host", "--source", "owner-revocation",
+                               "--section", "authorization", "--expect-revision", str(revision), "--set",
+                               json.dumps({"grants": [{"id": "codex/default", "state": "revoked", "count": 1},
+                                                      {"id": "codex/astra", "state": "granted", "count": 1,
+                                                       "expires": "2000-01-01T00:00:00Z"},
+                                                      {"id": "droid/default", "state": "granted", "count": 2}],
+                                           "capability_summary": {"presets": ["codex/default", "droid/default"]}}))
+        self.assertEqual(code, 0, out)
+        auth = self.doc()["state"]["authorization"]
+        self.assertNotIn("codex/default", [g["id"] for g in auth["grants"]])
+        self.assertNotIn("codex/astra", [g["id"] for g in auth["grants"]])
+        self.assertIn("codex/astra", auth["revoked"])
+        self.assertIn("codex/default", auth["revoked"], "current stop restriction prevents pool restoration")
+        self.assertEqual(auth["capability_summary"]["presets"], ["droid/default"])
+        self.assertEqual(self.doc()["state"]["tasks"]["pending-stop"]["dispatch"], ["original"])
+        self.assertEqual(auth["classes"], CLASS_SENTENCES)
+        self.delegator.write_text(json.dumps({"revision": 0, "authorization": {
+            "revoked": ["codex/default", "codex/astra"], "worker_pool": ["codex/default", "codex/luna"],
+            "expert_task_grants": [{"preset_id": "codex/astra", "count": 1}],
+            "elite_grants": [{"preset_ids": ["codex/default", "droid/default"], "count": 2}]},
+            "watch": {"stop": {"kind": "recovery", "status": "open", "source": "original-revocation",
+                               "next": "verify exact stop", "locator": "original-holder"}}}))
+        code, out = run_dispatch(["delegator", "migrate", "--file", str(self.delegator), "--write"])
+        self.assertEqual(code, 0, out)
+        saved = json.loads(self.delegator.read_text())
+        self.assertEqual(saved["authorization"]["worker_pool"], ["codex/luna"])
+        self.assertEqual(saved["authorization"]["expert_task_grants"], [])
+        self.assertEqual(saved["authorization"]["elite_grants"], [{"preset_ids": ["droid/default"], "count": 2}])
+        self.assertEqual(saved["watch"]["stop"]["locator"], "original-holder")
+        before = self.delegator.read_bytes()
+        code, out = run_dispatch(["delegator", "migrate", "--file", str(self.delegator), "--write"])
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.delegator.read_bytes(), before)
+
+    def test_delegator_seat_summary_groups_live_task_states_cap_and_no_host_cycle(self) -> None:
+        grants = [{"id": f"claude-code/{tier}", "state": "granted", "count": 1, "shared_seat": "claude-code"}
+                  for tier in ("default", "opus-xhigh", "sonnet")]
+        grants += [{"id": f"droid/{tier}", "state": "granted", "count": 2, "shared_seat": "droid"}
+                   for tier in ("default", "opus", "core")]
+        grants += [{"id": "codex/default", "state": "granted", "count": 1},
+                   {"id": "codex/astra", "state": "granted", "count": 1, "lifetime": "standing"},
+                   {"id": "codex/luna", "state": "granted", "count": 3}]
+        self.init({"classes": dict(CLASS_SENTENCES), "grants": grants, "elite_cap": 4})
+        self.update("tasks", "real-review", {"stage": "doing", "goal": "read original review", "dispatch": ["original-review"]})
+        self.update("tasks", "reclaim", {"stage": "doing", "goal": "exact reclaim", "session": "droid-KPR-returned",
+                                          "holder_instance_id": "droid-original"})
+        self.delegator.write_text(json.dumps({"schema": "kaola-delegator-heartbeat/1", "revision": 0,
+            "authorization": {"elite_cap": 4, "elite_grants": [
+                {"preset_ids": [g["id"] for g in grants if g["id"].startswith("claude-code/")], "count": 1},
+                {"preset_ids": [g["id"] for g in grants if g["id"].startswith("droid/")], "count": 2},
+                {"preset_id": "codex/default", "count": 1},
+                {"preset_id": "codex/astra", "count": 1, "lifetime": "standing"}]}, "watch": {}}))
+        def live(preset, session, holder, mutation, **extra):
+            return {"repo": str(self.repo), "identity": "verified", "state": "ready", "preset": preset,
+                    "platform": preset.split("/")[0], "session": session, "holder_instance_id": holder,
+                    "mutation_status": mutation, **extra}
+        live_file = self.repo / "live.json"
+        live_file.write_text(json.dumps({"rows": [
+            live("claude-code/opus-xhigh", "claude-code-KPR-review", "claude-original", "in_progress"),
+            live("droid/core", "droid-KPR-returned", "droid-original", "completed"),
+            live("codex/astra", "codex-KPR-reserved", "astra-original", "not_started"),
+            live("codex/default", "codex-KPR-host", "host-original", "in_progress", session_role="host"),
+            live("droid/default", "droid-KPR-side", "side-original", "in_progress", session_role="sideagent"),
+            live("codex/luna", "codex-KPR-pool", "pool-original", "in_progress")]}))
+        index = self.repo / ".kaola" / "dispatch-index.json"
+        index.write_text(json.dumps({"schema": "kaola-dispatch-index/1", "repo": str(self.repo), "items": [
+            {"item_id": "original-review", "task_id": "real-review", "repo": str(self.repo), "status": "in-flight",
+             "session": "claude-code-KPR-review", "holder_instance_id": "claude-original", "preset": "claude-code/opus-xhigh"}]}))
+        availability = self.repo / "available.json"
+        availability.write_text(json.dumps({"present": [g["id"] for g in grants]}))
+        flags = ["--live", str(live_file), "--index", str(index), "--availability", str(availability)]
+        before = {p: p.read_bytes() for p in (self.file, self.delegator, index)}
+        code, view = self.state("view", "--file", str(self.file), "--role", "delegator", *flags)
+        self.assertEqual(code, 0, view)
+        summary = view["seats"]
+        groups = summary["groups"]
+        claude = next(g for g in groups if any(p["id"] == "claude-code/default" for p in g["presets"]))
+        droid = next(g for g in groups if any(p["id"] == "droid/default" for p in g["presets"]))
+        self.assertEqual((claude["authorized_count"], droid["authorized_count"]), (1, 2))
+        self.assertEqual(len(claude["presets"]), 3)
+        self.assertEqual(claude["occupied"][0]["tasks"], ["real-review"])
+        self.assertEqual(claude["occupied"][0]["state"], "working")
+        self.assertEqual(droid["occupied"][0]["state"], "idle-but-unreclaimed")
+        self.assertEqual(droid["idle_available"], 1)
+        self.assertEqual(summary["occupied_elite_expert"], 3)
+        self.assertEqual(summary["idle_available_total"], 1, "per-grant free counts are not additive beyond cap")
+        expert = next(g for g in groups if any(p["id"] == "codex/astra" for p in g["presets"]))
+        self.assertEqual(expert["presets"][0]["lifetime"], "standing")
+        self.assertEqual((expert["occupied"][0]["state"], expert["idle_available"]), ("reserved", 0))
+        self.assertNotIn("codex/luna", json.dumps(groups))
+        code, own = run_dispatch(["delegator", "view", "--file", str(self.delegator), *flags])
+        self.assertEqual(code, 0, own)
+        for key in ("groups", "expert_authorization", "occupied", "idle_available_total", "elite_cap"):
+            self.assertEqual(own["seats"][key], summary[key])
+        code, on_demand = run_dispatch(["project", "--seats", "--repo", str(self.repo), "--authorization", str(self.file), *flags])
+        self.assertEqual(code, 0, on_demand)
+        self.assertEqual(on_demand["summary"]["groups"], groups)
+        code, host = self.state("view", "--file", str(self.file), "--role", "host")
+        self.assertEqual(code, 0, host)
+        self.assertNotIn("seats", host, "Host has no compulsory seat reporting cycle or injection")
+        self.assertNotIn("seats", json.loads(self.doc()["body"]))
+        self.assertEqual(before, {p: p.read_bytes() for p in before}, "reporting stores no occupancy or history")
+        self.update("holds", "actual-fault", {"scope": "droid-only", "reason": "original service refusal",
+                                               "presets": ["droid/default", "droid/opus", "droid/core"], "evidence": "original-refusal"})
+        rows = json.loads(live_file.read_text())
+        rows["rows"][0]["mutation_status"] = "unknown"
+        live_file.write_text(json.dumps(rows))
+        code, view = self.state("view", "--file", str(self.file), "--role", "delegator", *flags)
+        self.assertEqual(code, 0, view)
+        claude = next(g for g in view["seats"]["groups"] if any(p["id"] == "claude-code/default" for p in g["presets"]))
+        droid = next(g for g in view["seats"]["groups"] if any(p["id"] == "droid/default" for p in g["presets"]))
+        self.assertEqual(claude["occupied"][0]["state"], "unknown")
+        self.assertIsNone(claude["idle_available"])
+        self.assertEqual(droid["occupied"][0]["state"], "held/faulted")
+        self.assertEqual(droid["idle_available"], 0)
+        self.assertEqual(len(droid["unavailable"]), 3)
+
+    def test_delegator_missing_expert_and_unknown_sources_do_not_imply_free_seats(self) -> None:
+        self.init()
+        missing = self.repo / "missing-live.json"
+        before = self.file.read_bytes()
+        code, view = self.state("view", "--file", str(self.file), "--role", "delegator", "--live", str(missing))
+        self.assertEqual(code, 0, view)
+        self.assertEqual(view["seats"]["expert_authorization"], "none")
+        self.assertIn("live-source-unavailable", view["seats"]["unknown_reasons"])
+        self.assertIsNone(view["seats"]["idle_available_total"])
+        self.assertIsNone(view["seats"]["groups"][0]["idle_available"])
+        self.assertEqual(self.file.read_bytes(), before)
+
     def test_stored_class_sentences_stay_and_capability_is_separate(self) -> None:
         self.init({
             "classes": dict(CLASS_SENTENCES),
@@ -288,8 +563,7 @@ class RecordContract(unittest.TestCase):
             "--set", json.dumps({"watch": {"relay-1": {"status": "adopted", "next": "repair seated",
                                                        "evidence": "host:tasks/t1"}}})])
         self.assertEqual(code, 0, out)
-        watched = json.loads(self.delegator.read_text())["watch"]["relay-1"]["status"]
-        self.assertEqual(watched, "adopted")
+        self.assertNotIn("relay-1", json.loads(self.delegator.read_text())["watch"])
 
     def test_cleanup_keeps_pending_duties_and_does_not_delete_hash_copies(self) -> None:
         self.init()
@@ -932,7 +1206,7 @@ class RecordContract(unittest.TestCase):
         self.assertEqual(self.delegator.read_bytes(), before)
         doc = {"schema": "kaola-delegator-heartbeat/1", "revision": 0, "watch": {
             "r": {"status": "adopted", "evidence": "host:tasks/current", "report": {"past": True}},
-            "latest": {"status": "settled", "report": "past text"}}}
+            "latest": {"status": "settled", "evidence": "original-settlement", "report": "past text"}}}
         self.delegator.write_text(json.dumps(doc), encoding="utf-8")
         code, view = run_dispatch(["delegator", "view", "--file", str(self.delegator)])
         self.assertNotIn("past text", json.dumps(view))
@@ -941,9 +1215,9 @@ class RecordContract(unittest.TestCase):
                                   "--source", "owner", "--expect-revision", "0", "--set", '{"project":{"goal":"ship"}}'])
         self.assertEqual(code, 0, out)
         doc = json.loads(self.delegator.read_text())
-        self.assertNotIn("report", doc["watch"]["r"])
+        self.assertNotIn("r", doc["watch"])
         self.assertNotIn("latest", doc["watch"])
-        self.assertEqual(doc["watch"]["r"]["status"], "adopted")
+        self.assertEqual(doc["watch"], {})
         before = self.delegator.read_bytes()
         for _ in range(2):
             code, out = run_dispatch(["delegator", "migrate", "--file", str(self.delegator), "--write"])
@@ -974,15 +1248,18 @@ class RecordContract(unittest.TestCase):
                         self.assertEqual(self.delegator.read_bytes(), before)
                         problem = next(row for row in out["blockers"]
                                        if row["path"] == f"watch.repair.{alias}")
-                        for field in ("summary", "detail", "evidence"):
-                            self.assertIn(field, problem["recovery"])
+                        self.assertIn("watch/repair", problem["recovery"])
+                        self.assertIn("--expect-revision 7", problem["recovery"])
+                        self.assertIn("current decision/reconciliation route", problem["recovery"])
+                        self.assertNotIn("rehome", problem["recovery"])
                     code, out = run_dispatch([
                         "delegator", "update", "--file", str(self.delegator), "--writer", "delegator",
                         "--source", "owner-message-7", "--expect-revision", "7", "--set",
-                        json.dumps({"watch": {"repair": {alias: None, "status": "open", "detail": text}}})])
+                        json.dumps({"watch": {"repair": {alias: None, "status": "open",
+                                                         "evidence": "owner-message-7"}}})])
                     self.assertEqual(code, 0, out)
                     saved = json.loads(self.delegator.read_text())
-                    self.assertEqual(saved["watch"]["repair"]["detail"], text)
+                    self.assertEqual(saved["watch"]["repair"]["evidence"], "owner-message-7")
                     self.assertEqual(saved["watch"]["repair"]["source"], duty["source"])
                     self.assertEqual(saved["source"], doc["source"])
                     self.assertEqual(saved["authorization"], doc["authorization"])
@@ -1011,6 +1288,9 @@ class RecordContract(unittest.TestCase):
                             duty["status"] = "open"
                         normalized, blockers, _ = record.delegator_migrated({"watch": {"repair": duty}})
                         self.assertFalse(blockers)
+                        if not has_status and token in ("adopted", "settled"):
+                            self.assertNotIn("repair", normalized["watch"])
+                            continue
                         kept = normalized["watch"]["repair"]
                         self.assertEqual(kept["status"], "open" if has_status else token)
                         for field in ("source", "summary", "detail", "next", "evidence"):
@@ -1027,18 +1307,21 @@ class RecordContract(unittest.TestCase):
                     encoding="utf-8")
                 code, out = run_dispatch(["delegator", "migrate", "--file", str(self.delegator), "--write"])
                 self.assertEqual(code, 0, out)
-                self.assertNotIn("watch.release", out["dropped"])
+                self.assertEqual("watch.release" in out["dropped"], status in ("adopted", "settled"))
                 code, out = run_dispatch([
                     "delegator", "update", "--file", str(self.delegator), "--writer", "delegator",
                     "--source", "owner-release", "--expect-revision", "0", "--set", '{"project":{"goal":"ship"}}'])
                 self.assertEqual(code, 0, out)
                 saved = json.loads(self.delegator.read_text())
-                self.assertEqual(saved["watch"]["release"], duty)
+                if status in ("adopted", "settled"):
+                    self.assertNotIn("release", saved["watch"])
+                else:
+                    self.assertEqual(saved["watch"]["release"], duty)
                 self.assertEqual(saved["watch"]["repair"]["status"], "pending")
                 code, view = run_dispatch(["delegator", "view", "--file", str(self.delegator)])
                 self.assertEqual(code, 0, view)
-                shown = next(row for row in view["watch"] if row["id"] == "release")
-                self.assertEqual(shown, {"id": "release", **duty})
+                shown = [row for row in view["watch"] if row["id"] == "release"]
+                self.assertEqual(shown, [] if status in ("adopted", "settled") else [{"id": "release", **duty}])
                 before = self.delegator.read_bytes()
                 code, out = run_dispatch(["delegator", "migrate", "--file", str(self.delegator), "--write"])
                 self.assertEqual(code, 0, out)
@@ -1752,6 +2035,18 @@ class RealAcpInjection(unittest.TestCase):
             "--kind", "tasks", "--id", "repair-1",
             "--set", json.dumps({"stage": "doing", "goal": "projected-goal-marker",
                                  "next": "seat the named repair"})])
+        for cycle in range(2):
+            code, out = run_dispatch([
+                "state", "update", "--file", str(state), "--writer", "host", "--source", "original-fault",
+                "--kind", "alerts", "--id", "handled-fault", "--set",
+                json.dumps({"level": "warn", "summary": "REMOVED-EXCEPTION-SENTINEL"})])
+            self.assertEqual(code, 0, out)
+            code, out = run_dispatch([
+                "state", "retire", "--file", str(state), "--writer", "host", "--source", "original-disposition",
+                "--kind", "alerts", "--id", "handled-fault", "--expect-rev", "1",
+                "--evidence", "original-handled-receipt"])
+            self.assertEqual(code, 0, out)
+            self.assertNotIn("REMOVED-EXCEPTION-SENTINEL", state.read_text())
         doc = json.loads(state.read_text(encoding="utf-8"))
         doc["body"] = "STORED-BODY-SENTINEL"
         state.write_text(json.dumps(doc), encoding="utf-8")
@@ -1777,6 +2072,7 @@ class RealAcpInjection(unittest.TestCase):
         self.assertIn("projected-goal-marker", text)
         self.assertIn(CLASS_SENTENCES["Worker"], text)
         self.assertNotIn("STORED-BODY-SENTINEL", text)
+        self.assertNotIn("REMOVED-EXCEPTION-SENTINEL", text)
         host_observe = self.cli("observe", session=host)
         self.assertTrue(host_observe)
         stopped = self.cli("stop", "--force", session=worker, env=self.env(KAOLA_ACP_HEARTBEAT_HOST=target))

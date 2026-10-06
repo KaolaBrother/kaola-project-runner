@@ -1,32 +1,25 @@
 # Lifecycle state
 
-`<project>/.kaola/heartbeat-prompt.json` schema `kaola-heartbeat-prompt/2`
-holds current tasks, the adopted authorization projection, the Sideagent
-binding, holds, alerts and pending decisions. Its `body` is the generated Host
-view, not a second source. Change it only through `state` in
-`scripts/kaola-dispatch.py`; a hand edit skips revision checks. The Delegator
-file, dispatch index, Runner receipts, Git, forge and Workflow keep their own
-facts; state keeps references, current conclusions and next steps, never a
-copied backlog, ledger or history.
+`<project>/.kaola/heartbeat-prompt.json` (`kaola-heartbeat-prompt/2`) holds
+current tasks, authorization, Sideagent binding, holds, alerts and decisions.
+`body` is the generated Host view. Write through `scripts/kaola-dispatch.py
+state` for revision checks. Other files retain their own authority; keep
+references and current duties here, never copied backlog, ledger or history.
 
 ## Roles
 
 - Host: goal, task split, needed abilities, dependencies, preset choice,
   assignment text, `execute`/`collect`, reading original results, acceptance
-  and closeout decisions; bootstrap, failure and urgent recovery. It may read,
-  search, analyze and do simple authorized work itself.
+  and closeout decisions, including recovery. It may do simple authorized work.
 - Tools record dispatch, result and holder facts; no node restates them.
 - Sideagent: one maintenance role per project, outside every Class seat; a
-  fresh node per meaningful batch. It reconciles duties, holds, alerts,
-  conflicts and reclaim, and exact-stops finished workers. It assigns, grants
-  and accepts nothing. Launches use bypass permissions; a residual prompt is an
-  exception, and anything needing the user stays a pending `decisions` record.
+  fresh node per meaningful batch. It reconciles current duties/conflicts and exact-stops finished workers. It assigns, grants
+  and accepts nothing. Launches use bypass permissions; residual prompts and user decisions stay pending.
 - Research, QA or implementation helpers are counted, authorized items.
 - Workers never write state (`writer-refused`).
 
-No synchronous Sideagent round trip or approval stage per action: coalesce
-related updates and reuse valid evidence. The Host gets outcomes, capacity and
-pending decisions; evidence stays by reference.
+No synchronous Sideagent round trip. Coalesce updates and reuse evidence.
+The Host gets outcomes, capacity and pending decisions.
 
 ## Commands
 
@@ -39,8 +32,7 @@ pending decisions; evidence stays by reference.
 - `$S update --kind tasks|holds|alerts|decisions --id ID --set PATCH
   [--expect-rev N]`: JSON merge patch of one record (`null` deletes a key;
   `@path` reads a file). An existing record needs `--expect-rev`; a stale one
-  exits 3 with `current` and `unapplied`: merge by evidence and retry, never
-  rewrite the file. `--coalesce` counts a repeated alert.
+  exits 3 with `current` and `unapplied`: reconcile and retry. `--coalesce` counts a repeated alert.
 - `$S update --section project|authorization|sideagent|recovery|unverified
   --expect-revision N --set PATCH`: first three Host-only.
 - `$S retire --kind K --id ID --expect-rev N --evidence REF [--outcome T]
@@ -62,26 +54,29 @@ pending decisions; evidence stays by reference.
   `dispatch` (index item ids), `evidence`, `next`, `verdict`, `dispositions`
   (per item). A repair keeps the task id; one returned branch is not
   completion. A task needs no issue; Workflow owners keep claim/ledger/finalize.
-- `holds` (`scope`, `reason`): `evidence`, `impact`, `owner`, `resume_when`,
-  `next`. A hold keeps the grant; no takeover or quota reset lifts it.
-- `alerts` (`level` `watch|warn|severe`, `summary`): level by evidence and
-  impact, never by elapsed time. Read, acknowledged or in progress is not
-  resolved; a warning blocks no unrelated work.
-- `decisions` (`owner` `host|delegator|user`, `question`): kept until
-  `status: settled` with evidence (Sideagent: with `--host-turn`); a
-  notification clears no duty.
+- `holds` (`scope`, `reason`): active restrictions with `evidence`, `impact`,
+  `owner`, `resume_when`, `next`. A hold keeps the grant.
+- `alerts` (`level` `watch|warn|severe`, `summary`): applicable unresolved
+  exceptions. Read, acknowledged or in progress is not resolved. Once handled,
+  use `retire --expect-rev REV --evidence ORIGINAL`; it removes the stored row.
+- `decisions` (`owner` `host|delegator|user`, `question`): pending owner answers.
+  Host `update --set '{"status":"settled","evidence":"ORIGINAL"}'` removes
+  the row. A Sideagent copy needs `--host-turn` and stays pending Host adoption.
 
-Authorization, occupancy, task stage and service availability stay separate
-facts. A stopped process deletes no task.
+Views and injected bodies use the stored current collection. Keep no
+handled row or retrospective text in another field. Unfinished effects remain
+concrete current duties. Revoked/expired grants leave eligibility; current stop
+restrictions and live links stay. A stopped process does not finish a task.
+Refusals give id, revision and removal command. Do not create an absent row. Keep genuinely unresolved original evidence on the
+current decision/reconciliation route until its proper type is established.
+Unknown is not resolved; Agents judge semantic currentness.
 
 ## Touchpoints
 
-Update at existing events only: dispatch (task `doing`; plan items carry
-`task_id`, `output`, optional `requires`), result and verdict, a material
-goal, grant or fault change, recovery or adoption, and closeout. The inquiry
-and `check` catch omissions. At a result or verdict, relate it to the task
-goal and set the next authorized action or a sourced blocker. Confirming a
-stop does not finish that goal. No goal score and no per-dispatch approval.
+Update at dispatch (`doing`; plan: `task_id`, `output`, optional `requires`),
+result/verdict, goal/grant/fault change, recovery/adoption and closeout. Inquiry
+and `check` detect omissions. Link each result/verdict to its task goal and
+next action or sourced blocker; no goal score or per-dispatch approval.
 
 ## Host verdicts
 

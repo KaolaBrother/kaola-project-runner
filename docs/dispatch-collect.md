@@ -149,6 +149,65 @@ A per-result disposition does not settle every duty.
 That write does not store history and does not retire a row.
 It does not decide live close-out or task retirement.
 
+Current-state resolution uses the existing state tools. Active alerts and holds
+stay until handled. `state retire --kind alerts|holds --id ID --expect-rev REV
+--source ORIGINAL --evidence ORIGINAL` removes the row from stored state.
+Host `state update --kind decisions --id ID --expect-rev REV --source ORIGINAL
+--set '{"status":"settled","evidence":"ORIGINAL"}'` removes an answered
+decision. A Sideagent transcription stays pending until Host adoption.
+Delegator `update --expect-revision REV --source ORIGINAL
+--set '{"watch":{"ID":null}}'` clears a handled watch row. A sourced
+`adopted|settled` transition with original effect evidence also removes it.
+Every role view and injected body derives from the current stored collection.
+There is no resolved flag, history window or alternative retrospective text slot.
+
+A sourced authorization write or migration removes revoked grants and supported
+expired Expert grants. The existing `revoked` ids retain effective stop
+restrictions; they are not grant rows. Remove those restrictions only when the
+owner changes authorization. Current tasks keep their stop/handoff/reclaim
+links. Pause/exclusion restrictions stay while effective. Unreadable expiry or
+unknown preset authority is unresolved, not an inferred expiration.
+
+A refusal gives the exact collection/id, revision and existing removal command.
+Use original evidence of the handled duty; accepted tasks also need a retrievable
+`--cite` and closed dispatch/reclaim links. If the row is absent, do not create
+it or put its text elsewhere. Keep unresolved original evidence on the existing
+current decision/reconciliation route until the proper type is established.
+The Agent decides semantic currentness. The tool checks types, ownership and CAS.
+A pending recovery input requires its exact scoped checkpoint. Retiring an old
+alert does not clear a newer recovery input. Plan `state migrate` before `--write`;
+repeat migration preserves pending adoption, grants, duties and current links.
+
+### Owner-required user-facing Elite and Expert seat summary (2026-10-06)
+
+This is a product design requirement for the Delegator's standard USER-FACING heartbeat report. It is for the user to inspect authorization and usage. The Host is NOT required to repeat this summary in every heartbeat or receive another compulsory injected section. Expose the same current facts to the Host on demand when needed for dispatch. This owner correction supersedes the earlier requirement for both role heartbeat reports to always list it. Native timer text remains the canonical entry only.
+
+The user report shows:
+- Authorized Elite and Expert preset IDs (`runtime/tier`), counts and applicable grant lifetime.
+- Currently occupied seats and their linked tasks.
+- Idle, available capacity within each effective grant; held/unavailable/unknown shown separately.
+
+Count a shared seat group once across its permitted tiers. Idle but unreclaimed/reserved sessions are not automatically available. General cap and resource constraints still apply; per-grant free counts do not authorize exceeding the combined cap. Host and Sideagent roles do not consume worker seats. Show no Expert authorization as none, without implying a grant.
+
+Derive the report from existing current authorization and verified occupancy/task links. Do not create a second writable seat table, copy occupancy into Delegator JSON, retain historical seat rows, or inject complete model profiles. Reuse the existing Host dispatch view when needed; no new mandatory Host reading or reporting cycle.
+
+Acceptance: the generated Delegator reporting guidance and its user-facing current view expose the summary with correct shared counts, task links and available/held/unknown distinctions. Reuse applicable existing checks. Host access remains need-driven. No new permission, registry, timer or separate QA phase.
+
+The existing `project --seats` output adds a derived `summary`. The Delegator
+`state view --role delegator` and `delegator view` expose it as `seats`.
+No seat summary is stored in either current JSON or added to Host injection.
+Use existing `--live`, `--index`, `--availability` and `--skills-root` inputs
+when an original source requires an explicit locator. Without `--live`, the
+existing Runner lists fresh verified holders. Missing task/availability facts
+remain unknown; an empty project list does not prove external account or
+native QA target capacity. Shared counts use the current grant groups and
+existing Delegator ceilings. Profiles stay on demand. The same read-only
+`project --seats` interface remains available to Host when dispatch needs it.
+Update generated Skills through the renderer. Existing state migration keeps
+the schemas and pending duty links; installed old views need the accepted
+generated tool update before this summary is present. Do not write a seat
+summary into an old file as a substitute. No timer text change is needed.
+
 ## 3. Collect finished work
 
 Later, without waiting for the slowest branch:
