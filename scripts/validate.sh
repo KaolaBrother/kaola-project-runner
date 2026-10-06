@@ -312,6 +312,7 @@ python_suites_all=(
   "test-issue-259-record-contract.py"
   "test-issue-267-rejection-count.py"
   "test-issue-268-selection-continuity.py"
+  "test-issue-264-validate-lane-integrity.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -347,6 +348,7 @@ python_suites_a=(
   "test-issue-266-launch-broker-composed.py"
   "test-issue-267-rejection-count.py"
   "test-issue-268-selection-continuity.py"
+  "test-issue-264-validate-lane-integrity.py"
 )
 python_suites_b=(
   "test-issue-78-heredoc-deadlock.py"
