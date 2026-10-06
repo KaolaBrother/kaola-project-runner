@@ -1245,7 +1245,10 @@ class RecordContract(unittest.TestCase):
         self.assertIsNone(new_defect)
         self.assertNotIn("STORED-BODY-SENTINEL", new_body or "")
         self.assertIn("projected-goal-marker", new_body or "")
-        self.assertIn(CLASS_SENTENCES["Elite"], new_body or "")
+        # The recomputed/injected body is the plain shared projection: Class and
+        # capability text stay on demand (`state view --role host`, `project`),
+        # never forced into the routine heartbeat.
+        self.assertNotIn(CLASS_SENTENCES["Elite"], new_body or "")
 
     def test_a_migrate_note_is_not_a_seat_and_a_session_name_still_needs_live(self) -> None:
         self.init()

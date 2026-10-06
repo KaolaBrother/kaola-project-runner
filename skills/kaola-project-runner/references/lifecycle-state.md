@@ -61,7 +61,7 @@ The Host gets outcomes, capacity and pending decisions.
   use `retire --expect-rev REV --evidence ORIGINAL`; it removes the stored row.
 - `decisions` (`owner` `host|delegator|user`, `question`): pending owner answers.
   Host `update --set '{"status":"settled","evidence":"ORIGINAL"}'` removes
-  the row. A Sideagent copy needs `--host-turn` and stays pending Host adoption.
+  the row; a Host-judged handled one may `retire --evidence ORIGINAL`.
 
 Views and injected bodies use the stored current collection. Keep no
 handled row or retrospective text in another field. Unfinished effects remain

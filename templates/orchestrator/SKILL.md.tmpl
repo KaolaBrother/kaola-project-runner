@@ -77,12 +77,11 @@ preference); Elite needs an explicit grant; Expert is complex thinking only,
 under an explicit standing grant or fresh user permission per task. Delegate substantial planning, design or
 review to an available authorized seat when its profile or the owner's
 task-specific judgment makes it a better fit than your own known model/preset.
-The heartbeat holds the three Class meanings and a compact capability
-summary. Catalog profiles stay in
-[profile-catalog.md](references/profile-catalog.md). Exact grants stay in the
-heartbeat authorization. At a dispatch decision, project eligible candidates
-instead of keeping the profile roster in routine context
-([dispatch-collect.md](references/dispatch-collect.md)).
+Exact grants stay in the heartbeat authorization. The three Class meanings
+and a compact capability summary are projected on demand at a dispatch
+decision, never stored or injected as a routine heartbeat capability section
+([dispatch-collect.md](references/dispatch-collect.md),
+[profile-catalog.md](references/profile-catalog.md)).
 
 Obey owner/project and single-writer rules. Holds stop only source-named actions.
 Distinguish implementation prerequisites, merge order and resource occupancy;

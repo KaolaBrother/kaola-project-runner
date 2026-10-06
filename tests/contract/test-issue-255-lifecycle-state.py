@@ -153,9 +153,56 @@ class StateTool(StateProject):
         code, out = self.update("sideagent", "tasks", "t1", {"stage": "doing"}, "--expect-rev", "4")
         self.assertEqual(out["reason"], "record-retired", "an old revision does not restore the settled task")
         self.update("host", "decisions", "d1", {"owner": "user", "question": "Expert?"})
-        code, out = self.state("retire", "--file", str(self.file), "--writer", "host", "--source", "s",
+        # AGENTS.md requirement 2 (2026-10-06): the existing clear/resolve/retire
+        # operation removes a handled row atomically; tools validate types and
+        # transitions, Agents judge semantic currentness. A Sideagent cannot judge
+        # currentness, so its retire of a pending owner question is refused.
+        code, out = self.state("retire", "--file", str(self.file), "--writer", "sideagent", "--source", "s",
                                "--kind", "decisions", "--id", "d1", "--expect-rev", "1", "--evidence", "x")
-        self.assertEqual(out["reason"], "retire-unmet", "a pending decision stays")
+        self.assertEqual(out["reason"], "retire-unmet", "a Sideagent cannot drop a pending owner question")
+        # The Host judged the duty handled: it removes the row with original
+        # evidence, atomically, with no retained settled row, tombstone or copy.
+        code, out = self.state("retire", "--file", str(self.file), "--writer", "host", "--source", "owner-answer-9",
+                               "--kind", "decisions", "--id", "d1", "--expect-rev", "1", "--evidence", "owner msg 9")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("d1", self.doc()["state"]["decisions"])
+        self.assertNotIn("d1", [stone.get("id") for stone in self.doc()["state"].get("retired") or []],
+                         "a handled decision leaves no tombstone")
+        self.assertNotIn("d1", json.dumps(json.loads(self.doc()["body"]).get("decisions") or []),
+                         "role views derive from the current collection")
+        # Late-write protection: an old revision cannot reopen the removed question.
+        code, out = self.update("sideagent", "decisions", "d1", {"question": "again"}, "--expect-rev", "1")
+        self.assertEqual(out["reason"], "record-retired", "an old revision does not restore the removed question")
+
+    def test_maintenance_attention_separates_unbound_change_and_recovery_input(self) -> None:
+        owed = ("pending", "bounded reconciliation owed")
+
+        def attention() -> list[tuple[str, str]]:
+            code, out = self.state("view", "--file", str(self.file), "--role", "host")
+            self.assertEqual(code, 0, out)
+            return [(row["id"], row["why"]) for row in out["attention"]]
+
+        # (a) An ordinary unbound Host business change owes no compulsory node duty.
+        self.init()
+        self.update("host", "tasks", "t1", {"stage": "doing", "goal": "g"})
+        self.assertNotIn(owed, attention())
+        # (b) A typed recovery input stays visible even without any binding.
+        doc = self.doc()
+        doc["state"]["maintenance"] = {
+            "recovery_seq": 1,
+            "recovery_input": {"seq": 1, "kind": "host-compaction", "occurrence_id": "occ-1",
+                               "source": "completed-host-signal", "holder": "h1",
+                               "at": "2026-01-01T00:00:00+00:00", "evidence": "events.jsonl#7"}}
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        self.assertIn(owed, attention())
+        # (c) A bound maintenance Sideagent plus a Host business change keeps the owed row.
+        code, out = self.state("update", "--file", str(self.file), "--writer", "host", "--source", "bind",
+                               "--section", "sideagent", "--expect-revision", str(self.doc()["revision"]),
+                               "--set", json.dumps({"platform": "zcode", "session": "zcode-KT-sideagent",
+                                                    "state": "active", "mode": "node"}))
+        self.assertEqual(code, 0, out)
+        self.update("host", "tasks", "t1", {"stage": "review", "goal": "g2"})
+        self.assertIn(owed, attention())
 
     def test_retirement_needs_dispatched_work_closed_and_stopped(self) -> None:
         self.init()
@@ -2089,6 +2136,16 @@ class ConsolidatedDispatch(StateProject):
 
     def test_implementation_sends_the_hosts_core_and_scope_and_links_the_task(self) -> None:
         self.init()
+        # Scoped fixture: this one check dispatches two concurrent zcode items, so
+        # its own authorization must seat both. Module AUTH keeps its single-seat
+        # count coverage for the count-limit checks; the core+scope bytes/hash and
+        # task-link assertions below are unchanged.
+        code, out = self.state("update", "--file", str(self.file), "--writer", "host", "--source", "fixture",
+                               "--section", "authorization", "--expect-revision", str(self.doc()["revision"]),
+                               "--set", json.dumps({"grants": [
+                                   {"id": "codex/default", "state": "granted", "count": 1},
+                                   {"id": "zcode/default", "state": "granted", "count": 2}]}))
+        self.assertEqual(code, 0, out)
         self.update("host", "tasks", "t1", {"stage": "doing", "goal": "parser", "keep_open": True})
         host_revision = self.doc()["host_revision"]
         self.sessions(["zcode-KT-i1-a", "zcode-KT-i1-b"])

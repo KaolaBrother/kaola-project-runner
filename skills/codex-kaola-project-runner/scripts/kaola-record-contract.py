@@ -1932,8 +1932,13 @@ def host_view(doc: dict[str, Any], path: Path | None) -> dict[str, Any]:
     last = maintenance.get("last_checkpoint") if isinstance(maintenance, dict) else None
     if isinstance(last, dict) and not last.get("verified"):
         brief["last_checkpoint"] = {key: last.get(key) for key in ("batch", "at", "verified")}
-    owed = bool(maintenance.get("recovery_input") or host_changes(
-        doc, int(maintenance.get("handled_host_revision") or 0), int(doc.get("host_revision") or 0)))
+    # A typed recovery input is a real pending duty and stays visible without a
+    # binding. An ordinary Host business change is a maintenance-node duty only
+    # once a maintenance Sideagent is bound; unbound it is the Delegator inquiry
+    # fallback, not a compulsory node obligation.
+    owed = bool(maintenance.get("recovery_input") or (
+        binding is not None and host_changes(
+            doc, int(maintenance.get("handled_host_revision") or 0), int(doc.get("host_revision") or 0))))
     if owed:
         attention.append({"kind": "maintenance", "id": "pending", "why": "bounded reconciliation owed",
                           "next": "use the bound node or recover from original receipts"})

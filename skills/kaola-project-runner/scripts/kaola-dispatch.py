@@ -3734,7 +3734,11 @@ def render_state(doc: dict[str, Any], path: Path, *, unchecked_live: bool = Fals
     blockers = RECORD.maintenance_blockers(doc["state"].get("maintenance"))
     if blockers:
         raise StateRefusal("invalid-maintenance", "repair the current duty from original receipts", blocked=blockers)
-    view = host_view(doc, path)
+    # The injected/stored body is the shared contract projection, the same one a
+    # holder recomputes at read time (kaola-acp-holder.read_heartbeat_file ->
+    # RECORD.injection_body). The catalog-enriched capability stays on demand via
+    # `state view --role host`, so no catalog section is forced into the heartbeat.
+    view = RECORD.host_view(doc, path)
     body = json.dumps(view, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     doc["body"] = body
     text = json.dumps(doc, ensure_ascii=False, sort_keys=True, indent=1) + "\n"
