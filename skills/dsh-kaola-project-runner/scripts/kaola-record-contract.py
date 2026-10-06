@@ -1950,7 +1950,6 @@ def host_view(doc: dict[str, Any], path: Path | None) -> dict[str, Any]:
         "detail": f"{name} state; `state view --role sideagent` for evidence and dispatch rows",
         "project": project_view(state.get("project") or {}),
         "authorization": authorization_view(state.get("authorization") or {}),
-        "capability": capability_from_grants(state.get("authorization") or {}),
         "sideagent": ({key: binding.get(key) for key in ("platform", "session", "preset", "state", "mode")
                        if binding.get(key) is not None} if isinstance(binding, dict) else None),
         "attention": attention,

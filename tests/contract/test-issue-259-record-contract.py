@@ -1228,6 +1228,31 @@ class RecordContract(unittest.TestCase):
             })
         return rows
 
+    def test_plain_body_carries_no_capability_and_on_demand_view_keeps_it(self) -> None:
+        """dot decision 2026-10-06: the routine stored/injected body carries no
+        duplicate grant projection; the enriched on-demand view keeps it."""
+        grant = {"preset_ids": ["claude-code/default", "claude-code/fable"], "shared_seat": "claude-code",
+                 "count": 1, "state": "granted", "model_switch": True, "lifetime": "standing",
+                 "special_requirements": {"claude-code/fable": {"task_scope": "thinking and review only"}}}
+        self.init({"grants": [grant]})
+        self.update("tasks", "t1", {"stage": "doing", "goal": "g"})
+        body = json.loads(self.doc()["body"])
+        self.assertNotIn("capability", body, "no second grant projection in the routine body")
+        stored = {row["id"]: row for row in body["authorization"]["grants"]}
+        self.assertEqual(sorted(stored), sorted(grant["preset_ids"]))
+        for preset in grant["preset_ids"]:
+            self.assertEqual(stored[preset]["lifetime"], "standing")
+            self.assertTrue(stored[preset]["model_switch"])
+            self.assertEqual(stored[preset]["shared_seat"], "claude-code")
+        self.assertEqual(stored["claude-code/fable"]["special_requirements"],
+                         {"task_scope": "thinking and review only"})
+        code, host = self.state("view", "--file", str(self.file), "--role", "host")
+        self.assertEqual(code, 0, host)
+        self.assertTrue(set(grant["preset_ids"]) <= set(host["capability"]["presets"]),
+                        host["capability"]["presets"])
+        self.assertIn({"count": 1, "seat": "claude-code"}, host["capability"]["shared_seats"])
+        self.assertIn("catalog_sha256", host["capability"])
+
     def test_v090_holder_injects_stored_body_and_the_new_holder_projects(self) -> None:
         self.init()
         doc = self.doc()
@@ -1247,8 +1272,10 @@ class RecordContract(unittest.TestCase):
         self.assertIn("projected-goal-marker", new_body or "")
         # The recomputed/injected body is the plain shared projection: Class and
         # capability text stay on demand (`state view --role host`, `project`),
-        # never forced into the routine heartbeat.
+        # never forced into the routine heartbeat (dot decision 2026-10-06:
+        # no duplicate grant projection in the body at all).
         self.assertNotIn(CLASS_SENTENCES["Elite"], new_body or "")
+        self.assertNotIn("capability", new_body or "")
 
     def test_a_migrate_note_is_not_a_seat_and_a_session_name_still_needs_live(self) -> None:
         self.init()

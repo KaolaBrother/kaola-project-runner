@@ -10,7 +10,9 @@ disclosure, edge r3 folded with hashed durable evidence), `544b58c5` (this
 report), `0b3af748` (steer cells from #263 ADOPTED originals), `19faebfd`
 (dot corrections), `c44e87a7` (Fable R1–R4 wording corrections), `2c3d253b`
 (Fable D1 byte), `e4cf481b` (assertion truth) and `aa659981` (dot recheck
-proof: whole-object authorization equality + rich fixture). Requirements source: `.kw/worktrees/issue-264/AGENTS.md` §
+proof: whole-object authorization equality + rich fixture), plus the body-
+capability removal decision implemented with its focused tests (plain body
+and holder recomputation carry no capability; on-demand view keeps it). Requirements source: `.kw/worktrees/issue-264/AGENTS.md` §
 "Project special requirements — lifecycle implementation (#255)" at
 `3c7e7417`, plus owner clarifications relayed 2026-10-06 through the dot main
 session (capability table Sentinel_27d913395e90819199545f470d8c6421 /
@@ -69,7 +71,12 @@ Sideagent transcripts need `--host-turn`. `f562560f` makes the stored and
 injected heartbeat body the plain shared projection a holder recomputes at
 read time, while the catalog-enriched capability stays on demand
 (`state view --role host`, `project`) — the owner's 2026-10-06 no-compulsory-
-injection direction; the `24a2355a`-measured chains remain valid across it
+injection direction, completed by dot's same-day technical decision: the
+routine stored/injected body no longer carries the duplicate grant-derived
+`capability{presets,shared_seats}` projection either (full effective
+authorization in the same body is the single source; the on-demand
+dispatch/project views keep capability; no switch, no persistent field,
+grant semantics unchanged); the `24a2355a`-measured chains remain valid across it
 because current holders recompute rather than inject the stored body, and
 the only attention change is the unbound ordinary-change case, which every
 measured chain (bound node-mode Sideagent, typed recovery input) never

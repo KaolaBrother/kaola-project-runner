@@ -79,8 +79,7 @@ review to an available authorized seat when its profile or the owner's
 task-specific judgment makes it a better fit than your own known model/preset.
 Exact grants stay in the heartbeat authorization. The three Class meanings
 and the catalog-enriched capability summary are projected on demand at a
-dispatch decision and never injected into the routine heartbeat (the
-grant-derived preset list remains in the body)
+dispatch decision and never injected into the routine heartbeat
 ([dispatch-collect.md](references/dispatch-collect.md),
 [profile-catalog.md](references/profile-catalog.md)).
 

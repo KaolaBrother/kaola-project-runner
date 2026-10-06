@@ -50,8 +50,7 @@ for a user to grant; visibility never grants authorization.
 
 Host routine context is exact grants and current duties. The three Class
 meanings and the catalog-enriched capability summary are projected on demand
-at a dispatch decision and never injected into the routine heartbeat (only
-the grant-derived preset list remains in the body). Durable
+at a dispatch decision and never injected into the routine heartbeat. Durable
 grants keep exact ids, counts, structured shared-seat fields, exclusions, and
 owner special_requirements, without catalog profile text. At a dispatch
 decision, [dispatch-collect.md](dispatch-collect.md) projects each eligible
