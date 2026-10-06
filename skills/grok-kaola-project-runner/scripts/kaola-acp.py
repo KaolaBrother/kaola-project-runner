@@ -3531,20 +3531,97 @@ def _readback_value(effective: Any, label: str) -> tuple[str | None, bool, str |
 
 
 def _native_readback(effective: Any) -> dict[str, Any] | None:
-    """A sourced native currentValue, not a launch-argv substitute.
+    """Per-axis sourced native currentValue.
 
-    ``None`` when nothing on the object is a native model or effort readback.
-    Callers use that to avoid treating an older start's echo as this holder's
-    live value, and to avoid replacing a native echo with an argv stand-in.
+    A launch-argv model is unavailable and does not discard a genuine native
+    effort on the same object. ``None`` only when neither axis is a native
+    readback. The copy keeps a launch-argv model source so the comparison can
+    name that axis unavailable, and clears any other unread model so it cannot
+    be taken as native.
     """
     if not isinstance(effective, dict):
         return None
-    if effective.get("effective_model_source") == "launch-argv":
+    _model, model_readable, _model_note = _readback_value(effective, "model")
+    _effort, effort_readable, _effort_note = _readback_value(effective, "effort")
+    if not model_readable and not effort_readable:
         return None
-    for label in ("model", "effort"):
-        _value, readable, _note = _readback_value(effective, label)
-        if readable:
-            return effective
+    kept = dict(effective)
+    if not model_readable and kept.get("effective_model_source") != "launch-argv":
+        kept["effective_model"] = None
+    if not effort_readable:
+        kept["effective_effort"] = None
+    return kept
+
+
+def _stamp_live_readback(effective: Any, *, holder_instance_id: Any,
+                         recorded_at: Any) -> dict[str, Any] | None:
+    """Preceding holder's native readback, with that holder's own source.
+
+    The holder and time belong to this value. They are not taken from an
+    older start whose echo is a different value.
+    """
+    native = _native_readback(effective)
+    if native is None:
+        return None
+    live = dict(native)
+    live["holder_instance_id"] = holder_instance_id
+    live["recorded_at"] = recorded_at
+    return live
+
+
+def _most_recent_live(inherited: Any) -> tuple[Any, Any, Any]:
+    """``(effective, holder_instance_id, recorded_at)`` used as prior_live.
+
+    ``most_recent_live`` on a carried object is the live slot, separate from
+    the historical echo. ``None`` is unknown: the older ``effective_selection``
+    is not that slot. When the key is absent, this object is the preceding
+    holder's own record, so its ``effective_selection`` is the live readback
+    and the object's holder and time are its source.
+    """
+    if not isinstance(inherited, dict):
+        return None, None, None
+    if "most_recent_live" in inherited:
+        slot = inherited.get("most_recent_live")
+        if not isinstance(slot, dict):
+            return None, None, None
+        return slot, slot.get("holder_instance_id"), slot.get("recorded_at")
+    return (
+        inherited.get("effective_selection"),
+        inherited.get("holder_instance_id"),
+        inherited.get("recorded_at"),
+    )
+
+
+def _applied_baseline_source(inherited: Any) -> tuple[Any, Any]:
+    """Holder and time of the historical applied configuration."""
+    if not isinstance(inherited, dict):
+        return None, None
+    if "config_baseline_holder_instance_id" in inherited:
+        holder = inherited.get("config_baseline_holder_instance_id")
+    else:
+        holder = inherited.get("holder_instance_id")
+    if "config_baseline_recorded_at" in inherited:
+        recorded = inherited.get("config_baseline_recorded_at")
+    else:
+        recorded = inherited.get("recorded_at")
+    return holder, recorded
+
+
+def _unverified_explicit_baseline(saved: dict[str, Any]) -> dict[str, Any] | None:
+    """Earlier applied baseline when this explicit change was not verified.
+
+    ``None`` when this start's own application stands: there is no earlier
+    baseline, or the explicit change's readback matched what the Runner
+    applied. A bare continuation does not call this.
+    """
+    continuity = saved.get("selection_continuity")
+    if not isinstance(continuity, dict) or continuity.get("outcome") != "explicit-current":
+        return None
+    if continuity.get("explicit_readback_matches") is True:
+        return None
+    previous = saved.get("inherited")
+    if isinstance(previous, dict) and isinstance(previous.get("config_application"), dict):
+        return previous
     return None
 
 
@@ -3554,42 +3631,9 @@ def _continuity_equal(label: str, left: str, right: str) -> bool:
     return left == right
 
 
-def _saved_session_confirmed(inherited: Any, label: str, prior_live: str) -> bool:
-    """A live value that differs from the last applied value is intentional
-    only when this same evidence already showed that difference.
-
-    Records without ``selection_continuity`` keep the historical rule: the
-    ``effective_selection`` on that object is the sourced readback. When the
-    continuity record exists, agreement between what that start applied and
-    what it read back means a different later readback is not a saved-session
-    change. An unproven difference is not one either.
-    """
-    if not isinstance(inherited, dict):
-        return True
-    continuity = inherited.get("selection_continuity")
-    if not isinstance(continuity, dict):
-        return True
-    if continuity.get("outcome") == "saved-session-change":
-        return True
-    if continuity.get("cause") == "unproven":
-        return False
-    axes = continuity.get("axes")
-    axis = axes.get(label) if isinstance(axes, dict) else None
-    if not isinstance(axis, dict):
-        return False
-    applied_then = _continuity_text(axis.get("applied_this_start"))
-    fresh_then = _continuity_text(axis.get("fresh_effective"))
-    if not applied_then or not fresh_then:
-        return False
-    if _continuity_equal(label, fresh_then, applied_then):
-        return False
-    return _continuity_equal(label, fresh_then, prior_live)
-
-
 def _axis_status(label: str, *, explicit: bool, prior_applied: str | None,
                  prior_live: str | None, prior_live_readable: bool,
-                 fresh: str | None, fresh_readable: bool,
-                 inherited: Any = None) -> str:
+                 fresh: str | None, fresh_readable: bool) -> str:
     if explicit:
         return "explicit"
     if prior_applied is None:
@@ -3598,9 +3642,9 @@ def _axis_status(label: str, *, explicit: bool, prior_applied: str | None,
         return "unverifiable"
     if prior_live_readable and prior_live is not None and not _continuity_equal(
             label, prior_live, prior_applied):
-        if _continuity_equal(label, fresh, prior_live) and _saved_session_confirmed(
-                inherited, label, prior_live):
-            return "saved-session-change"
+        # A live value that differs from the historical applied value stays
+        # unproven, including when this readback repeats it. Repetition is
+        # not evidence that someone intended the change.
         if _continuity_equal(label, fresh, prior_live):
             return "differs-from-prior-applied"
         return "contradictory-evidence"
@@ -3671,15 +3715,17 @@ def reconcile_selection_continuity(
 ) -> dict[str, Any]:
     """Compare recorded, applied, and fresh values for one start (Issue #268).
 
-    Precedence is explicit current selection, then a saved-session selection
-    already visible on the prior live readback, then the prior successfully
-    applied selection, then a fresh-start default. A bare continuation does
-    not re-apply the preset and does not overwrite the loaded session. Stale
-    applied metadata alone never counts as the current selection. A match is
-    claimed only when the fresh readback equals the prior applied value and
-    the prior live readback does not contradict it. A later readback that
-    merely differs from the last applied value is not a user-intentional
-    change. Why a loaded value differs is left unproven.
+    Precedence is explicit current selection, then a loaded session when no
+    prior applied selection exists, then the prior successfully applied
+    selection, then a fresh-start default. Explicit flags replace that applied
+    baseline only when the fresh readback verifies the change. A bare
+    continuation does not re-apply the preset and does not overwrite the
+    loaded session. Stale applied metadata alone never counts as the current
+    selection. A match is claimed only when the fresh readback equals the
+    prior applied value and the prior live readback does not contradict it.
+    A difference from the historical applied value stays unproven, including
+    when a later readback repeats it. A missing most-recent live echo is
+    unknown and is not filled from an older echo.
     """
     recorded = {
         "source": recorded_source if isinstance(recorded_source, str) else None,
@@ -3687,7 +3733,8 @@ def reconcile_selection_continuity(
         "effort": _continuity_text(recorded_effort),
     }
     prior_application = inherited.get("config_application") if isinstance(inherited, dict) else None
-    prior_effective = inherited.get("effective_selection") if isinstance(inherited, dict) else None
+    prior_effective, live_holder, live_recorded = _most_recent_live(inherited)
+    baseline_holder, baseline_recorded = _applied_baseline_source(inherited)
     axes: dict[str, dict[str, Any]] = {}
     statuses: list[str] = []
     prior_model = _applied_config_value(prior_application, "model")
@@ -3702,7 +3749,6 @@ def reconcile_selection_continuity(
             label, explicit=explicit, prior_applied=prior_applied,
             prior_live=prior_live, prior_live_readable=prior_live_readable,
             fresh=fresh_value, fresh_readable=fresh_readable,
-            inherited=inherited,
         )
         statuses.append(status)
         axis = {
@@ -3721,6 +3767,10 @@ def reconcile_selection_continuity(
             axis["fresh_note"] = fresh_note
         if prior_note:
             axis["prior_live_note"] = prior_note
+        if prior_live_readable and isinstance(live_holder, str) and live_holder:
+            axis["prior_live_holder_instance_id"] = live_holder
+        if prior_live_readable and live_recorded is not None:
+            axis["prior_live_recorded_at"] = live_recorded
         axes[label] = axis
     had_prior = prior_model is not None or prior_effort is not None
     outcome = _continuity_outcome(
@@ -3745,6 +3795,18 @@ def reconcile_selection_continuity(
     readback_matches = _explicit_readback_matches(axes) if explicit else None
     for axis in axes.values():
         axis.pop("label", None)
+    prior_applied_selection: dict[str, Any] | None = None
+    if had_prior:
+        prior_applied_selection = {
+            "model": prior_model,
+            "effort": prior_effort,
+            "source": "prior-holder-record",
+            "historical": True,
+        }
+        if isinstance(baseline_holder, str) and baseline_holder:
+            prior_applied_selection["holder_instance_id"] = baseline_holder
+        if baseline_recorded is not None:
+            prior_applied_selection["recorded_at"] = baseline_recorded
     result: dict[str, Any] = {
         "precedence_order": list(CONTINUITY_PRECEDENCE),
         "precedence": precedence,
@@ -3763,12 +3825,7 @@ def reconcile_selection_continuity(
             "effort_readable": axes["effort"]["fresh_readable"],
             "source": "acp-config-echo",
         },
-        "prior_applied_selection": None if not had_prior else {
-            "model": prior_model,
-            "effort": prior_effort,
-            "source": "prior-holder-record",
-            "historical": True,
-        },
+        "prior_applied_selection": prior_applied_selection,
         "axes": {"model": axes["model"], "effort": axes["effort"]},
         "explicit_readback_matches": readback_matches,
     }
@@ -3816,10 +3873,12 @@ def inherited_start_evidence(prior: Any, args: argparse.Namespace, repo: str,
     prior record, for this platform/session/repo, both ran and recorded its
     evidence under. A Runner name alone never matches. Historical, never a
     fresh observation: a no-override resume carries the last applied
-    configuration forward flat rather than nesting it. When the immediately
-    preceding holder recorded a sourced native readback, that readback is the
-    carried ``effective_selection``. An older start's readback stays in that
-    start's continuity record and is not presented as this live value.
+    configuration forward flat rather than nesting it. The older start's own
+    readback stays ``effective_selection`` with that start's holder and time.
+    ``most_recent_live`` is only the immediately preceding holder's native
+    readback, per axis, with that holder's holder and time. A launch-argv
+    model does not drop a native effort. No native readback on that holder
+    leaves the live slot missing, so the older echo is not prior_live.
     """
     if not (args.resume or args.use_continue) or not acp_session_id:
         return None
@@ -3844,11 +3903,18 @@ def inherited_start_evidence(prior: Any, args: argparse.Namespace, repo: str,
     )
     if passthrough and isinstance(older, dict):
         carried = dict(older)
-        preceding = _native_readback(saved.get("effective_selection"))
+        preceding = _stamp_live_readback(
+            saved.get("effective_selection"),
+            holder_instance_id=prior.get("holder_instance_id"),
+            recorded_at=saved.get("recorded_at"),
+        )
         if preceding is not None:
-            # Last-applied history stays ``older``. The live comparison value
-            # is the immediately preceding holder's sourced readback.
-            carried["effective_selection"] = dict(preceding)
+            carried["most_recent_live"] = preceding
+        elif (_native_readback(carried.get("effective_selection")) is not None
+              or "most_recent_live" in carried):
+            # A readable older echo, or a live slot copied from a still older
+            # hop, is not this holder's readback.
+            carried["most_recent_live"] = None
         return carried
     inherited = start_evidence_facts(saved)
     inherited.update({
@@ -3857,6 +3923,20 @@ def inherited_start_evidence(prior: Any, args: argparse.Namespace, repo: str,
         "acp_session_id": acp_session_id,
         "recorded_at": saved.get("recorded_at"),
     })
+    previous = _unverified_explicit_baseline(saved)
+    if previous is not None:
+        inherited["config_application"] = previous["config_application"]
+        if "config_baseline_holder_instance_id" in previous:
+            inherited["config_baseline_holder_instance_id"] = previous.get(
+                "config_baseline_holder_instance_id")
+        else:
+            inherited["config_baseline_holder_instance_id"] = previous.get(
+                "holder_instance_id")
+        if "config_baseline_recorded_at" in previous:
+            inherited["config_baseline_recorded_at"] = previous.get(
+                "config_baseline_recorded_at")
+        else:
+            inherited["config_baseline_recorded_at"] = previous.get("recorded_at")
     return inherited
 
 

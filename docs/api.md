@@ -1207,18 +1207,23 @@ native mechanism or advertised fast variant exists, the request is reported `res
 There is no automatic escalation based on complexity, failures, or elapsed time. Omitting
 those flags does not by itself mean the prior applied model or effort is still in effect.
 `selection_continuity` on the `start` receipt (and on `start_evidence`) is the comparison.
-Its precedence is explicit current selection, then a saved-session selection that the prior
-live readback already showed, then the prior successfully applied selection, then a
-fresh-start default. Stale holder metadata alone never wins. A bare continuation does not
-re-apply the fresh-start preset and does not overwrite the loaded session.
+Its precedence is explicit current selection, then a loaded session when no prior applied
+selection exists (`saved-session-selection`), then the prior successfully applied selection,
+then a fresh-start default. A readback that differs from the historical applied value is not
+reclassified as an intentional saved-session edit. Stale holder metadata alone never wins. A bare
+continuation does not re-apply the fresh-start preset and does not overwrite the loaded session.
+Explicit flags take precedence. They replace the applied baseline only when the fresh readback
+verifies that explicit change.
 
 `prior_settings_preserved` is true only when the fresh ACP `currentValue` readback matches
 the prior successfully applied model and effort and the prior live readback does not
-contradict them. A difference is `differs-from-prior-applied`: not preserved, cause
-`unproven`, with recovery that names an explicit `--model`, `--effort`, or `--tier`
-continuation. A missing readback is `unverifiable` and is not called preserved. A prior
-live readback that already differed from the applied value, when the fresh readback still
-matches that live value, is `saved-session-change` and is left in place. Contradictory
+contradict them. A difference from that historical applied selection is
+`differs-from-prior-applied`: not preserved, cause `unproven`, including a legacy record with
+no continuity and including a difference already seen on an earlier readback. Repetition
+stabilizes the observation and does not make it intentional. A missing most-recent live echo
+is unknown; it does not block the continuation or add authorization. Recovery for an unproven
+difference names an explicit `--model`, `--effort`, or `--tier` continuation. A missing fresh
+readback is `unverifiable` and is not called preserved. Contradictory
 prior applied and prior live evidence is not resolved from the stale applied value.
 Recorded selection, this start's applied configuration, and the fresh readback stay
 separate fields. `model_selection.override_omitted` records the no-override branch.
@@ -1417,9 +1422,14 @@ recorded its evidence under keeps that evidence as `start_evidence.inherited` (`
 "prior-holder-record"`, `holder_instance_id`, `acp_session_id`, `recorded_at`), also echoed as the
 start receipt's `inherited_start_evidence`; a no-override resume (`model_selection.override_omitted`)
 carries the last applied configuration forward flat, including when the fresh readback did not confirm it.
-When the immediately preceding holder has a sourced native readback, that readback is the carried
-`effective_selection`. An older start's own readback is not that live value, and a difference the
-carried evidence did not already show is not a saved-session change.
+The older start's own readback stays that object's `effective_selection`, with that start's
+`holder_instance_id` and `recorded_at`. `most_recent_live` is the immediately preceding holder's
+native readback, checked per axis, with that holder's `holder_instance_id` and `recorded_at`.
+A launch-argv model does not discard a native effort on the same object; the model axis stays
+unavailable. When that holder has no native readback, `most_recent_live` is null if an older echo
+would otherwise be readable, and that echo is not `prior_live`. A difference from the historical
+applied selection stays `cause: unproven`. Seeing it again does not make it intentional. Explicit
+flags replace the applied baseline only when the fresh readback verifies the change.
 Any other native session, a Runner name alone, or a record without evidence inherits
 nothing, and the model stays unknown or native-preserved. Resume sends no extra model/effort option
 to fill these fields. The start receipt reports `start_evidence_recorded` (and
