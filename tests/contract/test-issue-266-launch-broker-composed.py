@@ -188,9 +188,13 @@ def _residual_for(record_dir: Path) -> list[str]:
 
 
 def _identity_gone(sb: Sandbox, session: str, platform: str = "claude-code") -> bool:
-    """The recorded exact holder and agent identities are both gone."""
+    """The recorded exact holder and agent identities exist and are both gone."""
     record = sb.record(session, platform)
-    return not pid_alive(record.get("holder_pid")) and not pid_alive(record.get("agent_pid"))
+    holder_pid = record.get("holder_pid")
+    agent_pid = record.get("agent_pid")
+    if not isinstance(holder_pid, int) or not isinstance(agent_pid, int):
+        return False  # missing identities cannot prove no residual
+    return not pid_alive(holder_pid) and not pid_alive(agent_pid)
 
 
 def required_child_record_failure() -> None:
@@ -254,6 +258,7 @@ def configuration_refusal_rollback() -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evidence-out")
+    parser.add_argument("--only", choices=["child_record", "config_refusal"])
     args = parser.parse_args()
     if sys.platform != "darwin":
         print(json.dumps({"result": "unsupported", "detail": "macOS composed proof"}))
@@ -266,6 +271,22 @@ def main() -> int:
         print(json.dumps({"result": "unsupported",
                           "detail": "composed root has no --launch-backend; set K266_COMPOSED_ROOT"}))
         return 0
+
+    if args.only:
+        failures: list[str] = []
+        try:
+            if args.only == "child_record":
+                required_child_record_failure()
+            else:
+                configuration_refusal_rollback()
+        except AssertionError as exc:
+            failures.append(str(exc))
+        payload = {"result": "pass" if not failures else "fail", "checks": len(CHECKS),
+                   "only": args.only, "failures": failures, "evidence": EVIDENCE, "root": str(ROOT)}
+        if args.evidence_out:
+            Path(args.evidence_out).write_text(json.dumps(payload, indent=2, sort_keys=True))
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 1 if failures else 0
 
     sb = Sandbox()
     host = "claude-code-K266-orchestrator-main"

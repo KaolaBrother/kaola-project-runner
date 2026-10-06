@@ -444,6 +444,41 @@ def test_recovery_source_probes(sb: Sandbox) -> None:
         module.os_job_owns = original_owns
 
 
+def test_live_agent_custody(sb: Sandbox) -> None:
+    """A dead recorded holder with a live recorded native agent stays unresolved."""
+    module = load_broker_module()
+    agent = subprocess.Popen(["sleep", "300"])
+    sb.track(agent.pid)
+    write_private(sb.record_dir / "record.json", json.dumps({
+        "platform": sb.platform, "session": sb.session, "repo": sb.repo.as_posix(),
+        "holder_pid": 2 ** 30, "agent_pid": agent.pid, "agent_pgid": agent.pid,
+        "state": "ready"}))
+    check(module._own_holder_effect_remains(sb.record_dir, sb.platform, sb.session,
+                                            sb.repo.as_posix()) is True,
+          "a live recorded native agent keeps the own effect unresolved")
+    original_state = module.os_job_state
+    original_owns = module.os_job_owns
+    module.os_job_state = lambda backend, label: "absent"
+    module.os_job_owns = lambda *a: False
+    try:
+        unresolved, state = module._reconcile_failed_attempt(
+            "launchd", "fixture-label", sb.dir / "spec.json",
+            argparse.Namespace(ready_timeout=1.0), sb.record_dir, sb.platform,
+            sb.session, sb.repo.as_posix())
+    finally:
+        module.os_job_state = original_state
+        module.os_job_owns = original_owns
+    check(unresolved is True and state == "absent",
+          "reconcile keeps the attempt unresolved when the native agent is alive",
+          unresolved=unresolved, state=state)
+    # With both recorded identities dead, the effect is resolved.
+    os.kill(agent.pid, 9)
+    wait_until(lambda: not pid_alive(agent.pid), 5, "fixture agent gone")
+    check(module._own_holder_effect_remains(sb.record_dir, sb.platform, sb.session,
+                                            sb.repo.as_posix()) is False,
+          "both recorded identities dead resolves the own effect")
+
+
 TESTS = (
     ("literal_argv_structure", test_literal_argv_structure, False),
     ("foreign_identity_rejected", test_foreign_identity_rejected, False),
@@ -453,6 +488,7 @@ TESTS = (
     ("spaces_in_record_path", test_spaces_in_record_path, True),
     ("systemd_user_refusal", test_systemd_user_refusal, False),
     ("recovery_source_probes", test_recovery_source_probes, False),
+    ("live_agent_custody", test_live_agent_custody, False),
 )
 
 

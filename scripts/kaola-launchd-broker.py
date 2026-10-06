@@ -87,8 +87,13 @@ class BrokerError(Exception):
         self.facts = facts
 
     def receipt(self) -> dict:
-        return {"schema": SCHEMA, "result": "refused", "reason": self.code,
-                "detail": self.message, "holder_may_exist": bool(self.spawned), **self.facts}
+        out = {"schema": SCHEMA, "result": "refused", "reason": self.code,
+               "detail": self.message, "holder_may_exist": bool(self.spawned), **self.facts}
+        if self.spawned:
+            out["recovery"] = ("An own holder or native agent may still run. Exact-stop this "
+                               "session through the Runner, or re-run broker cleanup after the "
+                               "manager state is readable.")
+        return out
 
 
 # --------------------------------------------------------------------------- util
@@ -729,13 +734,19 @@ def _reconcile_failed_attempt(backend: str, label: str, spec_path: Path,
 
 
 def _own_holder_effect_remains(record_dir: Path, platform: str, session: str, repo: str) -> bool:
-    """Whether this exact session's recorded holder is still alive."""
+    """Whether this exact session's recorded holder OR native agent is alive.
+
+    The native agent runs in its own group, so a dead holder alone does not prove
+    no residual. Missing recorded identities are unknown, never a clean claim.
+    """
     record = read_json(record_dir / RECORD_NAME)
     if not record or record.get("platform") != platform or record.get("session") != session:
         return False
     if record.get("repo") != repo:
         return False
-    return pid_alive(record.get("holder_pid"))
+    return (pid_alive(record.get("holder_pid"))
+            or pid_alive(record.get("agent_pid"))
+            or pid_alive(record.get("agent_pgid")))
 
 
 def do_cleanup(args: argparse.Namespace) -> dict:
