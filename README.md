@@ -668,7 +668,8 @@ the task, interprets the output, and decides what to do next.
 ```bash
 ./scripts/render-skills.py --write   # regenerate skills/ and the README preset catalog
 ./scripts/render-skills.py --check
-./scripts/validate.sh
+./scripts/validate.sh                # whole inventory
+./scripts/validate.sh --suite test-progressive-disclosure.py   # one affected suite (repeatable)
 ```
 
 Edit the shared [worker Skill template](templates/SKILL.md.tmpl), [orchestrator
@@ -683,6 +684,13 @@ The offline suite checks generated Skills, installer behavior, shell syntax, tra
 contracts, and regression cases in an isolated temporary home directory. The full
 contract suite needs a dev machine with `tmux`, bash >= 4 (`mapfile`/`BASHPID`), and
 Python >= 3.10; a missing prerequisite skips its affected rows with a named receipt.
+`./scripts/validate.sh --suite <inventory-basename>` runs only the named existing
+inventory suites through the same controlled entry (sandbox HOME/TMPDIR, `KAOLA_*`
+scrub, watchdog, failure propagation, exact cleanup). It is an explicit subset, not an
+inferred dependency graph; a subset PASS is not full coverage. Use the whole inventory
+only when actual changes, remaining gaps or a binding requirement justify it, never
+merely for a return, commit, integration/release or QA label. An unchanged valid result
+may be reused; a new commit does not invalidate every prior result.
 Live validation separately exercises start, read, send, read-back, and exact-session
 stop with the actual CLI and account; dated live-evidence documents are linked from
 the [documentation index](docs/README.md) and are dated results, not a guarantee for

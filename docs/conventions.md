@@ -50,8 +50,27 @@ After an allowed source change:
 
 ```bash
 ./scripts/render-skills.py --write
-./scripts/validate.sh
+./scripts/render-skills.py --check
+./scripts/validate.sh --suite <inventory-basename>   # affected suites, repeatable
+./scripts/validate.sh                                # whole inventory when justified
 ```
+
+`--suite` accepts the basename (with extension) of an existing inventory suite, for
+example `./scripts/validate.sh --suite test-progressive-disclosure.py`. It runs only that
+explicit subset through the controlled entry; it does not infer dependencies from
+filenames, commit identity or a graph, and an unknown name is refused. The Host chooses
+the set from the affected interfaces and the remaining uncertainty. A subset PASS is not
+full coverage. Development feedback uses the affected suites and their required
+preparation; integration and release use the checks that the actual change, the remaining
+gaps and the existing release and live-ACP contracts require. An unchanged valid result
+may be reused; a new commit does not invalidate every prior result. A build cache is not a
+test-result cache; a toolchain, configuration, fixture, feature, platform or external
+input change can invalidate evidence. When ordinary feedback is slow or repeats coverage,
+give a concrete smaller scope, a reused valid result, or a bounded fixture/module split or
+decoupling; if a costly check cannot shrink, name its unique coverage and move it to the
+allowed integration or release boundary. Do not only raise a timeout or run more copies of
+the full gate; the hang watchdog is not a normal feedback budget, and no universal
+elapsed-time gate or new monitor is added.
 
 ## Progressive disclosure
 
