@@ -1,0 +1,197 @@
+# Lifecycle implementation completion report — six owner requirements
+
+Scope: the final integrated candidate on `workflow/issue-264` at `f562560f`
+(QA-r2 integration: on-demand capability projection, binding-independent
+recovery-input visibility, handled-decision retire reconciliation, scoped
+count-2 fixture, `t259:1248` repair, template wording) and `082da503`
+(Host capability-gap table: README § "Host runtime capabilities and limits",
+AGENTS.md authoritative sync, `host-entry-matrix` pre-selection disclosure,
+edge r3 folded into `docs/host-compact-capabilities.md` with hashed durable
+evidence). Requirements source: `.kw/worktrees/issue-264/AGENTS.md` §
+"Project special requirements — lifecycle implementation (#255)" at
+`3c7e7417`, plus owner clarifications relayed 2026-10-06 through the dot main
+session (capability table Sentinel_27d913395e90819199545f470d8c6421 /
+_15c6ec9ed9b08191a982e2d62258f92a / _e3b97d4346908191a717f86890655ad6;
+support criterion Sentinel_993c0853c4c08191843176126322f9b2; Fable-at-ready
+Sentinel_76e2d79995308191893e4ceb49466050). Each was adopted verbatim into
+the heartbeat task records (revisions 85–88) before implementation — the
+record → relay → adoption → implementation/QA → final-answer path this
+report closes. Review gate: actual dot main-thread + Claude Code Fable
+personal PASS both remain pending; PATCH publication stays held.
+
+## 1. Template fidelity
+
+**Mechanism.** Two typed routine JSONs with fixed schemas and role-owned
+writes: `.kaola/heartbeat-prompt.json` (`kaola-heartbeat-prompt/2`; `body`
+written only by the `state` tool, skeleton-conformant generated Host view)
+and `.kaola/delegator-heartbeat.json` (`kaola-delegator-heartbeat/1`, owned
+by the dot Delegator, read-only to the Host). Skill-side templates are
+canonical under `templates/`; installed copies are render output only
+(`render-skills.py --check` PASS at both commits, byte budgets intact).
+
+**Drift detection and correction.** Every write carries revision checks:
+`--expect-rev`/`--expect-revision` refusals were observed and honored in
+live operation (task `expect-rev-required` at rev 82; section retry 1107 →
+1108); `state check` reports problems (observed `ok / problems[]` at rev
+1101); `state migrate` plan mode reports `current` and keeps the one-time
+v1 backup (`heartbeat-prompt.v1-754a4d19cefe.json`) with a defined
+`state-overwritten` alert. The 2026-10-06 Host switch surfaced real drift —
+`recovery.host` still narrating the retired Codex Host — and the tool
+refused prose ("object of identity fields"; forbidden `native_session_id`
+key listed) until the write matched the typed template.
+
+**Native timer readback unavailable.** The dot timer entry carries a static
+`timer_template` that locates the repo file — changing project state never
+enters timer text; when native readback is absent, that static locator is
+the documented fallback.
+
+**Limitations.** The top-level `carrier` identity stamp is not rewritten by
+`update`/`migrate` in the current tool version (observed with both the
+frozen c337 writer and the installed dispatch tool; capability/size
+semantics unaffected — file ≈44.5 KiB < 64 KiB, `check` ok). Identity
+custody is carried by `recovery.host`, per-record `writer`/`writer_holder`,
+the Delegator snapshot (rev 20) and Runner records instead.
+
+## 2. Structured, current and inspectable information
+
+**Mechanism.** Current-only collections (`tasks`, `holds`, `alerts`,
+`decisions`): a handled row leaves atomically via `clear/resolve/retire`
+with original evidence — no tombstone, no copy in another field (now
+canonically tested in `test-issue-255`); role views and injected bodies
+derive from the stored collection; workers are refused as writers;
+Sideagent transcripts need `--host-turn`. `f562560f` makes the stored and
+injected heartbeat body the plain shared projection a holder recomputes at
+read time, while the catalog-enriched capability stays on demand
+(`state view --role host`, `project`) — the owner's 2026-10-06 no-compulsory-
+injection direction. Evidence stays by reference; the Host view is bounded.
+
+**Repeated-cycle evidence.** The run's own succession demonstrates
+non-accumulation: handoff snapshot rev 1097 → adoption writes 1098–1111
+replaced stale handoff prose with current facts each beat; maintenance
+`handled_host_revision` advanced 813 → 815 → 818 via node batches
+`b-680c4b4ba30c`, `b-512bf8d97734`, `b-b2efdd13e7db`; superseded timer/quota
+narrative (Grok-era, Codex-era) was replaced, not retained alongside.
+Efficiency is judged by outcome: worker events were judged and integrated
+in the same beat (delivery-r2 accepted → integration `f562560f` within one
+beat), the 21:15 Delegator inquiry reused existing evidence without a
+second audit, and no bookkeeping engine was added.
+
+**Limitations.** The dispatch index keeps its old-dispatcher correlation
+rows (correlation-only, by contract — historical provenance, not live
+ownership); five older in-flight rows remain until their lifecycle close.
+
+## 3. Host autonomy and Sideagent lifecycle
+
+**Mechanism.** The Host owns plan, dispatch, acceptance and QA; Sideagent is
+one maintenance node per meaningful batch of Host changes — fresh node,
+checkpoint, exact stop — with no compulsory round trip: `f562560f` removes
+the node duty for ordinary unbound Host business changes while a typed
+`recovery_input` stays visible without any binding (three-case canonical
+test added). Worker events go to the Host; the node wakes the Host only
+when attention changed.
+
+**Trace.** Role entry: native `/kaola-project-runner` Skill invocation (E1)
+with `KAOLA_ACP_DISPATCHER` identity and host-exists admission. Actual calls
+this run, all receipted: `list` sweeps (3 live rows, no orphans),
+`rebind-host` ×2 (same holders, carriers moved), one identity-guarded
+`send --no-wait` (repair prompt fingerprint `4f60504d…`), exact `stop` ×2
+(exit 0, residuals []), and the state writes above. Node lifecycle:
+`zcode-KPR-node-inquiry` batches with verified scoped checkpoints and
+stops; the compaction-recovery chain itself is proven per runtime in
+`docs/host-compact-capabilities.md` (e.g. Kimi verified scoped checkpoint
+`b-e93d1a2aaa85` on fixed `24a2355a`).
+
+**Parallel split** followed independent context boundaries (core / hooks /
+edge / baseline-QA lanes disjoint; no fixed reviewer count, no all-branch
+barrier).
+
+**Limitations.** Devin seam checkpoint honestly partial
+(`recovery-originals-unavailable` on links — fixture local-record evidence,
+named recovery retained); Cursor and Droid compaction stages remain
+unverified (no native completed signal in bounded attempts).
+
+## 4. Recovery and informed autonomy
+
+**Mechanism.** `--preserve-dispatched-workers` stop + per-seat `rebind-host`
+carrier continuity (live on Codex and ZCode); `--session`, `acp_session_id`
+and native `sess_*` kept as three separate facts (a Git worktree is never an
+ACP id); `drain-restart` for stale seats; the transient-failure contract
+(≥3 safe reconciled retries, no blind replay, in-progress ≠ failed);
+environment/configuration failures distinguished from model behavior.
+
+**Real cases.** (a) The 2026-10-06 Codex→ZCode Host switch: exact
+preserve-stop (exit 0, spared pgids 78497/81677, swept []), successor
+rebound both workers in place with unchanged holders, no resend or restart,
+and the run continued in-beat. (b) Same-assignment recovery: the baseline-QA
+repair went to the exact rebound seat once, identity-guarded, never
+re-sent. (c) QA failure reading: fixture count discrepancy classified
+source-supported; the binding-gate proposal rejected for hiding a real
+recovery duty; pre-existing `t259` failures isolated by a stash control run
+(clean HEAD: 8 failures; integrated: 7 — `1248` repaired, zero new
+regressions) instead of being blamed on the change.
+
+**Limitations.** `lifecycle-state.md` lists relay-across-holder-death,
+timer read-back and real (≈1 MiB) state size as unproven;
+`RealAcpInjection` (pre-existing failure) needs a live ACP runtime.
+
+## 5. Continuous improvement and evolution
+
+**Mechanism.** Redundancy and staleness are noticed in ordinary planning,
+review and QA without waiting for user reminders; corrections take the
+smallest sufficient form; obsolete guidance is retired rather than a rule
+added per incident.
+
+**Actual instances (no failure prerequisite).** Stale heartbeat-capability
+wording retired from `SKILL.md.tmpl` and `worker-profiles.md.tmpl` (on-demand
+projection); the stale "pending decision stays" assertion reconciled with
+the 2026-10-06 current-only contract (doc + test message); the superseded
+Grok/Codex handoff narrative replaced by the typed identity object; a
+scoped count-2 fixture instead of weakening module AUTH; two byte-budget
+overruns corrected by compressing wording (never by raising the locked
+budgets); scratch counterexamples promoted to canonical tests only where
+coverage was absent (three-case maintenance attention; plain-body holder
+assertion).
+
+**Evidence.** Diffs of `f562560f` / `082da503`; the tool refusals that
+forced precision; unchanged valid evidence reused rather than regenerated
+(ZCode row reused byte-identical `4b247` bridge facts).
+
+**Limitations.** Seven pre-existing `t259` failures (6 × `watch_alias`
+v0.90 grant-shape drift, 1 × `RealAcpInjection`) are documented and
+deferred to the affected-review boundary — named, not silently waived, and
+not expanded into new standing rules.
+
+## 6. Future upgrade continuity
+
+**Mechanism.** `state migrate` (plan → write; one-time v1 hash-named
+backup; unknown schema refused; repeat reports `current`); the
+`heartbeat-state/2` carrier size contract; render-only generated surfaces
+with locked byte budgets; the CHANGELOG `Seats:` convention and per-release
+pin/adapter operator test (`docs/conventions.md`); and the capability-table
+update convention from `082da503` — re-check a row only against actual
+runtime version, adapter and measured evidence, fill a gap only when
+verified, and never write unverified as unsupported or fully supported.
+
+**Evidence.** This run exercised the real continuity events: an updated
+Skill reload reconciled against live state; a Host replacement preserving
+grants, duties and in-flight work with zero worker restarts; integration on
+the same claim/worktree with revision-guarded state; and explicit
+evidence-reuse rules in the matrix.
+
+**Limitations.** Consumer-side install UAT is intentionally not performed
+(no-install boundary): installed runtime Skills remain at the prior release
+until the authorized PATCH release/install step; relay across holder death
+and timer read-back remain unproven as above.
+
+## Gate status
+
+Engineering evidence: `render-skills.py --check` PASS; `t255` full 128 OK;
+generated+progressive suites 15 OK; `t259` full file at 7 failures, all
+pre-existing at `3c7e7417` (8 → 7: `1248` repaired, zero new regressions,
+stash-controlled). Pending: dot main-thread personal PASS, Claude Code Fable
+personal PASS (owner decision Sentinel_76e2d799: Claude authentication is
+fixed — the real Fable review starts when this report makes the candidate
+review-ready; no probe start, no authentication investigation, existing
+all-tier shared-1 standing grant, no automatic model switch), original
+259/263/264/265/266 lifecycle close, release pins/content/`Seats`, and the
+next UNUSED stable PATCH under HOLD.
