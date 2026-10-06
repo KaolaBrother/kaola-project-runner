@@ -192,7 +192,7 @@ def validate_holder_argv(argv: list[str], record_dir: Path, socket: Path, platfo
     compares each named binding to the expected value. It is not a token
     blacklist and it never reconstructs text from the process table.
     """
-    if not isinstance(argv, list) or not argv or not all(isinstance(x, str) and x for x in argv):
+    if not isinstance(argv, list) or not argv or not all(isinstance(x, str) for x in argv):
         raise BrokerError("argv-empty", "the holder argv must be a non-empty literal list")
     if os.path.basename(argv[0]) in SHELL_BASENAMES:
         raise BrokerError("argv-shell", f"the holder argv must not start a shell ({argv[0]})")
@@ -222,14 +222,14 @@ def sock_path_for(record_dir: Path) -> Path:
             / (sha(str(record_dir))[:24] + ".sock"))
 
 
-def socket_state(sock: Path, timeout: float = 5.0) -> dict:
+def socket_op(sock: Path, op: str, params: dict, timeout: float = 5.0) -> dict:
     import socket as _socket
     connection = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
     try:
         connection.settimeout(timeout)
         connection.connect(str(sock))
-        payload = json.dumps({"op": "state", "request_id": secrets.token_hex(8),
-                              "params": {}}).encode("utf-8") + b"\n"
+        payload = json.dumps({"op": op, "request_id": secrets.token_hex(8),
+                              "params": params}).encode("utf-8") + b"\n"
         connection.sendall(payload)
         buffer = bytearray()
         while True:
@@ -245,6 +245,10 @@ def socket_state(sock: Path, timeout: float = 5.0) -> dict:
         return {"error": {"code": "holder-unreachable", "message": str(exc)}}
     finally:
         connection.close()
+
+
+def socket_state(sock: Path, timeout: float = 5.0) -> dict:
+    return socket_op(sock, "state", {}, timeout)
 
 
 def verified_holder(record_dir: Path, platform: str, session: str, repo: str,
@@ -336,7 +340,10 @@ def systemctl(*args: str) -> subprocess.CompletedProcess:
 def os_job_state(backend: str, label: str) -> str:
     """running | exited | absent for the owned job/unit, per the active backend."""
     if backend == "launchd":
-        out = launchctl("list").stdout
+        result = launchctl("list")
+        if result.returncode != 0:
+            return "unknown"
+        out = result.stdout
         for line in out.splitlines():
             parts = line.split()
             if len(parts) == 3 and parts[2] == label:
@@ -380,8 +387,7 @@ def os_bootstrap(backend: str, label: str, plist_path: Path, spec_path: Path) ->
             raise BrokerError("launch-in-progress",
                               "a job for this exact session is already running; reconcile it",
                               spawned=True, label=label)
-        if state == "exited":
-            launchctl("bootout", f"{domain}/{label}")
+        # An exited job is handled by do_submit with this attempt's identity.
         result = launchctl("bootstrap", domain, str(plist_path))
         if result.returncode != 0:
             state = os_job_state(backend, label)
@@ -500,21 +506,42 @@ def do_internal_run(spec_path: Path) -> dict:
     child_entry, child_error = _record_child(spec, verified["record"].get("holder_pid"))
     if spec.get("child_record") and child_error is not None:
         # A requested custody record that cannot be written is a failed nested
-        # launch: roll back this attempt's own holder rather than claim success.
-        terminate_owned(proc)
-        return {"schema": SCHEMA, "result": "refused", "reason": "child-record-failed",
-                "holder_may_exist": False, "child_record_error": child_error}
-    receipt = ready_facts(verified)
-    receipt.update({"schema": SCHEMA, "result": "ready", "label": spec.get("label"),
-                    "job_pid": proc.pid})
-    if child_entry is not None:
-        receipt["child_record"] = child_entry
-    # Best effort: a receipt write failure must not strand a ready holder.
+        # launch. Stop this exact holder through the existing identity path and
+        # reap our own child, so the native agent group is reclaimed too.
+        stop = _stop_owned_holder(Path(spec["socket"]),
+                                  verified["record"].get("holder_instance_id"), proc)
+        receipt = {"schema": SCHEMA, "result": "refused", "reason": "child-record-failed",
+                   "child_record_error": child_error, **stop}
+    else:
+        receipt = ready_facts(verified)
+        receipt.update({"schema": SCHEMA, "result": "ready", "label": spec.get("label"),
+                        "job_pid": proc.pid})
+        if child_entry is not None:
+            receipt["child_record"] = child_entry
+    # The receipt carries the custody outcome; a write failure must not strand a
+    # ready holder, but submit then cannot gate on it and reconciles instead.
     try:
         write_private_atomic(record_dir / RECEIPT_NAME, json.dumps(receipt, sort_keys=True).encode())
     except OSError:
         pass
     return receipt
+
+
+def _stop_owned_holder(sock: Path, instance: str | None, proc: subprocess.Popen) -> dict:
+    """Stop this attempt's holder by identity, then reap its own Popen child."""
+    params: dict = {"force": True}
+    if instance:
+        params["expected_holder_instance_id"] = instance
+    reply = socket_op(sock, "stop", params, 30.0)
+    reply = reply if isinstance(reply, dict) else {}
+    terminate_owned(proc)
+    residual = reply.get("residual_pids")
+    return {
+        "holder_may_exist": bool(residual) or pid_alive(proc.pid),
+        "host_session_stopped": bool(reply.get("stopped")),
+        "residual_pids": residual,
+        "holder_alive": pid_alive(proc.pid),
+    }
 
 
 def _record_child(spec: dict, holder_pid: object) -> tuple[dict | None, str | None]:
@@ -584,6 +611,15 @@ def do_submit(args: argparse.Namespace) -> dict:
     bootstrapped = False
     unresolved = False
     try:
+        # Pre-bootstrap: an exited job is unloaded only when this attempt owns it.
+        state = os_job_state(backend, label)
+        if state == "exited":
+            if os_job_owns(backend, label, spec_path):
+                os_unload(backend, label)
+            else:
+                raise BrokerError("job-occupied",
+                                  "an exited job for this session is not owned by this attempt; "
+                                  "reconcile it", label=label, os_state=state)
         write_private_exclusive(spec_path, json.dumps(spec, sort_keys=True).encode())
         write_private_exclusive(armed_path, json.dumps({"schema": SCHEMA, "nonce": nonce}).encode())
         if backend == "launchd":
@@ -599,24 +635,42 @@ def do_submit(args: argparse.Namespace) -> dict:
             write_private_exclusive(plist_path, plistlib.dumps(plist))
         os_bootstrap(backend, label, plist_path, spec_path)
         bootstrapped = True
-        verified = wait_verified(record_dir, platform, session, repo, float(args.ready_timeout))
+        # Gate on the internal receipt: it carries the required custody outcome.
+        receipt = wait_receipt_file(record_dir, float(args.ready_timeout))
+        if receipt is None:
+            state = os_job_state(backend, label)
+            raise BrokerError("holder-not-ready",
+                              "the internal startup wrote no outcome inside the window",
+                              spawned=(state != "absent"), label=label, os_state=state)
+        if receipt.get("result") == "refused":
+            raise BrokerError(receipt.get("reason") or "launch-refused",
+                              receipt.get("child_record_error") or "the internal startup refused",
+                              spawned=bool(receipt.get("holder_may_exist")), label=label)
+        verified = wait_verified(record_dir, platform, session, repo, 5.0,
+                                 expect_pid=receipt.get("holder_pid"))
         if verified is None:
             state = os_job_state(backend, label)
             raise BrokerError("holder-not-ready",
-                              "holder did not reach a verified ready state inside the window",
+                              "the reported holder is not a verified live holder",
                               spawned=(state != "absent"), label=label, os_state=state)
-        os_wait_stopped(backend, label, 5.0)
-        os_unload(backend, label)
+        if os_job_owns(backend, label, spec_path):
+            os_wait_stopped(backend, label, 5.0)
+            os_unload(backend, label)
         return {"schema": SCHEMA, "result": "ready", "reconciled": False,
                 "label": label, "backend": backend, **ready_facts(verified)}
-    except BrokerError:
-        unresolved = _reconcile_failed_attempt(backend, label, spec_path, bootstrapped, args)
+    except BrokerError as exc:
+        unresolved, state = _reconcile_failed_attempt(backend, label, spec_path, args)
+        if not exc.spawned and (unresolved or verified_holder(record_dir, platform, session, repo)):
+            exc.spawned = True
         raise
-    except Exception:
+    except Exception as exc:
         # An unexpected failure (for example a private-file write error) still
         # reconciles and never claims a clean effect it cannot prove.
-        unresolved = _reconcile_failed_attempt(backend, label, spec_path, bootstrapped, args)
-        raise
+        unresolved, state = _reconcile_failed_attempt(backend, label, spec_path, args)
+        if verified_holder(record_dir, platform, session, repo) is not None:
+            unresolved = True
+        raise BrokerError("launch-failed", f"{type(exc).__name__}: {exc}",
+                          spawned=unresolved) from exc
     finally:
         remove_quiet(record_dir / RECEIPT_NAME)
         if not unresolved:
@@ -628,25 +682,36 @@ def do_submit(args: argparse.Namespace) -> dict:
                 pass
 
 
+def wait_receipt_file(record_dir: Path, timeout: float) -> dict | None:
+    """The internal startup's own outcome receipt, ready or refused."""
+    deadline = time.monotonic() + max(timeout, 1.0)
+    while time.monotonic() < deadline:
+        receipt = read_json(record_dir / RECEIPT_NAME)
+        if receipt.get("result") in ("ready", "refused"):
+            return receipt
+        time.sleep(0.05)
+    return None
+
+
 def _reconcile_failed_attempt(backend: str, label: str, spec_path: Path,
-                              bootstrapped: bool, args: argparse.Namespace) -> bool:
+                              args: argparse.Namespace) -> tuple[bool, str]:
     """Bound a failed attempt's cleanup to its own job/holder.
 
-    Returns True when the exact effect cannot be established, so the caller
-    keeps the attempt evidence and reports an unknown outcome instead of a clean
-    claim. Never unloads a job this attempt cannot prove it owns.
+    Returns (unresolved, state). Unresolved is True when the exact effect cannot
+    be established, so the caller keeps the attempt evidence and reports an
+    unknown outcome. Never unloads a job this attempt cannot prove it owns.
     """
     if backend == "unsupported":
-        return False
-    owns = os_job_owns(backend, label, spec_path)
+        return False, "absent"
     state = os_job_state(backend, label)
-    if owns or (bootstrapped and state in ("running", "exited")):
+    owns = os_job_owns(backend, label, spec_path) if state in ("running", "exited") else False
+    if owns:
         os_wait_stopped(backend, label, float(args.ready_timeout) + 10.0)
         os_unload(backend, label)
-        return False
-    if state in ("running", "unknown"):
-        return True
-    return False
+        return False, state
+    if state in ("running", "exited", "unknown"):
+        return True, state
+    return False, state
 
 
 def do_cleanup(args: argparse.Namespace) -> dict:

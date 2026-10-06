@@ -35,6 +35,7 @@ SCRATCH = Path(os.environ.get("K266_COMPOSED_ROOT", "")).resolve() if os.environ
 ROOT = SCRATCH or Path(__file__).resolve().parents[2]
 ENTRY = ROOT / "scripts" / "claude-code-tmux.sh"
 FAKE = ROOT / "tests" / "contract" / "fake-claude.py"
+MOCK = ROOT / "tests" / "contract" / "mock-acp-agent.py"
 PYTHON = sys.executable or shutil.which("python3")
 LABEL_PREFIX = "com.kaolabrother.kaola-runner.launch."
 
@@ -113,13 +114,24 @@ class Sandbox:
         except ValueError as exc:  # noqa: F841
             raise AssertionError(f"{command} printed no JSON: {result.stdout[-400:]} {result.stderr[-400:]}")
 
-    def record_dir(self, session: str) -> Path:
-        return (self.record_root / "claude-code" / session
-                / sha(self.repo.as_posix())[:16])
-
-    def record(self, session: str) -> dict:
+    def tmux(self, platform: str, command: str, session: str, *args: str, timeout: float = 90,
+             **extra: str) -> dict:
+        argv = ["bash", str(ROOT / "scripts" / "kaola-tmux.sh"), platform, command,
+                "--repo", str(self.repo), "--session", session, *args]
+        result = subprocess.run(argv, capture_output=True, text=True, timeout=timeout,
+                                env=self.env(**extra))
         try:
-            return json.loads((self.record_dir(session) / "record.json").read_text())
+            return json.loads(result.stdout)
+        except ValueError as exc:  # noqa: F841
+            raise AssertionError(f"{platform} {command} printed no JSON: "
+                                 f"{result.stdout[-400:]} {result.stderr[-400:]}")
+
+    def record_dir(self, session: str, platform: str = "claude-code") -> Path:
+        return (self.record_root / platform / session / sha(self.repo.as_posix())[:16])
+
+    def record(self, session: str, platform: str = "claude-code") -> dict:
+        try:
+            return json.loads((self.record_dir(session, platform) / "record.json").read_text())
         except (OSError, ValueError):
             return {}
 
@@ -129,7 +141,13 @@ class Sandbox:
 
     def cleanup(self, sessions: list[str]) -> None:
         for session in sessions:
-            self.track(self.record(session).get("holder_pid"))
+            for platform in ("claude-code", "opencode"):
+                self.track(self.record(session, platform).get("holder_pid"))
+        out = subprocess.run(["ps", "-axo", "pid,command"], capture_output=True, text=True).stdout
+        for line in out.splitlines():
+            parts = line.split(None, 1)
+            if len(parts) == 2 and str(self.record_root) in parts[1] and parts[0].isdigit():
+                self.track(int(parts[0]))
         for pid in sorted(set(self.pids), reverse=True):
             for sig in (15, 9):
                 try:
@@ -162,6 +180,69 @@ def rollback_source_check() -> None:
     check(result.get("host_session_stopped") is True and result.get("residual_pids") == []
           and result.get("holder_alive") is False,
           "stop_started_holder(proc=None) returns honest facts without an exception", result=result)
+
+
+def _residual_for(record_dir: Path) -> list[str]:
+    out = subprocess.run(["ps", "-axo", "pid,command"], capture_output=True, text=True).stdout
+    return [line for line in out.splitlines() if str(record_dir) in line]
+
+
+def required_child_record_failure() -> None:
+    """A required child-record write failure must not claim a nested success."""
+    sb = Sandbox()
+    session = f"claude-code-K266cust-{uuid.uuid4().hex[:6]}"
+    bad = sb.dir / "child-dir"          # a directory: append must fail
+    bad.mkdir()
+    try:
+        receipt = sb.cli("start", session, KAOLA_ACP_CHILD_RECORD=str(bad), timeout=150)
+        code = (receipt.get("error") or {}).get("code")
+        check(code == "child-record-failed",
+              "a required child-record write failure refuses through the real entry",
+              receipt=receipt)
+        check(receipt.get("mutation_status") in ("not_started", "unknown"),
+              "the custody failure reports truthful mutation state",
+              mutation=receipt.get("mutation_status"))
+        wait_until(lambda: _residual_for(sb.record_dir(session)) == [], 8,
+                   "the failed nested launch leaves no holder or agent")
+        check(_residual_for(sb.record_dir(session)) == [],
+              "no residual holder or native agent remains after the custody rollback")
+        status = sb.cli("status", session, timeout=30)
+        check(status.get("state") != "ready",
+              "the custody rollback leaves no ready session",
+              status={k: status.get(k) for k in ("state", "error")})
+    finally:
+        sb.cleanup([session])
+
+
+def _opencode_shim(sb: Sandbox) -> Path:
+    bin_dir = sb.dir / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    shim = bin_dir / "opencode"
+    shim.write_text("#!/bin/sh\nexec " + PYTHON + " " + str(MOCK) + " --caps strict-config \"$@\"\n")
+    shim.chmod(0o755)
+    return bin_dir
+
+
+def configuration_refusal_rollback() -> None:
+    """The real opencode entry must refuse an unverified explicit selection."""
+    sb = Sandbox()
+    bin_dir = _opencode_shim(sb)
+    session = f"opencode-K266-{uuid.uuid4().hex[:6]}"
+    try:
+        receipt = sb.tmux("opencode", "start", session, "--model", "gpt-6.1-sol",
+                          "--effort", "xhigh", timeout=180,
+                          PATH=f"{bin_dir}:{ROOT}:{os.environ.get('PATH', '/usr/bin:/bin')}")
+        code = receipt.get("reason") or (receipt.get("error") or {}).get("code")
+        check(code == "explicit-selection-unverified",
+              "the real opencode entry refuses an unverified explicit selection", receipt=receipt)
+        check(receipt.get("mutation_status") in ("not_started", "unknown"),
+              "the refusal reports truthful mutation state", mutation=receipt.get("mutation_status"))
+        wait_until(lambda: _residual_for(sb.record_dir(session, "opencode")) == [], 8,
+                   "the refused configuration leaves no holder or agent")
+        check(_residual_for(sb.record_dir(session, "opencode")) == [],
+              "no residual holder or native agent remains after the refusal")
+    finally:
+        sb.cleanup([session])
 
 
 def main() -> int:
@@ -253,6 +334,10 @@ def main() -> int:
               "the later exact Worker stop leaves no residual",
               stop={k: worker_stop.get(k) for k in ("stopped", "residual_pids")})
         wait_until(lambda: not pid_alive(worker_pid), 10, "Worker holder gone")
+
+        # The real entry's deliberate failure paths.
+        required_child_record_failure()
+        configuration_refusal_rollback()
     except AssertionError as exc:
         failures.append(str(exc))
     finally:
