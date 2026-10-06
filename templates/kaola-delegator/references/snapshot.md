@@ -27,10 +27,9 @@ Both files hold current facts only:
 The existing native timer is the only scheduler; its prompt stays static:
 Skill entry and locator sentence ([inquiry-report.md](inquiry-report.md)). A full sweep is one Delegator inquiry; one owned permission event needs no additional full sweep. Each inquiry of an
 already-verified unchanged Host uses the commands below: read this file,
-verify `host` by fresh Runner `status`, report the delegator view, audit the Host `body` (its `authorization` holds the
-three Class definitions, a compact capability summary, and durable grants named by exact preset id;
-catalog profiles stay out of that body),
-send one correction with current values, replace stale facts. The correction
+verify `host` by fresh Runner `status`, report the delegator view, audit the Host `body` (typed current facts: durable grants by exact
+preset id, tasks and duties; Class definitions and capability text are
+on-demand projections, never in that body), send one correction onlyor genuinely stale facts. The correction
 may carry `sweep=Delegator inquiry: list --repo, verify identity, stop orphans only, keep in-flight, report`.
 Relay urgent owner stops immediately; never wait to consolidate other changes. Never write
 the Host JSON, copy its rows here, or select workers. Missing or unreadable: report, then recover from owner,

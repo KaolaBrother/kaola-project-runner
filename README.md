@@ -91,11 +91,11 @@ measured evidence, and fill a gap only when verified.
 | Claude Code 2.1.289 (bridge 0.1.0) | measured | qualified on older candidate `0553a8db` (full chain; affected-boundary reuse pending, no fresh current run) | busy: second user message joins the running turn (2.1.272 probe; write-only ack is narrower than processing; #263 adoption proof reused) | not a fresh current-holder proof after later changes/reinstall |
 | Codex 0.160.1 (codex-acp 2.0.1) | measured | **VERIFIED** scoped checkpoint (candidate `9f778981`) | busy: `injected`, agent-confirmed consumption while the turn runs (adapters 1.11.0/1.13.0, #263 reused; idle refused) | CODEX_HOME dropped by non-Codex broker caused a native global-trust side effect (qualified) |
 | Cursor CLI 2026.09.28 | measured | **UNREACHED** — no native completed signal in bounded attempts; preCompact notice fallback only | after-turn: holder queue + ordinary prompt — #263 verified the owned prompt processed ADOPTED on the same session (no native active-input route found) | post-compaction read/use and recovery unverified |
-| Devin 3000.11.3 | measured | chain complete, entry VALID, checkpoint honestly partial (`recovery-originals-unavailable` on links — fixture-evidence gap, named recovery) | busy: second `session/prompt` — #263 verified original tool completion and processed ADOPTED on the exact session (the native ack itself does not confirm adoption) | fixture needs one real prior-diagnostic record in the same record root |
-| Droid 0.233.0 | measured | **UNREACHED** — two finite attempts, no completed signal; PreCompact-notice fallback | busy: second `session/prompt` — #263 verified token processing, original tool exit 0 and both replies processed ADOPTED (exact native turn number not required) | post-compaction stages unverified; no threshold claim |
+| Devin 3000.11.3 | measured | chain complete, entry VALID, checkpoint honestly partial (`recovery-originals-unavailable` on links — fixture-evidence gap, named recovery) | busy: second `session/prompt` — #263 verified original tool completion and processed ADOPTED on the exact session (requested swe-2-max, advertised swe-2-high; the native ack itself does not confirm adoption) | fixture needs one real prior-diagnostic record in the same record root |
+| Droid 0.233.0 | measured | **UNREACHED** — two finite attempts, no completed signal; PreCompact-notice fallback | busy: second `session/prompt` — #263 verified token processing, original tool exit 0 and both replies processed ADOPTED (model prose contradicted its raw tool receipt; both retained; exact native turn number not required) | post-compaction stages unverified; no threshold claim |
 | DSH 0.2.0-rc.2 | measured | **VERIFIED** scoped checkpoint (explicit positive) | busy: plugin inbox admission — #263 verified the request preserved its tool and processed ADOPTED (admission alone proves less) | background forwarding / installed-adapter efficacy unverified |
 | Grok 1.0.46 | measured | **VERIFIED** scoped checkpoint (candidate `9f778981`) | busy: `_x.ai/interject` queued ack — #263 verified the request ended ADOPTED (queued ack alone is admission; adoption from outcome) | turn-end race can start a detached fallback turn |
-| Kimi CLI 2.1.1 | measured | **POSITIVE** on fixed `24a2355a`: full automatic chain, **VERIFIED** scoped checkpoint `b-e93d1a2aaa85` (explicit `/compact`) | after-turn: ACP rejects concurrent prompt (`agent_busy`) → holder queue + ordinary prompt — #263 verified the owned prompt processed ADOPTED; admission-guard proof passed | single-run positive; background route unmeasured; earlier r1/r2 partials retained |
+| Kimi CLI 2.1.1 | measured | **POSITIVE** on fixed `24a2355a`: full automatic chain, **VERIFIED** scoped checkpoint `b-e93d1a2aaa85` (explicit `/compact`) | after-turn: ACP rejects concurrent prompt (`agent_busy`) → holder queue + ordinary prompt — #263 verified the owned prompt processed ADOPTED; admission-guard proof ran on a different holder/CLI hash (not a full-byte final-holder proof) | single-run positive; background route unmeasured; earlier r1/r2 partials retained |
 | OpenCode 2.0.23 (bridge 47a3b97d) | measured | **VERIFIED** scoped checkpoint (candidate `24a2355a`, recovery-only) | busy: V2 local adapter inbox admission (2.0.22) — #263 verified the request ended ADOPTED (admitted ≠ adopted) | numbered wrapper omits final-newline byte exposure; home propagation qualified |
 
 Every runtime also has the composite `--steer-mode interrupt` path, and
@@ -387,9 +387,9 @@ This is the full supported-runtime catalog, not a machine-local choice list.
 Local choices require a runtime discovered in the bound execution target's
 effective launch context and a matching installed platform Runner that declares
 the tier. Show each discovered runtime with its Class and current authorization.
-Routine context keeps a capability summary of present profiles, not one
-profile row per preset. At a dispatch decision the Host projects eligible
-candidates and does not load the full table. The README stays the full
+Routine context keeps exact grants and current duties; the capability
+summary of present profiles is projected on demand at a dispatch decision,
+which loads eligible candidates, not the full table. The README stays the full
 catalog on every machine.
 See [choosing a worker](#choosing-a-worker).
 
@@ -464,10 +464,11 @@ equal distribution across runtimes, or invented work to fill capacity. Worker
 profiles keep their individual strengths — the GLM and SWE-2 presets carry
 substantial, full-cycle tasks.
 
-The Host keeps short class meanings and a capability summary of presets that
-are both local and currently authorized: discovered Worker pool members (minus
-your restrictions), granted Elite presets with their limits, and an Expert
-preset only while its permitted task is active. A local preset requires a
+The Host keeps exact grants and current duties; class meanings and the
+on-demand capability summary cover presets both local and currently
+authorized: discovered Worker pool members (minus your restrictions), granted
+Elite presets with their limits, and an Expert preset only while its
+permitted task is active. A local preset requires a
 runtime discovered in the bound target's effective launch context and a
 matching installed platform Runner. Unknown discovery stays in the candidate
 projection and is not described as absent or as a capability. At a dispatch
@@ -667,10 +668,11 @@ conversations where supported, or start a fresh session; and expose ACP sessions
 human inspection through `list`, `view`, and `follow`. The controlling agent chooses
 the task, interprets the output, and decides what to do next.
 
-- **Dispatch/collect**: Project Runner's routine heartbeat carries a compact
-  capability summary. At a dispatch decision the same entry projects eligible
-  candidates and runs one adopted research, QA, or report item, or a bounded
-  fan-out, through the existing platform Runners. An on-demand Sideagent may
+- **Dispatch/collect**: Project Runner keeps exact grants in its routine
+  state; a compact capability summary is projected on demand. At a dispatch
+  decision the same entry projects eligible candidates and runs one adopted
+  research, QA, or report item, or a bounded fan-out, through the existing
+  platform Runners. An on-demand Sideagent may
   prepare that plan, synthesize evidence, or do explicitly scoped light work.
   The Host still adopts the plan, accepts the result, and exact-stops seats.
 - **Skill names**: `<platform>-kaola-project-runner` for each of the ten runtimes,

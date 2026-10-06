@@ -33,9 +33,12 @@ canonical under `templates/`; installed copies are render output only
 `--expect-rev`/`--expect-revision` refusals were observed and honored in
 live operation (task `expect-rev-required` at rev 82; section retry 1107 →
 1108); `state check` reports problems (observed `ok / problems[]` at rev
-1101); `state migrate` plan mode reports `current` and keeps the one-time
-v1 backup (`heartbeat-prompt.v1-754a4d19cefe.json`) with a defined
-`state-overwritten` alert. The 2026-10-06 Host switch surfaced real drift —
+1101); `state migrate` plan mode reports `current`; it writes no v1 copy (the
+existing `heartbeat-prompt.v1-754a4d19cefe.json` is an earlier release's
+leftover, kept, `trusted: false`), and `state-overwritten` is not raised
+from copies — an older writer replacing the current file is no longer
+detected that way (recover from project, Runner and forge records); that
+reduced overwrite detection is a real limitation of this mechanism. The 2026-10-06 Host switch surfaced real drift —
 `recovery.host` still narrating the retired Codex Host — and the tool
 refused prose ("object of identity fields"; forbidden `native_session_id`
 key listed) until the write matched the typed template.
@@ -63,14 +66,21 @@ Sideagent transcripts need `--host-turn`. `f562560f` makes the stored and
 injected heartbeat body the plain shared projection a holder recomputes at
 read time, while the catalog-enriched capability stays on demand
 (`state view --role host`, `project`) — the owner's 2026-10-06 no-compulsory-
-injection direction. Evidence stays by reference; the Host view is bounded.
+injection direction; the `24a2355a`-measured chains remain valid across it
+because current holders recompute rather than inject the stored body, and
+the only attention change is the unbound ordinary-change case, which every
+measured chain (bound node-mode Sideagent, typed recovery input) never
+exercised. Evidence stays by reference; the Host view is bounded.
 
 **Repeated-cycle evidence.** The run's own succession demonstrates
 non-accumulation: handoff snapshot rev 1097 → adoption writes 1098–1111
 replaced stale handoff prose with current facts each beat; maintenance
 `handled_host_revision` advanced 813 → 815 → 818 via node batches
 `b-680c4b4ba30c`, `b-512bf8d97734`, `b-b2efdd13e7db`; superseded timer/quota
-narrative (Grok-era, Codex-era) was replaced, not retained alongside.
+narrative (Grok-era, Codex-era) was replaced, not retained alongside
+(the completed Codex→ZCode handoff order was later retired from
+`project.stop` and the typed `recovery.host` provenance refreshed in an
+ordinary Host write, per the Fable delta round).
 Efficiency is judged by outcome: worker events were judged and integrated
 in the same beat (delivery-r2 accepted → integration `f562560f` within one
 beat), the 21:15 Delegator inquiry reused existing evidence without a
@@ -108,7 +118,10 @@ barrier).
 **Limitations.** Devin seam checkpoint honestly partial
 (`recovery-originals-unavailable` on links — fixture local-record evidence,
 named recovery retained); Cursor and Droid compaction stages remain
-unverified (no native completed signal in bounded attempts).
+unverified (no native completed signal in bounded attempts). Kimi's
+completed signal is a text match on an agent message chunk
+(`kimi-compaction-chunk`, `occurrence_id: null`), not a native structured
+event.
 
 ## 4. Recovery and informed autonomy
 
@@ -171,8 +184,9 @@ copy; illegal aliases still refused with zero file writes); the
 
 ## 6. Future upgrade continuity
 
-**Mechanism.** `state migrate` (plan → write; one-time v1 hash-named
-backup; unknown schema refused; repeat reports `current`); the
+**Mechanism.** `state migrate` (plan → write; unknown schema refused; repeat reports
+`current`; writes no v1 copy — older-writer overwrite detection was
+removed with it, a stated limitation); the
 `heartbeat-state/2` carrier size contract; render-only generated surfaces
 with locked byte budgets; the CHANGELOG `Seats:` convention and per-release
 pin/adapter operator test (`docs/conventions.md`); and the capability-table
@@ -184,7 +198,9 @@ verified, and never write unverified as unsupported or fully supported.
 Skill reload reconciled against live state; a Host replacement preserving
 grants, duties and in-flight work with zero worker restarts; integration on
 the same claim/worktree with revision-guarded state; and explicit
-evidence-reuse rules in the matrix.
+evidence-reuse rules in the matrix. The grouped-grant reader proof is a
+scratch/source check (docs/conventions.md), not an all-runtime installed
+upgrade result.
 
 **Limitations.** Consumer-side install UAT is intentionally not performed
 (no-install boundary): installed runtime Skills remain at the prior release
@@ -194,6 +210,18 @@ still projects main's superseded seven-item/Opus AGENTS until the final
 lifecycle sink replaces them; that view is re-read and verified from
 canonical main after the sink, never declared correct from the candidate.
 
+## Evidence locators
+
+Revision-guard refusals and adoption receipts: rebind/stop receipts
+`/tmp/kpr-zcode-host-baseline-qa-exact-stop.json`,
+`/tmp/kpr-zcode-host-edge-exact-stop.json`; repair send
+`/tmp/kpr-zcode-host-baseline-qa-repair-send.json` (fingerprint
+`4f60504d…`); task-rev refusals appear in the adoption beat's tool output
+(rev 82 `expect-rev-required`; section retry 1107→1108; `state check` ok
+at 1101). Fable's base/candidate reproduction logs:
+`/tmp/kpr-fable-review-20261006/logs/`; its review:
+`/tmp/kpr-i264-final-fable-review-20261006.md`.
+
 ## Gate status
 
 Engineering evidence: `render-skills.py --check` PASS; `t255` full 128 OK;
@@ -202,15 +230,23 @@ generated+progressive suites 15 OK. Regression scope, precisely: at
 clean `3c7e7417` under the same stash-controlled, same-machine runs (8
 there; `1248` was repaired by `f562560f`); no new regression within the
 tested set (full `t255`/`t259` files plus the generated/progressive
-suites). Review binding: the dot main thread personally reviewed
-`0b3af748` (six answers, README table, both behavioral diffs, retire
-wording, seven-failure originals) and returned NOT PASS with four bounded
-corrections; this revision implements them (mock `--log` past the broker
-env allowlist, effective-authority equivalence assertions, restored
-Sideagent copy semantics in the decisions clause, review-binding and
-scoped-regression precision), and the correction commit SHA below binds
-the re-review scope. Fable's independent review of `0b3af748` continues
-and is not replaced by dot. Pending: dot main-thread personal PASS, Claude Code Fable
+suites). Review bindings: (a) the dot main thread personally reviewed `0b3af748`
+(six answers, README table, both behavioral diffs, retire wording,
+seven-failure originals) and returned NOT PASS with four bounded
+corrections — implemented at `19faebfd` (mock `--log` past the broker env
+allowlist with empirical confirmation, effective-authority equivalence
+assertions, restored Sideagent copy semantics, review-binding and
+scoped-regression precision), which also pre-resolved Fable's O2. (b)
+Claude Code Fable personally reviewed the same `0b3af748` (independent
+base/candidate reproduction; product code, tests, evidence copies,
+capability table and steer cells pass its review) and returned FAIL on
+O1–O4 — report/template wording only, no behavioural objection; R1–R4 are
+implemented in this delta revision (migration wording, delegator snapshot +
+README + Skill capability-wording alignment, the Kimi matrix-row
+self-contradiction, steer-cell qualifiers, completed-handoff retirement
+from live state), and a delta re-review of those hunks was requested; the
+residual grant-derived `capability` preset list in the injected body is
+recorded as a pending owner decision (Fable §6). Pending: dot main-thread personal PASS, Claude Code Fable
 personal PASS (owner decision Sentinel_76e2d799: Claude authentication is
 fixed — the real Fable review starts when this report makes the candidate
 review-ready; no probe start, no authentication investigation, existing
