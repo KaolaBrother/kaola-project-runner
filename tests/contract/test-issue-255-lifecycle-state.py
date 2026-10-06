@@ -767,7 +767,7 @@ class StateTool(StateProject):
 
 LEGACY_BODY = {
     "project": {"repo": "/abs/kt", "code": "KT", "goal": "close issues", "stop": "backlog empty",
-                "rules": ["no Friday release"]},
+                "requirements_source": "AGENTS.md"},
     "authorization": AUTH,
     "active": [{"ref": "#12", "session": "claude-code-KT-i12-fix", "next": "accept", "evidence": "wt-12"},
                {"ref": "#12", "session": "codex-KT-i12-qa", "next": "qa"}],
@@ -786,6 +786,13 @@ class Migration(StateProject):
         return self.file.read_bytes()
 
     def test_plan_then_write_preserves_duties_and_lists_unknowns(self) -> None:
+        ambiguous = dict(LEGACY_BODY, project={**LEGACY_BODY["project"], "rules": ["no Friday release"]})
+        raw = self.write_legacy(ambiguous)
+        code, refusal = self.state("migrate", "--file", str(self.file), "--write")
+        self.assertEqual((code, refusal["result"]), (2, "blocked"), refusal)
+        self.assertEqual(self.file.read_bytes(), raw, "unresolved owner intent is not dropped")
+        self.assertIn("project.rules", {row["path"] for row in refusal["report"]["blockers"]})
+        (self.repo / "AGENTS.md").write_text("## User special requirements\nNo Friday release.\n")
         raw = self.write_legacy()
         index = self.repo / "index.json"
         index.write_text(json.dumps({"items": [
@@ -808,7 +815,9 @@ class Migration(StateProject):
         state = doc["state"]
         self.assertEqual(doc["schema"], "kaola-heartbeat-prompt/2")
         self.assertEqual(state["authorization"], AUTH, "valid authorization is kept as is")
-        self.assertEqual(state["project"]["rules"], ["no Friday release"], "adopted rules are not re-asked")
+        self.assertNotIn("rules", state["project"])
+        self.assertEqual(state["project"]["requirements_source"], "AGENTS.md")
+        self.assertIn("No Friday release", (self.repo / "AGENTS.md").read_text())
         self.assertEqual(state["tasks"]["#12"]["sessions"], ["claude-code-KT-i12-fix", "codex-KT-i12-qa"])
         self.assertEqual(state["tasks"]["#12"]["dispatch"], ["qa"])
         self.assertEqual(len(state["tasks"]["#12"]["assignments"]), 2, "one assignment per v1 active row")
@@ -818,7 +827,7 @@ class Migration(StateProject):
             self.assertIn(f"{duty}-stage", state["unverified"])
         self.assertIn("legacy-cadence_note", state["unverified"], "an unknown key is kept for review")
         self.assertIn("index-lost", state["unverified"])
-        self.assertIn("rules-source", state["unverified"])
+        self.assertNotIn("rules-source", state["unverified"])
         self.assertIsNone(state["sideagent"], "a live Sideagent-role row alone is never bound")
         self.assertEqual(state["unverified"]["sideagent-candidate"]["live"][0]["session"], "zcode-KT-sideagent")
         self.assertEqual(doc["carrier"]["holder_instance_id"], "host-1")

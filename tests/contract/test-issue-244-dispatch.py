@@ -1274,18 +1274,18 @@ class DispatchEntry(unittest.TestCase):
                 "send": sent("fp-switch"),
             },
         })
-        capped = self.authorization([
-            {"id": "claude-code/opus-xhigh", "state": "granted"},
-            {"id": "claude-code/sonnet", "state": "granted"},
-        ], elite_cap=1)
+        capped = self.authorization([{
+            "preset_ids": ["claude-code/opus-xhigh", "claude-code/sonnet"],
+            "shared_seat": "claude-code", "state": "granted", "count": 1,
+        }])
         plan = self.plan([
             {"item_id": "opus", "preset": "claude-code/opus-xhigh", "session": "claude-code-KPR-i244-opus", "prompt": "a"},
             {"item_id": "sonnet", "preset": "claude-code/sonnet", "session": "claude-code-KPR-i244-sonnet", "prompt": "b"},
         ])
         payload = self.execute(plan, capped, self.availability(["claude-code/opus-xhigh", "claude-code/sonnet"]))
         by_id = {item["item_id"]: item for item in payload["items"]}
-        self.assertEqual(by_id["opus"]["status"], "in-flight")
-        self.assertEqual(by_id["sonnet"]["reason"], "count")
+        self.assertEqual(by_id["opus"]["reason"], "resource-conflict")
+        self.assertEqual(by_id["sonnet"]["reason"], "resource-conflict")
         wide = self.plan([
             {"item_id": "opus", "preset": "claude-code/opus-xhigh", "session": "claude-code-KPR-i244-opus", "prompt": "a"},
             {"item_id": "sonnet", "preset": "claude-code/sonnet", "session": "claude-code-KPR-i244-sonnet", "prompt": "b"},
@@ -1293,7 +1293,7 @@ class DispatchEntry(unittest.TestCase):
         self.log.write_text("", encoding="utf-8")
         payload = self.execute(wide, capped, self.availability(["claude-code/opus-xhigh", "claude-code/sonnet"]))
         by_id = {item["item_id"]: item for item in payload["items"]}
-        self.assertEqual(by_id["sonnet"]["reason"], "count")
+        self.assertEqual(by_id["sonnet"]["reason"], "resource-conflict")
         self.assertNotIn("effective_cap", payload)
 
         live = write_json(self.root, "live.json", {"rows": [
@@ -1308,7 +1308,11 @@ class DispatchEntry(unittest.TestCase):
             },
         ]})
         self.log.write_text("", encoding="utf-8")
-        payload = self.execute(plan, capped, self.availability(["claude-code/opus-xhigh", "claude-code/sonnet"]), live=live)
+        single = self.plan([{
+            "item_id": "opus", "preset": "claude-code/opus-xhigh",
+            "session": "claude-code-KPR-i244-opus", "prompt": "a",
+        }])
+        payload = self.execute(single, capped, self.availability(["claude-code/opus-xhigh", "claude-code/sonnet"]), live=live)
         self.assertTrue(all(item["reason"] == "occupancy-unknown" for item in payload["items"]), payload)
         self.assertEqual(commands(self.log), [])
 
@@ -1316,7 +1320,7 @@ class DispatchEntry(unittest.TestCase):
             {"id": "claude-code/opus-xhigh", "state": "granted"},
         ], elite_cap=1)
         self.log.write_text("", encoding="utf-8")
-        payload = self.execute(plan, omitted, self.availability(["claude-code/opus-xhigh"]), live="omit")
+        payload = self.execute(single, omitted, self.availability(["claude-code/opus-xhigh"]), live="omit")
         self.assertEqual(payload["items"][0]["reason"], "occupancy-unknown")
 
         owner = self.authorization([
@@ -1935,10 +1939,9 @@ class DispatchEntry(unittest.TestCase):
         state = {
             "project": {"repo": str(self.repo)},
             "authorization": {
-                "grants": [{"id": "claude-code/opus-xhigh", "state": "granted"}],
-                "paused": ["codex/luna"],
-                "revoked": ["devin/default"],
-                "elite_cap": 1,
+                "grants": [{"id": "claude-code/opus-xhigh", "state": "granted", "count": 1},
+                           {"id": "codex/luna", "state": "paused", "count": 1}],
+                "exclusions": ["devin/default"],
             },
         }
         auth = write_json(self.root, "heartbeat.json", {"body": json.dumps(state)})
@@ -1953,7 +1956,7 @@ class DispatchEntry(unittest.TestCase):
         self.assertNotIn("devin/default", ids)
         withheld = {row["id"]: row["reason"] for row in payload["withheld"]}
         self.assertEqual(withheld["codex/luna"], "paused")
-        self.assertEqual(withheld["devin/default"], "revoked")
+        self.assertEqual(withheld["devin/default"], "excluded")
         install_fake(self.skills, ["claude-code", "codex", "devin"])
         repo = str(self.repo)
         self.use_spec({
@@ -1973,7 +1976,7 @@ class DispatchEntry(unittest.TestCase):
         self.assertEqual(by_id["elite"]["status"], "in-flight")
         self.assertEqual(by_id["elite"]["reason"], "admitted")
         self.assertEqual(by_id["paused"]["reason"], "paused")
-        self.assertEqual(by_id["revoked"]["reason"], "revoked")
+        self.assertEqual(by_id["revoked"]["reason"], "excluded")
         sessions = {row["session"] for row in commands(self.log)}
         self.assertIn("claude-code-KPR-i244-env", sessions)
         self.assertNotIn("codex-KPR-i244-paused", sessions)
@@ -2025,10 +2028,10 @@ class DispatchEntry(unittest.TestCase):
             {"platform": "devin", "session": "devin-KPR-i244-live-devin", "repo": repo, "state": "ready", "holder_instance_id": "h-devin"},
             {"platform": "claude-code", "session": "claude-code-KPR-i244-live-opus", "repo": repo, "state": "ready", "holder_instance_id": "h-opus"},
         ]
-        room = self.authorization([
-            {"id": "claude-code/opus-xhigh", "state": "granted"},
-            {"id": "claude-code/sonnet", "state": "granted"},
-        ], elite_cap=2)
+        room = self.authorization([{
+            "preset_ids": ["claude-code/opus-xhigh", "claude-code/sonnet"],
+            "shared_seat": "claude-code", "state": "granted", "count": 2,
+        }])
         plan = self.plan([
             {"item_id": "sonnet", "preset": "claude-code/sonnet", "session": "claude-code-KPR-i244-sonnet", "prompt": "a"},
             {"item_id": "pool", "preset": "zcode/default", "session": "zcode-KPR-i244-pool", "prompt": "b"},
@@ -2038,12 +2041,15 @@ class DispatchEntry(unittest.TestCase):
         by_id = {item["item_id"]: item for item in payload["items"]}
         self.assertEqual(by_id["sonnet"]["status"], "in-flight", payload)
         self.assertEqual(by_id["pool"]["status"], "in-flight", payload)
-        tight = self.authorization([{"id": "claude-code/sonnet", "state": "granted"}], elite_cap=1)
+        tight = self.authorization([{
+            "preset_ids": ["claude-code/opus-xhigh", "claude-code/sonnet"],
+            "shared_seat": "claude-code", "state": "granted", "count": 1,
+        }])
         payload = self.execute(
             self.plan([{"item_id": "sonnet", "preset": "claude-code/sonnet", "session": "claude-code-KPR-i244-sonnet", "prompt": "a"}]),
             tight, self.availability(["claude-code/sonnet"]), live=live(workers),
         )
-        self.assertEqual(payload["items"][0]["reason"], "count")
+        self.assertEqual(payload["items"][0]["reason"], "shared-occupied")
         shared_auth = self.authorization([
             {"id": "droid/opus", "state": "granted", "shared_seat": "seat-alpha"},
             {"id": "codex/default", "state": "granted", "shared_seat": "codex"},

@@ -5244,6 +5244,8 @@ def migrate_document(doc: dict[str, Any], raw: bytes, path: Path, index: dict[st
     carrier, why = carrier_from_live(rows, repo)
     if not blockers:
         state["authorization"] = current_authorization(state["authorization"])
+        if state.get("retired") == []:
+            state.pop("retired")
         new_doc = {"schema": STATE_SCHEMA, "revision": 0, "state": state}
         if carrier:
             new_doc["carrier"] = carrier
