@@ -345,12 +345,29 @@ def os_job_state(backend: str, label: str) -> str:
     if backend == "systemd-user":
         result = systemctl("is-active", unit_for(label))
         state = result.stdout.strip()
-        if state == "active":
+        if state in ("active", "activating", "reloading"):
             return "running"
         if state in ("inactive", "failed", "deactivating"):
             return "exited"
-        return "absent"
+        # A manager error or unknown phrase is never a verified absence.
+        return "unknown"
     return "absent"
+
+
+def os_job_owns(backend: str, label: str, spec_path: Path) -> bool:
+    """Whether the loaded owned job/unit names this attempt's private spec.
+
+    This is the ownership receipt: the spec path is per-attempt, so only the
+    attempt that wrote it can own the loaded job.
+    """
+    marker = str(spec_path)
+    if backend == "launchd":
+        out = launchctl("print", f"gui/{owner_uid()}/{label}").stdout
+        return marker in out
+    if backend == "systemd-user":
+        result = systemctl("show", unit_for(label), "-p", "ExecStart")
+        return marker in result.stdout
+    return False
 
 
 def os_bootstrap(backend: str, label: str, plist_path: Path, spec_path: Path) -> None:
@@ -367,9 +384,10 @@ def os_bootstrap(backend: str, label: str, plist_path: Path, spec_path: Path) ->
             launchctl("bootout", f"{domain}/{label}")
         result = launchctl("bootstrap", domain, str(plist_path))
         if result.returncode != 0:
+            state = os_job_state(backend, label)
             raise BrokerError("bootstrap-failed",
                               f"launchctl bootstrap failed: {result.stderr.strip() or result.stdout.strip()}",
-                              label=label)
+                              spawned=(state != "absent"), label=label, os_state=state)
         return
     if backend == "systemd-user":
         # Explicit lifetime policy: KillMode=process leaves the detached holder
@@ -382,9 +400,10 @@ def os_bootstrap(backend: str, label: str, plist_path: Path, spec_path: Path) ->
              os.path.realpath(__file__), "--internal-run", "--spec", str(spec_path)],
             capture_output=True, text=True, timeout=30)
         if result.returncode != 0:
+            state = os_job_state("systemd-user", label)
             raise BrokerError("bootstrap-failed",
                               f"systemd-run failed: {result.stderr.strip() or result.stdout.strip()}",
-                              label=label)
+                              spawned=(state != "absent"), label=label, os_state=state)
         return
     raise BrokerError("launch-backend-unsupported", f"no OS operation for backend {backend}")
 
@@ -478,12 +497,18 @@ def do_internal_run(spec_path: Path) -> dict:
         terminate_owned(proc)
         return {"schema": SCHEMA, "result": "refused", "reason": "holder-not-ready",
                 "holder_may_exist": False, "job_pid": proc.pid}
+    child_entry, child_error = _record_child(spec, verified["record"].get("holder_pid"))
+    if spec.get("child_record") and child_error is not None:
+        # A requested custody record that cannot be written is a failed nested
+        # launch: roll back this attempt's own holder rather than claim success.
+        terminate_owned(proc)
+        return {"schema": SCHEMA, "result": "refused", "reason": "child-record-failed",
+                "holder_may_exist": False, "child_record_error": child_error}
     receipt = ready_facts(verified)
-    child = _record_child(spec, verified["record"].get("holder_pid"))
     receipt.update({"schema": SCHEMA, "result": "ready", "label": spec.get("label"),
                     "job_pid": proc.pid})
-    if child is not None:
-        receipt["child_record"] = child
+    if child_entry is not None:
+        receipt["child_record"] = child_entry
     # Best effort: a receipt write failure must not strand a ready holder.
     try:
         write_private_atomic(record_dir / RECEIPT_NAME, json.dumps(receipt, sort_keys=True).encode())
@@ -492,17 +517,19 @@ def do_internal_run(spec_path: Path) -> dict:
     return receipt
 
 
-def _record_child(spec: dict, holder_pid: object) -> dict | None:
+def _record_child(spec: dict, holder_pid: object) -> tuple[dict | None, str | None]:
     path = spec.get("child_record")
-    if not path or not isinstance(holder_pid, int) or holder_pid <= 0:
-        return None
+    if not path:
+        return None, None
+    if not isinstance(holder_pid, int) or holder_pid <= 0:
+        return None, "the holder pid is not known"
     entry = {"pid": holder_pid, "pgid": holder_pid, "spawned_at": int(time.time() * 1000)}
     try:
         with open(path, "a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry, sort_keys=True) + "\n")
-    except OSError:
-        return None
-    return entry
+    except OSError as exc:
+        return None, str(exc)
+    return entry, None
 
 
 def do_submit(args: argparse.Namespace) -> dict:
@@ -555,6 +582,7 @@ def do_submit(args: argparse.Namespace) -> dict:
     if args.argv_json:
         remove_quiet(Path(args.argv_json))
     bootstrapped = False
+    unresolved = False
     try:
         write_private_exclusive(spec_path, json.dumps(spec, sort_keys=True).encode())
         write_private_exclusive(armed_path, json.dumps({"schema": SCHEMA, "nonce": nonce}).encode())
@@ -573,27 +601,52 @@ def do_submit(args: argparse.Namespace) -> dict:
         bootstrapped = True
         verified = wait_verified(record_dir, platform, session, repo, float(args.ready_timeout))
         if verified is None:
+            state = os_job_state(backend, label)
             raise BrokerError("holder-not-ready",
                               "holder did not reach a verified ready state inside the window",
-                              spawned=True, label=label)
+                              spawned=(state != "absent"), label=label, os_state=state)
         os_wait_stopped(backend, label, 5.0)
         os_unload(backend, label)
         return {"schema": SCHEMA, "result": "ready", "reconciled": False,
                 "label": label, "backend": backend, **ready_facts(verified)}
     except BrokerError:
-        # Clean ONLY the job this attempt created.
-        if bootstrapped:
-            os_wait_stopped(backend, label, float(args.ready_timeout) + 10.0)
-            os_unload(backend, label)
+        unresolved = _reconcile_failed_attempt(backend, label, spec_path, bootstrapped, args)
+        raise
+    except Exception:
+        # An unexpected failure (for example a private-file write error) still
+        # reconciles and never claims a clean effect it cannot prove.
+        unresolved = _reconcile_failed_attempt(backend, label, spec_path, bootstrapped, args)
         raise
     finally:
-        remove_quiet(attempt)
         remove_quiet(record_dir / RECEIPT_NAME)
-        try:
-            if not any(run_dir.iterdir()):
-                remove_quiet(run_dir)
-        except OSError:
-            pass
+        if not unresolved:
+            remove_quiet(attempt)
+            try:
+                if not any(run_dir.iterdir()):
+                    remove_quiet(run_dir)
+            except OSError:
+                pass
+
+
+def _reconcile_failed_attempt(backend: str, label: str, spec_path: Path,
+                              bootstrapped: bool, args: argparse.Namespace) -> bool:
+    """Bound a failed attempt's cleanup to its own job/holder.
+
+    Returns True when the exact effect cannot be established, so the caller
+    keeps the attempt evidence and reports an unknown outcome instead of a clean
+    claim. Never unloads a job this attempt cannot prove it owns.
+    """
+    if backend == "unsupported":
+        return False
+    owns = os_job_owns(backend, label, spec_path)
+    state = os_job_state(backend, label)
+    if owns or (bootstrapped and state in ("running", "exited")):
+        os_wait_stopped(backend, label, float(args.ready_timeout) + 10.0)
+        os_unload(backend, label)
+        return False
+    if state in ("running", "unknown"):
+        return True
+    return False
 
 
 def do_cleanup(args: argparse.Namespace) -> dict:

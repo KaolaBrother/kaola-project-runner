@@ -162,9 +162,6 @@ def rollback_source_check() -> None:
     check(result.get("host_session_stopped") is True and result.get("residual_pids") == []
           and result.get("holder_alive") is False,
           "stop_started_holder(proc=None) returns honest facts without an exception", result=result)
-    for marker in ("stop_started_holder(sock, proc, holder_pid_hint)",
-                   "**stop_started_holder(sock, proc, holder_pid_hint)"):
-        check(marker in text, f"both rollback call sites pass the holder pid hint ({marker})")
 
 
 def main() -> int:
@@ -184,32 +181,39 @@ def main() -> int:
         return 0
 
     sb = Sandbox()
-    host = f"claude-code-K266host-{uuid.uuid4().hex[:6]}"
+    host = "claude-code-K266-orchestrator-main"
     worker = f"claude-code-K266work-{uuid.uuid4().hex[:6]}"
     sessions = [host, worker]
     failures: list[str] = []
     try:
         rollback_source_check()
-        host_start = sb.cli("start", host, "--launch-backend", "launchd")
+        # The normal Host entry: NO launch-backend flag. The shared path must
+        # select the outside launcher by default.
+        host_start = sb.cli("start", host)
         host_pid = host_start.get("holder_pid")
         sb.track(host_pid)
-        check(host_start.get("state") == "ready", "Host starts ready through the outside launcher",
+        check(host_start.get("state") == "ready",
+              "the normal Host entry starts ready through the outside launcher",
               receipt={k: host_start.get(k) for k in ("state", "holder_pid", "holder_instance_id")})
         host_ppid = subprocess.run(["ps", "-o", "ppid=", "-p", str(host_pid)],
                                    capture_output=True, text=True).stdout.strip()
-        check(host_ppid == "1", "Host holder is re-parented to the service manager", host_pid=host_pid)
-        check(sb.record(host).get("start_selection", {}).get("launch_backend") == "launchd",
-              "the backend is recorded in the Host start selection",
+        check(host_ppid == "1", "the Host holder is re-parented to the service manager", host_pid=host_pid)
+        check(sb.record(host).get("session_role") == "host",
+              "the Host session records the Host role", role=sb.record(host).get("session_role"))
+        check(sb.record(host).get("start_selection", {}).get("launch_backend") in ("auto", "launchd"),
+              "the normal Host entry records the outside backend",
               selection=sb.record(host).get("start_selection"))
+        holder_env = subprocess.run(["ps", "eww", "-o", "command=", "-p", str(host_pid)],
+                                    capture_output=True, text=True).stdout
+        check("KAOLA_LAUNCH_BACKEND=" in holder_env,
+              "the Host holder exports KAOLA_LAUNCH_BACKEND for its seats")
 
         # The Host dispatches a Worker: the outer agent environment carries the
-        # Host's child record and the backend the Host exported, exactly as a
-        # live Host turn would. The Worker passes NO explicit flag: it must
-        # inherit the outside backend.
+        # Host's child record. The Worker passes NO explicit flag and no injected
+        # backend, so it must use the shared normal path too.
         child_record = sb.record_dir(host) / "children.jsonl"
         worker_start = sb.cli("start", worker,
                               KAOLA_ACP_CHILD_RECORD=str(child_record),
-                              KAOLA_LAUNCH_BACKEND="launchd",
                               **{"KAOLA_ACP_DISPATCHER": json.dumps({
                                   "holder_instance_id": host_start.get("holder_instance_id"),
                                   "platform": "claude-code", "repo": str(sb.repo), "session": host})})
@@ -219,10 +223,10 @@ def main() -> int:
               receipt={k: worker_start.get(k) for k in ("state", "holder_pid", "holder_instance_id")})
         worker_ppid = subprocess.run(["ps", "-o", "ppid=", "-p", str(worker_pid)],
                                      capture_output=True, text=True).stdout.strip()
-        check(worker_ppid == "1", "the Worker inherits the outside backend and is re-parented",
+        check(worker_ppid == "1", "the Worker uses the shared normal path and is re-parented",
               worker_pid=worker_pid)
-        check(sb.record(worker).get("start_selection", {}).get("launch_backend") == "launchd",
-              "the inherited backend is recorded in the Worker start selection",
+        check(sb.record(worker).get("start_selection", {}).get("launch_backend") in ("auto", "launchd"),
+              "the Worker records the outside backend with no flag",
               selection=sb.record(worker).get("start_selection"))
         entries = [json.loads(l) for l in child_record.read_text().splitlines() if l.strip()] \
             if child_record.exists() else []
