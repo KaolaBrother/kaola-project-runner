@@ -229,15 +229,19 @@ at 1101). Fable's base/candidate reproduction logs:
 
 ## Gate status
 
-CODE CANDIDATE / GATE STATUS (final, at `ff5a5383`): all root rounds 1-6 integrated; the release-gate full
-inventory is GREEN on this SHA (85 suites EXIT 0, zero SKIPPED/FAILED, 99 elapsed, ~809 s;
-/tmp/kpr-final-inventory-v6.log; the prior green at `d4de8685` is /tmp/kpr-final-inventory-v5.log). History: the
-full review of `0b3af748` returned FAIL on E1 (twelve no-log SKIPs, all green at `main` `dad228e4`) — E1 was
-root-caused (four suites registered in the replay list but never in an execution lane; the `--suite` narrowing
-masked it), fixed (`204456e9`), and pinned by the lane-integrity regression (`b5472308`). dot/root scoped PASSes:
-the two E1 product functions, `#268` A + B + B-delta, `#267` binding/replay/conflict/pending, and the effort3
-three segments; those are root verdicts. The earlier "E1 as open successor frontier" text is superseded history.
-Engineering evidence: `render-skills.py --check`
+CODE CANDIDATE / GATE STATUS (current): the release candidate is the tip of `workflow/issue-264` after the
+Fable O1–O5 docs-and-test fix and the D1–D4 narrow corrections (`7ddfe5d5` plus this commit). Scope delivered and
+judged: E1 (root cause, lane fix, integrity regression), #267 (binding/replay/conflict/pending, catalog-declared
+effort order with the not-implemented reset documented, production dispatch-locator binding, one-transition
+handoff), #268 (four-fact continuity, no false preserved, per-axis readback, no intent inference). Root scoped
+PASSes cover the segments listed in state; Fable's final review passed the product code, tests, the seven issues
+as delivered, the six owner requirements and the capability table, with O1–O5 docs/test objections fixed on top.
+Final pending gates: one full inventory at the final SHA (subset checks green first), Fable's delta verdict on
+the narrow-fix commit, root's release decision, then the seven-issue lifecycle close, Seats/pins, main sink and
+consumer-view re-read. Review history (superseded): the full review of `0b3af748` returned FAIL on E1 — twelve
+no-log SKIPs root-caused to suites registered in the replay list but never in an execution lane (the `--suite`
+narrowing masked it), fixed at `204456e9`, pinned at `b5472308`; the earlier five-issue successor-frontier text
+is retired to this history note. Engineering evidence: `render-skills.py --check`
 PASS; `t255` full 128 OK; `t259` full 60/60; generated+progressive
 suites 15 OK — these cover the AFFECTED checks only; the full inventory
 is red as described above. Regression scope, precisely: at

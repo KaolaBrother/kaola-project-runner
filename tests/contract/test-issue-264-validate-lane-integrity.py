@@ -14,16 +14,16 @@ test-issue-83-lane-failure-visibility.py):
 """
 from __future__ import annotations
 
+import os
 import re
+import shutil
 import subprocess
 import unittest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 VALIDATE = REPO / "scripts" / "validate.sh"
-BASH = next((str(Path(p)) for p in (
-    Path.home() / ".local/bin/bash", Path("/usr/local/bin/bash"), Path("/opt/homebrew/bin/bash"))
-    if p.is_file()), "bash")
+BASH = shutil.which("bash") or "bash"
 
 
 def arrays() -> dict[str, list[str]]:
@@ -62,11 +62,18 @@ class LaneIntegrity(unittest.TestCase):
 
     def test_an_unregistered_suite_is_refused_not_silently_run(self) -> None:
         # A name in NO list must be rejected up front; the else->keep_b
-        # fallback may only ever see registered names.
+        # fallback may only ever see registered names. Needs bash >= 4; skip
+        # with this named receipt when the interpreter cannot be resolved
+        # (#151 convention).
+        version = subprocess.run([BASH, "--version"], capture_output=True, text=True)
+        match = re.search(r"version (\d+)", version.stdout)
+        if not match or int(match.group(1)) < 4:
+            self.skipTest("prerequisite missing: bash >= 4 is required; "
+                          "detected " + BASH)
         proc = subprocess.run(
             [BASH, str(VALIDATE), "--suite", "test-issue-999-does-not-exist.py"],
             capture_output=True, text=True, timeout=60,
-            env={"PATH": "/usr/bin:/bin:/usr/local/bin", "HOME": str(REPO.parent)},
+            env={**os.environ, "PATH": os.environ["PATH"]},
         )
         self.assertNotEqual(proc.returncode, 0, proc.stdout)
         self.assertIn("unknown", (proc.stderr + proc.stdout).lower(),

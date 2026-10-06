@@ -6,11 +6,11 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
-Seats: restart required (holder, ZCode bridge, quota catalog, adapters and ACP protocol changed since v0.9.0 per the operator test in docs/conventions.md)
+Seats: restart required
 
 The changed launch resolution and input parsing run in the client. Since
-v0.9.0 the holder, ZCode bridge, quota catalog, adapters and ACP protocol
-have also changed; see the operator test in docs/conventions.md.
+v0.9.0 the holder, the ZCode bridge, and the eight platform manifests
+have changed; see the operator test in docs/conventions.md.
 
 - Codex manifest launches use an explicit absolute `CODEX_PATH`, or resolve
   `CODEX_BIN` then PATH and supply the absolute executable to the adapter.
