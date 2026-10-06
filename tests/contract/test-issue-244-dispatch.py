@@ -714,7 +714,7 @@ class DispatchEntry(unittest.TestCase):
         self.assertEqual(by_id["core"]["reason"], "shared-occupied", payload)
         self.assertFalse(self.log.exists(), "dry-run must not call a Runner")
 
-    def test_write_overlap_is_a_conflict_and_pool_ignores_the_seat_cap(self) -> None:
+    def test_write_overlap_is_a_conflict_and_pool_uses_default_permission(self) -> None:
         install_fake(self.skills, ["codex", "cursor-cli", "zcode"])
         repo = str(self.repo)
         self.use_spec({
@@ -3145,7 +3145,7 @@ class DispatchEntry(unittest.TestCase):
         self.assertNotIn("lifetime", view["grants"][0])
         self.assertNotIn("expires", view["grants"][0])
 
-    def test_worker_fan_out_ignores_a_full_elite_cap_and_expert_count_still_binds(self) -> None:
+    def test_worker_fan_out_is_separate_from_occupied_elite_and_expert_counts(self) -> None:
         install_fake(self.skills, ["codex", "devin", "dsh", "opencode", "zcode"])
         repo = str(self.repo)
         real = os.path.realpath(repo)
