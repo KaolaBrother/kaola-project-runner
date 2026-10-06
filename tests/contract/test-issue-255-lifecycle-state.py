@@ -54,10 +54,8 @@ def run(args: list[str], env: dict[str, str] | None = None) -> tuple[int, dict]:
         raise AssertionError(f"not JSON ({exc}): {proc.stdout}\n{proc.stderr}") from exc
 
 
-AUTH = {"classes": {"Expert": "e", "Elite": "l", "Worker": "w"},
-        "grants": [{"id": "codex/default", "state": "granted", "count": 1},
-                   {"id": "zcode/default", "state": "granted"}],
-        "elite_cap": 2}
+AUTH = {"grants": [{"id": "codex/default", "state": "granted", "count": 1},
+                   {"id": "zcode/default", "state": "granted", "count": 1}]}
 CITE = '{"path":"README.md","locator":"README.md"}'
 
 
@@ -405,7 +403,7 @@ class StateTool(StateProject):
         revision = self.doc()["revision"]
         self.state("update", "--file", str(self.file), "--writer", "host", "--source", "owner-msg-3",
                    "--section", "authorization", "--expect-revision", str(revision),
-                   "--set", '{"elite_cap": 3}')
+                   "--set", '{"grants":[{"id":"codex/default","state":"granted","count":3}]}')
         sources = self.doc()["state"]["section_sources"]
         self.assertEqual(sources["authorization"]["source"], "owner-msg-3")
         self.assertEqual(sources["project"]["source"], "turn-1")
@@ -525,7 +523,7 @@ class StateTool(StateProject):
         revision = self.doc()["revision"]
         code, out = self.state("update", "--file", str(self.file), "--writer", "sideagent", "--source", "s",
                                "--section", "authorization", "--expect-revision", str(revision),
-                               "--set", '{"elite_cap": 9}')
+                               "--set", '{"grants":[{"id":"codex/default","state":"granted","count":9}]}')
         self.assertEqual(out["reason"], "host-only")
         code, out = self.state("update", "--file", str(self.file), "--writer", "host", "--source", "s",
                                "--section", "project", "--expect-revision", str(revision - 1),
@@ -831,7 +829,7 @@ class Migration(StateProject):
         self.assertFalse(list(self.file.parent.glob("heartbeat-prompt.v1-*.json")))
         self.assertFalse(out["report"]["overwrite_detection"]["raised"])
         body = json.loads(doc["body"])
-        self.assertEqual(body["authorization"]["classes"], AUTH["classes"])
+        self.assertNotIn("classes", body["authorization"])
         self.assertEqual(body["authorization"], AUTH, "old readers of body still find authorization")
         code, again = self.state(*args, "--write")
         self.assertEqual(again["result"], "current", "a repeated migration changes nothing")
