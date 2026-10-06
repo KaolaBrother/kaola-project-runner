@@ -166,9 +166,59 @@
       "skill_payload_checks": [],
       "task_progress": "# QA progress (scratch)\n\n- step1 TASK-A: fixture seeded by controller. DONE.\n- step2 TASK-B: CURRENT. At the next maintained boundary, the Host records its\n  post-compaction installed-Skill read result (paths, byte counts, last lines)\n  and continues this duty from durable records.\n",
       "stage3": "automatic activation / PARTIAL scoped checkpoint / exact reclaim; verified settlement remains UNVERIFIED",
-      "extra_recovery_keys": [
-        "seq"
-      ]
+      "original_checkpoint_entries": [
+        {
+          "lane": "core",
+          "runtime": "codex",
+          "node_event": 945,
+          "original": "/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-sideagent/1eb0bc62e7c7029a/events.jsonl",
+          "entry": {
+            "input": "recovery#1",
+            "checked": {
+              "authorization": [
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/AGENTS.md#KPR-USER-REQUIREMENTS",
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.project",
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.authorization",
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/delegator-heartbeat.json#project",
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/delegator-heartbeat.json#authorization",
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/kaola-workflow/kaola-project-runner/workflow-state.md#Claim",
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/kaola-workflow/.ledger/issue-264.jsonl#n=0",
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-orchestrator-main/1eb0bc62e7c7029a/record.json#holder_instance_id,session_role"
+              ],
+              "duties": [
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.decisions",
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.alerts",
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.holds",
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe",
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.maintenance.recovery_input",
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.maintenance.last_checkpoint.settled",
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-sideagent/1eb0bc62e7c7029a/events.jsonl#175",
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-orchestrator-main/1eb0bc62e7c7029a/events.jsonl#88",
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-orchestrator-main/1eb0bc62e7c7029a/events.jsonl#92"
+              ],
+              "links": [
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe.dispatch[0]",
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe.evidence",
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/dispatch-index.json#items[0]",
+                "/tmp/kpr-i264-862-core/oc/receipt.json#steps.compact_end,steps.continue_end,tools_after_boundary,stop",
+                "/tmp/kpr-i264-862-core/oc/record/record.json#state,session,holder_instance_id,event_cursor",
+                "/tmp/kpr-i264-862-core-runtime-proof.md#OpenCode detail",
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-orchestrator-main/1eb0bc62e7c7029a/events.jsonl#88",
+                "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-orchestrator-main/1eb0bc62e7c7029a/events.jsonl#94"
+              ]
+            },
+            "unavailable": {},
+            "retained": "tasks/qa-observe"
+          },
+          "unknown_keys": [
+            "retained"
+          ]
+        }
+      ],
+      "rejected_input_keys": [
+        "retained"
+      ],
+      "result_seq_note": "tool-added normalized result provenance; not an invalid entry key"
     },
     "grok": {
       "original_events": "/tmp/kpr-i264-host-chain-1035/core/grok/run/records/grok/grok-KPR1035C-orchestrator-main/0756befdb8df4e56/events.jsonl",
@@ -346,9 +396,47 @@
       ],
       "task_progress": "# QA progress (scratch)\n\n- step1 TASK-A: fixture seeded by controller. DONE.\n- step2 TASK-B: CURRENT. At the next maintained boundary, the Host records its\n  post-compaction installed-Skill read result (paths, byte counts, last lines)\n  and continues this duty from durable records.\n- 2026-10-06: verified post-compaction installed-Skill read. Role skill `/Users/ylmacstudio/.grok/skills/kaola-project-runner/SKILL.md` 17407 bytes, last line `machine, quota engine, or close-out dashboard or ledger.` Platform skill `/Users/ylmacstudio/.grok/skills/grok-kaola-project-runner/SKILL.md` 10193 bytes, last line `and [references/acp.md](references/acp.md) for the structured ACP command surface.` Workflow Next is not active (claim none).\n",
       "stage3": "automatic activation / PARTIAL scoped checkpoint / exact reclaim; verified settlement remains UNVERIFIED",
-      "extra_recovery_keys": [
-        "seq"
-      ]
+      "original_checkpoint_entries": [
+        {
+          "lane": "core",
+          "runtime": "grok",
+          "node_event": 872,
+          "original": "/tmp/kpr-i264-host-chain-1035/core/grok/run/records/codex/codex-KPR1035C-sideagent/0756befdb8df4e56/events.jsonl",
+          "entry": {
+            "input": "recovery#1",
+            "retained": "tasks/qa-observe",
+            "checked": {
+              "authorization": [
+                "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/AGENTS.md#KPR-USER-REQUIREMENTS",
+                "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/.kaola/delegator-heartbeat.json",
+                "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/.kaola/heartbeat-prompt.json#state.project,state.authorization"
+              ],
+              "duties": [
+                "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe,state.decisions,state.alerts,state.holds",
+                "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/qa/progress.md",
+                "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/qa/task-skill.md",
+                "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+                "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/kaola-workflow/.ledger/issue-264.jsonl"
+              ],
+              "links": [
+                "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/.kaola/dispatch-index.json#qa-prior-reclaim-1",
+                "/tmp/kpr-i264-862-core/oc/receipt.json",
+                "/tmp/kpr-i264-862-core/oc/record/record.json",
+                "/tmp/kpr-i264-862-core/oc/record/events.jsonl#2,34-37,85",
+                "/tmp/kpr-i264-862-core-runtime-proof.md",
+                "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/records/grok/grok-KPR1035C-orchestrator-main/0756befdb8df4e56/events.jsonl#136,1374"
+              ]
+            }
+          },
+          "unknown_keys": [
+            "retained"
+          ]
+        }
+      ],
+      "rejected_input_keys": [
+        "retained"
+      ],
+      "result_seq_note": "tool-added normalized result provenance; not an invalid entry key"
     },
     "opencode": {
       "original_events": "/tmp/kpr-i264-host-chain-1035/core/opencode/run/records/opencode/opencode-KPR1035C-orchestrator-main/fe4e1fd89f04a300/events.jsonl",
@@ -535,9 +623,50 @@
       ],
       "task_progress": "# QA progress (scratch)\n\n- step1 TASK-A: fixture seeded by controller. DONE.\n- step2 TASK-B: CURRENT. At the next maintained boundary, the Host records its\n  post-compaction installed-Skill read result (paths, byte counts, last lines)\n  and continues this duty from durable records.\n- 2026-10-06 TASK-B verified: post-compaction full re-read of installed Skills —\n  qa/task-skill.md = 204 B, last line \"`qa/progress.md` naming what it verified.\";\n  kaola-project-runner/SKILL.md = 17407 B, last line \"machine, quota engine, or\n  close-out dashboard or ledger.\"; opencode-kaola-project-runner/SKILL.md = 10597 B,\n  last line \"and [references/acp.md](references/acp.md) for the structured ACP\n  command surface.\"; continuing step2 from durable records.\n",
       "stage3": "automatic activation / PARTIAL scoped checkpoint / exact reclaim; verified settlement remains UNVERIFIED",
-      "extra_recovery_keys": [
-        "seq"
-      ]
+      "original_checkpoint_entries": [
+        {
+          "lane": "core",
+          "runtime": "opencode",
+          "node_event": 1213,
+          "original": "/tmp/kpr-i264-host-chain-1035/core/opencode/run/records/codex/codex-KPR1035C-sideagent/fe4e1fd89f04a300/events.jsonl",
+          "entry": {
+            "input": "recovery#1",
+            "retained": "tasks/qa-observe",
+            "checked": {
+              "authorization": [
+                "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/AGENTS.md",
+                "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/delegator-heartbeat.json#/authorization",
+                "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/heartbeat-prompt.json#/state/project",
+                "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/heartbeat-prompt.json#/state/authorization",
+                "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+                "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/kaola-workflow/.ledger/issue-264.jsonl#1"
+              ],
+              "duties": [
+                "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/heartbeat-prompt.json#/state/decisions",
+                "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/heartbeat-prompt.json#/state/alerts",
+                "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/heartbeat-prompt.json#/state/tasks/qa-observe",
+                "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/qa/progress.md",
+                "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/qa/task-skill.md"
+              ],
+              "links": [
+                "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/heartbeat-prompt.json#/state/tasks/qa-observe/dispatch",
+                "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/dispatch-index.json#/items/qa-prior-reclaim-1",
+                "/tmp/kpr-i264-862-core/oc/receipt.json",
+                "/tmp/kpr-i264-862-core/oc/record/record.json",
+                "/tmp/kpr-i264-862-core-runtime-proof.md"
+              ]
+            }
+          },
+          "unknown_keys": [
+            "retained"
+          ]
+        }
+      ],
+      "rejected_input_keys": [
+        "retained"
+      ],
+      "result_seq_note": "tool-added normalized result provenance; not an invalid entry key"
     }
-  }
+  },
+  "causal_correction_source": "/tmp/kpr-1059-checkpoint-causal-correction.md"
 }

@@ -1,0 +1,248 @@
+[
+  {
+    "lane": "core",
+    "runtime": "codex",
+    "node_event": 945,
+    "original": "/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-sideagent/1eb0bc62e7c7029a/events.jsonl",
+    "entry": {
+      "input": "recovery#1",
+      "checked": {
+        "authorization": [
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/AGENTS.md#KPR-USER-REQUIREMENTS",
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.project",
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.authorization",
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/delegator-heartbeat.json#project",
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/delegator-heartbeat.json#authorization",
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/kaola-workflow/kaola-project-runner/workflow-state.md#Claim",
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/kaola-workflow/.ledger/issue-264.jsonl#n=0",
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-orchestrator-main/1eb0bc62e7c7029a/record.json#holder_instance_id,session_role"
+        ],
+        "duties": [
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.decisions",
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.alerts",
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.holds",
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe",
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.maintenance.recovery_input",
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.maintenance.last_checkpoint.settled",
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-sideagent/1eb0bc62e7c7029a/events.jsonl#175",
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-orchestrator-main/1eb0bc62e7c7029a/events.jsonl#88",
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-orchestrator-main/1eb0bc62e7c7029a/events.jsonl#92"
+        ],
+        "links": [
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe.dispatch[0]",
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe.evidence",
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/dispatch-index.json#items[0]",
+          "/tmp/kpr-i264-862-core/oc/receipt.json#steps.compact_end,steps.continue_end,tools_after_boundary,stop",
+          "/tmp/kpr-i264-862-core/oc/record/record.json#state,session,holder_instance_id,event_cursor",
+          "/tmp/kpr-i264-862-core-runtime-proof.md#OpenCode detail",
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-orchestrator-main/1eb0bc62e7c7029a/events.jsonl#88",
+          "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-orchestrator-main/1eb0bc62e7c7029a/events.jsonl#94"
+        ]
+      },
+      "unavailable": {},
+      "retained": "tasks/qa-observe"
+    },
+    "unknown_keys": [
+      "retained"
+    ]
+  },
+  {
+    "lane": "core",
+    "runtime": "grok",
+    "node_event": 872,
+    "original": "/tmp/kpr-i264-host-chain-1035/core/grok/run/records/codex/codex-KPR1035C-sideagent/0756befdb8df4e56/events.jsonl",
+    "entry": {
+      "input": "recovery#1",
+      "retained": "tasks/qa-observe",
+      "checked": {
+        "authorization": [
+          "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/AGENTS.md#KPR-USER-REQUIREMENTS",
+          "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/.kaola/delegator-heartbeat.json",
+          "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/.kaola/heartbeat-prompt.json#state.project,state.authorization"
+        ],
+        "duties": [
+          "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe,state.decisions,state.alerts,state.holds",
+          "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/qa/progress.md",
+          "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/qa/task-skill.md",
+          "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+          "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/kaola-workflow/.ledger/issue-264.jsonl"
+        ],
+        "links": [
+          "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/.kaola/dispatch-index.json#qa-prior-reclaim-1",
+          "/tmp/kpr-i264-862-core/oc/receipt.json",
+          "/tmp/kpr-i264-862-core/oc/record/record.json",
+          "/tmp/kpr-i264-862-core/oc/record/events.jsonl#2,34-37,85",
+          "/tmp/kpr-i264-862-core-runtime-proof.md",
+          "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/records/grok/grok-KPR1035C-orchestrator-main/0756befdb8df4e56/events.jsonl#136,1374"
+        ]
+      }
+    },
+    "unknown_keys": [
+      "retained"
+    ]
+  },
+  {
+    "lane": "core",
+    "runtime": "opencode",
+    "node_event": 1213,
+    "original": "/tmp/kpr-i264-host-chain-1035/core/opencode/run/records/codex/codex-KPR1035C-sideagent/fe4e1fd89f04a300/events.jsonl",
+    "entry": {
+      "input": "recovery#1",
+      "retained": "tasks/qa-observe",
+      "checked": {
+        "authorization": [
+          "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/AGENTS.md",
+          "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/delegator-heartbeat.json#/authorization",
+          "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/heartbeat-prompt.json#/state/project",
+          "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/heartbeat-prompt.json#/state/authorization",
+          "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+          "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/kaola-workflow/.ledger/issue-264.jsonl#1"
+        ],
+        "duties": [
+          "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/heartbeat-prompt.json#/state/decisions",
+          "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/heartbeat-prompt.json#/state/alerts",
+          "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/heartbeat-prompt.json#/state/tasks/qa-observe",
+          "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/qa/progress.md",
+          "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/qa/task-skill.md"
+        ],
+        "links": [
+          "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/heartbeat-prompt.json#/state/tasks/qa-observe/dispatch",
+          "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/dispatch-index.json#/items/qa-prior-reclaim-1",
+          "/tmp/kpr-i264-862-core/oc/receipt.json",
+          "/tmp/kpr-i264-862-core/oc/record/record.json",
+          "/tmp/kpr-i264-862-core-runtime-proof.md"
+        ]
+      }
+    },
+    "unknown_keys": [
+      "retained"
+    ]
+  },
+  {
+    "lane": "edge",
+    "runtime": "kimi",
+    "node_event": 1182,
+    "original": "/tmp/kpr-i264-host-chain-1035/edge/kimi/records/codex/codex-KPR103EK-sideagent/ec0c2da05cfe642c/events.jsonl",
+    "entry": {
+      "input": "recovery#1",
+      "retained": "tasks/qa-observe",
+      "checked": {
+        "authorization": [
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/AGENTS.md",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/delegator-heartbeat.json",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/heartbeat-prompt.json#state.project",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/heartbeat-prompt.json#state.authorization",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/kaola-workflow/.ledger/issue-264.jsonl"
+        ],
+        "duties": [
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/heartbeat-prompt.json#state.decisions",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/heartbeat-prompt.json#state.alerts",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/qa/progress.md",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/kaola-workflow/.ledger/issue-264.jsonl",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/receipts/state-task.json"
+        ],
+        "links": [
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe.dispatch",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/dispatch-index.json#qa-prior-reclaim-1",
+          "/tmp/kpr-heartbeat652-kimi-host-verification.json",
+          "/tmp/kpr-i264-862-dsh-kimi-runtime-proof.md",
+          "/tmp/kpr-heartbeat652-kimi-exact-stop.json",
+          "/tmp/kpr-i264-host-chain-1035/edge/kimi/records/kimi-cli/kimi-cli-KPR103EK-orchestrator-main/ec0c2da05cfe642c/events.jsonl#726",
+          "/tmp/kpr-i264-host-chain-1035/edge/kimi/records/kimi-cli/kimi-cli-KPR103EK-orchestrator-main/ec0c2da05cfe642c/record.json",
+          "/tmp/kpr-i264-host-chain-1035/edge/kimi/records/codex/codex-KPR103EK-sideagent/ec0c2da05cfe642c/record.json"
+        ]
+      },
+      "unavailable": {
+        "links": "qa-gap-missing remains listed in state.tasks.qa-observe.dispatch without a dispatch-index item or receipt; no Runner record for kimi-cli-KPR103EK-prior-diagnostic is present under /tmp/kpr-i264-host-chain-1035/edge/kimi/records. Preserve these as Host obligations."
+      }
+    },
+    "unknown_keys": [
+      "retained"
+    ]
+  },
+  {
+    "lane": "edge",
+    "runtime": "devin",
+    "node_event": 1452,
+    "original": "/tmp/kpr-i264-host-chain-1035/edge/devin/records/codex/codex-KPR103ED-sideagent/5bfda85e060e3e7c/events.jsonl",
+    "entry": {
+      "input": "recovery#1",
+      "retained": "tasks/qa-observe",
+      "checked": {
+        "authorization": [
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/AGENTS.md",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/delegator-heartbeat.json",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/heartbeat-prompt.json#state.project",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/heartbeat-prompt.json#state.authorization"
+        ],
+        "duties": [
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/heartbeat-prompt.json#state.decisions",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/heartbeat-prompt.json#state.alerts",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/qa/progress.md",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/kaola-workflow/.ledger/issue-264.jsonl",
+          "/tmp/kpr-i264-host-chain-1035/edge/devin/records/codex/codex-KPR103ED-sideagent/5bfda85e060e3e7c/events.jsonl#57"
+        ],
+        "links": [
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe.dispatch",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/dispatch-index.json#items[qa-prior-reclaim-1]",
+          "/tmp/kpr-acp-matrix-devin-20261005.md",
+          "/tmp/kpr-i264-862-dsh-kimi-runtime-proof.md",
+          "/tmp/kpr-devin-compact-probe-stopped-status.json",
+          "/tmp/kpr-i264-host-chain-1035/edge/devin/records/devin/devin-KPR103ED-orchestrator-main/5bfda85e060e3e7c/events.jsonl#270"
+        ]
+      },
+      "unavailable": {
+        "links": "qa-gap-missing: absent from .kaola/dispatch-index.json; no original dispatch/result/reclaim locator is available. The Host must resolve this seeded link gap."
+      }
+    },
+    "unknown_keys": [
+      "retained"
+    ]
+  },
+  {
+    "lane": "edge",
+    "runtime": "zcode",
+    "node_event": 1401,
+    "original": "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/codex/codex-KPR103EZ-sideagent/af6ada8b4fad8173/events.jsonl",
+    "entry": {
+      "input": "recovery#1",
+      "checked": {
+        "authorization": [
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/AGENTS.md",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/.kaola/delegator-heartbeat.json",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/.kaola/heartbeat-prompt.json#project,authorization",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/kaola-workflow/.ledger/issue-264.jsonl"
+        ],
+        "duties": [
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/.kaola/heartbeat-prompt.json#tasks,decisions,alerts",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/qa/progress.md",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/receipts/state-reactivate.json",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/receipts/host-start-sideagent-chain3.json",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/receipts/host-start-sideagent-recovery.json",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/receipts/host-stop-sideagent.json",
+          "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#2085",
+          "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#3363",
+          "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#3591"
+        ],
+        "links": [
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/.kaola/dispatch-index.json",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/qa/progress.md",
+          "/tmp/kpr-heartbeat673-zcode-host-verification.json",
+          "/tmp/kpr-i264-862-dsh-kimi-runtime-proof.md",
+          "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/codex/codex-KPR103EZ-sideagent/af6ada8b4fad8173/events.jsonl#917",
+          "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/codex/codex-KPR103EZ-sideagent/af6ada8b4fad8173/events.jsonl#918",
+          "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#137",
+          "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#138",
+          "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#2163"
+        ]
+      }
+    },
+    "unknown_keys": []
+  }
+]

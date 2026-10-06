@@ -1,0 +1,39 @@
+{
+  "body_bytes": 3024,
+  "file_bytes": 8666,
+  "file_limit": 65536,
+  "host_revision": 10,
+  "previous_revision": 14,
+  "result": "written",
+  "revision": 15,
+  "value": {
+    "mode": "node",
+    "platform": "codex",
+    "preset": "codex/luna",
+    "recipe": {
+      "argv": [
+        "codex",
+        "start",
+        "--repo",
+        "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo",
+        "--session",
+        "codex-KPR103EZ-sideagent",
+        "--role",
+        "sideagent",
+        "--tier",
+        "luna",
+        "--model",
+        "gpt-6-luna",
+        "--effort",
+        "max",
+        "--fast",
+        "off"
+      ],
+      "runner": "/tmp/kpr-i264-host-chain-1035/edge/candidate/scripts/kaola-tmux.sh"
+    },
+    "session": "codex-KPR103EZ-sideagent",
+    "since": "2026-10-06T10:13:17Z",
+    "source": "qa-diagnostic:reactivate sideagent binding for compact chain-3 boundary (edge-lane controller)",
+    "state": "active"
+  }
+}

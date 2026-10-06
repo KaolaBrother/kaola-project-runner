@@ -1,0 +1,67 @@
+{
+  "event_cursor": 1183,
+  "original": "/tmp/kpr-i264-host-chain-1035/edge/kimi/records/codex/codex-KPR103EK-sideagent/ec0c2da05cfe642c/events.jsonl",
+  "checkpoint": {
+    "at": "2026-10-06T09:33:09.806065+00:00",
+    "batch": "b-0d7be97b35b7",
+    "host_revision": {
+      "current": 3,
+      "from": 3,
+      "through": 3
+    },
+    "node": {
+      "holder_instance_id": "ac407e747581f8fdebbf0722b03f4e4f",
+      "session": "codex-KPR103EK-sideagent"
+    },
+    "recovery": {
+      "checked": {
+        "authorization": [
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/AGENTS.md",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/delegator-heartbeat.json",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/heartbeat-prompt.json#state.project",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/heartbeat-prompt.json#state.authorization",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/kaola-workflow/.ledger/issue-264.jsonl"
+        ],
+        "duties": [
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/heartbeat-prompt.json#state.decisions",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/heartbeat-prompt.json#state.alerts",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/qa/progress.md",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/kaola-workflow/.ledger/issue-264.jsonl",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/receipts/state-task.json"
+        ],
+        "links": [
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe.dispatch",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/dispatch-index.json#qa-prior-reclaim-1",
+          "/tmp/kpr-heartbeat652-kimi-host-verification.json",
+          "/tmp/kpr-i264-862-dsh-kimi-runtime-proof.md",
+          "/tmp/kpr-heartbeat652-kimi-exact-stop.json",
+          "/tmp/kpr-i264-host-chain-1035/edge/kimi/records/kimi-cli/kimi-cli-KPR103EK-orchestrator-main/ec0c2da05cfe642c/events.jsonl#726",
+          "/tmp/kpr-i264-host-chain-1035/edge/kimi/records/kimi-cli/kimi-cli-KPR103EK-orchestrator-main/ec0c2da05cfe642c/record.json",
+          "/tmp/kpr-i264-host-chain-1035/edge/kimi/records/codex/codex-KPR103EK-sideagent/ec0c2da05cfe642c/record.json"
+        ]
+      },
+      "input": {
+        "at": "2026-10-06T09:26:18.601674+00:00",
+        "evidence": "/tmp/kpr-i264-host-chain-1035/edge/kimi/records/kimi-cli/kimi-cli-KPR103EK-orchestrator-main/ec0c2da05cfe642c/events.jsonl#726",
+        "holder": "8043c53949194f52d4777691fd7bae56",
+        "kind": "host-compaction",
+        "occurrence_id": null,
+        "seq": 1,
+        "source": "completed-host-signal"
+      },
+      "seq": 1,
+      "unavailable": {
+        "links": "qa-gap-missing remains listed in state.tasks.qa-observe.dispatch without a dispatch-index item or receipt; no Runner record for kimi-cli-KPR103EK-prior-diagnostic is present under /tmp/kpr-i264-host-chain-1035/edge/kimi/records. Preserve these as Host obligations."
+      }
+    },
+    "returned_to_host": {
+      "recovery#1": "recovery-entry-unknown"
+    },
+    "settled": [],
+    "source": "b-0d7be97b35b7",
+    "verified": false
+  }
+}

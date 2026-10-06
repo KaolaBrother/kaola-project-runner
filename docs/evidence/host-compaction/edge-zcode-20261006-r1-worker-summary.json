@@ -1,0 +1,115 @@
+{
+ "platform": "zcode",
+ "runtime": "ZCode app-server 0.16.9 via candidate bridge kaola-zcode-acp.py",
+ "acp_session": "zcode-1",
+ "host_holder": "eaa5f0c66e49cb4a6c5524747b8c447e",
+ "events": [
+  {
+   "cursor": 16,
+   "step": "sideagent_node_started",
+   "kind": "sideagent_node_started",
+   "holder": "9394fe7ef23a9228b48bc9c3be4476df"
+  },
+  {
+   "cursor": 17,
+   "step": "sideagent_node_batch",
+   "kind": "sideagent_node_batch",
+   "batch": "b-318d92597beb",
+   "target_holder": "9394fe7ef23a9228b48bc9c3be4476df",
+   "host_revision_through": 3,
+   "prompt_fingerprint": "sha256:2adf21c809e04a22eeabf77e3946cef02dffc70b9ed94895ae2d848bc6092f9f"
+  },
+  {
+   "cursor": 136,
+   "step": "sideagent_node_settled",
+   "kind": "sideagent_node_settled",
+   "batch": "b-318d92597beb",
+   "holder": "9394fe7ef23a9228b48bc9c3be4476df",
+   "checkpoint": "verified",
+   "host_revision_through": 3,
+   "host_woken": true
+  },
+  {
+   "cursor": 141,
+   "step": "sideagent_node_stopped",
+   "kind": "sideagent_node_stopped",
+   "holder": "9394fe7ef23a9228b48bc9c3be4476df"
+  },
+  {
+   "cursor": 3589,
+   "step": "turn_ended(/compact)",
+   "kind": "turn_ended",
+   "prompt_fingerprint": "sha256:52e657bd1470bb75a808df9dbe93b8f82606f0b614db4d82e9a09dd291bf3f74"
+  },
+  {
+   "cursor": 3591,
+   "step": "compact_reload_detected",
+   "kind": "compact_reload_detected",
+   "source": "acp-compaction-update",
+   "occurrence_id": "zcode-state-14",
+   "session_id": "zcode-1",
+   "role": "host",
+   "holder": "eaa5f0c66e49cb4a6c5524747b8c447e"
+  },
+  {
+   "cursor": 3592,
+   "step": "compact_reload_delivered",
+   "kind": "compact_reload_delivered",
+   "prompt_fingerprint": "sha256:bf48d26d7fa8f500c056d7e7891d81ab8acc2c5ef37193f6db46403b993a779a"
+  },
+  {
+   "cursor": 3593,
+   "step": "host_compact_maintenance_registered",
+   "kind": "host_compact_maintenance_registered",
+   "signal_cursor": 3591
+  },
+  {
+   "cursor": 3594,
+   "step": "sideagent_node_started",
+   "kind": "sideagent_node_started",
+   "holder": "11ab6bbfa865bd9ade0e6b47e091dfff"
+  },
+  {
+   "cursor": 4499,
+   "step": "turn_ended(reload)",
+   "kind": "turn_ended",
+   "prompt_fingerprint": "sha256:bf48d26d7fa8f500c056d7e7891d81ab8acc2c5ef37193f6db46403b993a779a"
+  },
+  {
+   "cursor": 4500,
+   "step": "sideagent_node_batch",
+   "kind": "sideagent_node_batch",
+   "batch": "b-0adc9f467511",
+   "target_holder": "11ab6bbfa865bd9ade0e6b47e091dfff",
+   "host_revision_through": 10,
+   "prompt_fingerprint": "sha256:62106189a36ee8ba9380dae908c4b2a3cb1f56faf73b6c30de17bdfbdc5f8699"
+  },
+  {
+   "cursor": 4501,
+   "step": "sideagent_node_settled",
+   "kind": "sideagent_node_settled",
+   "batch": "b-0adc9f467511",
+   "holder": "11ab6bbfa865bd9ade0e6b47e091dfff",
+   "checkpoint": "verified",
+   "host_revision_through": 10,
+   "host_woken": false
+  },
+  {
+   "cursor": 4506,
+   "step": "sideagent_node_stopped",
+   "kind": "sideagent_node_stopped",
+   "holder": "11ab6bbfa865bd9ade0e6b47e091dfff"
+  }
+ ],
+ "raw_signal_3591": {
+  "method": "session/update",
+  "params": {
+   "sessionId": "zcode-1",
+   "update": {
+    "compactionId": "zcode-state-14",
+    "sessionUpdate": "compaction_update",
+    "status": "completed"
+   }
+  }
+ }
+}

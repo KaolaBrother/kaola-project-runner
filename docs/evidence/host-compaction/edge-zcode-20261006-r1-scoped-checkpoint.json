@@ -1,0 +1,70 @@
+{
+  "event_cursor": 1402,
+  "original": "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/codex/codex-KPR103EZ-sideagent/af6ada8b4fad8173/events.jsonl",
+  "checkpoint": {
+    "at": "2026-10-06T10:26:00.524772+00:00",
+    "batch": "b-0adc9f467511",
+    "host_revision": {
+      "current": 10,
+      "from": 3,
+      "through": 10
+    },
+    "node": {
+      "holder_instance_id": "11ab6bbfa865bd9ade0e6b47e091dfff",
+      "session": "codex-KPR103EZ-sideagent"
+    },
+    "recovery": {
+      "checked": {
+        "authorization": [
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/AGENTS.md",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/.kaola/delegator-heartbeat.json",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/.kaola/heartbeat-prompt.json#project,authorization",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/kaola-workflow/.ledger/issue-264.jsonl"
+        ],
+        "duties": [
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/.kaola/heartbeat-prompt.json#tasks,decisions,alerts",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/qa/progress.md",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/receipts/state-reactivate.json",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/receipts/host-start-sideagent-chain3.json",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/receipts/host-start-sideagent-recovery.json",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/receipts/host-stop-sideagent.json",
+          "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#2085",
+          "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#3363",
+          "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#3591"
+        ],
+        "links": [
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/.kaola/dispatch-index.json",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/qa/progress.md",
+          "/tmp/kpr-heartbeat673-zcode-host-verification.json",
+          "/tmp/kpr-i264-862-dsh-kimi-runtime-proof.md",
+          "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/codex/codex-KPR103EZ-sideagent/af6ada8b4fad8173/events.jsonl#917",
+          "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/codex/codex-KPR103EZ-sideagent/af6ada8b4fad8173/events.jsonl#918",
+          "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#137",
+          "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#138",
+          "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#2163"
+        ]
+      },
+      "input": {
+        "at": "2026-10-06T10:15:05.855397+00:00",
+        "evidence": "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#3591",
+        "holder": "eaa5f0c66e49cb4a6c5524747b8c447e",
+        "kind": "host-compaction",
+        "occurrence_id": "zcode-state-14",
+        "seq": 1,
+        "source": "completed-host-signal"
+      },
+      "seq": 1,
+      "unavailable": {}
+    },
+    "returned_to_host": {},
+    "settled": [
+      "host:alerts/maintenance-returned@9",
+      "host:section/sideagent@10",
+      "host:tasks/qa-observe@7",
+      "recovery#1"
+    ],
+    "source": "b-0adc9f467511",
+    "verified": true
+  }
+}

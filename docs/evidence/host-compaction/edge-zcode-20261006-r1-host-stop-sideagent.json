@@ -1,0 +1,1 @@
+{"error": {"code": "no-session", "message": "no ACP session record for this platform/session/repo"}, "git": {"branch": "master", "dirty": true}, "platform": "codex", "repo": "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo", "schema_version": 3, "session": "codex-KPR103EZ-sideagent", "transport": {"selected": "acp"}}

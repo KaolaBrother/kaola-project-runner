@@ -1,0 +1,102 @@
+{
+ "platform": "kimi-cli",
+ "runtime": "Kimi CLI 2.1.1",
+ "acp_session": "session_58ad0c33-bd29-406e-ba3d-cabbb22d020f",
+ "host_holder": "8043c53949194f52d4777691fd7bae56",
+ "events": [
+  {
+   "cursor": 13,
+   "kind": "sideagent_node_started",
+   "holder": "f48dcede4dbb646a72fa062a6a2afa80"
+  },
+  {
+   "cursor": 14,
+   "kind": "sideagent_node_batch",
+   "batch": "b-32e343bcede5",
+   "target_holder": "f48dcede4dbb646a72fa062a6a2afa80",
+   "host_revision_through": 3,
+   "prompt_fingerprint": "sha256:ae192b90d806185c276142e8808f2cd845864f208d381b7f398792f9fe4571c3"
+  },
+  {
+   "cursor": 717,
+   "kind": "sideagent_node_settled",
+   "batch": "b-32e343bcede5",
+   "holder": "f48dcede4dbb646a72fa062a6a2afa80",
+   "checkpoint": "verified",
+   "host_revision_through": 3,
+   "host_woken": false
+  },
+  {
+   "cursor": 722,
+   "kind": "sideagent_node_stopped",
+   "holder": "f48dcede4dbb646a72fa062a6a2afa80"
+  },
+  {
+   "cursor": 726,
+   "kind": "compact_reload_detected",
+   "source": "kimi-compaction-chunk",
+   "role": "host",
+   "session_id": "session_58ad0c33-bd29-406e-ba3d-cabbb22d020f",
+   "occurrence_id": null,
+   "holder": "8043c53949194f52d4777691fd7bae56"
+  },
+  {
+   "cursor": 727,
+   "kind": "compact_reload_delivered",
+   "prompt_fingerprint": "sha256:fd20065735761e02383c630045eddb8ee69e96b9c66843c35f67a3eeba244eb7"
+  },
+  {
+   "cursor": 728,
+   "kind": "host_compact_maintenance_registered",
+   "signal_cursor": 726
+  },
+  {
+   "cursor": 2423,
+   "kind": "turn_ended",
+   "prompt_fingerprint": "sha256:fd20065735761e02383c630045eddb8ee69e96b9c66843c35f67a3eeba244eb7"
+  },
+  {
+   "cursor": 2424,
+   "kind": "sideagent_node_started",
+   "holder": "ac407e747581f8fdebbf0722b03f4e4f"
+  },
+  {
+   "cursor": 2425,
+   "kind": "sideagent_node_batch",
+   "batch": "b-0d7be97b35b7",
+   "target_holder": "ac407e747581f8fdebbf0722b03f4e4f",
+   "host_revision_through": 3,
+   "prompt_fingerprint": "sha256:4a3d3e18e1b495ea29e3936ab311bc1a143744d81b160de3c7e35939607adb21"
+  },
+  {
+   "cursor": 2426,
+   "kind": "sideagent_node_settled",
+   "batch": "b-0d7be97b35b7",
+   "holder": "ac407e747581f8fdebbf0722b03f4e4f",
+   "checkpoint": "partial",
+   "host_revision_through": 3,
+   "host_woken": true
+  },
+  {
+   "cursor": 2435,
+   "kind": "sideagent_node_stopped",
+   "holder": "ac407e747581f8fdebbf0722b03f4e4f"
+  },
+  {
+   "cursor": 726,
+   "raw_signal": {
+    "method": "session/update",
+    "params": {
+     "sessionId": "session_58ad0c33-bd29-406e-ba3d-cabbb22d020f",
+     "update": {
+      "content": {
+       "text": "Compaction completed.\n- Messages compacted: 13\n- Tokens before: 33,117\n- Tokens after: 24,943",
+       "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+     }
+    }
+   }
+  }
+ ]
+}

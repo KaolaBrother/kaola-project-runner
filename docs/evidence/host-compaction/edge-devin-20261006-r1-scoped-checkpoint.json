@@ -1,0 +1,63 @@
+{
+  "event_cursor": 1453,
+  "original": "/tmp/kpr-i264-host-chain-1035/edge/devin/records/codex/codex-KPR103ED-sideagent/5bfda85e060e3e7c/events.jsonl",
+  "checkpoint": {
+    "at": "2026-10-06T10:48:19.033654+00:00",
+    "batch": "b-22f175756cbc",
+    "host_revision": {
+      "current": 3,
+      "from": 3,
+      "through": 3
+    },
+    "node": {
+      "holder_instance_id": "102735fe2b01c833904d87389f97d209",
+      "session": "codex-KPR103ED-sideagent"
+    },
+    "recovery": {
+      "checked": {
+        "authorization": [
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/AGENTS.md",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/delegator-heartbeat.json",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/heartbeat-prompt.json#state.project",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/heartbeat-prompt.json#state.authorization"
+        ],
+        "duties": [
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/heartbeat-prompt.json#state.decisions",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/heartbeat-prompt.json#state.alerts",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/qa/progress.md",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/kaola-workflow/.ledger/issue-264.jsonl",
+          "/tmp/kpr-i264-host-chain-1035/edge/devin/records/codex/codex-KPR103ED-sideagent/5bfda85e060e3e7c/events.jsonl#57"
+        ],
+        "links": [
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe.dispatch",
+          "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/dispatch-index.json#items[qa-prior-reclaim-1]",
+          "/tmp/kpr-acp-matrix-devin-20261005.md",
+          "/tmp/kpr-i264-862-dsh-kimi-runtime-proof.md",
+          "/tmp/kpr-devin-compact-probe-stopped-status.json",
+          "/tmp/kpr-i264-host-chain-1035/edge/devin/records/devin/devin-KPR103ED-orchestrator-main/5bfda85e060e3e7c/events.jsonl#270"
+        ]
+      },
+      "input": {
+        "at": "2026-10-06T10:34:50.775770+00:00",
+        "evidence": "/tmp/kpr-i264-host-chain-1035/edge/devin/records/devin/devin-KPR103ED-orchestrator-main/5bfda85e060e3e7c/events.jsonl#270",
+        "holder": "d72ff0e54ad87dd641126920c268f33f",
+        "kind": "host-compaction",
+        "occurrence_id": null,
+        "seq": 1,
+        "source": "completed-host-signal"
+      },
+      "seq": 1,
+      "unavailable": {
+        "links": "qa-gap-missing: absent from .kaola/dispatch-index.json; no original dispatch/result/reclaim locator is available. The Host must resolve this seeded link gap."
+      }
+    },
+    "returned_to_host": {
+      "recovery#1": "recovery-entry-unknown"
+    },
+    "settled": [],
+    "source": "b-22f175756cbc",
+    "verified": false
+  }
+}

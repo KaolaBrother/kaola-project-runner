@@ -1,0 +1,592 @@
+{
+  "date": "2026-10-06",
+  "candidate": "4b247a2dbae9006be71962da32b31e5c5eb05629",
+  "rows": {
+    "kimi": {
+      "host_events_original": "/tmp/kpr-i264-host-chain-1035/edge/kimi/records/kimi-cli/kimi-cli-KPR103EK-orchestrator-main/ec0c2da05cfe642c/events.jsonl",
+      "host_events_sha256": "8548cdc1d1fa18b2c5fd0d22741215ecd32d2847378b6bcf7d2f38d929ec7aac",
+      "signal": {
+        "cursor": 726,
+        "holder": "8043c53949194f52d4777691fd7bae56",
+        "kind": "compact_reload_detected",
+        "occurrence_id": null,
+        "role": "host",
+        "session_id": "session_58ad0c33-bd29-406e-ba3d-cabbb22d020f",
+        "signal": {
+          "method": "session/update",
+          "params": {
+            "sessionId": "session_58ad0c33-bd29-406e-ba3d-cabbb22d020f",
+            "update": {
+              "content": {
+                "text": "Compaction completed.\n- Messages compacted: 13\n- Tokens before: 33,117\n- Tokens after: 24,943",
+                "type": "text"
+              },
+              "sessionUpdate": "agent_message_chunk"
+            }
+          }
+        },
+        "source": "kimi-compaction-chunk",
+        "ts": 1791278778.52
+      },
+      "registered": {
+        "cursor": 728,
+        "input": {
+          "at": "2026-10-06T09:26:18.601674+00:00",
+          "evidence": "/tmp/kpr-i264-host-chain-1035/edge/kimi/records/kimi-cli/kimi-cli-KPR103EK-orchestrator-main/ec0c2da05cfe642c/events.jsonl#726",
+          "holder": "8043c53949194f52d4777691fd7bae56",
+          "kind": "host-compaction",
+          "occurrence_id": null,
+          "seq": 1,
+          "source": "completed-host-signal"
+        },
+        "kind": "host_compact_maintenance_registered",
+        "signal_cursor": 726,
+        "ts": 1791278778.609
+      },
+      "batch": {
+        "batch": "b-0d7be97b35b7",
+        "cursor": 2425,
+        "host_holder": "8043c53949194f52d4777691fd7bae56",
+        "host_revision_through": 3,
+        "kind": "sideagent_node_batch",
+        "prompt_fingerprint": "sha256:4a3d3e18e1b495ea29e3936ab311bc1a143744d81b160de3c7e35939607adb21",
+        "recovery_alerts": {},
+        "recovery_input": {
+          "at": "2026-10-06T09:26:18.601674+00:00",
+          "evidence": "/tmp/kpr-i264-host-chain-1035/edge/kimi/records/kimi-cli/kimi-cli-KPR103EK-orchestrator-main/ec0c2da05cfe642c/events.jsonl#726",
+          "holder": "8043c53949194f52d4777691fd7bae56",
+          "kind": "host-compaction",
+          "occurrence_id": null,
+          "seq": 1,
+          "source": "completed-host-signal"
+        },
+        "target_holder": "ac407e747581f8fdebbf0722b03f4e4f",
+        "ts": 1791278906.983
+      },
+      "checkpoint_original": {
+        "event_cursor": 1183,
+        "original": "/tmp/kpr-i264-host-chain-1035/edge/kimi/records/codex/codex-KPR103EK-sideagent/ec0c2da05cfe642c/events.jsonl",
+        "checkpoint": {
+          "at": "2026-10-06T09:33:09.806065+00:00",
+          "batch": "b-0d7be97b35b7",
+          "host_revision": {
+            "current": 3,
+            "from": 3,
+            "through": 3
+          },
+          "node": {
+            "holder_instance_id": "ac407e747581f8fdebbf0722b03f4e4f",
+            "session": "codex-KPR103EK-sideagent"
+          },
+          "recovery": {
+            "checked": {
+              "authorization": [
+                "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/AGENTS.md",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/delegator-heartbeat.json",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/heartbeat-prompt.json#state.project",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/heartbeat-prompt.json#state.authorization",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/kaola-workflow/.ledger/issue-264.jsonl"
+              ],
+              "duties": [
+                "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/heartbeat-prompt.json#state.decisions",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/heartbeat-prompt.json#state.alerts",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/qa/progress.md",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/kaola-workflow/.ledger/issue-264.jsonl",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/receipts/state-task.json"
+              ],
+              "links": [
+                "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe.dispatch",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo/.kaola/dispatch-index.json#qa-prior-reclaim-1",
+                "/tmp/kpr-heartbeat652-kimi-host-verification.json",
+                "/tmp/kpr-i264-862-dsh-kimi-runtime-proof.md",
+                "/tmp/kpr-heartbeat652-kimi-exact-stop.json",
+                "/tmp/kpr-i264-host-chain-1035/edge/kimi/records/kimi-cli/kimi-cli-KPR103EK-orchestrator-main/ec0c2da05cfe642c/events.jsonl#726",
+                "/tmp/kpr-i264-host-chain-1035/edge/kimi/records/kimi-cli/kimi-cli-KPR103EK-orchestrator-main/ec0c2da05cfe642c/record.json",
+                "/tmp/kpr-i264-host-chain-1035/edge/kimi/records/codex/codex-KPR103EK-sideagent/ec0c2da05cfe642c/record.json"
+              ]
+            },
+            "input": {
+              "at": "2026-10-06T09:26:18.601674+00:00",
+              "evidence": "/tmp/kpr-i264-host-chain-1035/edge/kimi/records/kimi-cli/kimi-cli-KPR103EK-orchestrator-main/ec0c2da05cfe642c/events.jsonl#726",
+              "holder": "8043c53949194f52d4777691fd7bae56",
+              "kind": "host-compaction",
+              "occurrence_id": null,
+              "seq": 1,
+              "source": "completed-host-signal"
+            },
+            "seq": 1,
+            "unavailable": {
+              "links": "qa-gap-missing remains listed in state.tasks.qa-observe.dispatch without a dispatch-index item or receipt; no Runner record for kimi-cli-KPR103EK-prior-diagnostic is present under /tmp/kpr-i264-host-chain-1035/edge/kimi/records. Preserve these as Host obligations."
+            }
+          },
+          "returned_to_host": {
+            "recovery#1": "recovery-entry-unknown"
+          },
+          "settled": [],
+          "source": "b-0d7be97b35b7",
+          "verified": false
+        }
+      },
+      "reclaim": {
+        "cursor": 2435,
+        "holder": "ac407e747581f8fdebbf0722b03f4e4f",
+        "kind": "sideagent_node_stopped",
+        "receipt": {
+          "stopped": true
+        },
+        "ts": 1791279274.14
+      },
+      "host_stop": {
+        "agent_exit_code": 0,
+        "agent_exit_signal": null,
+        "git": {
+          "branch": "master",
+          "dirty": true
+        },
+        "mutation_status": "completed",
+        "platform": "kimi-cli",
+        "repo": "/private/tmp/kpr-i264-host-chain-1035/edge/kimi/repo",
+        "residual_pids": [],
+        "schema_version": 3,
+        "session": "kimi-cli-KPR103EK-orchestrator-main",
+        "stopped": true,
+        "swept_child_pgids": [],
+        "transport": {
+          "selected": "acp"
+        }
+      },
+      "effective_selection": {
+        "effective_effort": "max",
+        "effective_model": "kimi-code/k3",
+        "effort_config_id": "thinking"
+      },
+      "bridge": null,
+      "skill_checks": [
+        {
+          "path": "/Users/ylmacstudio/.agents/skills/kimi-cli-kaola-project-runner/SKILL.md",
+          "sha256": "90f1c257706d8a760ec29490e79ce5222479c1499e096357e4fc34ebbb66479e",
+          "bytes": 10260,
+          "read_cursor": 1900,
+          "result_cursors": [
+            1903
+          ],
+          "actual_full_payload_match": true,
+          "no_line_limit_requested": true,
+          "exposure": "full numbered payload"
+        },
+        {
+          "path": "/Users/ylmacstudio/.zcode/skills/kaola-project-runner/SKILL.md",
+          "sha256": "1af732f378a11bd04e4533a3e1fe38cef9b9b48b393360748d0a8030f5524df7",
+          "bytes": 17407,
+          "read_cursor": 1901,
+          "result_cursors": [
+            1904
+          ],
+          "actual_full_payload_match": true,
+          "no_line_limit_requested": true,
+          "exposure": "full numbered payload"
+        }
+      ],
+      "task_progress": "# QA progress (scratch)\n\n- step1 TASK-A: fixture seeded by controller. DONE.\n- step2 TASK-B: CURRENT. At the next maintained boundary, the Host records its\n  post-compaction installed-Skill read result (paths, byte counts, last lines)\n  and continues this duty from durable records.\n- step3 TASK-A close-out read: /Users/ylmacstudio/.agents/skills/kimi-cli-kaola-project-runner/SKILL.md — 10260 bytes — last non-empty line: \"and [references/acp.md](references/acp.md) for the structured ACP command surface.\"\n- step3 TASK-A close-out read: /Users/ylmacstudio/.zcode/skills/kaola-project-runner/SKILL.md — 17407 bytes — last non-empty line: \"machine, quota engine, or close-out dashboard or ledger.\"\n- step2 TASK-B post-compaction read (maintained boundary): /Users/ylmacstudio/.agents/skills/kimi-cli-kaola-project-runner/SKILL.md — 10260 bytes — last non-empty line: \"and [references/acp.md](references/acp.md) for the structured ACP command surface.\"\n- step2 TASK-B post-compaction read (maintained boundary): /Users/ylmacstudio/.zcode/skills/kaola-project-runner/SKILL.md — 17407 bytes — last non-empty line: \"machine, quota engine, or close-out dashboard or ledger.\"\n",
+      "other_verified_business_batches_excluded": [
+        "b-32e343bcede5"
+      ],
+      "setup_assistance": "diagnostic fixture; missing alias retained; positive counterpart pending"
+    },
+    "zcode": {
+      "host_events_original": "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl",
+      "host_events_sha256": "c40285fbf70f52ed8f4ff31bc4a0044638140903fdefbdccabfa8d49dca4a558",
+      "signal": {
+        "cursor": 3591,
+        "holder": "eaa5f0c66e49cb4a6c5524747b8c447e",
+        "kind": "compact_reload_detected",
+        "occurrence_id": "zcode-state-14",
+        "role": "host",
+        "session_id": "zcode-1",
+        "signal": {
+          "method": "session/update",
+          "params": {
+            "sessionId": "zcode-1",
+            "update": {
+              "compactionId": "zcode-state-14",
+              "sessionUpdate": "compaction_update",
+              "status": "completed"
+            }
+          }
+        },
+        "source": "acp-compaction-update",
+        "ts": 1791281705.774
+      },
+      "registered": {
+        "cursor": 3593,
+        "input": {
+          "at": "2026-10-06T10:15:05.855397+00:00",
+          "evidence": "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#3591",
+          "holder": "eaa5f0c66e49cb4a6c5524747b8c447e",
+          "kind": "host-compaction",
+          "occurrence_id": "zcode-state-14",
+          "seq": 1,
+          "source": "completed-host-signal"
+        },
+        "kind": "host_compact_maintenance_registered",
+        "signal_cursor": 3591,
+        "ts": 1791281705.864
+      },
+      "batch": {
+        "batch": "b-0adc9f467511",
+        "cursor": 4500,
+        "host_holder": "eaa5f0c66e49cb4a6c5524747b8c447e",
+        "host_revision_through": 10,
+        "kind": "sideagent_node_batch",
+        "prompt_fingerprint": "sha256:62106189a36ee8ba9380dae908c4b2a3cb1f56faf73b6c30de17bdfbdc5f8699",
+        "recovery_alerts": {},
+        "recovery_input": {
+          "at": "2026-10-06T10:15:05.855397+00:00",
+          "evidence": "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#3591",
+          "holder": "eaa5f0c66e49cb4a6c5524747b8c447e",
+          "kind": "host-compaction",
+          "occurrence_id": "zcode-state-14",
+          "seq": 1,
+          "source": "completed-host-signal"
+        },
+        "target_holder": "11ab6bbfa865bd9ade0e6b47e091dfff",
+        "ts": 1791281998.433
+      },
+      "checkpoint_original": {
+        "event_cursor": 1402,
+        "original": "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/codex/codex-KPR103EZ-sideagent/af6ada8b4fad8173/events.jsonl",
+        "checkpoint": {
+          "at": "2026-10-06T10:26:00.524772+00:00",
+          "batch": "b-0adc9f467511",
+          "host_revision": {
+            "current": 10,
+            "from": 3,
+            "through": 10
+          },
+          "node": {
+            "holder_instance_id": "11ab6bbfa865bd9ade0e6b47e091dfff",
+            "session": "codex-KPR103EZ-sideagent"
+          },
+          "recovery": {
+            "checked": {
+              "authorization": [
+                "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/AGENTS.md",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/.kaola/delegator-heartbeat.json",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/.kaola/heartbeat-prompt.json#project,authorization",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/kaola-workflow/.ledger/issue-264.jsonl"
+              ],
+              "duties": [
+                "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/.kaola/heartbeat-prompt.json#tasks,decisions,alerts",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/qa/progress.md",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/receipts/state-reactivate.json",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/receipts/host-start-sideagent-chain3.json",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/receipts/host-start-sideagent-recovery.json",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/receipts/host-stop-sideagent.json",
+                "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#2085",
+                "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#3363",
+                "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#3591"
+              ],
+              "links": [
+                "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/.kaola/dispatch-index.json",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo/qa/progress.md",
+                "/tmp/kpr-heartbeat673-zcode-host-verification.json",
+                "/tmp/kpr-i264-862-dsh-kimi-runtime-proof.md",
+                "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/codex/codex-KPR103EZ-sideagent/af6ada8b4fad8173/events.jsonl#917",
+                "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/codex/codex-KPR103EZ-sideagent/af6ada8b4fad8173/events.jsonl#918",
+                "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#137",
+                "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#138",
+                "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#2163"
+              ]
+            },
+            "input": {
+              "at": "2026-10-06T10:15:05.855397+00:00",
+              "evidence": "/tmp/kpr-i264-host-chain-1035/edge/zcode/records/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/events.jsonl#3591",
+              "holder": "eaa5f0c66e49cb4a6c5524747b8c447e",
+              "kind": "host-compaction",
+              "occurrence_id": "zcode-state-14",
+              "seq": 1,
+              "source": "completed-host-signal"
+            },
+            "seq": 1,
+            "unavailable": {}
+          },
+          "returned_to_host": {},
+          "settled": [
+            "host:alerts/maintenance-returned@9",
+            "host:section/sideagent@10",
+            "host:tasks/qa-observe@7",
+            "recovery#1"
+          ],
+          "source": "b-0adc9f467511",
+          "verified": true
+        }
+      },
+      "reclaim": {
+        "cursor": 4506,
+        "holder": "11ab6bbfa865bd9ade0e6b47e091dfff",
+        "kind": "sideagent_node_stopped",
+        "receipt": {
+          "stopped": true
+        },
+        "ts": 1791282403.293
+      },
+      "host_stop": {
+        "agent_exit_code": 0,
+        "agent_exit_signal": null,
+        "git": {
+          "branch": "master",
+          "dirty": true
+        },
+        "mutation_status": "completed",
+        "platform": "zcode",
+        "repo": "/private/tmp/kpr-i264-host-chain-1035/edge/zcode/repo",
+        "residual_pids": [],
+        "schema_version": 3,
+        "session": "zcode-KPR103EZ-orchestrator-main",
+        "stopped": true,
+        "swept_child_pgids": [],
+        "transport": {
+          "selected": "acp"
+        }
+      },
+      "effective_selection": {
+        "effective_effort": null,
+        "effective_model": "account:bigmodel-individual-coding-plan\\GLM-5.3",
+        "effort_config_id": "thought"
+      },
+      "bridge": {
+        "layout": "skill",
+        "path": "/private/tmp/kpr-i264-host-chain-1035/edge/candidate/scripts/kaola-zcode-acp.py",
+        "present": true,
+        "relative": "kaola-zcode-acp.py",
+        "sha256": "35815c836d91ffb27066de2a4be17935a4a29de79a064be6279e2c98699ecadd",
+        "upstream_pin": "80aa4e2c39909f91145dfdf6428a3867b5c61701",
+        "verified_versions": "cli=0.16.9;adapter=kaola-zcode-acp;protocol=1"
+      },
+      "skill_checks": [
+        {
+          "path": "/Users/ylmacstudio/.zcode/skills/kaola-project-runner/SKILL.md",
+          "sha256": "1af732f378a11bd04e4533a3e1fe38cef9b9b48b393360748d0a8030f5524df7",
+          "bytes": 17407,
+          "read_cursor": 3701,
+          "result_cursors": [
+            3703
+          ],
+          "actual_full_payload_match": false,
+          "no_line_limit_requested": true,
+          "exposure": "completed Read / line-count summary only; no full bytes exposed in ACP; previous qualified unchanged proof reused"
+        },
+        {
+          "path": "/Users/ylmacstudio/.zcode/skills/zcode-kaola-project-runner/SKILL.md",
+          "sha256": "3e0da3e1039f13c0ee52e62e0f7d79652ff12e8d25a998ff65e701afb87d8130",
+          "bytes": 10029,
+          "read_cursor": 3704,
+          "result_cursors": [
+            3708
+          ],
+          "actual_full_payload_match": false,
+          "no_line_limit_requested": true,
+          "exposure": "completed Read / line-count summary only; no full bytes exposed in ACP; previous qualified unchanged proof reused"
+        }
+      ],
+      "task_progress": "# QA progress (scratch)\n\n- step1 TASK-A: fixture seeded by controller. DONE.\n- step2 TASK-B: DONE at heartbeat cursor 917 (2026-10-06). Post-compaction\n  installed-Skill read result recorded above; duty continued from durable\n  records: qa-prior-reclaim-1 ACCEPTED (evidence\n  /tmp/kpr-heartbeat673-zcode-host-verification.json, reply\n  /tmp/kpr-i264-862-dsh-kimi-runtime-proof.md); seeded dispatch link gap\n  qa-gap-missing RESOLVED in .kaola/dispatch-index.json; both alerts retired\n  in .kaola/heartbeat-prompt.json state; seat codex-KPR103EZ-sideagent not\n  live — record.json state=stopped at 2026-10-06T09:50:54Z (event cursor 920,\n  agent_alive false, no fatal error); Host stop attempt returned no-session\n  (receipt receipts/host-stop-sideagent.json).\n- TASK-B close-out (cursor 917): qa-observe marked done+accepted in\n  .kaola/heartbeat-prompt.json (task rev 3); both alerts retired (file rev 6->8);\n  sideagent binding state=ended (file rev 11). Task retire refused 4x\n  (retire-unmet; writer role unverified — Host writes came via plain shell,\n  not the ACP dispatcher chain); state check leaves only the watch-level\n  done-not-retired note with index+live verified (unchecked: []).\n- Beat at cursor 2086 (maintenance batch:8 binding-or-recipe-unavailable): original\n  receipts reconciled (node record.json stopped 2026-10-06T09:50:54Z at event\n  cursor 920, agent_alive false; Host stop receipt no-session). Binding repair\n  attempted exactly per the recorded recipe -> REFUSED heartbeat-host-unresolved\n  (receipts/host-start-sideagent-recovery.json: host holder record absent from the\n  T/kaola-501 registry; runner-requested socket 67711cda... does not exist; live\n  holder socket is d4104c2c...). Host-side checkpoint refused node-identity-required;\n  typed recovery-input refused host-identity-required. Alert maintenance-returned\n  kept OPEN with the blocker + reopening condition recorded in the heartbeat state\n  (alert rev 2, state revision 13). No new dispatch (restart blocked, nothing else\n  authorized); live codex seats 0/1.\n- Beat at cursor 3364 (batch:9, same binding-or-recipe-unavailable): environment\n  re-verified unchanged (alert rev 3 with inputs batch:8+batch:9; no host holder\n  record in T/kaola-501 registry; no new receipts; maintenance acked/handled 3/3).\n  No heartbeat-state writes this beat — each Host write mints a new unhandleable\n  batch (batch:9 came from the blocker-record write itself); prior refusal\n  receipts stand as valid evidence (receipts/host-start-sideagent-recovery.json:\n  heartbeat-host-unresolved; checkpoint node-identity-required; recovery-input\n  host-identity-required). Blocker + controller decision unchanged: start\n  codex-KPR103EZ-sideagent from the controller context that resolved the host at\n  09:43:00Z, or register the host holder record, then let the node checkpoint\n  batches through the current host_revision. Live codex seats 0/1.\n- Beat at compact chain-3 boundary (post second Host compaction; controller sent\n  compact2 at 18:15 local, dispatch cursor 3584 / event 3589, per\n  receipts/host-send-compact2.json): skills re-read fresh after compaction;\n  edge-lane controller reactivated the sideagent binding itself at 2026-10-06T10:13:17Z\n  (receipts/state-reactivate.json, previous_revision 14 -> 15, host_revision 10;\n  heartbeat now revision 16) and wiped both session record trees (repo records/ for\n  zcode host + codex node gone; host events.jsonl no longer exists; codex status\n  returns no-session; no KPR103EZ entry anywhere under T/kaola-501). Exact-recipe\n  restart re-run -> REFUSED again heartbeat-host-unresolved\n  (receipts/host-start-sideagent-chain3.json, mutation_status not_started): gate is\n  the still-missing per-user host holder record\n  T/kaola-501/zcode/zcode-KPR103EZ-orchestrator-main/af6ada8b4fad8173/record.json;\n  heartbeat_host_source=dispatcher; KAOLA_ACP_DISPATCHER carries holder eaa5f0c6...\n  with NO socket, the runner-derived socket 67711cda... does not exist, while the\n  holder's live bridge socket d4104c2c... (created 17:42) does. kaola-acp-holder.py\n  offers no register-only path (it spawns a holder daemon), so creating the record\n  by hand or via a second bridge would fabricate identity / add a mechanism — not\n  done. No heartbeat-state writes this beat (alert still rev 3, inputs batch:8+9\n  only); task qa-observe stays done+accepted; live codex seats 0/1. Blocker stands,\n  controller-owned: register the host holder record (with the live d4104c2c socket)\n  or start codex-KPR103EZ-sideagent from the controller context, then let the node\n  checkpoint batches through the current host_revision 10.\n- TASK-A setup read: /Users/ylmacstudio/.zcode/skills/zcode-kaola-project-runner/SKILL.md | 10029 bytes | last non-empty line: \"and [references/acp.md](references/acp.md) for the structured ACP command surface.\"\n- TASK-A setup read: /Users/ylmacstudio/.zcode/skills/kaola-project-runner/SKILL.md | 17407 bytes | last non-empty line: \"machine, quota engine, or close-out dashboard or ledger.\"\n",
+      "other_verified_business_batches_excluded": [
+        "b-318d92597beb"
+      ],
+      "setup_assistance": "controller state-reactivate rev15/host10 before signal; two manual starts refused/not_started; not unassisted recovery"
+    },
+    "devin": {
+      "host_events_original": "/tmp/kpr-i264-host-chain-1035/edge/devin/records/devin/devin-KPR103ED-orchestrator-main/5bfda85e060e3e7c/events.jsonl",
+      "host_events_sha256": "84559a999b0cf4f91ede7732e923adebd35be8be4772a893557f6fa52fe2111c",
+      "signal": {
+        "cursor": 270,
+        "holder": "d72ff0e54ad87dd641126920c268f33f",
+        "kind": "compact_reload_detected",
+        "occurrence_id": null,
+        "role": "host",
+        "session_id": "gelatinous-comma",
+        "signal": {
+          "jsonrpc": "2.0",
+          "method": "_cognition.ai/compaction",
+          "params": {
+            "sessionId": "gelatinous-comma",
+            "status": "completed",
+            "summary": "Full conversation history saved at /Users/ylmacstudio/.local/share/devin/cli/summaries/history_444fd311c7934c7a.md.\nSummary:\n## 1. Request and Intent\n\n### Overall objective\n\nThis was a disposable QA fixture run for “Issue 264 Host-compaction maintenance QA on devin,” specifically the “TASK-A close-out” setup turn. The fixture is seeded test data rather than a real project. The enduring objective was to verify that the Host records installed Skill read results at a maintained boundary and preserves the seeded dispatch-link gap as a visible Host obligation until resolved.\n\nThe repository’s `AGENTS.md` identifies the workspace as:\n\n> “KPR103ED scratch consumer — QA fixture”\n\nand states:\n\n> “Disposable consumer root for the Issue 264 Host-compaction maintenance QA on devin. This is seeded test data, not a real project. No claim, no ledger of record.”\n\nThe user’s explicit task was narrowly scoped:\n\n1. Read the full current contents of:\n   - `/Users/ylmacstudio/.config/devin/skills/devin-kaola-project-runner/SKILL.md`\n   - `/Users/ylmacstudio/.zcode/skills/kaola-project-runner/SKILL.md`\n2. Append one line per file to `qa/progress.md`, including:\n   - path\n   - byte count\n   - last non-empty line\n3. End the turn.\n4. Do not run other commands, modify other files, or start/stop sessions.\n\n### Current sub-task\n\nThe requested setup task was completed. Both Skill files were read in full, their byte counts were obtained, and two lines were appended to `qa/progress.md`. No sessions were started or stopped, and no other files were changed.\n\n## 2. Key Concepts and Values\n\n### Concepts and technologies\n\n- Kaola-Workflow compact recovery and Host maintenance.\n- Devin CLI project runner.\n- ZCode Kaola Project Runner.\n- ACP transport and exact owned sessions.\n- Disposable QA fixture / scratch consumer repository.\n- Host-compaction maintenance QA.\n- Durable progress recording in `qa/progress.md`.\n- Seeded dispatch-link gap that must remain visible:\n  - `qa-gap-missing`\n- No project claim or mission ledger for this fixture.\n- Canonical workspace:\n  - `/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo`\n\n### Important files and paths\n\n- Project instructions:\n  - `/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/AGENTS.md`\n- QA progress file:\n  - `/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/qa/progress.md`\n- Devin runner Skill:\n  - `/Users/ylmacstudio/.config/devin/skills/devin-kaola-project-runner/SKILL.md`\n- ZCode project runner Skill:\n  - `/Users/ylmacstudio/.zcode/skills/kaola-project-runner/SKILL.md`\n- Global instructions:\n  - `/Users/ylmacstudio/.config/devin/AGENTS.md`\n- Conversation history:\n  - `history_444fd311c7934c7a.md` (full path was not provided in the visible context)\n\n### Recorded values\n\nThe appended progress entries recorded:\n\n- `/Users/ylmacstudio/.config/devin/skills/devin-kaola-project-runner/SKILL.md`\n  - `10438 bytes`\n  - Last non-empty line:\n    > `and [references/acp.md](references/acp.md) for the structured ACP command surface.`\n\n- `/Users/ylmacstudio/.zcode/skills/kaola-project-runner/SKILL.md`\n  - `17407 bytes`\n  - Last non-empty line:\n    > `machine, quota engine, or close-out dashboard or ledger.`\n\nThe combined `wc -c` result was `27845 total`, but only the individual counts were written to the progress file.\n\n## 3. Task Requirements\n\n### Clarity of task\n\nThis was a direct file-reading and progress-recording task, not a code-development task.\n\n- Meta: No. The task directly required reading two files and updating one QA progress file.\n- Scope: Only `qa/progress.md` was allowed to change.\n- No project implementation, tests, session management, or workflow execution was requested.\n\n### Plan details\n\nThe user explicitly required:\n\n> “Setup turn for this disposable QA fixture (TASK-A close-out). Do exactly this, nothing more:”\n\n> “1. Read the full current content of /Users/ylmacstudio/.config/devin/skills/devin-kaola-project-runner/SKILL.md with your read tool.”\n\n> “2. Read the full current content of /Users/ylmacstudio/.zcode/skills/kaola-project-runner/SKILL.md with your read tool.”\n\n> “3. Append to qa/progress.md one line per file: path, byte count, and last non-empty line.”\n\n> “4. End your turn. Do not run other commands, do not change other files, do not start or stop sessions.”\n\nThe first Skill file was read from lines 1–165, covering the complete file. The second was read from lines 1–264, also covering the complete file.\n\n### Verification\n\nThe byte counts were obtained with:\n\n```text\nwc -c /Users/ylmacstudio/.config/devin/skills/devin-kaola-project-runner/SKILL.md /Users/ylmacstudio/.zcode/skills/kaola-project-runner/SKILL.md\n```\n\nThe tool reported:\n\n```text\n10438 /Users/ylmacstudio/.config/devin/skills/devin-kaola-project-runner/SKILL.md\n17407 /Users/ylmacstudio/.zcode/skills/kaola-project-runner/SKILL.md\n27845 total\n```\n\nThe progress-file update tool displayed the resulting appended lines, confirming that both entries were present.\n\n### Submission / follow-up\n\nThe requested endpoint was to append the records and end the turn. The prior assistant reported completion and explicitly stated:\n\n> “No other files touched, no sessions started or stopped.”\n\n### Forbidden actions\n\nThe user forbade:\n\n- Running other commands beyond what was needed for the requested operation.\n- Changing files other than `qa/progress.md`.\n- Starting sessions.\n- Stopping sessions.\n- Doing anything beyond the four listed steps.\n\n## 4. Additional Instructions\n\n### Repository-specific instructions\n\nThe fixture’s `AGENTS.md` required:\n\n> “Keep this disposable run finite: report exact command, receipt and cursor outcomes; do not add mechanisms.”\n\n> “The bound maintenance node reconciles only seeded duties; it invents, accepts and judges no tasks.”\n\n> “Preserve the seeded dispatch link gap `qa-gap-missing` as a visible Host obligation until the Host resolves it.”\n\nThese constraints reinforce that no new mechanisms, tasks, claims, or workflow records should be created.\n\n### Global workflow constraints\n\nThe global workflow instructions emphasized:\n\n- Read targets before writing.\n- Keep changes surgical.\n- Do not fabricate claims, issues, or mission state.\n- Treat this as a disposable consumer fixture with no claim and no ledger of record.\n- Do not start or stop unrelated sessions.\n- Preserve seeded obligations rather than inventing or judging work.\n\n### Skill-selection context\n\nThe environment listed multiple runner Skills, including:\n\n- `devin-kaola-project-runner`\n- `kaola-project-runner`\n- `zcode-kaola-project-runner`\n- Other platform-specific runners\n\nHowever, the user specifically requested reading the two filesystem Skill files and did not request invoking or operating a runner session. No runner session was started or stopped.\n\n## 5. Errors and Fixes\n\nNo substantive errors occurred.\n\nOne minor procedural point: the assistant initially said it would read the two requested Skill files and `qa/progress.md` in parallel. Reading `qa/progress.md` was useful for context, though the user’s explicit required reads concerned the two Skill files. The file was read but not modified except through the requested append.\n\nThe assistant then used `wc -c` to obtain byte counts. This was the only additional shell command shown, and it directly supported the required progress entries.\n\nThe final update successfully appended two lines to `qa/progress.md`.\n\n## 6. Problem Solving\n\nThe task required identifying the exact byte counts and last non-empty lines for two externally located Skill files.\n\nCompleted resolution:\n\n1. Read the full Devin runner Skill file.\n2. Read the full ZCode project runner Skill file.\n3. Used the reported file sizes:\n   - 10438 bytes\n   - 17407 bytes\n4. Used the visible final non-empty lines from each complete file read.\n5. Appended one correctly formatted progress line per file.\n6. Left all other repository files untouched.\n7. Did not create, resume, or stop any session.\n\nNo ongoing troubleshooting remains for this setup task.\n\n## 7. Pending Tasks\n\nNo pending task was explicitly left for this turn.\n\nThe existing `qa/progress.md` still contains the seeded workflow note:\n\n> “step2 TASK-B: CURRENT. At the next maintained boundary, the Host records its post-compaction installed-Skill read result (paths, byte counts, last lines) and continues this duty from durable records.”\n\nThe two newly appended records satisfy the requested installed-Skill read-result recording for this turn. The seeded `qa-gap-missing` obligation remains a Host-level obligation and was not resolved or altered by this task.\n\n## 8. Current Work\n\nImmediately before the summary request, the work had concluded.\n\nThe final state of `qa/progress.md` included the original six lines plus these two appended records:\n\n```text\n- /Users/ylmacstudio/.config/devin/skills/devin-kaola-project-runner/SKILL.md | 10438 bytes | last: `and [references/acp.md](references/acp.md) for the structured ACP command surface.`\n- /Users/ylmacstudio/.zcode/skills/kaola-project-runner/SKILL.md | 17407 bytes | last: `machine, quota engine, priority, or close-out dashboard or ledger.`\n```\n\nThe actual displayed final line for the second file was:\n\n```text\nmachine, quota engine, close-out dashboard or ledger.\n```\n\nNo code was changed. No tests were run. No sessions were started or stopped."
+          }
+        },
+        "source": "devin-compaction",
+        "ts": 1791282890.701
+      },
+      "registered": {
+        "cursor": 273,
+        "input": {
+          "at": "2026-10-06T10:34:50.775770+00:00",
+          "evidence": "/tmp/kpr-i264-host-chain-1035/edge/devin/records/devin/devin-KPR103ED-orchestrator-main/5bfda85e060e3e7c/events.jsonl#270",
+          "holder": "d72ff0e54ad87dd641126920c268f33f",
+          "kind": "host-compaction",
+          "occurrence_id": null,
+          "seq": 1,
+          "source": "completed-host-signal"
+        },
+        "kind": "host_compact_maintenance_registered",
+        "signal_cursor": 270,
+        "ts": 1791282890.783
+      },
+      "batch": {
+        "batch": "b-22f175756cbc",
+        "cursor": 898,
+        "host_holder": "d72ff0e54ad87dd641126920c268f33f",
+        "host_revision_through": 3,
+        "kind": "sideagent_node_batch",
+        "prompt_fingerprint": "sha256:7ac0c0513a7ad7f0092110710b27fbfbb293f4235e9861787ef13881442e5eb0",
+        "recovery_alerts": {},
+        "recovery_input": {
+          "at": "2026-10-06T10:34:50.775770+00:00",
+          "evidence": "/tmp/kpr-i264-host-chain-1035/edge/devin/records/devin/devin-KPR103ED-orchestrator-main/5bfda85e060e3e7c/events.jsonl#270",
+          "holder": "d72ff0e54ad87dd641126920c268f33f",
+          "kind": "host-compaction",
+          "occurrence_id": null,
+          "seq": 1,
+          "source": "completed-host-signal"
+        },
+        "target_holder": "102735fe2b01c833904d87389f97d209",
+        "ts": 1791282992.026
+      },
+      "checkpoint_original": {
+        "event_cursor": 1453,
+        "original": "/tmp/kpr-i264-host-chain-1035/edge/devin/records/codex/codex-KPR103ED-sideagent/5bfda85e060e3e7c/events.jsonl",
+        "checkpoint": {
+          "at": "2026-10-06T10:48:19.033654+00:00",
+          "batch": "b-22f175756cbc",
+          "host_revision": {
+            "current": 3,
+            "from": 3,
+            "through": 3
+          },
+          "node": {
+            "holder_instance_id": "102735fe2b01c833904d87389f97d209",
+            "session": "codex-KPR103ED-sideagent"
+          },
+          "recovery": {
+            "checked": {
+              "authorization": [
+                "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/AGENTS.md",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/delegator-heartbeat.json",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/heartbeat-prompt.json#state.project",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/heartbeat-prompt.json#state.authorization"
+              ],
+              "duties": [
+                "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/heartbeat-prompt.json#state.decisions",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/heartbeat-prompt.json#state.alerts",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/qa/progress.md",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/devin/kaola-workflow/.ledger/issue-264.jsonl",
+                "/tmp/kpr-i264-host-chain-1035/edge/devin/records/codex/codex-KPR103ED-sideagent/5bfda85e060e3e7c/events.jsonl#57"
+              ],
+              "links": [
+                "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe.dispatch",
+                "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo/.kaola/dispatch-index.json#items[qa-prior-reclaim-1]",
+                "/tmp/kpr-acp-matrix-devin-20261005.md",
+                "/tmp/kpr-i264-862-dsh-kimi-runtime-proof.md",
+                "/tmp/kpr-devin-compact-probe-stopped-status.json",
+                "/tmp/kpr-i264-host-chain-1035/edge/devin/records/devin/devin-KPR103ED-orchestrator-main/5bfda85e060e3e7c/events.jsonl#270"
+              ]
+            },
+            "input": {
+              "at": "2026-10-06T10:34:50.775770+00:00",
+              "evidence": "/tmp/kpr-i264-host-chain-1035/edge/devin/records/devin/devin-KPR103ED-orchestrator-main/5bfda85e060e3e7c/events.jsonl#270",
+              "holder": "d72ff0e54ad87dd641126920c268f33f",
+              "kind": "host-compaction",
+              "occurrence_id": null,
+              "seq": 1,
+              "source": "completed-host-signal"
+            },
+            "seq": 1,
+            "unavailable": {
+              "links": "qa-gap-missing: absent from .kaola/dispatch-index.json; no original dispatch/result/reclaim locator is available. The Host must resolve this seeded link gap."
+            }
+          },
+          "returned_to_host": {
+            "recovery#1": "recovery-entry-unknown"
+          },
+          "settled": [],
+          "source": "b-22f175756cbc",
+          "verified": false
+        }
+      },
+      "reclaim": {
+        "cursor": 909,
+        "holder": "102735fe2b01c833904d87389f97d209",
+        "kind": "sideagent_node_stopped",
+        "receipt": {
+          "stopped": true
+        },
+        "ts": 1791283805.254
+      },
+      "host_stop": {
+        "agent_exit_code": 0,
+        "agent_exit_signal": null,
+        "git": {
+          "branch": "master",
+          "dirty": true
+        },
+        "mutation_status": "completed",
+        "platform": "devin",
+        "repo": "/private/tmp/kpr-i264-host-chain-1035/edge/devin/repo",
+        "residual_pids": [],
+        "schema_version": 3,
+        "session": "devin-KPR103ED-orchestrator-main",
+        "stopped": true,
+        "swept_child_pgids": [],
+        "transport": {
+          "selected": "acp"
+        }
+      },
+      "effective_selection": {
+        "advertised_model": "swe-2-high",
+        "effective_effort": null,
+        "effective_model": "swe-2-max",
+        "effective_model_source": "launch-argv",
+        "effort_config_id": null
+      },
+      "bridge": null,
+      "skill_checks": [
+        {
+          "path": "/Users/ylmacstudio/.config/devin/skills/devin-kaola-project-runner/SKILL.md",
+          "sha256": "061c707d4f88ab3dd2275181364fa06039f3a5f810d49c39dc20c2dfd78ea533",
+          "bytes": 10438,
+          "read_cursor": 368,
+          "result_cursors": [
+            375
+          ],
+          "actual_full_payload_match": false,
+          "no_line_limit_requested": true,
+          "exposure": "completed Read / line-count summary only; no full bytes exposed in ACP; previous qualified unchanged proof reused"
+        },
+        {
+          "path": "/Users/ylmacstudio/.zcode/skills/kaola-project-runner/SKILL.md",
+          "sha256": "1af732f378a11bd04e4533a3e1fe38cef9b9b48b393360748d0a8030f5524df7",
+          "bytes": 17407,
+          "read_cursor": 369,
+          "result_cursors": [
+            377
+          ],
+          "actual_full_payload_match": false,
+          "no_line_limit_requested": true,
+          "exposure": "completed Read / line-count summary only; no full bytes exposed in ACP; previous qualified unchanged proof reused"
+        }
+      ],
+      "task_progress": "# QA progress (scratch)\n\n- step1 TASK-A: fixture seeded by controller. DONE.\n- step2 TASK-B: CURRENT. At the next maintained boundary, the Host records its\n  post-compaction installed-Skill read result (paths, byte counts, last lines)\n  and continues this duty from durable records.\n- /Users/ylmacstudio/.config/devin/skills/devin-kaola-project-runner/SKILL.md | 10438 bytes | last: `and [references/acp.md](references/acp.md) for the structured ACP command surface.`\n- /Users/ylmacstudio/.zcode/skills/kaola-project-runner/SKILL.md | 17407 bytes | last: `machine, quota engine, or close-out dashboard or ledger.`\n- step2 TASK-B boundary record: post-compaction installed-Skill re-read (host-compaction recovery_seq 1), read tool + `wc -c`:\n- /Users/ylmacstudio/.config/devin/skills/devin-kaola-project-runner/SKILL.md | 10438 bytes | last: `and [references/acp.md](references/acp.md) for the structured ACP command surface.`\n- /Users/ylmacstudio/.zcode/skills/kaola-project-runner/SKILL.md | 17407 bytes | last: `machine, quota engine, or close-out dashboard or ledger.`\n- qa-gap-missing: dispatch link still absent from .kaola/dispatch-index.json — remains an open Host obligation, not resolved by this node.\n- beat (event codex/idle/2480, batch b-22f175756cbc): node checkpoint partial, returned recovery#1 (recovery-entry-unknown); carrier exact-stopped node by design (events 2481-2483, record state=stopped).\n- Host reconcile: original receipts read (record.json + events + state check: only watch=dispatch-ref-missing); binding intact, no repair needed; host checkpoint refused (node-identity-required, by design); alert retire refused while recovery#1 unsettled — alert persists as the durable visible obligation.\n- state write: tasks.qa-observe rev 2 at host_revision 4 — frontier recorded (reconciled; gap open; TASK-B continues). qa-gap-missing kept in dispatch, unresolvable from evidence, no fabricated locator.\n",
+      "other_verified_business_batches_excluded": [
+        "b-452c5a873916",
+        "b-22ad0c76bc76"
+      ],
+      "setup_assistance": "diagnostic fixture; missing alias retained; positive counterpart pending"
+    }
+  }
+}
