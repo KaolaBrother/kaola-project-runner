@@ -187,6 +187,12 @@ def _residual_for(record_dir: Path) -> list[str]:
     return [line for line in out.splitlines() if str(record_dir) in line]
 
 
+def _identity_gone(sb: Sandbox, session: str, platform: str = "claude-code") -> bool:
+    """The recorded exact holder and agent identities are both gone."""
+    record = sb.record(session, platform)
+    return not pid_alive(record.get("holder_pid")) and not pid_alive(record.get("agent_pid"))
+
+
 def required_child_record_failure() -> None:
     """A required child-record write failure must not claim a nested success."""
     sb = Sandbox()
@@ -202,10 +208,10 @@ def required_child_record_failure() -> None:
         check(receipt.get("mutation_status") in ("not_started", "unknown"),
               "the custody failure reports truthful mutation state",
               mutation=receipt.get("mutation_status"))
-        wait_until(lambda: _residual_for(sb.record_dir(session)) == [], 8,
+        wait_until(lambda: _identity_gone(sb, session), 8,
                    "the failed nested launch leaves no holder or agent")
-        check(_residual_for(sb.record_dir(session)) == [],
-              "no residual holder or native agent remains after the custody rollback")
+        check(_identity_gone(sb, session),
+              "the recorded exact holder and agent identities are gone after the custody rollback")
         status = sb.cli("status", session, timeout=30)
         check(status.get("state") != "ready",
               "the custody rollback leaves no ready session",
@@ -237,10 +243,10 @@ def configuration_refusal_rollback() -> None:
               "the real opencode entry refuses an unverified explicit selection", receipt=receipt)
         check(receipt.get("mutation_status") in ("not_started", "unknown"),
               "the refusal reports truthful mutation state", mutation=receipt.get("mutation_status"))
-        wait_until(lambda: _residual_for(sb.record_dir(session, "opencode")) == [], 8,
+        wait_until(lambda: _identity_gone(sb, session, "opencode"), 8,
                    "the refused configuration leaves no holder or agent")
-        check(_residual_for(sb.record_dir(session, "opencode")) == [],
-              "no residual holder or native agent remains after the refusal")
+        check(_identity_gone(sb, session, "opencode"),
+              "the recorded exact holder and agent identities are gone after the refusal")
     finally:
         sb.cleanup([session])
 

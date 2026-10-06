@@ -528,7 +528,13 @@ def do_internal_run(spec_path: Path) -> dict:
 
 
 def _stop_owned_holder(sock: Path, instance: str | None, proc: subprocess.Popen) -> dict:
-    """Stop this attempt's holder by identity, then reap its own Popen child."""
+    """Stop this attempt's holder by identity, then reap its own Popen child.
+
+    Clean requires a positive stop reply with an actual empty residual list and a
+    reaped child. A missing/refused reply, a null residual, or a live holder keeps
+    the native/worker custody unknown: the native agent has its own group, so a
+    reaped holder alone is not proof of no residual.
+    """
     params: dict = {"force": True}
     if instance:
         params["expected_holder_instance_id"] = instance
@@ -536,9 +542,11 @@ def _stop_owned_holder(sock: Path, instance: str | None, proc: subprocess.Popen)
     reply = reply if isinstance(reply, dict) else {}
     terminate_owned(proc)
     residual = reply.get("residual_pids")
+    stopped = reply.get("stopped") is True
+    clean = stopped and isinstance(residual, list) and residual == [] and not pid_alive(proc.pid)
     return {
-        "holder_may_exist": bool(residual) or pid_alive(proc.pid),
-        "host_session_stopped": bool(reply.get("stopped")),
+        "holder_may_exist": not clean,
+        "host_session_stopped": stopped,
         "residual_pids": residual,
         "holder_alive": pid_alive(proc.pid),
     }
@@ -659,14 +667,16 @@ def do_submit(args: argparse.Namespace) -> dict:
         return {"schema": SCHEMA, "result": "ready", "reconciled": False,
                 "label": label, "backend": backend, **ready_facts(verified)}
     except BrokerError as exc:
-        unresolved, state = _reconcile_failed_attempt(backend, label, spec_path, args)
+        unresolved, state = _reconcile_failed_attempt(backend, label, spec_path, args,
+                                                      record_dir, platform, session, repo)
         if not exc.spawned and (unresolved or verified_holder(record_dir, platform, session, repo)):
             exc.spawned = True
         raise
     except Exception as exc:
         # An unexpected failure (for example a private-file write error) still
         # reconciles and never claims a clean effect it cannot prove.
-        unresolved, state = _reconcile_failed_attempt(backend, label, spec_path, args)
+        unresolved, state = _reconcile_failed_attempt(backend, label, spec_path, args,
+                                                      record_dir, platform, session, repo)
         if verified_holder(record_dir, platform, session, repo) is not None:
             unresolved = True
         raise BrokerError("launch-failed", f"{type(exc).__name__}: {exc}",
@@ -694,39 +704,82 @@ def wait_receipt_file(record_dir: Path, timeout: float) -> dict | None:
 
 
 def _reconcile_failed_attempt(backend: str, label: str, spec_path: Path,
-                              args: argparse.Namespace) -> tuple[bool, str]:
+                              args: argparse.Namespace, record_dir: Path, platform: str,
+                              session: str, repo: str) -> tuple[bool, str]:
     """Bound a failed attempt's cleanup to its own job/holder.
 
     Returns (unresolved, state). Unresolved is True when the exact effect cannot
     be established, so the caller keeps the attempt evidence and reports an
-    unknown outcome. Never unloads a job this attempt cannot prove it owns.
+    unknown outcome. Never unloads a job this attempt cannot prove it owns, and
+    never declares clean from a job unload alone while an own holder effect
+    remains.
     """
+    remains = _own_holder_effect_remains(record_dir, platform, session, repo)
     if backend == "unsupported":
-        return False, "absent"
+        return remains, "absent"
     state = os_job_state(backend, label)
     owns = os_job_owns(backend, label, spec_path) if state in ("running", "exited") else False
     if owns:
         os_wait_stopped(backend, label, float(args.ready_timeout) + 10.0)
         os_unload(backend, label)
-        return False, state
+        return _own_holder_effect_remains(record_dir, platform, session, repo), state
     if state in ("running", "exited", "unknown"):
         return True, state
-    return False, state
+    return remains, state
+
+
+def _own_holder_effect_remains(record_dir: Path, platform: str, session: str, repo: str) -> bool:
+    """Whether this exact session's recorded holder is still alive."""
+    record = read_json(record_dir / RECORD_NAME)
+    if not record or record.get("platform") != platform or record.get("session") != session:
+        return False
+    if record.get("repo") != repo:
+        return False
+    return pid_alive(record.get("holder_pid"))
 
 
 def do_cleanup(args: argparse.Namespace) -> dict:
-    """Remove this session's owned leftover job/run dir. Never unload a running job."""
+    """Remove only this session's proven completed own attempt artifacts.
+
+    A running job, an unknown manager state, or an exited job this session's
+    attempts do not own is left untouched. The manager is never unloaded on a
+    guess, and a nonowned or concurrent resource is preserved.
+    """
     backend, _ = backend_for(args.backend)
     label = label_for(args.platform, args.session, args.repo)
     run_dir = run_dir_for(Path(args.run_base) if args.run_base else default_run_base(), label)
-    if backend != "unsupported" and os_job_state(backend, label) == "running":
-        raise BrokerError("job-running",
-                          "the one-shot job for this session is still running; stop the holder "
-                          "through the Runner first", label=label)
-    if backend != "unsupported" and os_job_state(backend, label) == "exited":
-        os_unload(backend, label)
-    remove_quiet(run_dir)
-    return {"schema": SCHEMA, "result": "cleaned", "label": label}
+    if backend != "unsupported":
+        state = os_job_state(backend, label)
+        if state == "running":
+            raise BrokerError("job-running",
+                              "the one-shot job for this session is still running; stop the holder "
+                              "through the Runner first", label=label)
+        if state == "unknown":
+            raise BrokerError("job-state-unknown",
+                              "the service-manager state is unreadable; the owned job and its "
+                              "artifacts stay untouched", label=label)
+        if state == "exited":
+            owned = any(os_job_owns(backend, label, spec)
+                        for spec in run_dir.glob("attempt-*/spec.json"))
+            if not owned:
+                raise BrokerError("job-not-owned",
+                                  "an exited job for this session is not owned by a recorded "
+                                  "attempt; leave it", label=label)
+            os_unload(backend, label)
+    # Remove only attempt dirs no loaded job references any more.
+    removed = 0
+    if run_dir.exists():
+        for attempt in sorted(run_dir.glob("attempt-*")):
+            if backend != "unsupported" and os_job_owns(backend, label, attempt / "spec.json"):
+                continue
+            remove_quiet(attempt)
+            removed += 1
+        try:
+            if not any(run_dir.iterdir()):
+                remove_quiet(run_dir)
+        except OSError:
+            pass
+    return {"schema": SCHEMA, "result": "cleaned", "label": label, "attempts_removed": removed}
 
 
 # --------------------------------------------------------------------------- cli

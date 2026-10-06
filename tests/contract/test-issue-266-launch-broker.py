@@ -391,6 +391,59 @@ def test_systemd_user_refusal(sb: Sandbox) -> None:
     check(stale == [], "the refused backend leaves no run-dir artifact", stale=[str(p) for p in stale])
 
 
+def test_recovery_source_probes(sb: Sandbox) -> None:
+    module = load_broker_module()
+
+    class FakeProc:
+        pid = 2 ** 30
+        def poll(self): return 0
+        def wait(self, timeout=None): return 0
+
+    original_socket = module.socket_op
+    module.socket_op = lambda *a, **k: {}
+    try:
+        result = module._stop_owned_holder(Path("/nonexistent.sock"), "inst", FakeProc())
+    finally:
+        module.socket_op = original_socket
+    check(result["holder_may_exist"] is True and result["host_session_stopped"] is False
+          and result["residual_pids"] is None,
+          "an absent stop reply keeps native/worker custody unknown", result=result)
+
+    label = module.label_for(sb.platform, sb.session, sb.repo.as_posix())
+    run_dir = sb.launch_base / label
+    attempt = run_dir / "attempt-fixture"
+    attempt.mkdir(parents=True, exist_ok=True)
+    (attempt / "spec.json").write_text("{}")
+    original_state = module.os_job_state
+    original_owns = module.os_job_owns
+    try:
+        module.os_job_state = lambda backend, label: "unknown"
+        module.os_job_owns = lambda *a: False
+        reason = None
+        try:
+            module.do_cleanup(argparse.Namespace(backend="launchd", platform=sb.platform,
+                              session=sb.session, repo=sb.repo.as_posix(),
+                              run_base=str(sb.launch_base)))
+        except module.BrokerError as exc:
+            reason = exc.code
+        check(reason == "job-state-unknown",
+              "cleanup leaves an unknown manager state untouched", reason=reason)
+        check(attempt.exists(), "cleanup keeps attempt evidence on an unknown state")
+        module.os_job_state = lambda backend, label: "exited"
+        reason = None
+        try:
+            module.do_cleanup(argparse.Namespace(backend="launchd", platform=sb.platform,
+                              session=sb.session, repo=sb.repo.as_posix(),
+                              run_base=str(sb.launch_base)))
+        except module.BrokerError as exc:
+            reason = exc.code
+        check(reason == "job-not-owned",
+              "cleanup does not unload a nonowned exited job", reason=reason)
+    finally:
+        module.os_job_state = original_state
+        module.os_job_owns = original_owns
+
+
 TESTS = (
     ("literal_argv_structure", test_literal_argv_structure, False),
     ("foreign_identity_rejected", test_foreign_identity_rejected, False),
@@ -399,6 +452,7 @@ TESTS = (
     ("failed_start_cleanup", test_failed_start_cleanup, False),
     ("spaces_in_record_path", test_spaces_in_record_path, True),
     ("systemd_user_refusal", test_systemd_user_refusal, False),
+    ("recovery_source_probes", test_recovery_source_probes, False),
 )
 
 
