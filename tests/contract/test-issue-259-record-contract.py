@@ -1289,6 +1289,170 @@ class RecordContract(unittest.TestCase):
         self.assertTrue(any(key.startswith("host:tasks/kept@") for key in returned), returned)
         self.assertFalse(out["value"]["verified"])
 
+    def test_explicit_verdict_reconciles_an_accepted_prior_without_losing_duties(self) -> None:
+        self.init()
+        verdict = {"value": "accepted", "by": "host", "why": "the current design is accepted"}
+        code, out = self.state(
+            "update", "--file", str(self.file), "--writer", "host", "--source", "accepted-design",
+            "--kind", "tasks", "--id", "design", "--set", json.dumps({
+                "stage": "done", "goal": "deliver the design", "verdict": verdict,
+                "evidence": ["original-design", "unresolved-final-review"],
+                "next": "finish the integrated review", "wait": "outer and Opus", "keep_open": True,
+                "dispatch": ["design-review"], "dispositions": {"design-review": "accepted"}}))
+        self.assertEqual(code, 0, out)
+        code, out = self.state(
+            "update", "--file", str(self.file), "--writer", "sideagent", "--source", "pending-duty",
+            "--kind", "decisions", "--id", "final-review", "--set",
+            json.dumps({"owner": "host", "question": "accept the integrated candidate?"}))
+        self.assertEqual(code, 0, out)
+        doc = self.doc()
+        doc["state"]["tasks"]["design"]["prior_verdict"] = {
+            "value": "partial", "by": "host", "why": "the prior review is pending"}
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        code, out = self.state(
+            "update", "--file", str(self.file), "--writer", "sideagent", "--source", "same-process-fact",
+            "--kind", "tasks", "--id", "design", "--expect-rev", "1", "--set", '{"wait":"outer and Opus"}')
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["value"]["prior_verdict"], doc["state"]["tasks"]["design"]["prior_verdict"])
+        before = self.doc()["state"]
+        for revision in (2, 3):
+            code, out = self.state(
+                "update", "--file", str(self.file), "--writer", "host", "--source", "same-authoritative-verdict",
+                "--kind", "tasks", "--id", "design", "--expect-rev", str(revision),
+                "--set", json.dumps({"verdict": verdict}))
+            self.assertEqual(code, 0, out)
+            self.assertNotIn("prior_verdict", out["value"])
+            for key, value in before["tasks"]["design"].items():
+                if key not in ("prior_verdict", "rev", "updated_at", "source", "writer", "host_revision"):
+                    self.assertEqual(out["value"][key], value, key)
+            self.assertEqual({k: v for k, v in self.doc()["state"].items() if k != "tasks"},
+                             {k: v for k, v in before.items() if k != "tasks"})
+            self.assertTrue(any(row["id"] == "final-review" for row in json.loads(self.doc()["body"])["attention"]))
+
+    def test_legacy_verdict_notes_migrate_without_losing_open_prior_text(self) -> None:
+        self.init()
+        doc = self.doc()
+        doc["state"]["tasks"] = {
+            "current": {"stage": "doing", "goal": "finish the repair", "rev": 1,
+                        "verdict": {"value": "partial", "by": "host", "note": "keep final review open"},
+                        "evidence": ["original-review"], "next": "complete QA"},
+            "open": {"stage": "review", "goal": "review the repair", "rev": 1,
+                     "prior_verdict": {"value": "repair", "by": "host", "why": "retain current evidence",
+                                       "note": "resolve the second review duty"},
+                     "wait": "Host review", "evidence": ["unresolved-source"]}}
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        before = self.file.read_bytes()
+        code, view = self.state("view", "--file", str(self.file), "--role", "host")
+        self.assertEqual(code, 0, view)
+        self.assertEqual([row["path"] for row in view["unknown"]],
+                         ["state.tasks.current.verdict.note", "state.tasks.open.prior_verdict.note"])
+        self.assertEqual(self.file.read_bytes(), before)
+        for slot, key, value in (("prior_verdict", "note", ["unmapped"]),
+                                 ("prior_verdict", "why", {"unmapped": "current"})):
+            invalid = json.loads(before)
+            invalid["state"]["tasks"]["open"][slot][key] = value
+            self.file.write_text(json.dumps(invalid), encoding="utf-8")
+            sentinel = self.file.read_bytes()
+            code, out = self.state("migrate", "--file", str(self.file), "--write")
+            self.assertEqual((code, out["result"]), (2, "blocked"), out)
+            self.assertEqual(out["blockers"][0]["path"], "tasks.open.prior_verdict.note")
+            self.assertEqual(self.file.read_bytes(), sentinel)
+        self.file.write_bytes(before)
+        removed = ["tasks.current.verdict.note mapped to tasks.current.verdict.why",
+                   "tasks.open.prior_verdict.note mapped to tasks.open.prior_verdict.why"]
+        code, plan = self.state("migrate", "--file", str(self.file))
+        self.assertEqual((code, plan["result"]), (0, "planned"), plan)
+        self.assertEqual(plan["report"]["removed"], removed)
+        self.assertEqual(self.file.read_bytes(), before)
+        code, out = self.state("migrate", "--file", str(self.file), "--write")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["removed"], removed)
+        expected = json.loads(before)["state"]
+        expected.pop("retired", None)  # Existing cleanup removes this empty list.
+        expected["tasks"]["current"]["verdict"]["why"] = expected["tasks"]["current"]["verdict"].pop("note")
+        prior = expected["tasks"]["open"]["prior_verdict"]
+        prior["why"] += "\n" + prior.pop("note")
+        self.assertEqual(self.doc()["state"], expected)
+        migrated = self.file.read_bytes()
+        code, out = self.state("migrate", "--file", str(self.file), "--write")
+        self.assertEqual((code, out["result"]), (0, "current"), out)
+        self.assertEqual(self.file.read_bytes(), migrated)
+        code, out = self.state(
+            "update", "--file", str(self.file), "--writer", "sideagent", "--source", "same-process-fact",
+            "--kind", "tasks", "--id", "open", "--expect-rev", "1", "--set", '{"wait":"Host review"}')
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["value"]["prior_verdict"], prior)
+        self.assertNotIn("verdict", out["value"])
+        self.assertTrue(any(row["id"] == "open" and row["why"] == "awaiting-verdict"
+                            for row in json.loads(self.doc()["body"])["attention"]))
+
+    def test_explicit_legacy_verdict_update_clears_prior_after_role_and_cas_checks(self) -> None:
+        self.init()
+        doc = self.doc()
+        doc["state"]["tasks"]["legacy"] = {
+            "stage": "done", "goal": "deliver the design", "rev": 1,
+            "verdict": {"value": "accepted", "by": "host", "note": "final integrated review remains open"},
+            "prior_verdict": {"value": "partial", "by": "host", "note": "earlier review is pending"},
+            "evidence": ["original-design", "pending-review"], "next": "finish integrated QA",
+            "wait": "outer and Opus", "dispatch": ["design-seat"], "keep_open": True}
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        before = self.file.read_bytes()
+        patch = {"verdict": {"note": None, "why": "final integrated review remains open"}}
+        for writer, revision, proposed, extra, reason in (
+                ("host", "0", patch, (), "conflict"),
+                ("worker", "1", patch, (), "writer-refused"),
+                ("sideagent", "1", patch, (), "host-turn-required"),
+                ("host", "1", {"verdict": {"note": None, "value": "invalid"}}, (), "invalid-input"),
+                ("host", "1", {"verdict": {"note": "invalid new legacy key"}}, (), "invalid-input"),
+                ("host", "1", {"prior_verdict": None}, (), "invalid-input")):
+            code, out = self.state(
+                "update", "--file", str(self.file), "--writer", writer, "--source", "refusal-case",
+                "--kind", "tasks", "--id", "legacy", "--expect-rev", revision, "--set", json.dumps(proposed), *extra)
+            self.assertNotEqual(code, 0, out)
+            self.assertEqual(out["reason"], reason)
+            self.assertEqual(self.file.read_bytes(), before)
+        for writer in ("host", "sideagent"):
+            with self.subTest(writer=writer):
+                self.file.write_bytes(before)
+                extra = ("--host-turn", "host-legacy-review-2") if writer == "sideagent" else ()
+                code, out = self.state(
+                    "update", "--file", str(self.file), "--writer", writer, "--source", "explicit-current-verdict",
+                    "--kind", "tasks", "--id", "legacy", "--expect-rev", "1", "--set", json.dumps(patch), *extra)
+                self.assertEqual(code, 0, out)
+                task = out["value"]
+                self.assertNotIn("prior_verdict", task)
+                self.assertNotIn("note", task["verdict"])
+                self.assertEqual(task["verdict"]["why"], doc["state"]["tasks"]["legacy"]["verdict"]["note"])
+                for key, value in doc["state"]["tasks"]["legacy"].items():
+                    if key not in ("prior_verdict", "verdict", "rev"):
+                        self.assertEqual(task[key], value, key)
+                self.assertEqual(self.doc()["state"]["authorization"], doc["state"]["authorization"])
+                if writer == "sideagent":
+                    self.assertEqual(task["transcribed"], {"host_turn": "host-legacy-review-2", "fields": ["verdict"]})
+                    self.assertTrue(any(row["why"] == "transcribed-check" and row["host_turn"] == "host-legacy-review-2"
+                                        for row in json.loads(self.doc()["body"])["attention"]))
+
+    def test_verdict_null_is_refused_without_losing_open_prior(self) -> None:
+        self.init()
+        doc = self.doc()
+        doc["state"]["tasks"]["open"] = {
+            "stage": "review", "goal": "review the repair", "rev": 1,
+            "prior_verdict": {"value": "repair", "by": "host", "why": "keep the pending instruction"},
+            "evidence": ["pending-source"], "wait": "Host review"}
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        before = self.file.read_bytes()
+        for writer, extra, reason in (("host", (), "invalid-input"),
+                                      ("sideagent", ("--host-turn", "host-null-2"), "invalid-input"),
+                                      ("sideagent", (), "host-turn-required")):
+            code, out = self.state(
+                "update", "--file", str(self.file), "--writer", writer, "--source", "null-case",
+                "--kind", "tasks", "--id", "open", "--expect-rev", "1", "--set", '{"verdict":null}', *extra)
+            self.assertEqual((code, out["reason"]), (2, reason), out)
+            self.assertEqual(self.file.read_bytes(), before)
+            if reason == "invalid-input":
+                self.assertEqual(out["path"], "tasks.open.verdict")
+                self.assertIn("keep the verdict", out["recovery"])
+
     def test_node_process_write_does_not_change_delivery_open(self) -> None:
         self.init()
         self.state("update", "--file", str(self.file), "--writer", "host", "--source", "bind",

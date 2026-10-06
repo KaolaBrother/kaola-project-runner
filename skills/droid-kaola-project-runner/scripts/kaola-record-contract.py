@@ -251,7 +251,7 @@ def reject_record_patch(kind: str, patch: dict[str, Any]) -> dict[str, str] | No
             )
         if key in ("verdict", "prior_verdict") and isinstance(value, dict):
             for nested in value:
-                if nested not in VERDICT_KEYS:
+                if nested not in VERDICT_KEYS and value[nested] is not None:
                     return refusal(
                         f"{kind}.{key}.{nested}",
                         ", ".join(sorted(VERDICT_KEYS)),
@@ -692,16 +692,15 @@ def unknown_paths(state: dict[str, Any]) -> list[dict[str, str]]:
             for key in item:
                 if key not in UNVERIFIED_KEYS:
                     add(f"state.unverified.{ident}.{key}")
-    for kind, allowed in RECORD_KEYS.items():
+    for kind in RECORD_KEYS:
         records = state.get(kind) or {}
         if not isinstance(records, dict):
             continue
         for ident, record in records.items():
             if not isinstance(record, dict):
                 continue
-            for key in record:
-                if key not in allowed:
-                    add(f"state.{kind}.{ident}.{key}")
+            for key in unknown_record_keys(kind, record):
+                add(f"state.{kind}.{ident}.{key}")
     for stone in state.get("retired") or []:
         if isinstance(stone, dict):
             for key in stone:
@@ -814,10 +813,29 @@ def cleanup_current(state: dict[str, Any]) -> tuple[list[dict[str, str]], dict[s
             changed = True
     tasks = cleaned.get("tasks") if isinstance(cleaned.get("tasks"), dict) else {}
     for task_id, task in tasks.items():
+        if not isinstance(task, dict):
+            continue
+        for slot in ("verdict", "prior_verdict"):
+            verdict = task.get(slot)
+            if not isinstance(verdict, dict) or "note" not in verdict:
+                continue
+            path = f"tasks.{task_id}.{slot}.note"
+            note, why = verdict["note"], verdict.get("why", "")
+            if not isinstance(note, str) or not isinstance(why, str):
+                blockers.append(refusal(path, "string note and why",
+                                        "rehome both current texts explicitly; the file was not written"))
+                continue
+            # Keep both literal texts when the current explanation differs.
+            verdict["why"] = why + "\n" + note if why and note and why != note else why or note
+            verdict.pop("note")
+            removed.append(f"{path} mapped to tasks.{task_id}.{slot}.why")
+            changed = True
         if isinstance(task, dict) and "legacy" in task:
             removed.append(f"tasks.{task_id}.legacy")
             task.pop("legacy")
             changed = True
+    if blockers:
+        return blockers, state, False, []
     unverified = cleaned.get("unverified")
     if isinstance(unverified, dict):
         for ident, item in list(unverified.items()):

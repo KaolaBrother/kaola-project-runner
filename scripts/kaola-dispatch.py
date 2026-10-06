@@ -3715,6 +3715,7 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
         raise StateRefusal("invalid-input", f"{', '.join(RECORD_META)} are kept by the tool")
     rejected = RECORD.reject_record_patch(kind, patch)
     if rejected:
+        rejected["path"] = f"{kind}.{record_id}.{rejected['path'].removeprefix(kind + '.')}"
         raise StateRefusal("invalid-input", rejected["detail"], **{
             key: rejected[key] for key in ("path", "allowed", "recovery")
         }, unapplied=patch)
@@ -3755,7 +3756,18 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
             raise StateRefusal("host-turn-required",
                                f"{', '.join(owned)} are Host decisions; name the Host turn transcribed",
                                unapplied=patch)
+    if kind == "tasks" and "verdict" in patch and patch["verdict"] is None:
+        raise StateRefusal(
+            "invalid-input", "verdict must be an authoritative verdict object",
+            path=f"tasks.{record_id}.verdict", allowed=", ".join(VERDICTS),
+            recovery="keep the verdict or set a valid verdict object. Use `state migrate` for legacy note text. "
+                     "The file was not changed.", unapplied=patch,
+        )
     merged = merge_patch(current or {}, patch)
+    if kind == "tasks" and isinstance(patch.get("verdict"), dict):
+        # The explicit Host verdict replaces the prior review verdict.
+        # Refuse invalid new verdicts below before any file write.
+        merged.pop("prior_verdict", None)
     if kind == "tasks" and isinstance(patch.get("dispatch"), list):
         merged["dispatch"] = RECORD.union_dispatch((current or {}).get("dispatch"), patch.get("dispatch"))
     if current is None:
@@ -3767,11 +3779,13 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
     if unknown:
         raise StateRefusal(
             "invalid-input",
-            f"{kind}.{unknown[0]} is not a current field. Run `state migrate` and read its removed list, "
-            "or set this key to null.",
-            path=f"{kind}.{unknown[0]}",
+            f"{kind}.{record_id}.{unknown[0]} is not a current field.",
+            path=f"{kind}.{record_id}.{unknown[0]}",
             allowed=", ".join(sorted(RECORD.RECORD_KEYS[kind])),
-            recovery="run `state migrate` or set this key to null and retry. The file was not changed.",
+            recovery="run `state migrate` for known legacy mappings and read its removed list. "
+                     "Rehome other current text before an explicit null removal. "
+                     "prior_verdict is tool-owned; an authoritative verdict supersedes it. "
+                     "The file was not changed.",
             unapplied=patch,
         )
     typed = RECORD.record_type_problem(kind, merged)

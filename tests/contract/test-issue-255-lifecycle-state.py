@@ -314,7 +314,9 @@ class StateTool(StateProject):
     def test_a_repair_verdict_does_not_answer_the_next_review(self) -> None:
         self.init()
         fingerprint = lambda: holder_module.attention_fingerprint(self.doc()["body"])
-        self.update("host", "tasks", "t3", {"stage": "review", "goal": "g"})
+        self.update("host", "tasks", "t3", {"stage": "review", "goal": "g",
+                                             "evidence": ["repair-source", "unresolved-review"],
+                                             "next": "resolve the separate review duty", "wait": "outer review"})
         self.update("host", "tasks", "t3", {"verdict": {"value": "repair", "why": "P1"}}, "--expect-rev", "1")
         self.assertEqual([(row["id"], row["why"]) for row in json.loads(self.doc()["body"])["attention"]],
                          [("t3", "delivery-open")])
@@ -328,8 +330,47 @@ class StateTool(StateProject):
         rows = json.loads(self.doc()["body"])["attention"]
         self.assertEqual([(r["why"], r.get("prior_verdict")) for r in rows], [("awaiting-verdict", "repair")])
         self.assertNotEqual(fingerprint(), quiet, "the Host is woken for the second review")
-        code, out = self.update("sideagent", "tasks", "t3", {"prior_verdict": None}, "--expect-rev", "4")
-        self.assertEqual(out["reason"], "invalid-input")
+        before = self.file.read_bytes()
+        for writer, patch, revision, reason in (
+                ("sideagent", {"prior_verdict": None}, "4", "invalid-input"),
+                ("host", {"prior_verdict": {"value": "accepted"}}, "4", "invalid-input"),
+                ("host", {"verdict": {"value": "accepted"}}, "3", "conflict"),
+                ("worker", {"verdict": {"value": "accepted"}}, "4", "writer-refused"),
+                ("sideagent", {"verdict": {"value": "accepted"}}, "4", "host-turn-required")):
+            code, out = self.update(writer, "tasks", "t3", patch, "--expect-rev", revision)
+            self.assertNotEqual(code, 0, out)
+            self.assertEqual(out["reason"], reason)
+            self.assertEqual(self.file.read_bytes(), before, "a refusal must not change the file")
+        self.update("sideagent", "decisions", "pending", {"owner": "host", "question": "accept the open duty?"})
+        self.update("sideagent", "holds", "grant-hold", {"scope": "codex/default", "reason": "owner hold"})
+        before = self.file.read_bytes()
+        state_before = self.doc()["state"]
+        for writer in ("host", "sideagent"):
+            with self.subTest(writer=writer):
+                self.file.write_bytes(before)
+                extra = ("--host-turn", "host-review-5") if writer == "sideagent" else ()
+                code, out = self.update(writer, "tasks", "t3", {"verdict": {
+                    "value": "accepted", "why": "the repair passed"}}, "--expect-rev", "4", *extra)
+                self.assertEqual(code, 0, out)
+                task = self.doc()["state"]["tasks"]["t3"]
+                self.assertNotIn("prior_verdict", task)
+                self.assertEqual(task["verdict"]["value"], "accepted")
+                self.assertEqual(task["verdict"]["by"], "host")
+                for key, value in state_before["tasks"]["t3"].items():
+                    if key not in ("prior_verdict", "rev", "updated_at", "writer", "host_revision"):
+                        self.assertEqual(task[key], value, key)
+                self.assertEqual({k: v for k, v in self.doc()["state"].items() if k != "tasks"},
+                                 {k: v for k, v in state_before.items() if k != "tasks"})
+                attention = json.loads(self.doc()["body"])["attention"]
+                self.assertTrue(any(row["id"] == "pending" for row in attention))
+                rows = [row for row in attention if row["id"] == "t3"]
+                if writer == "sideagent":
+                    self.assertEqual(task["verdict"]["host_turn"], "host-review-5")
+                    self.assertEqual(task["transcribed"], {"host_turn": "host-review-5", "fields": ["verdict"]})
+                    self.assertEqual(rows, [{"kind": "tasks", "id": "t3", "why": "transcribed-check",
+                                             "host_turn": "host-review-5", "fields": ["verdict"]}])
+                else:
+                    self.assertEqual(rows, [])
 
     def test_every_repeated_repair_result_is_new_attention(self) -> None:
         self.init()
