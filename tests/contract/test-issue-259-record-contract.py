@@ -346,10 +346,6 @@ class RecordContract(unittest.TestCase):
             json.dumps({"authorization": {"model_switches": ["droid/default"]}})])
         self.assertEqual(code, 2, out); self.assertEqual(self.delegator.read_bytes(), before)
 
-    def update(self, kind: str, ident: str, patch: dict, *args: str) -> tuple[int, dict]:
-        return self.state("update", "--file", str(self.file), "--writer", "host", "--source", "original-source",
-                          "--kind", kind, "--id", ident, "--set", json.dumps(patch), *args)
-
         worker_pause = {"schema": "kaola-delegator-heartbeat/1", "revision": 0,
             "authorization": {"worker_pool": ["zcode/default", "dsh/default"], "paused": ["zcode/default"]},
             "watch": {"reopen": {"kind": "recovery", "status": "open", "source": "original-pause",
@@ -374,8 +370,12 @@ class RecordContract(unittest.TestCase):
         self.delegator.write_text(json.dumps(saved))
         code, migrated = run_dispatch(["delegator", "migrate", "--file", str(self.delegator), "--write"])
         self.assertEqual(code, 0, migrated)
-        self.assertIn("authorization.elite_grants[0].class derived from catalog", migrated["removed"])
+        self.assertIn("authorization.elite_grants[0].class derived from catalog", migrated["dropped"])
         self.assertNotIn("class", json.loads(self.delegator.read_text())["authorization"]["elite_grants"][0])
+
+    def update(self, kind: str, ident: str, patch: dict, *args: str) -> tuple[int, dict]:
+        return self.state("update", "--file", str(self.file), "--writer", "host", "--source", "original-source",
+                          "--kind", kind, "--id", ident, "--set", json.dumps(patch), *args)
 
     def test_current_exception_resolution_repeated_cli_views_and_newer_recovery(self) -> None:
         self.init()
