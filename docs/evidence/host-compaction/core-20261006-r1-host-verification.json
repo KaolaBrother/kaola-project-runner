@@ -1,0 +1,543 @@
+{
+  "date": "2026-10-06",
+  "candidate": "4b247a2dbae9006be71962da32b31e5c5eb05629",
+  "rows": {
+    "codex": {
+      "original_events": "/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-orchestrator-main/1eb0bc62e7c7029a/events.jsonl",
+      "events_sha256": "b08e8d279c288c42f48225cca94ab045db67d310d979a1a2ea7fd85a0144ffe5",
+      "signal": {
+        "cursor": 88,
+        "holder": "c0c935cbaee999d195a44ab3b1d53af0",
+        "kind": "compact_reload_detected",
+        "occurrence_id": "01a1109b-29f7-7a40-8644-3830a2a601a6",
+        "role": "host",
+        "session_id": "01a11098-40c1-7723-8928-a32b882c4d09",
+        "signal": {
+          "method": "session/update",
+          "params": {
+            "sessionId": "01a11098-40c1-7723-8928-a32b882c4d09",
+            "update": {
+              "compactionId": "01a1109b-29f7-7a40-8644-3830a2a601a6",
+              "sessionUpdate": "compaction_update",
+              "status": "completed"
+            }
+          }
+        },
+        "source": "acp-compaction-update",
+        "ts": 1791279979.55
+      },
+      "batch": {
+        "batch": "b-90965c51ce82",
+        "cursor": 94,
+        "host_holder": "c0c935cbaee999d195a44ab3b1d53af0",
+        "host_revision_through": 3,
+        "kind": "sideagent_node_batch",
+        "prompt_fingerprint": "sha256:70cf4b137a4c08fdb87bafb3ba3304f97d363fa73037bae79bc1ab8135d691f6",
+        "recovery_alerts": {},
+        "recovery_input": {
+          "at": "2026-10-06T09:46:19.621109+00:00",
+          "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-orchestrator-main/1eb0bc62e7c7029a/events.jsonl#88",
+          "holder": "c0c935cbaee999d195a44ab3b1d53af0",
+          "kind": "host-compaction",
+          "occurrence_id": "01a1109b-29f7-7a40-8644-3830a2a601a6",
+          "seq": 1,
+          "source": "completed-host-signal"
+        },
+        "target_holder": "e1f8fbd3f188bd392e5d95ffcfaa2388",
+        "ts": 1791279982.757
+      },
+      "checkpoint": {
+        "at": "2026-10-06T09:53:40.103455+00:00",
+        "batch": "b-90965c51ce82",
+        "host_revision": {
+          "current": 3,
+          "from": 3,
+          "through": 3
+        },
+        "node": {
+          "holder_instance_id": "e1f8fbd3f188bd392e5d95ffcfaa2388",
+          "session": "codex-KPR1035C-sideagent"
+        },
+        "recovery": {
+          "checked": {
+            "authorization": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/AGENTS.md#KPR-USER-REQUIREMENTS",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.project",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.authorization",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/delegator-heartbeat.json#project",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/delegator-heartbeat.json#authorization",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/kaola-workflow/kaola-project-runner/workflow-state.md#Claim",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/kaola-workflow/.ledger/issue-264.jsonl#n=0",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-orchestrator-main/1eb0bc62e7c7029a/record.json#holder_instance_id,session_role"
+            ],
+            "duties": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.decisions",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.alerts",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.holds",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.maintenance.recovery_input",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.maintenance.last_checkpoint.settled",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-sideagent/1eb0bc62e7c7029a/events.jsonl#175",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-orchestrator-main/1eb0bc62e7c7029a/events.jsonl#88",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-orchestrator-main/1eb0bc62e7c7029a/events.jsonl#92"
+            ],
+            "links": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe.dispatch[0]",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe.evidence",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo/.kaola/dispatch-index.json#items[0]",
+              "/tmp/kpr-i264-862-core/oc/receipt.json#steps.compact_end,steps.continue_end,tools_after_boundary,stop",
+              "/tmp/kpr-i264-862-core/oc/record/record.json#state,session,holder_instance_id,event_cursor",
+              "/tmp/kpr-i264-862-core-runtime-proof.md#OpenCode detail",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-orchestrator-main/1eb0bc62e7c7029a/events.jsonl#88",
+              "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-orchestrator-main/1eb0bc62e7c7029a/events.jsonl#94"
+            ]
+          },
+          "input": {
+            "at": "2026-10-06T09:46:19.621109+00:00",
+            "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/records/codex/codex-KPR1035C-orchestrator-main/1eb0bc62e7c7029a/events.jsonl#88",
+            "holder": "c0c935cbaee999d195a44ab3b1d53af0",
+            "kind": "host-compaction",
+            "occurrence_id": "01a1109b-29f7-7a40-8644-3830a2a601a6",
+            "seq": 1,
+            "source": "completed-host-signal"
+          },
+          "seq": 1,
+          "unavailable": {}
+        },
+        "returned_to_host": {
+          "recovery#1": "recovery-entry-unknown"
+        },
+        "settled": [],
+        "source": "b-90965c51ce82",
+        "verified": false
+      },
+      "host_stop": {
+        "agent_exit_code": 0,
+        "agent_exit_signal": null,
+        "git": {
+          "branch": "main",
+          "dirty": true
+        },
+        "mutation_status": "completed",
+        "platform": "codex",
+        "repo": "/private/tmp/kpr-i264-host-chain-1035/core/codex/run/repo",
+        "residual_pids": [],
+        "schema_version": 3,
+        "session": "codex-KPR1035C-orchestrator-main",
+        "stopped": true,
+        "swept_child_pgids": [],
+        "transport": {
+          "selected": "acp"
+        }
+      },
+      "node_reclaims": [
+        {
+          "cursor": 83,
+          "holder": "daf020e8ad1d8ec218751c24d8a614e1",
+          "kind": "sideagent_node_stopped",
+          "receipt": {
+            "stopped": true
+          },
+          "ts": 1791279950.853
+        },
+        {
+          "cursor": 353,
+          "holder": "e1f8fbd3f188bd392e5d95ffcfaa2388",
+          "kind": "sideagent_node_stopped",
+          "receipt": {
+            "stopped": true
+          },
+          "ts": 1791280534.76
+        }
+      ],
+      "selection": {
+        "effective_effort": "high",
+        "effective_model": "gpt-6.1-sol",
+        "effort_config_id": "reasoning_effort"
+      },
+      "bridge": null,
+      "versions": {
+        "adapter": "2.0.1",
+        "child_package": "@openai/codex",
+        "child_path": "/Users/ylmacstudio/.local/bin/codex",
+        "child_version": "0.160.1",
+        "requested_cli": "0.160.0"
+      },
+      "skill_payload_checks": [],
+      "task_progress": "# QA progress (scratch)\n\n- step1 TASK-A: fixture seeded by controller. DONE.\n- step2 TASK-B: CURRENT. At the next maintained boundary, the Host records its\n  post-compaction installed-Skill read result (paths, byte counts, last lines)\n  and continues this duty from durable records.\n",
+      "stage3": "automatic activation / PARTIAL scoped checkpoint / exact reclaim; verified settlement remains UNVERIFIED",
+      "extra_recovery_keys": [
+        "seq"
+      ]
+    },
+    "grok": {
+      "original_events": "/tmp/kpr-i264-host-chain-1035/core/grok/run/records/grok/grok-KPR1035C-orchestrator-main/0756befdb8df4e56/events.jsonl",
+      "events_sha256": "b35501361738c60ba564fbb1aa67d072c4da2edaa3ee636b7f8bfee2707dd857",
+      "signal": {
+        "cursor": 136,
+        "holder": "5aba1ef376add2009ceafba68944d111",
+        "kind": "compact_reload_detected",
+        "occurrence_id": null,
+        "role": "host",
+        "session_id": "01a110a7-0bcd-71b1-9b6e-06045627b3a3",
+        "signal": {
+          "jsonrpc": "2.0",
+          "method": "_x.ai/session_notification",
+          "params": {
+            "_meta": {
+              "agentTimestampMs": 1791280982629,
+              "eventId": "01a110a7-0bcd-71b1-9b6e-06045627b3a3-79"
+            },
+            "sessionId": "01a110a7-0bcd-71b1-9b6e-06045627b3a3",
+            "update": {
+              "sessionUpdate": "auto_compact_completed",
+              "summary_preview": null,
+              "tokens_after": 21219,
+              "tokens_before": 21219
+            }
+          }
+        },
+        "source": "grok-auto-compact-completed",
+        "ts": 1791280982.63
+      },
+      "batch": {
+        "batch": "b-a3222b0e394e",
+        "cursor": 1374,
+        "host_holder": "5aba1ef376add2009ceafba68944d111",
+        "host_revision_through": 3,
+        "kind": "sideagent_node_batch",
+        "prompt_fingerprint": "sha256:3ffa546d9877fafba2506e27460c08a3b34608e57070c17060ca253992af0c52",
+        "recovery_alerts": {},
+        "recovery_input": {
+          "at": "2026-10-06T10:03:02.699023+00:00",
+          "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/records/grok/grok-KPR1035C-orchestrator-main/0756befdb8df4e56/events.jsonl#136",
+          "holder": "5aba1ef376add2009ceafba68944d111",
+          "kind": "host-compaction",
+          "occurrence_id": null,
+          "seq": 1,
+          "source": "completed-host-signal"
+        },
+        "target_holder": "030c3132ad9e3c212008e0ec775eb01f",
+        "ts": 1791281194.079
+      },
+      "checkpoint": {
+        "at": "2026-10-06T10:09:31.068292+00:00",
+        "batch": "b-a3222b0e394e",
+        "host_revision": {
+          "current": 3,
+          "from": 3,
+          "through": 3
+        },
+        "node": {
+          "holder_instance_id": "030c3132ad9e3c212008e0ec775eb01f",
+          "session": "codex-KPR1035C-sideagent"
+        },
+        "recovery": {
+          "checked": {
+            "authorization": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/AGENTS.md#KPR-USER-REQUIREMENTS",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/.kaola/delegator-heartbeat.json",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/.kaola/heartbeat-prompt.json#state.project,state.authorization"
+            ],
+            "duties": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/.kaola/heartbeat-prompt.json#state.tasks.qa-observe,state.decisions,state.alerts,state.holds",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/qa/progress.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/qa/task-skill.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/kaola-workflow/.ledger/issue-264.jsonl"
+            ],
+            "links": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo/.kaola/dispatch-index.json#qa-prior-reclaim-1",
+              "/tmp/kpr-i264-862-core/oc/receipt.json",
+              "/tmp/kpr-i264-862-core/oc/record/record.json",
+              "/tmp/kpr-i264-862-core/oc/record/events.jsonl#2,34-37,85",
+              "/tmp/kpr-i264-862-core-runtime-proof.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/records/grok/grok-KPR1035C-orchestrator-main/0756befdb8df4e56/events.jsonl#136,1374"
+            ]
+          },
+          "input": {
+            "at": "2026-10-06T10:03:02.699023+00:00",
+            "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/records/grok/grok-KPR1035C-orchestrator-main/0756befdb8df4e56/events.jsonl#136",
+            "holder": "5aba1ef376add2009ceafba68944d111",
+            "kind": "host-compaction",
+            "occurrence_id": null,
+            "seq": 1,
+            "source": "completed-host-signal"
+          },
+          "seq": 1,
+          "unavailable": {}
+        },
+        "returned_to_host": {
+          "recovery#1": "recovery-entry-unknown"
+        },
+        "settled": [],
+        "source": "b-a3222b0e394e",
+        "verified": false
+      },
+      "host_stop": {
+        "agent_exit_code": 0,
+        "agent_exit_signal": null,
+        "git": {
+          "branch": "main",
+          "dirty": true
+        },
+        "mutation_status": "completed",
+        "platform": "grok",
+        "repo": "/private/tmp/kpr-i264-host-chain-1035/core/grok/run/repo",
+        "residual_pids": [],
+        "schema_version": 3,
+        "session": "grok-KPR1035C-orchestrator-main",
+        "stopped": true,
+        "swept_child_pgids": [],
+        "transport": {
+          "selected": "acp"
+        }
+      },
+      "node_reclaims": [
+        {
+          "cursor": 131,
+          "holder": "427992be2c5b7f6df8698dfe8c81cb25",
+          "kind": "sideagent_node_stopped",
+          "receipt": {
+            "stopped": true
+          },
+          "ts": 1791280950.109
+        },
+        {
+          "cursor": 1384,
+          "holder": "030c3132ad9e3c212008e0ec775eb01f",
+          "kind": "sideagent_node_stopped",
+          "receipt": {
+            "stopped": true
+          },
+          "ts": 1791281432.219
+        }
+      ],
+      "selection": {
+        "effective_effort": "xhigh",
+        "effective_model": "grok-4.7",
+        "effort_config_id": "reasoning_effort"
+      },
+      "bridge": null,
+      "versions": null,
+      "skill_payload_checks": [
+        {
+          "name": "kaola-project-runner",
+          "path": "/Users/ylmacstudio/.grok/skills/kaola-project-runner/SKILL.md",
+          "bytes": 17407,
+          "sha256": "1af732f378a11bd04e4533a3e1fe38cef9b9b48b393360748d0a8030f5524df7",
+          "actual_full_body_match": true,
+          "tool": "call-82eb822a-48f5-436e-8763-eecf6114f09f-2",
+          "result_cursors": [
+            324
+          ]
+        },
+        {
+          "name": "grok-kaola-project-runner",
+          "path": "/Users/ylmacstudio/.grok/skills/grok-kaola-project-runner/SKILL.md",
+          "bytes": 10193,
+          "sha256": "8328baf72c89ada26bd0ce04f70f06bd2b9382604c5b9e761a674fa8c9272730",
+          "actual_full_body_match": true,
+          "tool": "call-82eb822a-48f5-436e-8763-eecf6114f09f-3",
+          "result_cursors": [
+            326
+          ]
+        }
+      ],
+      "task_progress": "# QA progress (scratch)\n\n- step1 TASK-A: fixture seeded by controller. DONE.\n- step2 TASK-B: CURRENT. At the next maintained boundary, the Host records its\n  post-compaction installed-Skill read result (paths, byte counts, last lines)\n  and continues this duty from durable records.\n- 2026-10-06: verified post-compaction installed-Skill read. Role skill `/Users/ylmacstudio/.grok/skills/kaola-project-runner/SKILL.md` 17407 bytes, last line `machine, quota engine, or close-out dashboard or ledger.` Platform skill `/Users/ylmacstudio/.grok/skills/grok-kaola-project-runner/SKILL.md` 10193 bytes, last line `and [references/acp.md](references/acp.md) for the structured ACP command surface.` Workflow Next is not active (claim none).\n",
+      "stage3": "automatic activation / PARTIAL scoped checkpoint / exact reclaim; verified settlement remains UNVERIFIED",
+      "extra_recovery_keys": [
+        "seq"
+      ]
+    },
+    "opencode": {
+      "original_events": "/tmp/kpr-i264-host-chain-1035/core/opencode/run/records/opencode/opencode-KPR1035C-orchestrator-main/fe4e1fd89f04a300/events.jsonl",
+      "events_sha256": "6ad3db482b6a456de235fc7f1bbb908c6254353eadc203631a86b84fdd7bc1b3",
+      "signal": {
+        "cursor": 33,
+        "holder": "a1d1be782e600b94b9f191ab23dd3617",
+        "kind": "compact_reload_detected",
+        "occurrence_id": "msg_110bb50a7001n2hTSSm3OoFdCQ",
+        "role": "host",
+        "session_id": "ses_eef4a6639ffe1ZS1KQz2TX15LH",
+        "signal": {
+          "method": "session/update",
+          "params": {
+            "sessionId": "ses_eef4a6639ffe1ZS1KQz2TX15LH",
+            "update": {
+              "_meta": {
+                "opencode/compaction": {
+                  "messageId": "msg_110bb50a7001n2hTSSm3OoFdCQ",
+                  "reason": "manual",
+                  "status": "completed"
+                }
+              },
+              "sessionUpdate": "session_info_update"
+            }
+          }
+        },
+        "source": "opencode-compaction-meta",
+        "ts": 1791282077.305
+      },
+      "batch": {
+        "batch": "b-a2f62de87573",
+        "cursor": 145,
+        "host_holder": "a1d1be782e600b94b9f191ab23dd3617",
+        "host_revision_through": 3,
+        "kind": "sideagent_node_batch",
+        "prompt_fingerprint": "sha256:9ca3c41a65ed68b6ff35bd7a5ee8da3def616bfe75f9c5d172613929ca033804",
+        "recovery_alerts": {},
+        "recovery_input": {
+          "at": "2026-10-06T10:21:17.375884+00:00",
+          "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/records/opencode/opencode-KPR1035C-orchestrator-main/fe4e1fd89f04a300/events.jsonl#33",
+          "holder": "a1d1be782e600b94b9f191ab23dd3617",
+          "kind": "host-compaction",
+          "occurrence_id": "msg_110bb50a7001n2hTSSm3OoFdCQ",
+          "seq": 1,
+          "source": "completed-host-signal"
+        },
+        "target_holder": "2b57e8c09a0a70ee780ac13f3fc970dc",
+        "ts": 1791282112.942
+      },
+      "checkpoint": {
+        "at": "2026-10-06T10:25:30.620643+00:00",
+        "batch": "b-a2f62de87573",
+        "host_revision": {
+          "current": 3,
+          "from": 3,
+          "through": 3
+        },
+        "node": {
+          "holder_instance_id": "2b57e8c09a0a70ee780ac13f3fc970dc",
+          "session": "codex-KPR1035C-sideagent"
+        },
+        "recovery": {
+          "checked": {
+            "authorization": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/AGENTS.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/delegator-heartbeat.json#/authorization",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/heartbeat-prompt.json#/state/project",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/heartbeat-prompt.json#/state/authorization",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/kaola-workflow/.ledger/issue-264.jsonl#1"
+            ],
+            "duties": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/heartbeat-prompt.json#/state/decisions",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/heartbeat-prompt.json#/state/alerts",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/heartbeat-prompt.json#/state/tasks/qa-observe",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/qa/progress.md",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/qa/task-skill.md"
+            ],
+            "links": [
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/heartbeat-prompt.json#/state/tasks/qa-observe/dispatch",
+              "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo/.kaola/dispatch-index.json#/items/qa-prior-reclaim-1",
+              "/tmp/kpr-i264-862-core/oc/receipt.json",
+              "/tmp/kpr-i264-862-core/oc/record/record.json",
+              "/tmp/kpr-i264-862-core-runtime-proof.md"
+            ]
+          },
+          "input": {
+            "at": "2026-10-06T10:21:17.375884+00:00",
+            "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/records/opencode/opencode-KPR1035C-orchestrator-main/fe4e1fd89f04a300/events.jsonl#33",
+            "holder": "a1d1be782e600b94b9f191ab23dd3617",
+            "kind": "host-compaction",
+            "occurrence_id": "msg_110bb50a7001n2hTSSm3OoFdCQ",
+            "seq": 1,
+            "source": "completed-host-signal"
+          },
+          "seq": 1,
+          "unavailable": {}
+        },
+        "returned_to_host": {
+          "recovery#1": "recovery-entry-unknown"
+        },
+        "settled": [],
+        "source": "b-a2f62de87573",
+        "verified": false
+      },
+      "host_stop": {
+        "agent_exit_code": 0,
+        "agent_exit_signal": null,
+        "git": {
+          "branch": "main",
+          "dirty": true
+        },
+        "mutation_status": "completed",
+        "platform": "opencode",
+        "repo": "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/repo",
+        "residual_pids": [],
+        "schema_version": 3,
+        "session": "opencode-KPR1035C-orchestrator-main",
+        "stopped": true,
+        "swept_child_pgids": [],
+        "transport": {
+          "selected": "acp"
+        }
+      },
+      "node_reclaims": [
+        {
+          "cursor": 30,
+          "holder": "d1643d3e31968fd36c2b423febbea771",
+          "kind": "sideagent_node_stopped",
+          "receipt": {
+            "stopped": true
+          },
+          "ts": 1791282060.257
+        },
+        {
+          "cursor": 152,
+          "holder": "2b57e8c09a0a70ee780ac13f3fc970dc",
+          "kind": "sideagent_node_stopped",
+          "receipt": {
+            "stopped": true
+          },
+          "ts": 1791282415.878
+        }
+      ],
+      "selection": {
+        "effective_effort": "default",
+        "effective_model": "opencode-go/deepseek-v4.1-flash",
+        "effort_config_id": "effort"
+      },
+      "bridge": {
+        "layout": "skill",
+        "path": "/private/tmp/kpr-i264-host-chain-1035/core/src/scripts/kaola-opencode-acp.py",
+        "present": true,
+        "relative": "kaola-opencode-acp.py",
+        "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67",
+        "upstream_pin": null,
+        "verified_versions": "cli=2.0.22;protocol=1"
+      },
+      "versions": null,
+      "skill_payload_checks": [
+        {
+          "name": "kaola-project-runner",
+          "path": "/Users/ylmacstudio/.config/opencode/skills/kaola-project-runner/SKILL.md",
+          "bytes": 17407,
+          "sha256": "1af732f378a11bd04e4533a3e1fe38cef9b9b48b393360748d0a8030f5524df7",
+          "actual_full_body_match": true,
+          "tool": "call_01_q0c8xe9vtfkk7yuoaa9731ci",
+          "result_cursors": [
+            50
+          ]
+        },
+        {
+          "name": "opencode-kaola-project-runner",
+          "path": "/Users/ylmacstudio/.config/opencode/skills/opencode-kaola-project-runner/SKILL.md",
+          "bytes": 10597,
+          "sha256": "d71a297994686577484de0057c94b745c19d123117d99f6966d2bdcccd4e7981",
+          "actual_full_body_match": true,
+          "tool": "call_01_1kv2annvqfl0whxen489lwha",
+          "result_cursors": [
+            93
+          ]
+        }
+      ],
+      "task_progress": "# QA progress (scratch)\n\n- step1 TASK-A: fixture seeded by controller. DONE.\n- step2 TASK-B: CURRENT. At the next maintained boundary, the Host records its\n  post-compaction installed-Skill read result (paths, byte counts, last lines)\n  and continues this duty from durable records.\n- 2026-10-06 TASK-B verified: post-compaction full re-read of installed Skills —\n  qa/task-skill.md = 204 B, last line \"`qa/progress.md` naming what it verified.\";\n  kaola-project-runner/SKILL.md = 17407 B, last line \"machine, quota engine, or\n  close-out dashboard or ledger.\"; opencode-kaola-project-runner/SKILL.md = 10597 B,\n  last line \"and [references/acp.md](references/acp.md) for the structured ACP\n  command surface.\"; continuing step2 from durable records.\n",
+      "stage3": "automatic activation / PARTIAL scoped checkpoint / exact reclaim; verified settlement remains UNVERIFIED",
+      "extra_recovery_keys": [
+        "seq"
+      ]
+    }
+  }
+}
