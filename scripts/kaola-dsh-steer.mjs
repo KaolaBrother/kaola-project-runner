@@ -55,7 +55,7 @@ export function apply(ctx, config) {
 		try { conn.write(JSON.stringify({ id, ...obj }) + "\n"); } catch {}
 	};
 
-	const handle = (conn, raw) => {
+	const handle = async (conn, raw) => {
 		let req;
 		try { req = JSON.parse(raw); } catch {
 			reply(conn, null, { ok: false, error: { code: "bad-json", message: "request line is not JSON" } });
@@ -65,15 +65,50 @@ export function apply(ctx, config) {
 		try {
 			const op = req?.op;
 			if (op === "ping") { reply(conn, id, { ok: true, pong: true }); return; }
-			if (op === "status" || op === "steer") {
+			if (op === "status" || op === "steer" || op === "compact") {
 				const agents = ctx.get("agents");
 				if (agents === void 0) {
-					reply(conn, id, { ok: false, error: { code: "service-unavailable", message: "agents service is not mounted" } });
+					reply(conn, id, { ...(op === "compact" ? { sessionId: req.sessionId } : {}), ok: false, error: { code: "service-unavailable", message: "agents service is not mounted" } });
 					return;
 				}
 				const agent = agents.get(String(req?.sessionId ?? ""));
 				if (agent === void 0) {
-					reply(conn, id, { ok: false, error: { code: "session/not-found", message: `no live agent for session ${JSON.stringify(req?.sessionId)}` } });
+					reply(conn, id, { ...(op === "compact" ? { sessionId: req.sessionId } : {}), ok: false, error: { code: "session/not-found", message: `no live agent for session ${JSON.stringify(req?.sessionId)}` } });
+					return;
+				}
+				if (op === "compact") {
+					const compaction = ctx.get("compaction");
+					if (typeof compaction?.compactNow !== "function") {
+						reply(conn, id, { sessionId: req.sessionId, ok: false, error: { code: "service-unavailable", message: "compactNow is not mounted" } });
+						return;
+					}
+					// The shipped command calls this seam. Do not compact through
+					// a model prompt or bypass its idle/range/model/flush checks.
+					const commandId = randomUUID();
+					const controller = new AbortController();
+					const cancel = () => controller.abort();
+					conn.once("close", cancel);
+					let summary, end;
+					const dispose = ctx.on("session/event", (session, event) => {
+						if (session !== agent.session || event.data?.sourceCommandId !== commandId) return;
+						if (event.type === "compaction/summary") summary = { seq: event.seq, data: {
+							compactionId: event.data.compactionId, sourceCommandId: commandId,
+							shadowedRange: event.data.shadowedRange, shadowedTokenCount: event.data.shadowedTokenCount } };
+						if (event.type === "compaction/end") end = { seq: event.seq, data: event.data };
+					});
+					try {
+						const result = await compaction.compactNow(agent, controller.signal, commandId);
+						if (result === null) reply(conn, id, { ok: true, sessionId: req.sessionId, compacted: false });
+						else reply(conn, id, { ok: true, sessionId: req.sessionId, compacted: true,
+							compactionId: result.compactionId, sourceCommandId: commandId,
+							summarySeq: result.summarySeq, endSeq: result.endSeq, summary, end });
+					} catch (error) {
+						reply(conn, id, { ok: false, sessionId: req.sessionId, summary, end,
+							error: { code: error?.code ?? "internal", message: String(error?.message ?? error) } });
+					} finally {
+						dispose();
+						conn.removeListener("close", cancel);
+					}
 					return;
 				}
 				if (op === "status") {

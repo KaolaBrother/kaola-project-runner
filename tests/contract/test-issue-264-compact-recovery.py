@@ -509,5 +509,203 @@ class ZcodeCompactPromptTests(unittest.TestCase):
         self.assertIn("not a current file read", sent)
 
 
+
+class SessionUsageTests(unittest.TestCase):
+    def setUp(self):
+        self.race = load_module("usage264_race", PROJECT / "tests/contract/test-issue-65-steer-race.py")
+        self.race.SteerRaceContract.setUp(self)
+        self.holder._await_prompt = lambda request: None
+        self.agent.unknown_updates = 0
+        self.race.SteerRaceContract.start_turn(self, "current task")
+
+    def tearDown(self):
+        self.race.SteerRaceContract.tearDown(self)
+
+    def usage(self, session, used, size):
+        self.holder.on_session_update({"sessionId": session, "update": {
+            "sessionUpdate": "usage_update", "used": used, "size": size}})
+
+    def test_foreign_usage_cannot_replace_turn_or_current_projection(self):
+        self.usage(self.holder.acp_session_id, 19736, 262000)
+        self.usage("foreign-child", 900000, 1000000)
+        self.assertEqual(self.holder.turn["context_usage"], {"used": 19736, "size": 262000})
+        self.assertEqual(self.holder.projection.usage, {"used": 19736, "size": 262000})
+        events = self.holder.events.read_since(0, None)
+        self.assertEqual(events[-1]["sessionId"], "foreign-child")
+        self.assertEqual(events[-1]["update"]["used"], 900000)
+
+    def test_local_sessionless_null_and_new_turn_keep_existing_contract(self):
+        self.usage(self.holder.acp_session_id, 12578, 1000000)
+        self.usage(None, 15692, 1000000)
+        self.assertEqual(self.holder.turn["context_usage"]["used"], 15692)
+        self.usage(self.holder.acp_session_id, None, None)
+        self.assertEqual(self.holder.turn["context_usage"], {"used": None, "size": None})
+        self.assertEqual(self.holder.projection.usage, {"used": 15692, "size": 1000000})
+        self.race.SteerRaceContract.settle(self, self.holder.turn["request_id"])
+        self.race.SteerRaceContract.start_turn(self, "next task")
+        self.assertNotIn("context_usage", self.holder.turn)
+
+
+class DshCompactTests(unittest.TestCase):
+    def setUp(self):
+        self.classify = load_module("dsh264_classifier", HELPER).classify
+        self.original = load_module("dsh264_original_tests", PROJECT / "tests/contract/test-issue-263-steer-adaptation.py")
+        self.original.OpenCodeAdapter.setUp(self)
+        self.adapter = self.original.dsh.Adapter(self.child, self.adapter.endpoint)
+        self.emitted = []
+        self.adapter.emit = self.emitted.append
+        self.prompt["params"]["prompt"][0]["text"] = "/compact"
+
+    def tearDown(self):
+        self.original.OpenCodeAdapter.tearDown(self)
+
+    def answer(self, **changes):
+        import json, socket, threading
+        native = {"id": 17, "sessionId": "ses_owned", "ok": True, "compacted": True,
+                  "compactionId": "cmp-native", "sourceCommandId": "cmd-native",
+                  "summarySeq": 12, "endSeq": 14,
+                  "summary": {"seq": 12, "data": {"compactionId": "cmp-native", "sourceCommandId": "cmd-native",
+                      "shadowedRange": {"start": 3, "end": 9}, "shadowedTokenCount": 100}},
+                  "end": {"seq": 14, "data": {"compactionId": "cmp-native", "sourceCommandId": "cmd-native", "turn": None}}}
+        native.update(changes)
+        received = []
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
+            server.bind(self.adapter.endpoint); server.listen()
+            def reply():
+                connection, _ = server.accept()
+                with connection:
+                    received.append(json.loads(connection.recv(4096)))
+                    connection.sendall((json.dumps(native) + "\n").encode())
+            thread = threading.Thread(target=reply); thread.start()
+            operation = self.adapter.input(self.prompt)
+            operation.join(3); thread.join(3)
+        Path(self.adapter.endpoint).unlink()
+        self.assertFalse(thread.is_alive())
+        self.assertFalse(operation.is_alive())
+        self.assertEqual(received, [{"id": 17, "op": "compact", "sessionId": "ses_owned"}])
+        self.assertEqual(self.child.stdin.getvalue(), "")
+        return native
+
+    def test_finite_compact_maps_only_original_matching_success_before_end_turn(self):
+        native = self.answer()
+        self.assertEqual(len(self.emitted), 2)
+        signal = self.classify(self.emitted[0], "dsh")
+        self.assertEqual(signal.session_id, "ses_owned")
+        self.assertEqual(signal.occurrence_id, "cmp-native")
+        self.assertEqual(self.emitted[0]["params"]["update"]["_meta"]["dsh/compaction"], native)
+        self.assertEqual(self.emitted[1]["id"], 17)
+        self.assertEqual(self.emitted[1]["result"]["stopReason"], "end_turn")
+        self.assertEqual(self.adapter.active, {})
+        self.assertEqual(self.adapter.pending, {})
+
+    def test_null_failure_foreign_and_mismatched_originals_never_emit_completion(self):
+        for changes in [
+                {"compacted": False},
+                {"ok": False, "error": {"code": "busy"}},
+                {"ok": False, "error": {"code": "persistence"}},
+                {"sessionId": "foreign"}, {"id": 18}, {"endSeq": 15},
+                {"summary": None},
+                {"end": {"seq": 14, "data": {"compactionId": "cmp-native", "sourceCommandId": "cmd-native", "error": []}}}]:
+            with self.subTest(changes=changes):
+                self.emitted.clear(); self.answer(**changes)
+                self.assertEqual(len(self.emitted), 1)
+                self.assertIsNone(self.classify(self.emitted[0], "dsh"))
+                self.assertIn("result" if changes.get("compacted") is False else "error", self.emitted[0])
+
+    def test_busy_command_refuses_and_other_prompts_keep_native_model_route(self):
+        self.adapter.active["ses_owned"] = 8
+        self.adapter.input(self.prompt).join(3)
+        self.assertEqual(self.emitted[-1]["error"]["code"], -32602)
+        self.assertEqual(self.adapter.active, {"ses_owned": 8})
+        self.assertEqual(self.child.stdin.getvalue(), "")
+        self.adapter.active.clear()
+        self.prompt["params"]["prompt"][0]["text"] = "/compact with instructions"
+        self.adapter.input(self.prompt)
+        import json
+        self.assertEqual(json.loads(self.child.stdin.getvalue()), self.prompt)
+        self.assertEqual(self.adapter.active, {"ses_owned": 17})
+
+    def test_native_cancel_stays_live_during_manual_compaction_without_replay(self):
+        import json, socket, threading
+        entered = threading.Event(); release = threading.Event()
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
+            server.bind(self.adapter.endpoint); server.listen()
+            def reply():
+                connection, _ = server.accept()
+                with connection:
+                    request = json.loads(connection.recv(4096)); entered.set()
+                    release.wait(3)
+                    connection.sendall((json.dumps({"id": request["id"], "sessionId": "ses_owned",
+                        "ok": False, "error": {"code": "cancelled"}}) + "\n").encode())
+            thread = threading.Thread(target=reply); thread.start()
+            operation = self.adapter.input(self.prompt)
+            self.assertTrue(entered.wait(3))
+            cancel = {"jsonrpc": "2.0", "method": "session/cancel", "params": {"sessionId": "ses_owned"}}
+            self.adapter.input(cancel)
+            self.assertEqual(json.loads(self.child.stdin.getvalue()), cancel)
+            release.set(); operation.join(3); thread.join(3)
+        self.assertFalse(operation.is_alive())
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(len(self.emitted), 1)
+        self.assertEqual(self.emitted[0]["error"]["data"]["error"]["code"], "cancelled")
+        self.assertIsNone(self.classify(self.emitted[0], "dsh"))
+
+    def test_native_plugin_uses_current_agent_seam_and_original_events(self):
+        import subprocess
+        code = r"""
+import assert from 'node:assert/strict';
+import {createConnection} from 'node:net';
+import {once} from 'node:events';
+import {pathToFileURL} from 'node:url';
+import {existsSync, statSync} from 'node:fs';
+const {apply} = await import(pathToFileURL(process.argv[1]));
+const socketPath = process.argv[2];
+const handlers = new Set(); let cleanup; let scenario = 'success'; let called = 0;
+const agent = {session: {}, status: 'idle'};
+const dispatch = (session, type, seq, data) => {for (const h of handlers) h(session, {type, seq, data});};
+const ctx = { get: key => key === 'agents' ? {get: id => id === 'owned' ? agent : undefined} : {
+  compactNow: async (actual, signal, commandId) => {
+    assert.equal(actual, agent); assert.equal(signal.aborted, false); ++called;
+    if (scenario === 'null') return null;
+    if (scenario === 'busy') throw Object.assign(new Error('native busy'), {code:'busy'});
+    const data = {compactionId:'native-id', sourceCommandId: commandId, turn:null};
+    dispatch({}, 'compaction/end', 90, data);
+    dispatch(agent.session, 'compaction/end', 91, {...data, sourceCommandId:'foreign-command'});
+    dispatch(agent.session, 'compaction/summary', 12, {...data, summary:'private summary', shadowedTokenCount:99, shadowedRange:{start:3,end:9}});
+    dispatch(agent.session, 'compaction/end', 14, data);
+    if (scenario === 'persistence') throw Object.assign(new Error('save failed'), {code:'persistence'});
+    return {...data, summarySeq:12,endSeq:14};
+  }}, on: (_, h) => {handlers.add(h); return () => handlers.delete(h);},
+  effect: f => {cleanup=f();} };
+apply(ctx, {socketPath});
+// Connection itself is the finite operation; no model, polling or workload.
+const call = async (sessionId) => {
+  const c = createConnection(socketPath); await once(c,'connect');
+  c.write(JSON.stringify({id:7,op:'compact',sessionId})+'\n');
+  const [data] = await once(c,'data'); c.destroy();
+  return JSON.parse(data.toString());
+};
+try {
+  const success = await call('owned');
+  assert.equal(success.ok,true); assert.equal(success.compacted,true);
+  assert.equal(success.end.seq,14); assert.equal(success.summary.seq,12);
+  assert.equal(success.summary.data.summary,undefined); assert.equal(handlers.size,0);
+  assert.equal(statSync(socketPath).mode & 0o777,0o600);
+  scenario='null'; assert.equal((await call('owned')).compacted,false);
+  scenario='busy'; assert.equal((await call('owned')).error.code,'busy');
+  scenario='persistence'; const fail=await call('owned');
+  assert.equal(fail.ok,false); assert.equal(fail.error.code,'persistence'); assert.equal(fail.end.seq,14);
+  assert.equal((await call('foreign')).error.code,'session/not-found'); assert.equal(called,4);
+  assert.equal(handlers.size,0);
+} finally {cleanup();}
+assert.equal(existsSync(socketPath),false);
+console.log('PASS native plugin socket, current-agent seam, original events, busy/null/failure, scoped disposal');
+"""
+        result = subprocess.run(["node", "--input-type=module", "-e", code,
+            str(PROJECT / "scripts/kaola-dsh-steer.mjs"), str(Path(self.tmp.name) / "plugin.sock")],
+            text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("PASS native plugin socket", result.stdout)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

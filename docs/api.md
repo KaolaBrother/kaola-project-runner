@@ -266,6 +266,24 @@ existing bounded check is `preflight`, `start` (the receipt's `transport.agent_i
 ACP handshake, not the package version), `status`, and exact `stop`; it needs no model turn. Report
 any model, provider, or credential failure separately without changing those settings.
 
+The local DSH adapter also handles an argument-free `/compact` ACP text prompt through the
+same process-local overlay. Source support is confirmed in DSH `0.2.0-rc.2`:
+`ctx.compaction.compactNow(agent, signal, commandId)`. This calls the native idle-session
+operation. It retains the selected model and the native range, busy and save checks.
+An open ACP prompt is refused. A native `null` result ends the command without a completion
+signal. A save failure remains a failure, even if the native end event exists.
+
+The adapter maps a successful return and its matching current-session `compaction/summary`
+and `compaction/end` events to `compaction_update` with the native occurrence id. Its
+`_meta["dsh/compaction"]` retains the bounded native receipt. This is a local adapter mapping,
+not an upstream ACP notification. Ordinary prompts and steering keep their existing routes.
+ACP cancellation stays available during this call. Disconnect cancels its request signal;
+unknown effects require original-session reconciliation before retry. No profile or install
+file is changed. Direct custom DSH commands bypass this overlay. Automatic compaction outside
+this finite request still has no forwarded completion on the shipped ACP route. Use the
+existing inquiry recovery there. Live compaction and post-compaction read/use on this new
+route remain pending; model-free adapter tests do not establish them.
+
 Droid's executable override is `DROID_BIN`. Its ACP command is the native
 `droid exec --output-format acp`; no bridge or translator is used. Droid defaults to Auto Model
 (`model=auto`) and full bypass (`autonomy_level=auto-high`). The supported

@@ -2356,7 +2356,8 @@ class Holder:
             if not known:
                 turn["tool_order"].append(tool_id)
         elif variant == "usage_update":
-            turn["context_usage"] = {"used": update.get("used"), "size": update.get("size")}
+            if params.get("sessionId") in (None, self.acp_session_id):
+                turn["context_usage"] = {"used": update.get("used"), "size": update.get("size")}
         elif variant == "config_option_update":
             if params.get("sessionId") in (None, self.acp_session_id):
                 self._apply_config_options(
@@ -2380,7 +2381,8 @@ class Holder:
                     if thread_status.get("type") == "systemError" else None
                 )
         received_at = round(time.time(), 3)
-        self.projection.apply(update, self.events.cursor + 1, received_at)
+        if variant != "usage_update" or params.get("sessionId") in (None, self.acp_session_id):
+            self.projection.apply(update, self.events.cursor + 1, received_at)
         cursor = self.events.append({"kind": "session_update", "sessionId": params.get("sessionId"),
                                      "update": update}, ts=received_at)
         self.write_record()
