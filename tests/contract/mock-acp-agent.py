@@ -113,6 +113,7 @@ class MockAgent:
         self.active_turn: tuple[Any, str] | None = None
         self.child_proc: subprocess.Popen | None = None
         self.configured: dict[str, Any] = {}
+        self.held_currents: set[str] = set()
         self.config_fixture = self._load_config_fixture()
         self.deferred_model_ready = False
         self.deferred_ready_options: list[dict[str, Any]] | None = None
@@ -147,6 +148,11 @@ class MockAgent:
         returned option as ``currentValue``, and seeds ``configured`` from
         fixture ``new``/``resume`` currentValues so a later mode/fast set does
         not drop the loaded model and effort.
+
+        Cap ``hold-current`` keeps those seeded currentValues across
+        ``session/set_config_option``. The call still succeeds and is logged,
+        so a start can record an applied value while the later state readback
+        stays on the loaded session selection.
         """
         raw = os.environ.get("MOCK_ACP_CONFIG", "")
         if not raw:
@@ -172,6 +178,8 @@ class MockAgent:
                 current = option.get("currentValue")
                 if isinstance(option_id, str) and option_id and isinstance(current, str) and current:
                     self.configured.setdefault(option_id, current)
+                    if "hold-current" in self.caps:
+                        self.held_currents.add(option_id)
 
     @staticmethod
     def _load_list_pages() -> list[dict[str, Any]] | None:
@@ -633,7 +641,8 @@ class MockAgent:
                 for scoped in {o["id"] for opts in self.CURSOR_MODEL_OPTIONS.values()
                                for o in opts}:
                     self.configured.pop(scoped, None)
-            self.configured[str(config_id)] = params.get("value")
+            if str(config_id) not in self.held_currents:
+                self.configured[str(config_id)] = params.get("value")
         result = fixture.get("set_result")
         if not isinstance(result, dict):
             result = {"configOptions": self.config_options()}

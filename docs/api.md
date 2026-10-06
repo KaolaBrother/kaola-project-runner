@@ -1222,8 +1222,9 @@ matches that live value, is `saved-session-change` and is left in place. Contrad
 prior applied and prior live evidence is not resolved from the stale applied value.
 Recorded selection, this start's applied configuration, and the fresh readback stay
 separate fields. `model_selection.override_omitted` records the no-override branch.
-`model_selection.preserved` stays true only when that branch had no prior applied
-selection, or the fresh readback confirmed it. Droid's `model_verified` echo verdict is
+`model_selection.preserved` is true only when that branch's fresh readback equals the
+prior applied selection. No prior applied selection, or an unreadable readback, leaves
+it false. Droid's `model_verified` echo verdict is
 unchanged. Catalog output is
 reported as evidence and never rewrites or blocks the declared exact model literal. Actual mismatch,
 catalog absence, or unreadable evidence never disables generic communication.
@@ -1415,7 +1416,10 @@ caller's raw flags, so an omitted `--tier` is `null`. A resume or `--continue` w
 recorded its evidence under keeps that evidence as `start_evidence.inherited` (`source:
 "prior-holder-record"`, `holder_instance_id`, `acp_session_id`, `recorded_at`), also echoed as the
 start receipt's `inherited_start_evidence`; a no-override resume (`model_selection.override_omitted`)
-carries the older applied evidence forward flat, including when the fresh readback did not confirm it.
+carries the last applied configuration forward flat, including when the fresh readback did not confirm it.
+When the immediately preceding holder has a sourced native readback, that readback is the carried
+`effective_selection`. An older start's own readback is not that live value, and a difference the
+carried evidence did not already show is not a saved-session change.
 Any other native session, a Runner name alone, or a record without evidence inherits
 nothing, and the model stays unknown or native-preserved. Resume sends no extra model/effort option
 to fill these fields. The start receipt reports `start_evidence_recorded` (and

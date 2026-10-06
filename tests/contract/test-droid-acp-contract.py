@@ -457,7 +457,8 @@ class DroidAcpResumeTests(DroidAcpSessionFixture):
         self.assertEqual(receipt.get("acp_session_id"), resume_id)
         self.assertEqual(receipt.get("state"), "ready")
         selection = receipt.get("model_selection") or {}
-        self.assertTrue(selection.get("preserved"))
+        self.assertIs(selection.get("preserved"), False)
+        self.assertIs(selection.get("override_omitted"), True)
         self.assertEqual(selection.get("source"), "resume-preserved")
         self.assertIsNone(selection.get("resolved_model"))
         # Issue #185: a preserved resume has no Runner target, so the echoed

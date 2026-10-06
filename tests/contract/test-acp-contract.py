@@ -1811,7 +1811,10 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertNotIn("model", [config_id for config_id, _ in events])
         self.assertNotIn("reasoning_effort", [config_id for config_id, _ in events])
         selection = receipt.get("model_selection") or {}
-        self.assertTrue(selection.get("preserved"))
+        # No prior applied selection and no fresh readback: the omitted
+        # override is not evidence that a selection was preserved.
+        self.assertIs(selection.get("preserved"), False)
+        self.assertIs(selection.get("override_omitted"), True)
         self.assertIsNone(selection.get("resolved_model"))
 
     def test_preflight_reports_advertised_config_ids_and_selection(self) -> None:
@@ -2336,7 +2339,8 @@ class Issue203StartEvidenceTests(AcpSessionFixture, unittest.TestCase):
         self.assertNotIn("inherited_start_evidence", other)
         evidence = self.cli("observe", platform="codex")["start_evidence"]
         self.assertNotIn("inherited", evidence)
-        self.assertTrue(evidence["model_selection"]["preserved"])
+        self.assertIs(evidence["model_selection"]["preserved"], False)
+        self.assertIs(evidence["model_selection"]["override_omitted"], True)
         self.assertIsNone(evidence["model_selection"]["resolved_model"])
         self.assertEqual(evidence["model_display"], {
             "name": None, "preset_id": None, "preset_effort": None, "components": None,

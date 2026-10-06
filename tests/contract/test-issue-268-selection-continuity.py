@@ -268,6 +268,112 @@ class SelectionContinuityClassification(unittest.TestCase):
         self.assertIsNone(fact["prior_settings_preserved"])
         self.assertEqual(fact["precedence"], "saved-session-selection")
 
+    def test_bare_continuation_does_not_start_preserved(self) -> None:
+        receipt: dict = {}
+        self.acp.merge_policy_evidence(receipt, {
+            "requested_model_source": "resume-preserved",
+            "requested_tier": "default",
+            "requested_model_name": "native saved session selection",
+            "resolved_runtime_model_id": "",
+            "resolved_parameters": {},
+        })
+        self.assertIs(receipt["model_selection"]["preserved"], False)
+        self.assertIs(receipt["model_selection"]["override_omitted"], True)
+
+    def test_later_readback_inequality_is_not_an_intentional_change(self) -> None:
+        prior = inherited(live_effort="low")
+        prior["selection_continuity"] = {
+            "outcome": "fresh-start-default",
+            "axes": {
+                "model": {
+                    "applied_this_start": "gpt-6.1-sol",
+                    "fresh_effective": "gpt-6.1-sol",
+                },
+                "effort": {"applied_this_start": "high", "fresh_effective": "high"},
+            },
+        }
+        fact = self.reconcile(fresh=effective("gpt-6.1-sol", "low"), inherited=prior)
+        self.assertEqual(fact["outcome"], "differs-from-prior-applied")
+        self.assertEqual(fact["cause"], "unproven")
+        self.assertNotEqual(fact["precedence"], "saved-session-selection")
+        self.assertEqual(fact["axes"]["effort"]["prior_live"], "low")
+        self.assertEqual(fact["axes"]["effort"]["prior_applied"], "high")
+        self.assertIs(fact["prior_settings_preserved"], False)
+
+    def test_same_record_disagreement_stays_a_saved_session(self) -> None:
+        prior = inherited(live_effort="low")
+        prior["selection_continuity"] = {
+            "outcome": "fresh-start-default",
+            "axes": {
+                "model": {
+                    "applied_this_start": "gpt-6.1-sol",
+                    "fresh_effective": "gpt-6.1-sol",
+                },
+                "effort": {"applied_this_start": "high", "fresh_effective": "low"},
+            },
+        }
+        fact = self.reconcile(fresh=effective("gpt-6.1-sol", "low"), inherited=prior)
+        self.assertEqual(fact["outcome"], "saved-session-change")
+        self.assertEqual(fact["precedence"], "saved-session-selection")
+        self.assertNotIn("cause", fact)
+        self.assertIs(fact["prior_settings_preserved"], False)
+
+    def test_passthrough_keeps_applied_history_and_preceding_readback(self) -> None:
+        older = {
+            "model_selection": {
+                "source": "runner-default", "override_omitted": False, "preserved": False,
+            },
+            "config_application": applied("gpt-6.1-sol", "high"),
+            "effective_selection": effective("gpt-6.1-sol", "high"),
+            "selection_continuity": {
+                "outcome": "fresh-start-default",
+                "axes": {
+                    "effort": {"applied_this_start": "high", "fresh_effective": "high"},
+                },
+            },
+            "source": "prior-holder-record",
+            "acp_session_id": "native-1",
+        }
+        preceding_evidence = {
+            "model_selection": {
+                "source": "resume-preserved",
+                "override_omitted": True,
+                "preserved": False,
+            },
+            "config_application": applied(None, None),
+            "effective_selection": effective("gpt-6.1-sol", "low"),
+            "selection_continuity": {
+                "outcome": "differs-from-prior-applied", "cause": "unproven",
+            },
+            "inherited": older,
+            "acp_session_id": "native-1",
+        }
+        prior = {
+            "platform": "codex",
+            "repo": "/repo",
+            "session": "seat",
+            "acp_session_id": "native-1",
+            "holder_instance_id": "holder-2",
+            "start_evidence": preceding_evidence,
+        }
+        args = namespace(use_continue=True)
+        args.session = "seat"
+        got = self.acp.inherited_start_evidence(prior, args, "/repo", "native-1")
+        self.assertIsNotNone(got)
+        assert got is not None
+        self.assertNotIn("inherited", got)
+        self.assertEqual(got["config_application"]["effort"]["value"], "high")
+        self.assertEqual(got["effective_selection"]["effective_effort"], "low")
+        self.assertEqual(got["selection_continuity"]["outcome"], "fresh-start-default")
+        self.assertEqual(
+            got["selection_continuity"]["axes"]["effort"]["fresh_effective"], "high")
+        unread = dict(preceding_evidence)
+        unread["effective_selection"] = effective(None, None)
+        prior["start_evidence"] = unread
+        kept = self.acp.inherited_start_evidence(prior, args, "/repo", "native-1")
+        assert kept is not None
+        self.assertEqual(kept["effective_selection"]["effective_effort"], "high")
+
     def test_codex_adapter_omits_model_and_effort_until_they_are_resolved(self) -> None:
         bash = BASH if BASH.is_file() else Path("bash")
         adapter = SCRIPTS / "adapters" / "codex.sh"
@@ -481,6 +587,161 @@ class Issue268LiveContinuationTests(unittest.TestCase):
         self.assertTrue(resumed["model_selection"]["override_omitted"])
         self.assertEqual(continuity["fresh_effective_readback"]["effort"], "high")
         self.assertEqual(continuity["prior_applied_selection"]["effort"], "high")
+
+    def test_two_low_continuations_keep_high_history_and_stay_unproven(self) -> None:
+        first = self.fx.start("codex", caps="echo-current")
+        native = first["acp_session_id"]
+        self.assertEqual(first["effective_selection"]["effective_effort"], "high")
+        self.assertEqual(first["config_application"]["effort"]["value"], "high")
+        self.stop()
+        if self.fx.mock_log.is_file():
+            self.fx.mock_log.write_text("", encoding="utf-8")
+
+        continued = self.fx.start(
+            "codex", "--continue", caps="list,resume,echo-current",
+            extra_env=self.continue_env(native, "low"),
+        )
+        self.assertEqual(continued["acp_session_id"], native)
+        first_hop = continued["selection_continuity"]
+        self.assertEqual(first_hop["outcome"], "differs-from-prior-applied")
+        self.assertEqual(first_hop["cause"], "unproven")
+        self.assertIs(first_hop["prior_settings_preserved"], False)
+        self.assertIs(continued["model_selection"]["preserved"], False)
+        self.assertIs(continued["model_selection"]["override_omitted"], True)
+        self.assertEqual(first_hop["prior_applied_selection"]["effort"], "high")
+        self.assertIs(first_hop["prior_applied_selection"]["historical"], True)
+        self.assertEqual(first_hop["fresh_effective_readback"]["effort"], "low")
+        self.assertEqual(first_hop["axes"]["effort"]["prior_live"], "high")
+        self.stop()
+        if self.fx.mock_log.is_file():
+            self.fx.mock_log.write_text("", encoding="utf-8")
+
+        again = self.fx.start(
+            "codex", "--continue", caps="list,resume,echo-current",
+            extra_env=self.continue_env(native, "low"),
+        )
+        self.assertEqual(again["acp_session_id"], native)
+        second = again["selection_continuity"]
+        self.assertEqual(second["outcome"], "differs-from-prior-applied")
+        self.assertEqual(second["cause"], "unproven")
+        self.assertNotEqual(second["precedence"], "saved-session-selection")
+        self.assertIs(second["prior_settings_preserved"], False)
+        self.assertIs(again["model_selection"]["preserved"], False)
+        self.assertIs(again["model_selection"]["override_omitted"], True)
+        self.assertEqual(second["prior_applied_selection"]["effort"], "high")
+        self.assertIs(second["prior_applied_selection"]["historical"], True)
+        self.assertEqual(second["fresh_effective_readback"]["effort"], "low")
+        self.assertEqual(second["axes"]["effort"]["prior_live"], "low")
+        self.assertEqual(second["axes"]["effort"]["prior_applied"], "high")
+        carried = again["inherited_start_evidence"]
+        self.assertNotIn("inherited", carried)
+        self.assertEqual(carried["config_application"]["effort"]["value"], "high")
+        self.assertEqual(carried["effective_selection"]["effective_effort"], "low")
+        self.assertEqual(
+            carried["selection_continuity"]["axes"]["effort"]["fresh_effective"], "high")
+        self.assertNotEqual(
+            carried["effective_selection"]["effective_effort"],
+            carried["selection_continuity"]["axes"]["effort"]["fresh_effective"],
+        )
+        status = self.fx.cli("status", platform="codex")
+        self.assertEqual(
+            status["start_evidence"]["selection_continuity"]["outcome"],
+            "differs-from-prior-applied",
+        )
+        self.assertEqual(status["start_evidence"]["selection_continuity"]["cause"], "unproven")
+        self.assertIs(status["start_evidence"]["model_selection"]["preserved"], False)
+
+    def test_saved_session_change_is_confirmed_by_resume(self) -> None:
+        loaded = [
+            {"id": "model", "name": "Model", "type": "select",
+             "currentValue": "gpt-6.1-sol",
+             "options": [{"value": "gpt-6.1-sol", "name": "Sol"}]},
+            {"id": "reasoning_effort", "name": "Reasoning effort", "type": "select",
+             "currentValue": "low",
+             "options": [{"value": "low", "name": "Low"}, {"value": "high", "name": "High"}]},
+        ]
+        first = self.fx.start(
+            "codex", caps="echo-current,hold-current",
+            extra_env={"MOCK_ACP_CONFIG": json.dumps({"new": loaded})},
+        )
+        self.assertTrue(first["config_application"]["effort"]["applied"], first)
+        self.assertEqual(first["config_application"]["effort"]["value"], "high")
+        self.assertEqual(first["effective_selection"]["effective_effort"], "low")
+        self.assertEqual(first["selection_continuity"]["outcome"], "fresh-start-default")
+        native = first["acp_session_id"]
+        self.stop()
+        if self.fx.mock_log.is_file():
+            self.fx.mock_log.write_text("", encoding="utf-8")
+
+        resumed = self.fx.start(
+            "codex", "--continue", caps="list,resume,echo-current",
+            extra_env=self.continue_env(native, "low"),
+        )
+        self.assertEqual(resumed["acp_session_id"], native)
+        sent = [config_id for config_id, _value in self.fx.config_events()]
+        self.assertNotIn("reasoning_effort", sent)
+        confirmed = resumed["selection_continuity"]
+        self.assertEqual(confirmed["outcome"], "saved-session-change")
+        self.assertEqual(confirmed["precedence"], "saved-session-selection")
+        self.assertNotIn("cause", confirmed)
+        self.assertIn("left unchanged", confirmed["detail"])
+        self.assertIs(confirmed["prior_settings_preserved"], False)
+        self.assertIs(resumed["model_selection"]["preserved"], False)
+        self.assertIs(resumed["model_selection"]["override_omitted"], True)
+        self.assertEqual(confirmed["prior_applied_selection"]["effort"], "high")
+        self.assertIs(confirmed["prior_applied_selection"]["historical"], True)
+        self.assertEqual(confirmed["fresh_effective_readback"]["effort"], "low")
+        self.assertEqual(confirmed["axes"]["effort"]["prior_live"], "low")
+        self.stop()
+        if self.fx.mock_log.is_file():
+            self.fx.mock_log.write_text("", encoding="utf-8")
+
+        again = self.fx.start(
+            "codex", "--continue", caps="list,resume,echo-current",
+            extra_env=self.continue_env(native, "low"),
+        )
+        follow = again["selection_continuity"]
+        self.assertEqual(follow["outcome"], "saved-session-change")
+        self.assertEqual(follow["precedence"], "saved-session-selection")
+        self.assertNotIn("cause", follow)
+        self.assertIs(again["model_selection"]["preserved"], False)
+        self.assertIs(again["model_selection"]["override_omitted"], True)
+        self.assertEqual(follow["prior_applied_selection"]["effort"], "high")
+        self.assertEqual(follow["fresh_effective_readback"]["effort"], "low")
+        self.assertEqual(follow["axes"]["effort"]["prior_live"], "low")
+        carried = again["inherited_start_evidence"]
+        self.assertNotIn("inherited", carried)
+        self.assertEqual(carried["config_application"]["effort"]["value"], "high")
+        self.assertEqual(carried["effective_selection"]["effective_effort"], "low")
+
+    def test_no_prior_and_no_fresh_is_not_preserved(self) -> None:
+        pages = [{"sessions": [{
+            "sessionId": "saved-codex-1",
+            "cwd": str(self.fx.repo),
+            "updatedAt": "2026-10-07T00:00:00Z",
+        }]}]
+        receipt = self.fx.start(
+            "codex", "--resume", "saved-codex-1", caps="resume",
+            extra_env={"MOCK_ACP_LIST_PAGES": json.dumps(pages)},
+        )
+        self.assertNotIn("inherited_start_evidence", receipt)
+        continuity = receipt["selection_continuity"]
+        self.assertIsNone(continuity["prior_applied_selection"])
+        self.assertFalse(continuity["fresh_effective_readback"]["model_readable"])
+        self.assertFalse(continuity["fresh_effective_readback"]["effort_readable"])
+        self.assertIsNone(continuity["prior_settings_preserved"])
+        self.assertIs(receipt["model_selection"]["preserved"], False)
+        self.assertIs(receipt["model_selection"]["override_omitted"], True)
+        status = self.fx.cli("status", platform="codex")
+        self.assertIs(status["start_evidence"]["model_selection"]["preserved"], False)
+        self.assertEqual(
+            status["start_evidence"]["model_selection"]["preserved"],
+            receipt["model_selection"]["preserved"],
+        )
+        self.assertEqual(
+            status["start_evidence"]["selection_continuity"]["outcome"],
+            receipt["selection_continuity"]["outcome"],
+        )
 
 
 if __name__ == "__main__":

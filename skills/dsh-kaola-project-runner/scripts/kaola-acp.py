@@ -2647,11 +2647,13 @@ def merge_policy_evidence(receipt: dict[str, Any], policy: dict[str, Any]) -> No
         "requested_name": policy.get("requested_model_name"),
         "resolved_model": policy.get("resolved_runtime_model_id") or None,
         "resolved_effort": (policy.get("resolved_parameters") or {}).get("effort"),
-        # ``preserved`` starts as the resume-preserved branch. ``start`` clears
-        # it when a prior applied selection exists and the fresh readback does
-        # not confirm it (Issue #268). ``override_omitted`` stays the branch
-        # fact so a later resume can still find that applied selection.
-        "preserved": policy.get("requested_model_source") == "resume-preserved",
+        # ``preserved`` is not the bare-continuation branch. It stays false
+        # until ``start`` proves the fresh readback equals the prior applied
+        # selection (Issue #268). No prior applied selection, or an unreadable
+        # readback, is not a silent true. ``override_omitted`` stays that
+        # branch fact on its own, so a later resume can still find the last
+        # applied selection.
+        "preserved": False,
         "override_omitted": policy.get("requested_model_source") == "resume-preserved",
     }
 
@@ -3528,15 +3530,66 @@ def _readback_value(effective: Any, label: str) -> tuple[str | None, bool, str |
     return value, True, None
 
 
+def _native_readback(effective: Any) -> dict[str, Any] | None:
+    """A sourced native currentValue, not a launch-argv substitute.
+
+    ``None`` when nothing on the object is a native model or effort readback.
+    Callers use that to avoid treating an older start's echo as this holder's
+    live value, and to avoid replacing a native echo with an argv stand-in.
+    """
+    if not isinstance(effective, dict):
+        return None
+    if effective.get("effective_model_source") == "launch-argv":
+        return None
+    for label in ("model", "effort"):
+        _value, readable, _note = _readback_value(effective, label)
+        if readable:
+            return effective
+    return None
+
+
 def _continuity_equal(label: str, left: str, right: str) -> bool:
     if label == "effort":
         return left.lower() == right.lower()
     return left == right
 
 
+def _saved_session_confirmed(inherited: Any, label: str, prior_live: str) -> bool:
+    """A live value that differs from the last applied value is intentional
+    only when this same evidence already showed that difference.
+
+    Records without ``selection_continuity`` keep the historical rule: the
+    ``effective_selection`` on that object is the sourced readback. When the
+    continuity record exists, agreement between what that start applied and
+    what it read back means a different later readback is not a saved-session
+    change. An unproven difference is not one either.
+    """
+    if not isinstance(inherited, dict):
+        return True
+    continuity = inherited.get("selection_continuity")
+    if not isinstance(continuity, dict):
+        return True
+    if continuity.get("outcome") == "saved-session-change":
+        return True
+    if continuity.get("cause") == "unproven":
+        return False
+    axes = continuity.get("axes")
+    axis = axes.get(label) if isinstance(axes, dict) else None
+    if not isinstance(axis, dict):
+        return False
+    applied_then = _continuity_text(axis.get("applied_this_start"))
+    fresh_then = _continuity_text(axis.get("fresh_effective"))
+    if not applied_then or not fresh_then:
+        return False
+    if _continuity_equal(label, fresh_then, applied_then):
+        return False
+    return _continuity_equal(label, fresh_then, prior_live)
+
+
 def _axis_status(label: str, *, explicit: bool, prior_applied: str | None,
                  prior_live: str | None, prior_live_readable: bool,
-                 fresh: str | None, fresh_readable: bool) -> str:
+                 fresh: str | None, fresh_readable: bool,
+                 inherited: Any = None) -> str:
     if explicit:
         return "explicit"
     if prior_applied is None:
@@ -3545,8 +3598,11 @@ def _axis_status(label: str, *, explicit: bool, prior_applied: str | None,
         return "unverifiable"
     if prior_live_readable and prior_live is not None and not _continuity_equal(
             label, prior_live, prior_applied):
-        if _continuity_equal(label, fresh, prior_live):
+        if _continuity_equal(label, fresh, prior_live) and _saved_session_confirmed(
+                inherited, label, prior_live):
             return "saved-session-change"
+        if _continuity_equal(label, fresh, prior_live):
+            return "differs-from-prior-applied"
         return "contradictory-evidence"
     if _continuity_equal(label, fresh, prior_applied):
         return "matches-prior-applied"
@@ -3621,8 +3677,9 @@ def reconcile_selection_continuity(
     not re-apply the preset and does not overwrite the loaded session. Stale
     applied metadata alone never counts as the current selection. A match is
     claimed only when the fresh readback equals the prior applied value and
-    the prior live readback does not contradict it. Why a loaded value differs
-    is left unproven.
+    the prior live readback does not contradict it. A later readback that
+    merely differs from the last applied value is not a user-intentional
+    change. Why a loaded value differs is left unproven.
     """
     recorded = {
         "source": recorded_source if isinstance(recorded_source, str) else None,
@@ -3645,6 +3702,7 @@ def reconcile_selection_continuity(
             label, explicit=explicit, prior_applied=prior_applied,
             prior_live=prior_live, prior_live_readable=prior_live_readable,
             fresh=fresh_value, fresh_readable=fresh_readable,
+            inherited=inherited,
         )
         statuses.append(status)
         axis = {
@@ -3757,8 +3815,11 @@ def inherited_start_evidence(prior: Any, args: argparse.Namespace, repo: str,
     Only a resume/continue whose adopted ``acp_session_id`` equals the one the
     prior record, for this platform/session/repo, both ran and recorded its
     evidence under. A Runner name alone never matches. Historical, never a
-    fresh observation: a preserved resume carries the older applied evidence
-    forward rather than nesting it.
+    fresh observation: a no-override resume carries the last applied
+    configuration forward flat rather than nesting it. When the immediately
+    preceding holder recorded a sourced native readback, that readback is the
+    carried ``effective_selection``. An older start's readback stays in that
+    start's continuity record and is not presented as this live value.
     """
     if not (args.resume or args.use_continue) or not acp_session_id:
         return None
@@ -3782,7 +3843,13 @@ def inherited_start_evidence(prior: Any, args: argparse.Namespace, repo: str,
         and selection.get("source") == "resume-preserved"
     )
     if passthrough and isinstance(older, dict):
-        return older
+        carried = dict(older)
+        preceding = _native_readback(saved.get("effective_selection"))
+        if preceding is not None:
+            # Last-applied history stays ``older``. The live comparison value
+            # is the immediately preceding holder's sourced readback.
+            carried["effective_selection"] = dict(preceding)
+        return carried
     inherited = start_evidence_facts(saved)
     inherited.update({
         "source": "prior-holder-record",
@@ -5350,9 +5417,11 @@ def command_start(args: argparse.Namespace, repo: str,
         )
         receipt["selection_continuity"] = continuity
         selection = receipt.get("model_selection")
-        if (isinstance(selection, dict) and continuity.get("had_prior_applied")
-                and continuity.get("prior_settings_preserved") is not True):
-            selection["preserved"] = False
+        if isinstance(selection, dict) and selection.get("override_omitted") is True:
+            # True only when the fresh readback proved continuity with the
+            # prior applied selection. No prior, an unreadable readback, and
+            # a difference all stay false.
+            selection["preserved"] = continuity.get("prior_settings_preserved") is True
         explicit_model = acp_model_value if args.model else ""
         explicit_effort = effort_value if args.effort else ""
         problem = (explicit_selection_problem(explicit_model, explicit_effort, effective)
