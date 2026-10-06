@@ -3617,6 +3617,232 @@ def host_view(doc: dict[str, Any], path: Path) -> dict[str, Any]:
     return view
 
 
+# Write metadata and alert coalescing change on every repeat without
+# changing what the Host is asked to judge.
+DIGEST_SKIP = (*RECORD_META, "count", "last_seen", "ack")
+# Field-set version inside a task's tool-kept `rejection` object.
+# Heartbeat schema stays kaola-heartbeat-prompt/2. Do not bump it: a writer
+# that sees /3 refuses the whole file. Absent count is unknown, never zero.
+REJECTION_VERSION = 1
+EFFORT_RANK = {"low": 1, "medium": 2, "high": 3, "xhigh": 4, "max": 5}
+
+
+def judgment_digest(record: dict[str, Any]) -> str:
+    """Short digest of what a Host judgment record asks, so the same id with a
+    changed question, options, evidence or owner is new attention."""
+    text = json.dumps({key: value for key, value in record.items() if key not in DIGEST_SKIP},
+                      ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def _positive_int(value: Any) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    return None
+
+
+def _dispatch_ids(task: dict[str, Any] | None) -> set[str]:
+    if not isinstance(task, dict):
+        return set()
+    raw = task.get("dispatch")
+    if isinstance(raw, str) and raw:
+        return {raw}
+    if isinstance(raw, list):
+        return {item for item in raw if isinstance(item, str) and item}
+    return set()
+
+
+def _owner_of(task: dict[str, Any]) -> str | None:
+    """Responsible owner: preset or recorded owner. A session shell is not an owner."""
+    preset = task.get("preset")
+    if isinstance(preset, str) and preset.strip():
+        return preset.strip()
+    owner = task.get("owner")
+    if isinstance(owner, str) and owner.strip():
+        return owner.strip()
+    rows = task.get("assignments")
+    if isinstance(rows, list):
+        for row in rows:
+            if isinstance(row, dict):
+                named = row.get("preset")
+                if isinstance(named, str) and named.strip():
+                    return named.strip()
+    return None
+
+
+def _submission_dispatch(patch: dict[str, Any]) -> str | None:
+    dispositions = patch.get("dispositions")
+    if not isinstance(dispositions, dict):
+        return None
+    repaired = [key for key, value in dispositions.items()
+                if value == "repair" and isinstance(key, str) and key]
+    if len(repaired) == 1:
+        return repaired[0]
+    return None
+
+
+def _submission_receipt(patch: dict[str, Any]) -> str | None:
+    if "evidence" not in patch:
+        return None
+    evidence = patch.get("evidence")
+    if isinstance(evidence, str) and evidence.strip():
+        return evidence.strip()
+    if isinstance(evidence, list):
+        rows = [item.strip() for item in evidence if isinstance(item, str) and item.strip()]
+        if len(rows) == 1:
+            return rows[0]
+    return None
+
+
+def _stored_rejection(current: dict[str, Any] | None) -> dict[str, Any]:
+    raw = (current or {}).get("rejection")
+    return dict(raw) if isinstance(raw, dict) else {}
+
+
+def _handoff_resets(current: dict[str, Any] | None, merged: dict[str, Any]) -> bool:
+    """A new segment needs an actual handed-off disposition and a new dispatch id."""
+    old = (current or {}).get("dispositions") if isinstance((current or {}).get("dispositions"), dict) else {}
+    new = merged.get("dispositions") if isinstance(merged.get("dispositions"), dict) else {}
+    handed = [key for key, value in new.items() if value == "handed-off" and old.get(key) != "handed-off"]
+    if not handed:
+        return False
+    return bool(_dispatch_ids(merged) - _dispatch_ids(current))
+
+
+def _effort_action(patch: dict[str, Any], rejection: dict[str, Any], writer: str) -> str | None:
+    """A Host-recorded higher known effort starts a segment. Unknown is not a raise."""
+    if writer != "host" or "effort" not in patch or not isinstance(patch.get("effort"), str):
+        return None
+    rank = EFFORT_RANK.get(patch["effort"].strip().lower())
+    if rank is None:
+        return None
+    previous = rejection.get("effort")
+    previous_rank = EFFORT_RANK.get(previous) if isinstance(previous, str) else None
+    if previous_rank is None:
+        return "record"
+    if rank > previous_rank:
+        return "raise"
+    return None
+
+
+def _bind_review(patch: dict[str, Any], rejection: dict[str, Any]) -> int | None:
+    if "review" in patch:
+        return _positive_int(patch.get("review"))
+    return _positive_int(rejection.get("open_review"))
+
+
+def _submission_relation(rejection: dict[str, Any], incoming: dict[str, Any]) -> str:
+    """`new`, `replay`, or `unknown`. Unknown does not increment and is not zero."""
+    review = incoming.get("review")
+    stored = _positive_int(rejection.get("review"))
+    if isinstance(review, int):
+        if stored is None or review > stored:
+            return "new"
+        if review == stored:
+            return "replay"
+        return "late"
+    dispatch = incoming.get("dispatch")
+    receipt = incoming.get("receipt")
+    if dispatch and dispatch == rejection.get("dispatch"):
+        if receipt and rejection.get("receipt") and receipt != rejection.get("receipt"):
+            return "unknown"
+        return "replay"
+    if receipt and receipt == rejection.get("receipt") and not dispatch and not rejection.get("dispatch"):
+        return "replay"
+    return "unknown"
+
+
+def apply_task_rejection(current: dict[str, Any] | None, merged: dict[str, Any],
+                         patch: dict[str, Any], writer: str) -> None:
+    """Keep the current owner's repair count at the verdict transition.
+
+    The binding is the rejected submission's dispatch item, delivery receipt,
+    and review revision. A Host turn id is not that identity. A late older
+    review does not change the current count. `effort` and `review` on the
+    patch are consumed and are not stored as task keys.
+    """
+    if "review" in patch:
+        merged.pop("review", None)
+    if "effort" in patch:
+        merged.pop("effort", None)
+    previous = _stored_rejection(current)
+    rejection = dict(previous)
+    entered = merged.get("stage") == "review" and (not current or current.get("stage") != "review")
+    if entered:
+        base = _positive_int(rejection.get("open_review")) or _positive_int(rejection.get("review")) or 0
+        rejection["open_review"] = base + 1
+    verdict = patch.get("verdict") if isinstance(patch.get("verdict"), dict) else None
+    is_repair = bool(verdict and verdict.get("value") == "repair")
+    incoming_review = _bind_review(patch, rejection) if is_repair else None
+    incoming = None
+    relation = None
+    if is_repair:
+        incoming = {"dispatch": _submission_dispatch(patch), "receipt": _submission_receipt(patch),
+                    "review": incoming_review}
+        # Compare with the binding from before this patch. A segment reset below
+        # drops that binding, so the same review number can count again after it.
+        relation = _submission_relation(previous, incoming)
+    resets = _handoff_resets(current, merged) or _effort_action(patch, previous, writer) == "raise"
+    # A late older review, or a repair whose order cannot be bound, must not
+    # replace the current verdict or the current count. A real segment reset in
+    # this same patch still starts the new segment below.
+    if relation == "late" or (relation == "unknown" and _positive_int(previous.get("count")) and not resets):
+        if current and isinstance(current.get("verdict"), dict):
+            merged["verdict"] = current["verdict"]
+        elif "verdict" in patch:
+            merged.pop("verdict", None)
+        if current and isinstance(current.get("prior_verdict"), dict):
+            merged["prior_verdict"] = current["prior_verdict"]
+        elif not (current and "prior_verdict" in current):
+            merged.pop("prior_verdict", None)
+        restored = dict(previous)
+        if entered:
+            restored["open_review"] = rejection["open_review"]
+        if restored:
+            restored["v"] = REJECTION_VERSION
+            merged["rejection"] = restored
+        else:
+            merged.pop("rejection", None)
+        return
+    effort_action = _effort_action(patch, rejection, writer)
+    if _handoff_resets(current, merged) or effort_action == "raise":
+        for key in ("count", "dispatch", "receipt", "review"):
+            rejection.pop(key, None)
+        owner = _owner_of(merged)
+        if owner:
+            rejection["owner"] = owner
+        else:
+            rejection.pop("owner", None)
+    if effort_action in ("record", "raise") and isinstance(patch.get("effort"), str):
+        rejection["effort"] = patch["effort"].strip().lower()
+    if is_repair and incoming is not None and _submission_relation(rejection, incoming) == "new":
+        count = _positive_int(rejection.get("count"))
+        rejection["count"] = 1 if count is None else count + 1
+        if incoming["dispatch"]:
+            rejection["dispatch"] = incoming["dispatch"]
+        else:
+            rejection.pop("dispatch", None)
+        if incoming["receipt"]:
+            rejection["receipt"] = incoming["receipt"]
+        else:
+            rejection.pop("receipt", None)
+        if incoming["review"] is not None:
+            rejection["review"] = incoming["review"]
+            open_review = _positive_int(rejection.get("open_review")) or 0
+            if incoming["review"] > open_review:
+                rejection["open_review"] = incoming["review"]
+        if not (isinstance(rejection.get("owner"), str) and rejection.get("owner")):
+            owner = _owner_of(merged)
+            if owner:
+                rejection["owner"] = owner
+    if any(key in rejection for key in ("count", "open_review", "owner", "effort", "review", "dispatch", "receipt")):
+        rejection["v"] = REJECTION_VERSION
+        merged["rejection"] = rejection
+    elif not previous:
+        merged.pop("rejection", None)
+    return merged
+
+
 def maintenance_brief(state: dict[str, Any]) -> dict[str, Any]:
     """The last checkpoint identity and time beside current obligations, so
     a reader can see whether maintenance is progressing. No history."""
@@ -3688,8 +3914,16 @@ def delegator_view(doc: dict[str, Any], path: Path, repo: Path) -> dict[str, Any
     tasks = projected.get("tasks") or {}
 
     def brief(task_id: str, task: dict[str, Any]) -> dict[str, Any]:
-        return {"id": task_id, **{key: short(task.get(key)) for key in ("stage", "goal", "wait", "next")
-                                  if task.get(key) is not None}}
+        shown = {"id": task_id, **{key: short(task.get(key)) for key in
+                                   ("stage", "goal", "wait", "next", "resume_when")
+                                   if task.get(key) is not None}}
+        verdict = task.get("verdict") if isinstance(task.get("verdict"), dict) else None
+        if verdict and isinstance(verdict.get("value"), str):
+            shown["verdict"] = verdict["value"]
+        projected = RECORD.rejection_projection(task, state.get("holds"), task_id)
+        if projected:
+            shown["rejection"] = projected
+        return shown
 
     def rows(kind: str, fields: tuple[str, ...]) -> list[dict[str, Any]]:
         found = []
@@ -3963,6 +4197,8 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
         )
     if "prior_verdict" in patch:
         raise StateRefusal("invalid-input", "prior_verdict is kept by the tool", unapplied=patch)
+    if "rejection" in patch:
+        raise StateRefusal("invalid-input", "rejection is kept by the tool", unapplied=patch)
     coalesce = bool(getattr(args, "coalesce", False)) and kind == "alerts" and current is not None
     expected = args.expect_rev
     if not coalesce:
@@ -3987,9 +4223,11 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
                      "The file was not changed.", unapplied=patch,
         )
     merged = merge_patch(current or {}, patch)
-    if kind == "tasks" and isinstance(patch.get("verdict"), dict):
-        # The explicit Host verdict replaces the prior review verdict.
-        # Refuse invalid new verdicts below before any file write.
+    if (kind == "tasks" and isinstance(patch.get("verdict"), dict)
+            and patch["verdict"].get("value") != "repair"):
+        # An explicit final/terminal verdict replaces the prior review verdict.
+        # A repair keeps it: #267 counts rounds of the same obligation and the
+        # earlier repair stays its prior. Refuse invalid new verdicts below.
         merged.pop("prior_verdict", None)
     if kind == "tasks" and isinstance(patch.get("dispatch"), list):
         merged["dispatch"] = RECORD.union_dispatch((current or {}).get("dispatch"), patch.get("dispatch"))
@@ -3998,6 +4236,11 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
         if missing:
             raise StateRefusal("invalid-input", f"a new {kind} record needs {', '.join(missing)}")
         merged["created_at"] = observed_at()
+    if kind == "tasks":
+        # #267 patch-only inputs consumed by apply_task_rejection below:
+        # never stored, never refused as unknown record keys.
+        merged.pop("effort", None)
+        merged.pop("review", None)
     unknown = RECORD.unknown_record_keys(kind, merged)
     if unknown:
         raise StateRefusal(
@@ -4055,6 +4298,8 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
         merged.pop("transcribed", None)
         if "verdict" in patch:
             merged["verdict"] = {**merged["verdict"], "by": "host"}
+    if kind == "tasks":
+        apply_task_rejection(current if isinstance(current, dict) else None, merged, patch, args.writer)
     merged["rev"] = int((current or {}).get("rev") or 0) + 1
     merged["updated_at"] = observed_at()
     merged["source"] = args.source

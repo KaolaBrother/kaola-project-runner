@@ -219,7 +219,7 @@ sink, and write ownership.
    When records are inconsistent, investigate and direct a scoped repair;
    never fabricate claim identities.
 5. **Reclaim seats and report.** The only legal idle seat is one whose delivery is
-   awaiting acceptance; a rejected delivery's repair is the same assignment unless substantive (task-failure),
+   awaiting acceptance; same assignment for one repair; a second Host repair verdict escalates (task-failure),
    and an accepted seat keeps only the finalize/cleanup duties it owns. Once
    it owns none (done or explicitly handed off) or the seat is abandoned,
    exact-stop it in that same beat. The stop action is the exact owned session

@@ -4,7 +4,21 @@ Decide the next owner when a worker substantively fails an engineering task. Thi
 
 ## Trigger
 
-Judge the concrete evidence. Act when the core objective is unreachable, the evidence disproves the approach, or repeated repair no longer makes meaningful progress on the core problem. Routine errors, small fixes, and productive debugging stay with the current worker, including a rejected delivery whose repair is still that assignment. There is no fixed retry count, timer, or failure classifier. A connection wait, or an environment or tool failure, is addressed as the demonstrated cause; it is not by itself a model-capability failure ([qa-evidence.md](qa-evidence.md)).
+Judge the concrete evidence. Act when the core objective is unreachable, the evidence disproves the approach, or the same acceptance obligation receives a second Host `repair` verdict for the same responsible owner.
+
+One failed attempt is one Host `repair` verdict on one formal submission of that obligation. A submission is a delivery claimed complete, a full gate or package result returned for acceptance, or an outside review the Host records as `repair`. The tool keeps the current owner's rejection count at that verdict. Absent is unknown, never zero. The second count, on a different submission, is the escalation trigger.
+
+These are not attempts: a worker's own red test, a work-in-progress consult, a pre-declared scoped experiment, and a stall. One verdict counts once, whatever the number of findings or the exit code. A green self-test does not erase a `repair`. A later different defect on the same obligation still counts. A package, candidate, task-name, or session-shell rename does not reset the count. Editing `acceptance` does not clear it. A new prompt or strategy, with the same owner and effort, is not escalation.
+
+The first `repair` stays with that owner. No timer and no failure classifier run inside the worker's own loop. Fix a demonstrated tool or environment cause and verify it on that seat; record the evidence before the next attempt. A cause that was never shown, and comes back as `repair`, counts. A connection wait is not by itself a model-capability failure ([qa-evidence.md](qa-evidence.md)).
+
+## Escalation
+
+Escalation means a different authorized owner now diagnoses or executes the obligation, or a higher effort where the Elite branch below allows it. The voucher is the dispatch or the effort receipt. `next` says what that owner does differently. Research may accompany the change. It does not replace a change of owner or effort ([public-research.md](public-research.md)).
+
+When no suitable authorized seat or effort exists, record a local hold with `resume_when` and leave the count. Say that escalation is not done. The same seat may run only a pre-declared scoped experiment until the hold lifts. Substantive new scope is a new obligation. The old unresolved responsibility stays with its count.
+
+The Host records the verdict and chooses the handoff. The Delegator supervises: it may tell the Host that escalation is owed, and it does not dispatch or name a seat. The Sideagent transcribes Host verdicts and does not judge them. The tool keeps the count. It does not choose the next owner and it does not block a dispatch.
 
 ## Next owner
 

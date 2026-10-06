@@ -310,6 +310,7 @@ python_suites_all=(
   "test-issue-254-opencode-model.py"
   "test-issue-255-lifecycle-state.py"
   "test-issue-259-record-contract.py"
+  "test-issue-267-rejection-count.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -398,6 +399,7 @@ python_suites_b=(
 shell_suites=(
   "test-installer-migration.sh"
   "test-installer-runtimes.sh"
+  "test-issue-267-rejection-count.py"
 )
 
 array_contains() {

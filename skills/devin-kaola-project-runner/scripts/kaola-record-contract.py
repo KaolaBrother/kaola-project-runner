@@ -37,7 +37,7 @@ AUTH_KEYS = frozenset({
 RECOVERY_KEYS = frozenset({"protected_untracked", "host"})
 TASK_KEYS = frozenset({
     "stage", "goal", "scope", "acceptance", "needs", "depends", "source", "keep_open",
-    "dispositions", "verdict", "prior_verdict", "dispatch", "evidence", "wait", "next",
+    "dispositions", "verdict", "prior_verdict", "rejection", "dispatch", "evidence", "wait", "next",
     "sessions", "assignments", "session", "holder", "holder_instance_id", "platform",
     "preset", "candidate", "resume_when", "boundary", "owner", "duty", "ref",
     "rev", "created_at", "updated_at", "writer", "transcribed", "host_revision",
@@ -63,6 +63,12 @@ RECORD_KEYS = {
     "tasks": TASK_KEYS, "holds": HOLD_KEYS, "alerts": ALERT_KEYS, "decisions": DECISION_KEYS,
 }
 VERDICT_KEYS = frozenset({"value", "by", "host_turn", "why"})
+# Closed nested key set of a task's tool-kept `rejection` object (#267).
+# Heartbeat schema stays kaola-heartbeat-prompt/2; the field-set version
+# lives inside the object as `v`.
+REJECTION_KEYS = frozenset({
+    "v", "count", "owner", "dispatch", "receipt", "review", "open_review", "effort",
+})
 TRANSCRIBED_KEYS = frozenset({"host_turn", "fields"})
 UNVERIFIED_KEYS = frozenset({"summary", "locator", "session", "live", "v1", "unchecked", "source"})
 V1_IDENTITY = frozenset({
@@ -264,6 +270,9 @@ def unknown_record_keys(kind: str, record: dict[str, Any]) -> list[str]:
     transcribed = record.get("transcribed")
     if isinstance(transcribed, dict):
         found += [f"transcribed.{key}" for key in transcribed if key not in TRANSCRIBED_KEYS]
+    rejection = record.get("rejection")
+    if isinstance(rejection, dict):
+        found += [f"rejection.{key}" for key in rejection if key not in REJECTION_KEYS]
     return found
 
 
@@ -272,6 +281,10 @@ def reject_record_patch(kind: str, patch: dict[str, Any]) -> dict[str, str] | No
     allowed = RECORD_KEYS[kind]
     for key, value in patch.items():
         if value is None:
+            continue
+        if kind == "tasks" and key in ("effort", "review"):
+            # #267 patch-only inputs consumed by apply_task_rejection:
+            # never stored, never refused as unknown record keys.
             continue
         if key not in allowed:
             return refusal(
@@ -1655,7 +1668,35 @@ def judgment_digest(record: dict[str, Any]) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
-def task_attention(task_id: str, task: dict[str, Any]) -> list[dict[str, Any]]:
+def rejection_projection(task: dict[str, Any], holds: Any, task_id: str) -> dict[str, Any] | None:
+    """Current-owner rejection facts for the views (#267). Absent count is unknown."""
+    rejection = task.get("rejection") if isinstance(task.get("rejection"), dict) else None
+    if not isinstance(rejection, dict) or not isinstance(rejection.get("count"), int):
+        return None
+    shown: dict[str, Any] = {"count": rejection["count"]}
+    if rejection.get("owner") is not None:
+        shown["owner"] = rejection["owner"]
+    submission = {key: rejection[key] for key in ("dispatch", "receipt", "review")
+                  if rejection.get(key) is not None}
+    if submission:
+        shown["submission"] = submission
+    count = rejection["count"]
+    if count >= 2:
+        label = "owed"
+        if task.get("resume_when"):
+            label = "held"
+        elif isinstance(holds, dict):
+            for hold_id, hold in holds.items():
+                if isinstance(hold, dict) and (hold_id == task_id or hold.get("scope") == task_id):
+                    label = "held"
+                    break
+        shown["escalation"] = label
+    else:
+        shown["escalation"] = "same-assignment"
+    return shown
+
+
+def task_attention(task_id: str, task: dict[str, Any], holds: Any = None) -> list[dict[str, Any]]:
     found = []
     verdict = task.get("verdict") if isinstance(task.get("verdict"), dict) else None
     if task.get("stage") == "review" and not verdict:
@@ -1668,11 +1709,20 @@ def task_attention(task_id: str, task: dict[str, Any]) -> list[dict[str, Any]]:
         found.append({"kind": "tasks", "id": task_id, "why": "verdict-missing", "stage": task["stage"],
                       "content": judgment_digest(task)})
     if isinstance(verdict, dict) and verdict.get("value") == "repair" and task.get("goal"):
-        # Host goal, next, and verdict only. A node process write does not change this row.
-        body = {"goal": task.get("goal"), "next": task.get("next"), "verdict": verdict.get("value")}
+        # Host goal, next and verdict, plus the #267 rejection facts: a new
+        # counted rejection wakes the Host once; an unchanged row stays quiet.
+        projected = rejection_projection(task, holds, task_id) or {}
+        body = {"goal": task.get("goal"), "next": task.get("next"), "verdict": verdict.get("value"),
+                "rejection_count": projected.get("count"), "escalation": projected.get("escalation")}
         text = json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        found.append({"kind": "tasks", "id": task_id, "why": "delivery-open",
-                      "content": hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]})
+        row = {"kind": "tasks", "id": task_id, "why": "delivery-open",
+               "content": hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]}
+        for key in ("count", "owner", "escalation"):
+            if projected.get(key) is not None:
+                row[key if key != "count" else "rejection_count"] = projected[key]
+        if projected.get("submission"):
+            row["submission"] = projected["submission"]
+        found.append(row)
     if isinstance(task.get("transcribed"), dict):
         found.append({"kind": "tasks", "id": task_id, "why": "transcribed-check",
                       "host_turn": task["transcribed"].get("host_turn"),
@@ -1876,7 +1926,10 @@ def host_view(doc: dict[str, Any], path: Path | None) -> dict[str, Any]:
                               if task[key].get(field) is not None}
         if task.get("dispatch"):
             entry["dispatch_count"] = len(task["dispatch"]) if isinstance(task["dispatch"], list) else 1
-        attention.extend(task_attention(task_id, task))
+        rejection = rejection_projection(task, state.get("holds"), task_id)
+        if rejection:
+            entry["rejection"] = rejection
+        attention.extend(task_attention(task_id, task, state.get("holds")))
         tasks.append(entry)
     holds = []
     for hold_id, hold in sorted((state.get("holds") or {}).items()):

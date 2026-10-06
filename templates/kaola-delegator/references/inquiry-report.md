@@ -110,7 +110,7 @@ report has these five parts, in order. An empty part says
    recovery watch until scoped action evidence. Equal sequence, elapsed time or
    generic `last_verified` alone proves neither failure nor settlement. Reuse a
    justified in-flight node; do not control workers or request an all-state audit.
-3. Tasks in progress (`doing`).
+3. Tasks in progress (`doing`). Read each `rejection`: count, owner, submission, escalation or hold. Absent count is unknown, never zero. Owed: tell the Host to apply task-failure.md. Name no seat and do not dispatch.
 4. Tasks to do (`todo`).
 5. This round's outcomes and next steps.
 

@@ -86,7 +86,8 @@ class MainSkill(unittest.TestCase):
         self.assertIn("an accepted seat keeps only the finalize/cleanup duties it owns", self.text)
         self.assertRegex(self.text, r"Once it owns none \(done or explicitly handed off\) or the seat is "
                                     r"abandoned, exact-stop it in that same beat")
-        self.assertIn("a rejected delivery's repair is the same assignment", self.text)
+        self.assertIn("same assignment for one repair; a second Host repair verdict escalates", self.text)
+        self.assertNotIn("a rejected delivery's repair is the same assignment unless substantive", self.text)
 
     def test_new_task_is_new_session_resume_is_same_assignment_only(self) -> None:
         self.assertIn(
