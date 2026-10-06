@@ -131,8 +131,12 @@ recovery duty; pre-existing `t259` failures isolated by a stash control run
 regressions) instead of being blamed on the change.
 
 **Limitations.** `lifecycle-state.md` lists relay-across-holder-death,
-timer read-back and real (≈1 MiB) state size as unproven;
-`RealAcpInjection` (pre-existing failure) needs a live ACP runtime.
+timer read-back and real (≈1 MiB) state size as unproven. Correction
+(dot review): `RealAcpInjection` is a mock-ACP/real-holder test, not a
+live-runtime need — its empty log was `MOCK_ACP_LOG` being deliberately
+dropped by the launch broker's env allowlist (commit `24a2355a`); fixed by
+carrying the log path in the agent command (`--log`), keeping the
+projected-goal-marker real-injection assertion intact.
 
 ## 5. Continuous improvement and evolution
 
@@ -156,10 +160,14 @@ assertion).
 forced precision; unchanged valid evidence reused rather than regenerated
 (ZCode row reused byte-identical `4b247` bridge facts).
 
-**Limitations.** Seven pre-existing `t259` failures (6 × `watch_alias`
-v0.90 grant-shape drift, 1 × `RealAcpInjection`) are documented and
-deferred to the affected-review boundary — named, not silently waived, and
-not expanded into new standing rules.
+**Limitations.** The seven `t259` failures observed at `0b3af748` (all
+pre-existing at clean `3c7e7417`) were resolved by the dot-correction
+revision, keeping the original obligations: the six `watch_alias` subtests
+compared stored authorization byte-shape across the catalog-derived `class`
+removal and now assert exact effective-authority equivalence (preset set,
+count and every non-derived key preserved; `class` absent as a stored
+copy; illegal aliases still refused with zero file writes); the
+`RealAcpInjection` fix is described under requirement 4.
 
 ## 6. Future upgrade continuity
 
@@ -181,14 +189,28 @@ evidence-reuse rules in the matrix.
 **Limitations.** Consumer-side install UAT is intentionally not performed
 (no-install boundary): installed runtime Skills remain at the prior release
 until the authorized PATCH release/install step; relay across holder death
-and timer read-back remain unproven as above.
+and timer read-back remain unproven as above. The delegator consumer view
+still projects main's superseded seven-item/Opus AGENTS until the final
+lifecycle sink replaces them; that view is re-read and verified from
+canonical main after the sink, never declared correct from the candidate.
 
 ## Gate status
 
 Engineering evidence: `render-skills.py --check` PASS; `t255` full 128 OK;
-generated+progressive suites 15 OK; `t259` full file at 7 failures, all
-pre-existing at `3c7e7417` (8 → 7: `1248` repaired, zero new regressions,
-stash-controlled). Pending: dot main-thread personal PASS, Claude Code Fable
+generated+progressive suites 15 OK. Regression scope, precisely: at
+`0b3af748` the full `t259` file had 7 failures, each already present at
+clean `3c7e7417` under the same stash-controlled, same-machine runs (8
+there; `1248` was repaired by `f562560f`); no new regression within the
+tested set (full `t255`/`t259` files plus the generated/progressive
+suites). Review binding: the dot main thread personally reviewed
+`0b3af748` (six answers, README table, both behavioral diffs, retire
+wording, seven-failure originals) and returned NOT PASS with four bounded
+corrections; this revision implements them (mock `--log` past the broker
+env allowlist, effective-authority equivalence assertions, restored
+Sideagent copy semantics in the decisions clause, review-binding and
+scoped-regression precision), and the correction commit SHA below binds
+the re-review scope. Fable's independent review of `0b3af748` continues
+and is not replaced by dot. Pending: dot main-thread personal PASS, Claude Code Fable
 personal PASS (owner decision Sentinel_76e2d799: Claude authentication is
 fixed — the real Fable review starts when this report makes the candidate
 review-ready; no probe start, no authentication investigation, existing

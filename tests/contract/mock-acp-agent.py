@@ -1009,7 +1009,13 @@ def main() -> int:
     parser.add_argument("--steering", default="none",
                         choices=("none", "injected", "promptRequired", "startedNewTurn",
                                  "error", "silent", "weird"))
+    parser.add_argument("--log", default="",
+                        help="JSONL log path; overrides MOCK_ACP_LOG, which the "
+                             "launch broker's env allowlist deliberately drops")
     args, _unknown = parser.parse_known_args()
+    global LOG_PATH
+    if args.log:
+        LOG_PATH = args.log
     caps = {item for item in args.caps.split(",") if item}
     agent = MockAgent(args.scenario, caps, args.turn_ms, args.flood_bytes,
                       steering=args.steering, ignore_cancel=args.ignore_cancel,

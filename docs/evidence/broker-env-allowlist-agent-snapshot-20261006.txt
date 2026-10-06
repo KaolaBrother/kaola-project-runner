@@ -1,0 +1,19 @@
+# Agent child environment observed 2026-10-06 (RealAcpInjection root cause)
+# Repro: kaola-acp.py codex start --command <mock> with MOCK_ACP_LOG set in the CLI env;
+# snapshot written by the agent itself at startup. MOCK_ACP_LOG is absent — the
+# launch broker env allowlist (scripts/kaola-launchd-broker.py PASS_ALWAYS/PASS_KAOLA,
+# commit 24a2355a) deliberately drops unlisted caller variables before the holder/agent.
+# Fix: the mock takes --log argv (env kept for compat); the test passes it in --command.
+
+HOME=/tmp/kpr-injection-repro/home
+KAOLA_ACP_CHILD_RECORD=/tmp/kpr-injection-repro/records/codex/codex-diag-work/61bb5507ac8832ec/children.jsonl
+KAOLA_ACP_DISPATCHER={"holder_instance_id": "98cc8005c0a5adff44d57353d006bf98", "platform": "codex", "repo": "/private/tmp/kpr-injection-repro/repo", "session": "codex-diag-work"}
+KAOLA_ACP_HEARTBEAT_HOST={"platform": "codex", "repo": "/private/tmp/kpr-injection-repro/repo", "session": "codex-diag-host", "socket": "/tmp/kpr-injection-repro/kaola-501-acp/fcf7d32253d17bba78850d19.sock"}
+KAOLA_ACP_HEARTBEAT_HOST_SOCKET=/tmp/kpr-injection-repro/kaola-501-acp/fcf7d32253d17bba78850d19.sock
+KAOLA_ACP_RECORD_ROOT=/tmp/kpr-injection-repro/records
+KAOLA_LAUNCH_BACKEND=auto
+LANG=C
+LC_CTYPE=C.UTF-8
+PATH=/usr/bin:/bin:/usr/local/bin
+TMPDIR=/tmp/kpr-injection-repro
+__CF_USER_TEXT_ENCODING=0x1F5:0x0:0x0

@@ -59,9 +59,10 @@ The Host gets outcomes, capacity and pending decisions.
 - `alerts` (`level` `watch|warn|severe`, `summary`): applicable unresolved
   exceptions. Read, acknowledged or in progress is not resolved. Once handled,
   use `retire --expect-rev REV --evidence ORIGINAL`; it removes the stored row.
-- `decisions` (`owner` `host|delegator|user`, `question`): pending owner answers.
-  Host `update --set '{"status":"settled","evidence":"ORIGINAL"}'` removes
-  the row; a Host-judged handled one may `retire --evidence ORIGINAL`.
+- `decisions` (`owner` `host|delegator|user`, `question`): open owner answers.
+  Host settles with `update --set status/evidence ORIGINAL` or, judged
+  handled, `retire --evidence ORIGINAL`. A Sideagent copy needs
+  `--host-turn`, stays pending Host adoption, never judges currentness.
 
 Views and injected bodies use the stored current collection. Keep no
 handled row or retrospective text in another field. Unfinished effects remain
@@ -73,7 +74,7 @@ Unknown is not resolved; Agents judge semantic currentness.
 
 ## Touchpoints
 
-Update at dispatch (`doing`; plan: `task_id`, `output`, optional `requires`),
+Update at dispatch (`doing`; plan: dispatch-collect),
 result/verdict, goal/grant/fault change, recovery/adoption and closeout. Inquiry
 and `check` detect omissions. Link each result/verdict to its task goal and
 next action or sourced blocker; no goal score or per-dispatch approval.

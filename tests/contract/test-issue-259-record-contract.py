@@ -1597,7 +1597,21 @@ class RecordContract(unittest.TestCase):
                     self.assertEqual(saved["watch"]["repair"]["evidence"], "owner-message-7")
                     self.assertEqual(saved["watch"]["repair"]["source"], duty["source"])
                     self.assertEqual(saved["source"], doc["source"])
-                    self.assertEqual(saved["authorization"], doc["authorization"])
+                    # Normalization may drop only fields derived from the
+                    # catalog (the stored `class` copy); the effective grant
+                    # authority — presets, count, switch, lifetime, scope —
+                    # must survive exactly, with no expansion.
+                    self.assertEqual(saved["authorization"].keys(),
+                                     doc["authorization"].keys())
+                    for saved_g, orig_g in zip(saved["authorization"]["elite_grants"],
+                                               doc["authorization"]["elite_grants"]):
+                        self.assertEqual(saved_g.get("preset_ids"), orig_g["preset_ids"])
+                        self.assertEqual(saved_g.get("count"), orig_g["count"])
+                        self.assertNotIn("class", saved_g,
+                                         "Class is catalog-derived; no stored copy")
+                        for key, value in orig_g.items():
+                            if key != "class":
+                                self.assertEqual(saved_g.get(key), value)
 
         # Each non-token alias needs its own path, also with a valid status.
         self.delegator.write_text(json.dumps({"revision": 0, "watch": {"repair": {
@@ -2385,7 +2399,10 @@ class RealAcpInjection(unittest.TestCase):
         (self.repo / ".kaola").mkdir()
         self.log = self.root / "mock.jsonl"
         self.started: list[str] = []
-        self.agent = f"{PYTHON} {MOCK} --scenario normal --caps resume,load,list,close"
+        # The log path travels in the agent command: the launch broker's env
+        # allowlist deliberately drops MOCK_ACP_LOG from the agent environment.
+        self.agent = (f"{PYTHON} {MOCK} --scenario normal --caps resume,load,list,close "
+                      f"--log {self.log}")
 
     def tearDown(self) -> None:
         for session in self.started:
