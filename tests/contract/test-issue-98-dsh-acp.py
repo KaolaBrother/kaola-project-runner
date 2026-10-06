@@ -321,7 +321,7 @@ class Issue120RunnerUnderAHostSeatbelt(unittest.TestCase):
         self.session = f"dsh-i120-{self._testMethodName[-24:].lower()}-{os.getpid()}"
 
     def cli(self, command: str, *args: str, agent: str = "", confined: bool = True) -> dict:
-        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
+        env = {k: v for k, v in os.environ.items() if (not k.startswith("KAOLA_") or (k == "KAOLA_LAUNCH_BACKEND" and v == "direct"))}
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.root / "records")
         argv = [sys.executable, str(CLI), "dsh", command, "--repo", str(self.repo),
                 "--session", self.session, *args]
@@ -466,7 +466,7 @@ class Issue120DshPermissionModeThroughTheRunner(unittest.TestCase):
 
     def cli(self, command: str, *args: str, **env: str) -> subprocess.CompletedProcess:
         base = {k: v for k, v in os.environ.items()
-                if not k.startswith("KAOLA_") and k != "DSH_PERMISSION_MODE"}
+                if (not k.startswith("KAOLA_") or (k == "KAOLA_LAUNCH_BACKEND" and v == "direct")) and k != "DSH_PERMISSION_MODE"}
         base.update(KAOLA_ACP_RECORD_ROOT=str(self.root / "records"), **env)
         return subprocess.run([sys.executable, str(CLI), "dsh", command, "--repo", str(self.repo),
                                "--session", self.session, "--command", self.agent, *args],
@@ -542,7 +542,7 @@ class Issue227LaunchUsesDshBin(unittest.TestCase):
 
     def start(self, *args: str, **env: str) -> dict:
         base = {k: v for k, v in os.environ.items()
-                if not k.startswith("KAOLA_") and k != "DSH_BIN"}
+                if (not k.startswith("KAOLA_") or (k == "KAOLA_LAUNCH_BACKEND" and v == "direct")) and k != "DSH_BIN"}
         base.update(KAOLA_ACP_RECORD_ROOT=str(self.root / "records"),
                     PATH=f"{self.path_dir}{os.pathsep}{os.environ.get('PATH', '')}", **env)
 

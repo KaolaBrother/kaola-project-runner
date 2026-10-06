@@ -86,7 +86,7 @@ class ReaderExceptionBoundary(unittest.TestCase):
             "--command", f"{sys.executable} {MOCK} --scenario handler_raises",
             *args,
         ]
-        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
+        env = {k: v for k, v in os.environ.items() if (not k.startswith("KAOLA_") or (k == "KAOLA_LAUNCH_BACKEND" and v == "direct"))}
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         result = subprocess.run(
             argv, capture_output=True, text=True, env=env, timeout=timeout

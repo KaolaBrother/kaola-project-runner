@@ -951,7 +951,7 @@ class DispatchEntry(unittest.TestCase):
             },
         })
         auth = self.authorization([
-            {"count": 1, "id": "codex/luna", "state": "granted"},
+            {"count": 2, "id": "codex/luna", "state": "granted"},
             {"count": 1, "id": "cursor-cli/default", "state": "granted"},
         ])
         plan = self.plan([
@@ -1418,15 +1418,24 @@ class DispatchEntry(unittest.TestCase):
 
         rows = write_json(self.root, "rows-auth.json", {
             "rows": [{"id": "claude-code/opus-xhigh", "class": "Elite"}],
-            "classes": {"Expert": "e", "Elite": "l", "Worker": "w"},
         })
         payload = self.project(rows, self.availability(["claude-code/opus-xhigh", "zcode/default"]))
         self.assertNotIn("claude-code/opus-xhigh", {item["id"] for item in payload["candidates"]})
 
+        legacy = write_json(self.root, "legacy-classes-auth.json", {
+            "rows": [{"id": "claude-code/opus-xhigh", "class": "Elite"}],
+            "classes": {"Expert": "e", "Elite": "l", "Worker": "w"},
+        })
+        code, payload = run(["project", "--authorization", str(legacy),
+                             "--platforms", str(PLATFORMS)], self.env)
+        self.assertEqual(code, 2, payload)
+        self.assertEqual(payload["reason"], "invalid-input")
+        self.assertIn("authorization.classes: legacy duplicate authority", payload["detail"])
+
         excluded = self.authorization(
-            [{"count": 1, "id": "codex/default", "state": "granted"}],
+            [{"count": 1, "id": "codex/default", "state": "granted"},
+             {"count": 1, "id": "zcode/default", "state": "paused"}],
             exclusions=["codex/default"],
-            paused=["zcode/default"],
         )
         payload = self.project(excluded, self.availability(["codex/default", "zcode/default"]))
         withheld = {row["id"]: row["reason"] for row in payload["withheld"]}
@@ -2118,7 +2127,7 @@ class DispatchEntry(unittest.TestCase):
         ])
         plan = self.plan([
             {"item_id": "kept", "preset": "claude-code/opus-xhigh", "session": "claude-code-KPR-i244-kept", "prompt": prompt},
-            {"item_id": "cap", "preset": "claude-code/sonnet", "session": "claude-code-KPR-i244-cap", "prompt": "new"},
+            {"item_id": "cap", "preset": "claude-code/opus-xhigh", "session": "claude-code-KPR-i244-cap", "prompt": "new"},
             {"item_id": "count", "preset": "claude-code/opus-xhigh", "session": "claude-code-KPR-i244-count", "prompt": "other"},
             {"item_id": "seat", "preset": "droid/opus", "session": "droid-KPR-i244-seat", "prompt": "seat"},
         ])
@@ -3763,7 +3772,8 @@ class RenderedGuidance(unittest.TestCase):
         self.assertNotIn("such as `dsh/default`", reference)
         self.assertIn("not start other workers", reference)
         self.assertNotIn("目录单行 profile 原文", skeleton)
-        self.assertIn("capability_summary", skeleton)
+        self.assertIn("capability", skeleton)
+        self.assertNotIn("capability_summary", skeleton)
         self.assertIn("单一 JSON 对象", skeleton)
         self.assertIn("dispatch-collect.md", profiles)
         self.assertIn("compact capability summary", snapshot)

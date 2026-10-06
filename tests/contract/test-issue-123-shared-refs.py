@@ -129,7 +129,8 @@ class Sandbox:
     def env(self, **extra: str) -> dict[str, str]:
         base = {"PATH": f"{Path(PYTHON).parent}:/usr/bin:/bin", "HOME": str(self.home),
                 "LANG": "C", "TMPDIR": tempfile.gettempdir(), "PYTHONUNBUFFERED": "1",
-                "KAOLA_ACP_RECORD_ROOT": str(self.dir / "records")}
+                "KAOLA_ACP_RECORD_ROOT": str(self.dir / "records"),
+                "KAOLA_LAUNCH_BACKEND": "direct"}
         tmux = shutil.which("tmux")
         if tmux:
             base["PATH"] += ":" + str(Path(tmux).parent)

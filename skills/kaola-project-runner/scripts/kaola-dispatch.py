@@ -3596,9 +3596,10 @@ def host_view(doc: dict[str, Any], path: Path) -> dict[str, Any]:
         view["capability"] = {**capability_summary(candidates),
                               "shared_seats": [{"seat": seat, "count": count} for seat, count in shared_seat_capacities(grants).items()],
                               "withheld": withheld,
-                              "catalog_source": str(catalog_paths[0].parent) if catalog_paths else None,
+                              "catalog_source": os.path.commonpath([str(p.parent) for p in catalog_paths]),
                               "catalog_sha256": hashlib.sha256(b"".join(p.read_bytes() for p in catalog_paths)).hexdigest()}
-        view["capability"].pop("text", None)
+        unknown = sum(item.get("availability") == "unknown" for item in candidates)
+        view["capability"]["text"] = f"availability unknown: {unknown} of {len(candidates)} eligible presets" if unknown else ""
         profiles = Path(__file__).resolve().parent.parent / "references" / "worker-profiles.md"
         if not profiles.is_file():
             profiles = Path(__file__).resolve().parent.parent / "templates" / "orchestrator" / "references" / "worker-profiles.md.tmpl"

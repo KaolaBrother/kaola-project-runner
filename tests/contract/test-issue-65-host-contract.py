@@ -214,7 +214,7 @@ class CursorAnchorBehaviour(unittest.TestCase):
         # KAOLA_ACP_DISPATCHER) refuse the start `heartbeat-host-conflict`
         # before anything is spawned. Drop the inherited namespace and set the
         # one fixture this suite needs, the same rule validate.sh applies.
-        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
+        env = {k: v for k, v in os.environ.items() if (not k.startswith("KAOLA_") or (k == "KAOLA_LAUNCH_BACKEND" and v == "direct"))}
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         result = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=timeout)
         receipt = json.loads(result.stdout)

@@ -122,7 +122,7 @@ class CanonicalRootFixture(unittest.TestCase):
                 timeout: float = 60) -> subprocess.CompletedProcess:
         # Issue #104/#182: each case declares its own binding facts, and no
         # inherited KAOLA_* binding survives into the fixture.
-        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
+        env = {k: v for k, v in os.environ.items() if (not k.startswith("KAOLA_") or (k == "KAOLA_LAUNCH_BACKEND" and v == "direct"))}
         if bound is not None:
             env[CANONICAL_KEY] = bound
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
@@ -436,7 +436,7 @@ class TestStopInstanceProtection(unittest.TestCase):
 
     def acp(self, command: str, *args: str, check: bool = True,
             timeout: float = 40) -> dict:
-        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
+        env = {k: v for k, v in os.environ.items() if (not k.startswith("KAOLA_") or (k == "KAOLA_LAUNCH_BACKEND" and v == "direct"))}
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         argv = [sys.executable, str(ACP_CLI), "grok", command,
                 "--repo", str(self.repo), "--session", self.session,
@@ -507,7 +507,7 @@ class TestStopInstanceProtection(unittest.TestCase):
     def test_shared_entrypoint_forwards_the_expected_instance_to_stop(self) -> None:
         self.start()
         live = self.live_instance_id()
-        env = {k: v for k, v in os.environ.items() if not k.startswith("KAOLA_")}
+        env = {k: v for k, v in os.environ.items() if (not k.startswith("KAOLA_") or (k == "KAOLA_LAUNCH_BACKEND" and v == "direct"))}
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
         env["KAOLA_ACP_COMMAND"] = f"{sys.executable} {MOCK} --scenario normal"
         result = subprocess.run(

@@ -175,7 +175,35 @@ class RecordContract(unittest.TestCase):
         self.assertEqual(host["capability"]["presets"], out["capability_summary"]["presets"])
         self.assertIsInstance(host["capability"]["catalog_source"], str)
         self.assertEqual(len(host["capability"]["catalog_sha256"]), 64)
-        self.assertNotIn("text", host["capability"])
+        unknown = sum(row["availability"] == "unknown" for row in rows.values())
+        self.assertGreater(unknown, 0)
+        self.assertLess(unknown, len(rows))
+        self.assertEqual(host["capability"]["text"], f"availability unknown: {unknown} of {len(rows)} eligible presets")
+        self.assertEqual(host["capability"]["catalog_source"], str(PLATFORMS))
+        before_layout = self.file.read_bytes()
+        installed = Path(self.tmp.name) / "layout" / "skills"
+        for manifest in sorted(PLATFORMS.glob("*.yaml")):
+            target = installed / f"{manifest.stem}-kaola-project-runner" / "scripts" / "platform.yaml"
+            target.parent.mkdir(parents=True)
+            target.write_bytes(manifest.read_bytes())
+        entry = installed / "kaola-project-runner" / "scripts" / "kaola-dispatch.py"
+        entry.parent.mkdir(parents=True)
+        entry.touch()
+        module = load_module(DISPATCH, "installed_layout_projection")
+        with unittest.mock.patch.object(module, "__file__", str(entry)):
+            paths = module.platform_paths(entry, None)
+            self.assertEqual(len(paths), 10)
+            projected = module.host_view(self.doc(), self.file)["capability"]
+        self.assertEqual(projected["catalog_source"], str(installed.resolve()))
+        self.assertEqual(projected["catalog_sha256"], hashlib.sha256(b"".join(p.read_bytes() for p in paths)).hexdigest())
+        self.assertEqual(projected["presets"], host["capability"]["presets"])
+        self.assertEqual(projected["text"], host["capability"]["text"])
+        availability.unlink()
+        code, host_unknown = self.state("view", "--file", str(self.file), "--role", "host")
+        self.assertEqual(code, 0, host_unknown)
+        eligible = len(host_unknown["capability"]["presets"])
+        self.assertEqual(host_unknown["capability"]["text"], f"availability unknown: {eligible} of {eligible} eligible presets")
+        self.assertEqual(self.file.read_bytes(), before_layout)
         self.assertEqual(len(json.loads(self.doc()["body"])["authorization"]["grants"]), 3)
         grant["state"] = "revoked"
         code, out = self.state("update", "--file", str(self.file), "--writer", "host", "--source", "owner-revoke",

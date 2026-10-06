@@ -296,7 +296,7 @@ roles, not benchmark claims, and they do not change which model a Host itself ru
 | Class | Presets | Role | Authorization |
 |---|---|---|---|
 | **Expert** | 3 | Complex thinking only: difficult analysis, design, objective decomposition, and review judgments. No concrete implementation or execution; not an ordinary worker seat. | Your explicit grant. A task grant (the default) ends with its task. A standing grant, only when you say so, lets the Host use that preset within its stated scope, count and limits until you revoke it or it expires. The Host judges completion and exact-stops the seat; that stop revokes no standing grant, and the same approved task continues across turns and recovery without asking again. |
-| **Worker** | 5 | Cheaper and generally weaker; simpler, bounded work that adds parallel throughput. | Default-authorized: no per-seat, count, or priority approval, and outside the general worker cap. Real account/token/service limits and your explicit restrictions still apply. |
+| **Worker** | 5 | Cheaper and generally weaker; simpler, bounded work that adds parallel throughput. | Default-authorized: no approval is required for each seat, count, or priority. Actual account, token and service limits and your explicit restrictions still apply. |
 | **Elite** | 13 | The main execution workforce: primary implementation and demanding execution. | Your explicit runtime/preset/count grant, within its caps and seat-switch rules. A valid grant stays valid for its scope; no per-task permission. |
 
 An Expert review informs the Host; it never replaces the Host's acceptance or its
