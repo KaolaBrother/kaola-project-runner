@@ -1601,19 +1601,51 @@ class RecordContract(unittest.TestCase):
                     # catalog (the stored `class` copy); the effective grant
                     # authority — presets, count and every non-derived key —
                     # must survive exactly (any added grant key would fail).
-                    self.assertEqual(saved["authorization"].keys(),
-                                     doc["authorization"].keys())
-                    for saved_g, orig_g in zip(saved["authorization"]["elite_grants"],
-                                               doc["authorization"]["elite_grants"]):
-                        self.assertEqual(saved_g.get("preset_ids"), orig_g["preset_ids"])
-                        self.assertEqual(saved_g.get("count"), orig_g["count"])
-                        self.assertNotIn("class", saved_g,
-                                         "Class is catalog-derived; no stored copy")
-                        self.assertEqual(set(saved_g), {k for k in orig_g if k != "class"},
-                                         "no grant key is added or lost")
-                        for key, value in orig_g.items():
-                            if key != "class":
-                                self.assertEqual(saved_g.get(key), value)
+                    # Normalized whole-object equality (dot recheck proof):
+                    # only the catalog-derived `class` may differ. Comparing the
+                    # complete structure covers list length, order, extra keys
+                    # and every non-derived value (preset set, count, switch,
+                    # lifetime, shared seat, requirements) at once.
+                    normalized = dict(doc["authorization"])
+                    normalized["elite_grants"] = [
+                        {k: v for k, v in grant.items() if k != "class"}
+                        for grant in doc["authorization"]["elite_grants"]]
+                    self.assertEqual(saved["authorization"], normalized)
+                    self.assertNotIn("class", json.dumps(saved["authorization"]))
+
+        # One representative rich grant (dot recheck proof): grouped preset ids
+        # (the shared-seat fact), non-empty switch_authorization, lifetime and
+        # task requirements survive normalization exactly, with no value lost
+        # and no extra grant; the illegal alias is still refused with the file
+        # bytes unchanged.
+        rich = {"schema": "kaola-delegator-heartbeat/1", "revision": 3, "source": "owner-9",
+                "watch": {"rich": {"kind": "relay", "relay_status": "Owner condition: keep pending.",
+                                   "source": "owner-9", "summary": "s", "next": "n"}},
+                "authorization": {"elite_grants": [
+                    {"preset_ids": ["claude-code/default", "claude-code/fable"], "count": 1,
+                     "class": "Expert", "switch_authorization": True, "lifetime": "standing",
+                     "special_requirements": "thinking and review only"}]}}
+        self.delegator.write_text(json.dumps(rich), encoding="utf-8")
+        before = self.delegator.read_bytes()
+        code, out = run_dispatch([
+            "delegator", "update", "--file", str(self.delegator), "--writer", "delegator",
+            "--source", "owner-9", "--expect-revision", "3", "--set",
+            json.dumps({"watch": {"rich": {"status": "open"}}})])
+        self.assertEqual(code, 2, out)
+        self.assertEqual(self.delegator.read_bytes(), before)
+        problem = next(row for row in out["blockers"] if row["path"] == "watch.rich.relay_status")
+        self.assertIn("current decision/reconciliation route", problem["recovery"])
+        code, out = run_dispatch([
+            "delegator", "update", "--file", str(self.delegator), "--writer", "delegator",
+            "--source", "owner-9", "--expect-revision", "3", "--set",
+            json.dumps({"watch": {"rich": {"relay_status": None, "status": "open",
+                                           "evidence": "owner-9"}}})])
+        self.assertEqual(code, 0, out)
+        saved = json.loads(self.delegator.read_text())
+        expected = {k: v for k, v in rich["authorization"]["elite_grants"][0].items()
+                    if k != "class"}
+        self.assertEqual(saved["authorization"]["elite_grants"], [expected])
+        self.assertNotIn("class", json.dumps(saved["authorization"]))
 
         # Each non-token alias needs its own path, also with a valid status.
         self.delegator.write_text(json.dumps({"revision": 0, "watch": {"repair": {
