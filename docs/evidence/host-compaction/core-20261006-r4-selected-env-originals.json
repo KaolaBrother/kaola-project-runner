@@ -1,0 +1,63 @@
+{
+  "original_capture": "/tmp/kpr-1073-core-original-capture.json",
+  "scope": "selected runtime-home path and before/after metadata only; full caller environment and credential bytes excluded",
+  "outputs": [
+    {
+      "command_cursor": 17052,
+      "output_cursor": 17058,
+      "original_toolCallId": "call_6865848b672d4b39afd747ed#cc3319df633146ddae459d0d1bea5eb8",
+      "selected_original_lines": [
+        "lane auth copy: size=4249 mode=600 mtime=Oct  6 20:26:39 2026",
+        "global config: size=6959 mtime=Oct  6 19:57:55 2026",
+        "42"
+      ]
+    },
+    {
+      "command_cursor": 17101,
+      "output_cursor": 17105,
+      "original_toolCallId": "call_d62b6f48af174089916d487c#d76e496ea3a940bab550477f4486bfc2",
+      "selected_original_lines": [
+        "CODEX_HOME=/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/codex-home"
+      ]
+    },
+    {
+      "command_cursor": 17165,
+      "output_cursor": 17172,
+      "original_toolCallId": "call_035a9815b3ce4d54a1357133#0fef285a43f44876953cd04b2b6c003b",
+      "selected_original_lines": [
+        "pid 9657:",
+        "CODEX_HOME=/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/codex-home",
+        "pid 12233:",
+        "native process title pid9680 selected CODEX_HOME=/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/codex-home"
+      ]
+    },
+    {
+      "command_cursor": 17722,
+      "output_cursor": 17726,
+      "original_toolCallId": "call_e202c8189d4a436387f20c45#0f54eb00168a47dcbdc6fbc5ee7442aa",
+      "selected_original_lines": [
+        "holder 73610:",
+        "CODEX_HOME=/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/codex-home"
+      ]
+    },
+    {
+      "command_cursor": 18052,
+      "output_cursor": 18060,
+      "original_toolCallId": "call_f02ce3f7c6d046299dd1baed#020a9d15c67344b29d80fb4407dfd785",
+      "selected_original_lines": [
+        "size=6959 mtime=Oct  6 19:57:55 2026",
+        "42",
+        "global opencode-r4 grep exit: 1"
+      ]
+    },
+    {
+      "command_cursor": 18285,
+      "output_cursor": 18291,
+      "original_toolCallId": "call_312b22896aae4212b02798bd#52ebf723057b4500bac98a8e5a2296dd",
+      "selected_original_lines": [
+        "pre-removal: size=4249 mode=600 mtime=Oct  6 20:26:39 2026",
+        "removed opencode-r4/codex-home/auth.json (4249B, 0600, created 20:26:39 by me) — contents never logged"
+      ]
+    }
+  ]
+}

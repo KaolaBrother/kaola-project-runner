@@ -1,0 +1,187 @@
+{
+  "candidate": "24a2355a226fc371b6502ea6b254b2157da6efa6",
+  "actual_utc": [
+    "2026-10-06T12:26:47Z",
+    "2026-10-06T12:35:23Z"
+  ],
+  "source_hashes": {
+    "scripts/kaola-acp-holder.py": "f455cd271d20b2f15c36045b31f4fdf4d067615c0f4937b0eda2473a09a1aa56",
+    "scripts/kaola-dispatch.py": "f80610b2a8a4ea57ba61d1144d7c531651c0f92b4c9db65c66d6893b5d7c566d",
+    "scripts/kaola-launchd-broker.py": "c39e68944bb91a6f6dbfdff3f8c1c736b09beb03078a8dbe6220d515c3fe3a68",
+    "scripts/kaola-opencode-acp.py": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67",
+    "templates/orchestrator/references/sideagent-node.md": "82e79574e08a12920be0e679e11f27503d82d31fd9d2a1efc1f9d1df7168c8ce"
+  },
+  "host": "cc34c0f714aa05848b443fc10511c487",
+  "native_session": "ses_eeed1b309ffeckayL5LnNXQafu",
+  "host_events": "/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/records/opencode/opencode-KPR1035C-orchestrator-main/38360317559ac205/events.jsonl",
+  "node_events": "/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/records/codex/codex-KPR1035C-sideagent/38360317559ac205/events.jsonl",
+  "skill_payloads": [
+    {
+      "path": "/Users/ylmacstudio/.config/opencode/skills/opencode-kaola-project-runner/SKILL.md",
+      "raw_call": 125,
+      "raw_output": 127,
+      "bytes": 10597,
+      "lines": 166,
+      "sha256": "d71a297994686577484de0057c94b745c19d123117d99f6966d2bdcccd4e7981",
+      "normalization": "number prefix removed; final newline not exposed by numbered wrapper; every file line including YAML matched"
+    },
+    {
+      "path": "/Users/ylmacstudio/.config/opencode/skills/kaola-project-runner/SKILL.md",
+      "raw_call": 126,
+      "raw_output": 128,
+      "bytes": 17407,
+      "lines": 264,
+      "sha256": "1af732f378a11bd04e4533a3e1fe38cef9b9b48b393360748d0a8030f5524df7",
+      "normalization": "number prefix removed; final newline not exposed by numbered wrapper; every file line including YAML matched"
+    }
+  ],
+  "checkpoint": {
+    "node_command_cursor": 860,
+    "entries": [
+      {
+        "input": "recovery#1",
+        "checked": {
+          "authorization": [
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/AGENTS.md",
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/.kaola/delegator-heartbeat.json#/authorization",
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/.kaola/heartbeat-prompt.json#/state/project",
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/.kaola/heartbeat-prompt.json#/state/authorization",
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/kaola-workflow/.ledger/issue-264.jsonl#1"
+          ],
+          "duties": [
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/.kaola/heartbeat-prompt.json#/state/decisions",
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/.kaola/heartbeat-prompt.json#/state/alerts",
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/.kaola/heartbeat-prompt.json#/state/tasks/qa-observe",
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/qa/progress.md",
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/qa/task-skill.md"
+          ],
+          "links": [
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/.kaola/heartbeat-prompt.json#/state/tasks/qa-observe/dispatch",
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/.kaola/dispatch-index.json#/items/qa-prior-reclaim-1",
+            "/tmp/kpr-i264-862-core/oc/receipt.json",
+            "/tmp/kpr-i264-862-core/oc/record/record.json",
+            "/tmp/kpr-i264-862-core-runtime-proof.md"
+          ]
+        },
+        "unavailable": {}
+      }
+    ],
+    "actual_scoped_checkpoint": {
+      "at": "2026-10-06T12:34:27.202828+00:00",
+      "batch": "b-dc2215b9f4e2",
+      "host_revision": {
+        "current": 3,
+        "from": 3,
+        "through": 3
+      },
+      "node": {
+        "holder_instance_id": "3621523a78d499b840e006408dd0ce6e",
+        "session": "codex-KPR1035C-sideagent"
+      },
+      "recovery": {
+        "checked": {
+          "authorization": [
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/AGENTS.md",
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/.kaola/delegator-heartbeat.json#/authorization",
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/.kaola/heartbeat-prompt.json#/state/project",
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/.kaola/heartbeat-prompt.json#/state/authorization",
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/kaola-workflow/kaola-project-runner/workflow-state.md",
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode/run/kaola-workflow/.ledger/issue-264.jsonl#1"
+          ],
+          "duties": [
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/.kaola/heartbeat-prompt.json#/state/decisions",
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/.kaola/heartbeat-prompt.json#/state/alerts",
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/.kaola/heartbeat-prompt.json#/state/tasks/qa-observe",
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/qa/progress.md",
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/qa/task-skill.md"
+          ],
+          "links": [
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/.kaola/heartbeat-prompt.json#/state/tasks/qa-observe/dispatch",
+            "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo/.kaola/dispatch-index.json#/items/qa-prior-reclaim-1",
+            "/tmp/kpr-i264-862-core/oc/receipt.json",
+            "/tmp/kpr-i264-862-core/oc/record/record.json",
+            "/tmp/kpr-i264-862-core-runtime-proof.md"
+          ]
+        },
+        "input": {
+          "at": "2026-10-06T12:29:04.260285+00:00",
+          "evidence": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/records/opencode/opencode-KPR1035C-orchestrator-main/38360317559ac205/events.jsonl#36",
+          "holder": "cc34c0f714aa05848b443fc10511c487",
+          "kind": "host-compaction",
+          "occurrence_id": "msg_11130478f001ZiTmloR28am2gC",
+          "seq": 1,
+          "source": "completed-host-signal"
+        },
+        "seq": 1,
+        "unavailable": {}
+      },
+      "returned_to_host": {},
+      "settled": [
+        "recovery#1"
+      ],
+      "source": "b-dc2215b9f4e2",
+      "verified": true
+    }
+  },
+  "host_stop": {
+    "agent_exit_code": 0,
+    "detail": null,
+    "error": null,
+    "holder_exit": null,
+    "reason": null,
+    "residual_pids": [],
+    "result": null,
+    "stopped": true,
+    "swept_child_pgids": []
+  },
+  "native_cleanup": [
+    {
+      "holder": "3621523a78d499b840e006408dd0ce6e",
+      "state": "stopped",
+      "liveness": {
+        "holder_pid": false,
+        "agent_pid": false
+      }
+    },
+    {
+      "holder": "cc34c0f714aa05848b443fc10511c487",
+      "state": "stopped",
+      "liveness": {
+        "holder_pid": false,
+        "agent_pid": false
+      }
+    }
+  ],
+  "owned_credential_copy_present": false,
+  "selected_env_originals": "/tmp/kpr-1073-core-r4-selected-env-originals.json",
+  "environment_limits": "Driver and both node holder selected CODEX_HOME readbacks verified. Node1 native process title contains same path; no direct Host7216 or node2-native73636 selected-key ps output found. Private native session files are inspected separately. Global before/after size6959/mtime19:57:55/42 project keys and no new opencode-r4 key observed, but no byte hash/preimage exists: byte-identical/zero-global-writes claim is not established.",
+  "host_events_sha256": "5fd21cd42ee17b6750542103e56ae40ebcc063a804e5fb21bc8c65937f60d650",
+  "node_events_sha256": "d26c78920f03e49c841af1b922df6c94c736d40855ea469ade01b90619aac32f",
+  "native_home_session_proof": [
+    {
+      "native_session_id": "01a1112e-78ac-7d31-b9ff-8175041e232b",
+      "private_home_file": "/tmp/kpr-i264-host-chain-1035/core/opencode-r4/codex-home/sessions/2026/10/06/rollout-2026-10-06T20-27-03-01a1112e-78ac-7d31-b9ff-8175041e232b.jsonl",
+      "native_session_meta": {
+        "id": "01a1112e-78ac-7d31-b9ff-8175041e232b",
+        "timestamp": "2026-10-06T12:27:03.618Z",
+        "cwd": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo",
+        "originator": "@agentclientprotocol/codex-acp",
+        "cli_version": "0.160.1",
+        "source": "vscode"
+      }
+    },
+    {
+      "native_session_id": "01a11132-7f75-7d43-9c62-1a0a18e3bac0",
+      "private_home_file": "/tmp/kpr-i264-host-chain-1035/core/opencode-r4/codex-home/sessions/2026/10/06/rollout-2026-10-06T20-31-24-01a11132-7f75-7d43-9c62-1a0a18e3bac0.jsonl",
+      "native_session_meta": {
+        "id": "01a11132-7f75-7d43-9c62-1a0a18e3bac0",
+        "timestamp": "2026-10-06T12:31:24.568Z",
+        "cwd": "/private/tmp/kpr-i264-host-chain-1035/core/opencode-r4/run/repo",
+        "originator": "@agentclientprotocol/codex-acp",
+        "cli_version": "0.160.1",
+        "source": "vscode"
+      }
+    }
+  ]
+}
