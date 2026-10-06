@@ -159,8 +159,13 @@ class Sandbox:
             (self.bin / "tmux").symlink_to(tmux)
 
     def env(self, **overrides: str | None) -> dict[str, str]:
+        # Pin the backend validate.sh declares for this suite (this env is
+        # built from scratch, dropping the export). The fake agent's FAKE119_*
+        # channel does not cross the launch broker's minimal-env boundary by
+        # design; the broker path has its own Issue #266 suites.
         base = {"PATH": f"{self.bin}:/usr/bin:/bin", "HOME": str(self.home), "LANG": "C",
                 "TMPDIR": tempfile.gettempdir(), "PYTHONUNBUFFERED": "1",
+                "KAOLA_LAUNCH_BACKEND": "direct",
                 "KAOLA_ACP_RECORD_ROOT": str(self.record_root)}
         for key, value in overrides.items():
             if value is None:

@@ -133,6 +133,10 @@ class Sandbox:
             "HOME": str(self.home),
             "LANG": os.environ.get("LANG", "C"),
             "KAOLA_ACP_RECORD_ROOT": str(self.record_root),
+            # Pin the backend validate.sh declares for this suite (this env is
+            # built from scratch, dropping the export); the broker path has
+            # its own Issue #266 suites.
+            "KAOLA_LAUNCH_BACKEND": "direct",
             "PYTHONUNBUFFERED": "1",
         }
         for name in DENIED_ENV:

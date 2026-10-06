@@ -3581,7 +3581,11 @@ def stop_started_holder(sock: Path, proc: subprocess.Popen | None,
 
     The direct path reaps its own Popen child. The outside-launch path (#266)
     has no local child: it stops through the socket and reports the reply's
-    residual facts, never polling a process object it does not own.
+    residual facts. The holder answers stop before it exits
+    (``_exit_after_reply``), so the outside path settles on the recorded pid
+    inside the same bound the direct path's ``proc.wait`` uses; a single
+    liveness sample would race the dying holder and misreport a reclaimed
+    session as alive.
     """
     params: dict[str, Any] = {"force": True}
     if expected_instance:
@@ -3605,8 +3609,16 @@ def stop_started_holder(sock: Path, proc: subprocess.Popen | None,
             except subprocess.TimeoutExpired:
                 pass
         holder_alive = proc.poll() is None
+    elif holder_pid is not None:
+        # Local import: the composed broker proof execs this function's source
+        # standalone, with only the globals it injects.
+        import time as _time
+        deadline = _time.monotonic() + 10.0
+        while _time.monotonic() < deadline and pid_alive(holder_pid):
+            _time.sleep(0.05)
+        holder_alive = pid_alive(holder_pid)
     else:
-        holder_alive = pid_alive(holder_pid) if holder_pid is not None else None
+        holder_alive = None
     # The holder validates the expected instance before it mutates and does not
     # echo it back. Clean is a bound request plus a positive stop, an actual
     # empty residual list, and a gone holder; anything else stays unknown.

@@ -511,7 +511,7 @@ def do_internal_run(spec_path: Path) -> dict:
         terminate_owned(proc)
         return {"schema": SCHEMA, "result": "refused", "reason": "holder-not-ready",
                 "holder_may_exist": False, "job_pid": proc.pid}
-    child_entry, child_error = _record_child(spec, verified["record"].get("holder_pid"))
+    child_fact, child_error = _record_child(spec, verified["record"].get("holder_pid"))
     if spec.get("child_record") and child_error is not None:
         # A requested custody record that cannot be written is a failed nested
         # launch. Stop this exact holder through the existing identity path and
@@ -524,8 +524,8 @@ def do_internal_run(spec_path: Path) -> dict:
         receipt = ready_facts(verified)
         receipt.update({"schema": SCHEMA, "result": "ready", "label": spec.get("label"),
                         "job_pid": proc.pid})
-        if child_entry is not None:
-            receipt["child_record"] = child_entry
+        if child_fact is not None:
+            receipt["child_record"] = child_fact
     # The receipt carries the custody outcome; a write failure must not strand a
     # ready holder, but submit then cannot gate on it and reconciles instead.
     try:
@@ -561,6 +561,13 @@ def _stop_owned_holder(sock: Path, instance: str | None, proc: subprocess.Popen)
 
 
 def _record_child(spec: dict, holder_pid: object) -> tuple[dict | None, str | None]:
+    """Append the custody line and return the receipt fact in the direct shape.
+
+    The file line carries ``{pid, pgid, spawned_at ms}`` exactly like the
+    direct spawn's append; the returned fact carries ``{path, recorded, pid,
+    pgid}``, the same keys ``record_holder_child_spawn`` reports on a direct
+    start receipt, so a broker launch proves the same custody fact upstream.
+    """
     path = spec.get("child_record")
     if not path:
         return None, None
@@ -572,7 +579,7 @@ def _record_child(spec: dict, holder_pid: object) -> tuple[dict | None, str | No
             handle.write(json.dumps(entry, sort_keys=True) + "\n")
     except OSError as exc:
         return None, str(exc)
-    return entry, None
+    return {"path": path, "recorded": True, "pid": holder_pid, "pgid": holder_pid}, None
 
 
 def do_submit(args: argparse.Namespace) -> dict:
@@ -672,8 +679,14 @@ def do_submit(args: argparse.Namespace) -> dict:
         if os_job_owns(backend, label, spec_path):
             os_wait_stopped(backend, label, 5.0)
             os_unload(backend, label)
-        return {"schema": SCHEMA, "result": "ready", "reconciled": False,
-                "label": label, "backend": backend, **ready_facts(verified)}
+        out = {"schema": SCHEMA, "result": "ready", "reconciled": False,
+               "label": label, "backend": backend, **ready_facts(verified)}
+        if receipt.get("child_record") is not None:
+            # The internal startup wrote the custody line; carry its proof so
+            # the caller's start receipt reports the same child_record fact a
+            # direct spawn reports.
+            out["child_record"] = receipt["child_record"]
+        return out
     except BrokerError as exc:
         unresolved, state = _reconcile_failed_attempt(backend, label, spec_path, args,
                                                       record_dir, platform, session, repo)

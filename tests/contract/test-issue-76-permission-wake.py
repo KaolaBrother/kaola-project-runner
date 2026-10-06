@@ -269,6 +269,12 @@ class Sandbox:
             "LANG": os.environ.get("LANG", "C"),
             "TMPDIR": tempfile.gettempdir(),
             "KAOLA_ACP_RECORD_ROOT": str(self.record_root),
+            # Pin the backend validate.sh declares for this suite (this env is
+            # built from scratch, dropping the export). The fixture agent's
+            # PERMISSION_FAKE_* channel does not cross the launch broker's
+            # minimal-env boundary by design; the broker path has its own
+            # Issue #266 suites.
+            "KAOLA_LAUNCH_BACKEND": "direct",
             "KAOLA_ZCODE_NODE": str(self.node),
             "DROID_BIN": str(self.droid_shim),
             "PYTHONUNBUFFERED": "1",

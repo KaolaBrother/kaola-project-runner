@@ -255,6 +255,10 @@ class Sandbox:
             "LANG": os.environ.get("LANG", "C"),
             "TMPDIR": tempfile.gettempdir(),
             "KAOLA_ACP_RECORD_ROOT": str(self.record_root),
+            # Pin the backend validate.sh declares for this suite (this env is
+            # built from scratch, dropping the export); the launch broker path
+            # has its own Issue #266 suites.
+            "KAOLA_LAUNCH_BACKEND": "direct",
             "KAOLA_ZCODE_NODE": str(self.node),
             "PYTHONUNBUFFERED": "1",
         }
@@ -1202,6 +1206,12 @@ def bare_holder(module, entries: list[dict] | None = None, *,
                                     "session": "host"})()
     holder.host_entry = module.HOST_SKILL_ENTRY
     holder.host_name = "ZCode"
+    # Issue #245/#264: the holder reads self.session_role on its worker-event
+    # and restore paths, and self.stop_requested on the same dispatch. This
+    # fixture is a running Host, so set the attributes the constructor would
+    # have set from --role.
+    holder.session_role = "host"
+    holder.stop_requested = False
     return holder
 
 
