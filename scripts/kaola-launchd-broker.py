@@ -6,30 +6,35 @@ The Runner normally spawns the holder as a child of whatever shell ran
 is a descendant of the app and can die with the app. This helper launches the
 holder under the per-user service manager instead:
 
-* **submit** builds a one-shot, per-user job whose only job is to run the
-  internal startup and exit. The holder is spawned with ``start_new_session``,
-  so it is re-parented to the service manager and survives the caller, the
-  short-lived job, and a later job unload.
+* **submit** starts a one-shot, per-user job whose only work is the internal
+  startup and exit. The holder is spawned with ``start_new_session``, so it is
+  re-parented to the service manager and survives the caller, the short-lived
+  job, and a later job unload.
 * **internal-run** is that job body. It validates a private, mode-600 armed spec,
-  builds the holder environment from an explicit map only, spawns the holder
-  with a literal argv, waits for the holder's own ``ready`` record, writes a
-  readiness receipt, and exits.
-* **stop** unloads only the owned job and removes its files.
+  builds the holder environment from an explicit minimal map only, spawns the
+  holder with a literal argv, verifies the holder's own socket/record identity,
+  writes a readiness receipt, records the child identity for the outer agent's
+  exact sweep, and exits.
+* **stop** unloads only this session's owned job and removes its files.
 
-Hard rules implemented here:
+Hard rules:
 
 * ProgramArguments is a literal argv list. No shell, no ``-c``, no ``eval``.
 * The internal path is refused unless a private armed spec (mode 600, owner uid)
   exists. There is no environment-variable or other global authority bypass.
+* Readiness is the holder's own socket/record identity: matching stored strings,
+  a live PID, the argv anchor, and the holder's own ``state`` reply. A live PID
+  alone is never ownership.
 * The holder environment is an explicit minimal map. The full inherited
   environment and credentials are never written to the plist or any log.
 * ``KeepAlive`` is false; there is no login/boot/crash restart and no separate
   scheduler or registry.
-* The job PID is never treated as the holder PID. Readiness comes from the
-  holder's own record.
+* The job PID is never treated as the holder PID.
+* The label and run directory are derived from the platform/session/repo, never
+  taken as arbitrary caller input.
 
-macOS (launchd) is implemented. Linux user systemd and other systems have a
-measured disposition; see ``backend_for``.
+macOS (launchd) is implemented. Linux user systemd has a minimal adapter that is
+unmeasured here; other systems refuse with an actionable recovery.
 """
 
 from __future__ import annotations
@@ -45,14 +50,16 @@ import signal
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
-SCHEMA = "kaola-launch-broker/1"
+SCHEMA = "kaola-launch-broker/2"
 NONCE_BYTES = 16
 DEFAULT_READY_TIMEOUT = 90.0
 RECORD_NAME = "record.json"
 RECEIPT_NAME = "launch.broker.json"
+LABEL_PREFIX = "com.kaolabrother.kaola-runner.launch."
 
 # The only environment names that may reach the holder. Everything else from the
 # caller is dropped, so no caller-app ownership variable and no unlisted
@@ -65,6 +72,7 @@ PASS_PROXY = (
     "http_proxy", "https_proxy", "no_proxy", "all_proxy",
 )
 SHELL_BASENAMES = {"sh", "bash", "zsh", "dash", "fish", "ksh", "tcsh", "csh"}
+ALLOWED_RUNTIME_SUFFIXES = ("-from-parent",)
 
 
 class BrokerError(Exception):
@@ -88,6 +96,10 @@ def sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def owner_uid() -> int:
+    return os.getuid()
+
+
 def pid_alive(pid: object) -> bool:
     if not isinstance(pid, int) or pid <= 0:
         return False
@@ -99,6 +111,17 @@ def pid_alive(pid: object) -> bool:
     return bool(out) and not out.upper().startswith("Z")
 
 
+def process_command(pid: object) -> str | None:
+    if not isinstance(pid, int) or pid <= 0:
+        return None
+    try:
+        out = subprocess.run(["ps", "-o", "command=", "-p", str(pid)],
+                             capture_output=True, text=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return out or None
+
+
 def read_json(path: Path) -> dict:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -106,26 +129,46 @@ def read_json(path: Path) -> dict:
         return {}
 
 
-def owner_uid() -> int:
-    return os.getuid()
-
-
 def assert_secure_file(path: Path) -> None:
-    """Refuse a spec/armed file that is not a private, owned, regular file."""
     try:
         st = path.lstat()
     except OSError as exc:
-        raise BrokerError("spec-missing", f"private spec is not present: {path}") from exc
+        raise BrokerError("spec-missing", f"private file is not present: {path}") from exc
     if stat.S_ISLNK(st.st_mode) or not stat.S_ISREG(st.st_mode):
-        raise BrokerError("spec-not-regular", f"private spec is not a regular file: {path}")
+        raise BrokerError("spec-not-regular", f"private file is not a regular file: {path}")
     if st.st_uid != owner_uid():
-        raise BrokerError("spec-foreign-owner", f"private spec is not owned by this user: {path}")
+        raise BrokerError("spec-foreign-owner", f"private file is not owned by this user: {path}")
     if stat.S_IMODE(st.st_mode) & 0o077:
-        raise BrokerError("spec-permissive", f"private spec mode is not 600: {path}")
+        raise BrokerError("spec-permissive", f"private file mode is not 600: {path}")
 
 
-def run_dir_for(base: Path, label: str) -> Path:
-    return base / label
+def write_private_exclusive(path: Path, data: bytes) -> None:
+    """Create a fresh mode-600 file; refuse if it already exists."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        os.write(fd, data)
+    finally:
+        os.close(fd)
+    os.chmod(path, 0o600)
+
+
+def write_private_atomic(path: Path, data: bytes) -> None:
+    tmp = path.with_name(path.name + "." + secrets.token_hex(4) + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        os.write(fd, data)
+    finally:
+        os.close(fd)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+
+
+def remove_quiet(path: Path) -> None:
+    try:
+        (path.unlink() if path.is_file() or path.is_symlink() else shutil.rmtree(path))
+    except OSError:
+        pass
 
 
 # --------------------------------------------------------------------------- env
@@ -143,44 +186,108 @@ def filter_env(env: dict, extra_keys: set[str] | None = None) -> dict:
     return kept
 
 
-def check_literal_argv(argv: list[str]) -> None:
-    """Refuse any composed shell command or prompt on the launch path."""
+def validate_holder_argv(argv: list[str], record_dir: Path, platform: str,
+                         session: str, repo: str) -> None:
+    """Validate the known internal holder launch structure.
+
+    This is not a token blacklist: the argv must be the Runner holder command,
+    and every other argument is retained as safe literal data/config.
+    """
     if not isinstance(argv, list) or not argv or not all(isinstance(x, str) and x for x in argv):
-        raise BrokerError("argv-empty", "ProgramArguments must be a non-empty literal argv list")
+        raise BrokerError("argv-empty", "the holder argv must be a non-empty literal list")
     first = os.path.basename(argv[0])
     if first in SHELL_BASENAMES:
-        raise BrokerError("argv-shell", f"ProgramArguments must not start a shell ({first}); "
-                                        "pass a literal argv list, never a composed command")
-    for item in argv:
-        if item in ("-c", "-lc", "-ic", "/bin/zsh", "/bin/bash", "/bin/sh"):
-            raise BrokerError("argv-shell-flag", f"ProgramArguments must not contain {item!r}")
+        raise BrokerError("argv-shell", f"the holder argv must not start a shell ({first})")
+    second = os.path.basename(argv[1]) if len(argv) > 1 else ""
+    if second != "kaola-acp-holder.py":
+        raise BrokerError("argv-not-holder",
+                          "the holder argv must name kaola-acp-holder.py as its second element")
+    flat = " ".join(argv)
+    for flag, expected in (("--record-dir", str(record_dir)), ("--platform", platform),
+                           ("--session", session), ("--repo", repo)):
+        if f" {flag} " not in f" {flat} ":
+            raise BrokerError("argv-incomplete", f"the holder argv must carry {flag}")
 
 
-# --------------------------------------------------------------------------- holder record
+# --------------------------------------------------------------------------- identity
 
 
-def holder_record(record_dir: Path) -> dict:
-    return read_json(record_dir / RECORD_NAME)
+def sock_path_for(record_dir: Path) -> Path:
+    return (Path(tempfile.gettempdir()) / f"kaola-{owner_uid()}-acp"
+            / (sha(str(record_dir))[:24] + ".sock"))
 
 
-def holder_ready(record: dict, platform: str, session: str, repo: str) -> bool:
-    """Ready means the holder's own record says ready with a live holder pid."""
-    if not record:
+def socket_state(sock: Path, timeout: float = 5.0) -> dict:
+    import socket as _socket
+    connection = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+    try:
+        connection.settimeout(timeout)
+        connection.connect(str(sock))
+        payload = json.dumps({"op": "state", "request_id": secrets.token_hex(8),
+                              "params": {}}).encode("utf-8") + b"\n"
+        connection.sendall(payload)
+        buffer = bytearray()
+        while True:
+            data = connection.recv(65536)
+            if not data:
+                break
+            buffer.extend(data)
+            if b"\n" in buffer:
+                line, _, _ = buffer.partition(b"\n")
+                return json.loads(line.decode("utf-8"))
+        return json.loads(buffer.decode("utf-8")) if buffer else {"error": {"code": "holder-closed"}}
+    except (OSError, ValueError) as exc:
+        return {"error": {"code": "holder-unreachable", "message": str(exc)}}
+    finally:
+        connection.close()
+
+
+def argv_anchor(pid: int, record_dir: Path) -> bool:
+    command = process_command(pid)
+    if command is None or "kaola-acp-holder" not in command:
         return False
-    if record.get("platform") != platform or record.get("session") != session:
+    marker = " --record-dir "
+    if marker not in f" {command} ":
         return False
-    if record.get("repo") != repo:
-        return False
-    if record.get("state") != "ready":
-        return False
-    return pid_alive(record.get("holder_pid"))
+    tail = f" {command} ".split(marker, 1)[1]
+    found = tail.split(" ", 1)[0] if " " in tail else tail.strip()
+    return os.path.realpath(found) == os.path.realpath(str(record_dir))
 
 
-def ready_facts(record: dict) -> dict:
+def verified_holder(record_dir: Path, platform: str, session: str, repo: str,
+                    expect_pid: int | None = None) -> dict | None:
+    """The holder record plus its own live socket identity, or None.
+
+    A matching stored string and a live PID are necessary but not sufficient: the
+    live PID must anchor to this record directory and the holder's socket must
+    answer with the same instance id.
+    """
+    record = read_json(record_dir / RECORD_NAME)
+    if not record or record.get("platform") != platform or record.get("session") != session:
+        return None
+    if record.get("repo") != repo or record.get("state") != "ready":
+        return None
+    pid = record.get("holder_pid")
+    if not pid_alive(pid):
+        return None
+    if expect_pid is not None and pid != expect_pid:
+        return None
+    if not argv_anchor(pid, record_dir):
+        return None
+    state = socket_state(sock_path_for(record_dir))
+    if state.get("error") or state.get("holder_instance_id") != record.get("holder_instance_id"):
+        return None
+    if state.get("holder_pid") not in (None, pid):
+        return None
+    return {"record": record, "state": state}
+
+
+def ready_facts(verified: dict) -> dict:
+    record, state = verified["record"], verified["state"]
     return {
         "holder_pid": record.get("holder_pid"),
         "holder_instance_id": record.get("holder_instance_id"),
-        "acp_session_id": record.get("acp_session_id"),
+        "acp_session_id": state.get("acp_session_id", record.get("acp_session_id")),
         "agent_pid": record.get("agent_pid"),
         "platform": record.get("platform"),
         "session": record.get("session"),
@@ -189,47 +296,63 @@ def ready_facts(record: dict) -> dict:
     }
 
 
-# --------------------------------------------------------------------------- macOS launchd backend
+# --------------------------------------------------------------------------- job identity
 
 
-def launchd_label(platform: str, session: str, repo: str) -> str:
-    token = sha(f"{platform}\0{session}\0{repo}")[:16]
-    return f"com.kaolabrother.kaola-runner.launch.{token}"
+def label_for(platform: str, session: str, repo: str) -> str:
+    return LABEL_PREFIX + sha(f"{platform}\0{session}\0{repo}")[:16]
+
+
+def run_dir_for(base: Path, label: str) -> Path:
+    return base / label
+
+
+def default_run_base() -> Path:
+    return Path.home() / ".kaola-runner" / "launchd"
 
 
 def launchctl(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["/bin/launchctl", *args], capture_output=True, text=True, timeout=30)
 
 
-def launchd_bootstrap(label: str, plist_path: Path) -> None:
-    domain = f"gui/{owner_uid()}"
-    # Drop any stale job with this exact label first (owned label only).
-    launchctl("bootout", f"{domain}/{label}")
-    result = launchctl("bootstrap", domain, str(plist_path))
-    if result.returncode != 0:
-        raise BrokerError("bootstrap-failed",
-                          f"launchctl bootstrap failed: {result.stderr.strip() or result.stdout.strip()}",
-                          label=label, plist=str(plist_path))
-
-
-def launchd_bootout(label: str) -> None:
-    launchctl("bootout", f"gui/{owner_uid()}/{label}")
-
-
-def launchd_job_running(label: str) -> bool:
-    """True when the labeled job is currently running (a live PID column)."""
+def job_state(label: str) -> str:
+    """running | exited | absent, from launchctl's own list."""
     out = launchctl("list").stdout
     for line in out.splitlines():
         parts = line.split()
         if len(parts) == 3 and parts[2] == label:
-            return parts[0].isdigit()
-    return False
+            return "running" if parts[0].isdigit() else "exited"
+    return "absent"
+
+
+def launchd_bootstrap(label: str, plist_path: Path) -> None:
+    if not label.startswith(LABEL_PREFIX):
+        raise BrokerError("label-foreign", f"refuse to bootstrap a foreign label: {label}")
+    domain = f"gui/{owner_uid()}"
+    state = job_state(label)
+    if state == "running":
+        raise BrokerError("launch-in-progress",
+                          "a job for this exact session is already running; reconcile it",
+                          label=label)
+    if state == "exited":
+        launchctl("bootout", f"{domain}/{label}")
+    result = launchctl("bootstrap", domain, str(plist_path))
+    if result.returncode != 0:
+        raise BrokerError("bootstrap-failed",
+                          f"launchctl bootstrap failed: {result.stderr.strip() or result.stdout.strip()}",
+                          label=label)
+
+
+def launchd_bootout(label: str) -> None:
+    if not label.startswith(LABEL_PREFIX):
+        return
+    launchctl("bootout", f"gui/{owner_uid()}/{label}")
 
 
 def wait_job_stopped(label: str, timeout: float) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if not launchd_job_running(label):
+        if job_state(label) != "running":
             return
         time.sleep(0.1)
 
@@ -238,15 +361,13 @@ def wait_job_stopped(label: str, timeout: float) -> None:
 
 
 def systemd_user_available() -> tuple[bool, str]:
-    """Measured availability of a user systemd domain; no fallback is implied."""
-    if not shutil.which("systemctl"):
-        return False, "systemctl is not on PATH"
+    if not shutil.which("systemctl") or not shutil.which("systemd-run"):
+        return False, "systemctl/systemd-run is not on PATH"
     try:
         result = subprocess.run(["systemctl", "--user", "is-system-running"],
                                 capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.TimeoutExpired) as exc:
         return False, f"systemctl --user probe failed: {exc}"
-    # "running", "degraded", "maintenance" all mean a live user manager.
     if result.stdout.strip() in ("running", "degraded", "maintenance"):
         return True, result.stdout.strip()
     return False, result.stdout.strip() or result.stderr.strip() or "no user manager"
@@ -254,7 +375,7 @@ def systemd_user_available() -> tuple[bool, str]:
 
 def backend_for(force: str | None = None) -> tuple[str, str]:
     """Return (backend, detail). Never silently falls back to a direct spawn."""
-    if force:
+    if force and force != "auto":
         return force, "forced by caller"
     if sys.platform == "darwin":
         return "launchd", "macOS"
@@ -264,41 +385,7 @@ def backend_for(force: str | None = None) -> tuple[str, str]:
     return "unsupported", f"no supported service manager for {sys.platform}"
 
 
-# --------------------------------------------------------------------------- submit
-
-
-def _run_dir(args: argparse.Namespace) -> Path:
-    base = Path(args.run_dir) if args.run_dir else (Path.home() / ".kaola-runner" / "launchd")
-    return run_dir_for(base, args.label)
-
-
-def _write_private(path: Path, data: bytes) -> None:
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    try:
-        os.write(fd, data)
-    finally:
-        os.close(fd)
-    os.chmod(path, 0o600)
-
-
-def _write_private_atomic(path: Path, data: bytes) -> None:
-    tmp = path.with_name(path.name + "." + secrets.token_hex(4) + ".tmp")
-    _write_private(tmp, data)
-    os.replace(tmp, path)
-
-
-def _read_spec_file(path: Path, armed: Path) -> dict:
-    assert_secure_file(path)
-    assert_secure_file(armed)
-    spec = read_json(path)
-    armed_data = read_json(armed)
-    if spec.get("schema") != SCHEMA or armed_data.get("schema") != SCHEMA:
-        raise BrokerError("spec-schema", "private spec schema mismatch")
-    if not spec.get("nonce") or spec.get("nonce") != armed_data.get("nonce"):
-        raise BrokerError("spec-nonce", "private spec nonce mismatch")
-    argv = spec.get("argv")
-    check_literal_argv(list(argv or []))
-    return spec
+# --------------------------------------------------------------------------- spawn / terminate
 
 
 def terminate_owned(proc: subprocess.Popen) -> None:
@@ -321,24 +408,62 @@ def terminate_owned(proc: subprocess.Popen) -> None:
         pass
 
 
+def wait_verified(record_dir: Path, platform: str, session: str, repo: str,
+                  timeout: float, expect_pid: int | None = None) -> dict | None:
+    deadline = time.monotonic() + max(timeout, 1.0)
+    while time.monotonic() < deadline:
+        verified = verified_holder(record_dir, platform, session, repo, expect_pid)
+        if verified is not None:
+            return verified
+        time.sleep(0.05)
+    return None
+
+
+def wait_receipt(record_dir: Path, platform: str, session: str, repo: str,
+                 timeout: float) -> dict | None:
+    """Wait for this attempt's receipt, then re-verify the live holder identity."""
+    deadline = time.monotonic() + max(timeout, 1.0)
+    while time.monotonic() < deadline:
+        receipt = read_json(record_dir / RECEIPT_NAME)
+        if receipt.get("result") == "ready" and receipt.get("holder_instance_id"):
+            verified = verified_holder(record_dir, platform, session, repo,
+                                       receipt.get("holder_pid"))
+            if verified is not None and verified["record"].get(
+                    "holder_instance_id") == receipt.get("holder_instance_id"):
+                return verified
+        time.sleep(0.05)
+    return None
+
+
+# --------------------------------------------------------------------------- submit
+
+
+def _run_dir(args: argparse.Namespace) -> Path:
+    base = Path(args.run_base) if args.run_base else default_run_base()
+    return run_dir_for(base, label_for(args.platform, args.session, args.repo))
+
+
 def do_internal_run(spec_path: Path) -> dict:
-    """Job body: validated private seam, spawn the holder, wait, write receipt."""
+    """Job body: validated private seam, spawn the holder, verify, write receipt."""
     armed = Path(str(spec_path) + ".armed")
     try:
-        spec = _read_spec_file(spec_path, armed)
+        assert_secure_file(spec_path)
+        assert_secure_file(armed)
+        spec = read_json(spec_path)
+        armed_data = read_json(armed)
+        if spec.get("schema") != SCHEMA or armed_data.get("schema") != SCHEMA:
+            raise BrokerError("spec-schema", "private spec schema mismatch")
+        if not spec.get("nonce") or spec.get("nonce") != armed_data.get("nonce"):
+            raise BrokerError("spec-nonce", "private spec nonce mismatch")
+        validate_holder_argv(list(spec.get("argv") or []), Path(spec["record_dir"]),
+                             spec["platform"], spec["session"], spec["repo"])
     except BrokerError as exc:
         sys.stderr.write(json.dumps(exc.receipt()) + "\n")
         return exc.receipt()
-    # Consume the armed marker and the spec before spawning: one use only.
     for path in (armed, spec_path):
-        try:
-            path.unlink()
-        except OSError:
-            pass
+        remove_quiet(path)
     argv = list(spec["argv"])
     env = {k: v for k, v in (spec.get("env") or {}).items() if isinstance(v, str)}
-    # Replace the whole environment with the explicit minimal map. This removes
-    # any launchd- or caller-injected variable that is not on the allowlist.
     os.environ.clear()
     os.environ.update(env)
     log_path = Path(spec["log"])
@@ -347,158 +472,163 @@ def do_internal_run(spec_path: Path) -> dict:
     with open(log_path, "ab") as log:
         proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                                 start_new_session=True, env=env, cwd=cwd)
-    ready = wait_ready(record_dir, spec["platform"], spec["session"], spec["repo"],
-                       float(spec.get("ready_timeout") or DEFAULT_READY_TIMEOUT))
-    if ready is None:
-        # Failed start cleanup: this job owns the holder it just spawned, and no
-        # receipt was issued, so terminate that exact process group.
+    verified = wait_verified(record_dir, spec["platform"], spec["session"], spec["repo"],
+                             float(spec.get("ready_timeout") or DEFAULT_READY_TIMEOUT),
+                             expect_pid=proc.pid)
+    if verified is None:
         terminate_owned(proc)
         return {"schema": SCHEMA, "result": "refused", "reason": "holder-not-ready",
                 "job_pid": proc.pid}
-    receipt = ready_facts(ready)
+    receipt = ready_facts(verified)
     receipt.update({"schema": SCHEMA, "result": "ready", "label": spec.get("label"),
                     "job_pid": proc.pid})
-    _write_private_atomic(record_dir / RECEIPT_NAME, json.dumps(receipt, sort_keys=True).encode())
+    child = _record_child(spec, verified["record"].get("holder_pid"))
+    if child is not None:
+        receipt["child_record"] = child
+    write_private_atomic(record_dir / RECEIPT_NAME, json.dumps(receipt, sort_keys=True).encode())
     return receipt
 
 
-def wait_ready(record_dir: Path, platform: str, session: str, repo: str,
-               timeout: float) -> dict | None:
-    deadline = time.monotonic() + max(timeout, 1.0)
-    while time.monotonic() < deadline:
-        record = holder_record(record_dir)
-        if holder_ready(record, platform, session, repo):
-            return record
-        time.sleep(0.05)
-    return None
+def _record_child(spec: dict, holder_pid: object) -> dict | None:
+    """Append the spawned holder's identity to the outer agent's child record.
+
+    This keeps dispatcher/child ownership across the outside launch, so the
+    outer host's exact sweep and preserve-dispatched-worker duties still hold.
+    """
+    path = spec.get("child_record")
+    if not path or not isinstance(holder_pid, int) or holder_pid <= 0:
+        return None
+    entry = {"pid": holder_pid, "pgid": holder_pid, "spawned_at": int(time.time() * 1000)}
+    try:
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(entry, sort_keys=True) + "\n")
+    except OSError:
+        return None
+    return entry
 
 
-def wait_receipt(record_dir: Path, platform: str, session: str, repo: str,
-                 timeout: float) -> dict | None:
-    """Wait for the internal-run receipt, so the job body has finished its work."""
-    deadline = time.monotonic() + max(timeout, 1.0)
-    while time.monotonic() < deadline:
-        receipt = read_json(record_dir / RECEIPT_NAME)
-        if (receipt.get("result") == "ready"
-                and receipt.get("holder_pid")
-                and pid_alive(receipt.get("holder_pid"))):
-            record = holder_record(record_dir)
-            if holder_ready(record, platform, session, repo):
-                return receipt
-        time.sleep(0.05)
-    return None
+def _systemd_submit(args: argparse.Namespace, spec_path: Path, label: str) -> None:
+    unit = label.replace("com.kaolabrother.kaola-runner.launch.", "kaola-runner-launch-")
+    result = subprocess.run(
+        ["systemd-run", "--user", "--collect", "--unit", unit,
+         "--description", f"Kaola Runner holder launch {args.session}",
+         sys.executable, os.path.realpath(__file__), "--internal-run", "--spec", str(spec_path)],
+        capture_output=True, text=True, timeout=30)
+    if result.returncode != 0:
+        raise BrokerError("bootstrap-failed",
+                          f"systemd-run failed: {result.stderr.strip() or result.stdout.strip()}")
 
 
 def do_submit(args: argparse.Namespace) -> dict:
-    argv = list(args.argv or [])
-    check_literal_argv(argv)
+    record_dir = Path(args.record_dir)
+    platform, session, repo = args.platform, args.session, args.repo
+    # Reconcile a verified live holder before any new job.
+    existing = verified_holder(record_dir, platform, session, repo)
+    if existing is not None:
+        return {"schema": SCHEMA, "result": "existing", "reconciled": True,
+                **ready_facts(existing)}
+
     backend, detail = backend_for(args.backend)
     if backend == "unsupported":
         raise BrokerError("launch-backend-unsupported",
                           f"no supported outside-caller launch backend here ({detail}). "
                           "Start the Host from an independent terminal on this target, "
-                          "or use the direct backend explicitly.", backend=detail)
-    if backend == "systemd-user":
-        raise BrokerError("launch-backend-unmeasured",
-                          "the user systemd backend is designed but not measured on this host; "
-                          "start the Host from an independent terminal on this target.",
-                          backend=detail)
+                          "or pass the direct backend explicitly.", backend=detail)
 
-    record_dir = Path(args.record_dir)
-    # Reconcile before any new job: a live ready holder is the session.
-    existing = holder_record(record_dir)
-    if holder_ready(existing, args.platform, args.session, args.repo):
-        return {"schema": SCHEMA, "result": "existing", "reconciled": True,
-                "label": args.label, **ready_facts(existing)}
+    label = label_for(platform, session, repo)
+    run_dir = run_dir_for(Path(args.run_base) if args.run_base else default_run_base(), label)
 
-    run_dir = _run_dir(args)
-    run_dir.mkdir(parents=True, exist_ok=True)
-    os.chmod(run_dir, 0o700)
-    label = args.label
-    spec_path = run_dir / "spec.json"
-    armed_path = Path(str(spec_path) + ".armed")
-    plist_path = run_dir / "job.plist"
+    # A concurrent or partial start for this exact session must be reconciled, not
+    # killed or overwritten.
+    if job_state(label) == "running":
+        verified = wait_verified(record_dir, platform, session, repo, float(args.ready_timeout))
+        if verified is not None:
+            return {"schema": SCHEMA, "result": "existing", "reconciled": True,
+                    **ready_facts(verified)}
+        raise BrokerError("launch-in-progress",
+                          "a job for this exact session is already running; reconcile it",
+                          label=label)
 
+    argv = list(args.argv or [])
+    validate_holder_argv(argv, record_dir, platform, session, repo)
     env = filter_env(dict(args.env_from or {}), set(args.env_allow or []))
     if "PATH" not in env:
         env["PATH"] = os.environ.get("PATH", "/usr/bin:/bin")
     if "HOME" not in env:
         env["HOME"] = str(Path.home())
+
+    run_dir.mkdir(parents=True, exist_ok=True)
+    os.chmod(run_dir, 0o700)
+    attempt = run_dir / f"attempt-{secrets.token_hex(6)}"
+    attempt.mkdir(mode=0o700)
+    spec_path = attempt / "spec.json"
+    armed_path = Path(str(spec_path) + ".armed")
+    plist_path = attempt / "job.plist"
     nonce = secrets.token_hex(NONCE_BYTES)
     spec = {
         "schema": SCHEMA, "nonce": nonce, "label": label,
         "argv": argv, "env": env, "cwd": args.cwd or "/", "log": args.log,
-        "record_dir": str(record_dir), "platform": args.platform,
-        "session": args.session, "repo": args.repo,
+        "record_dir": str(record_dir), "platform": platform,
+        "session": session, "repo": repo, "child_record": args.child_record or "",
         "ready_timeout": args.ready_timeout,
     }
-    _write_private(spec_path, json.dumps(spec, sort_keys=True).encode())
-    _write_private(armed_path, json.dumps({"schema": SCHEMA, "nonce": nonce}).encode())
-
-    self_path = os.path.realpath(__file__)
-    # The plist carries only the non-secret core environment. The full filtered
-    # environment lives in the mode-600 spec and is never written to the plist.
-    plist_core = {k: env[k] for k in ("HOME", "USER", "LOGNAME", "PATH", "LANG", "TMPDIR", "SHELL")
-                  if k in env}
-    plist = {
-        "Label": label,
-        "ProgramArguments": [sys.executable, self_path, "--internal-run", "--spec", str(spec_path)],
-        "RunAtLoad": True,
-        "KeepAlive": False,
-        "ProcessType": "Interactive",
-        "WorkingDirectory": str(args.cwd or "/"),
-        "EnvironmentVariables": plist_core,
-        "StandardOutPath": str(args.log),
-        "StandardErrorPath": str(args.log),
-    }
-    _write_private(plist_path, plistlib.dumps(plist))
-
+    if args.argv_json:
+        # The caller-supplied literal argv file is consumed and removed here.
+        remove_quiet(Path(args.argv_json))
     try:
-        launchd_bootstrap(label, plist_path)
-        receipt = wait_receipt(record_dir, args.platform, args.session, args.repo,
-                               float(args.ready_timeout))
-        if receipt is None:
-            raise BrokerError("holder-not-ready", "holder did not reach ready inside the window",
-                              label=label)
-        # The one-shot job wrote its receipt. Unload the job; the detached holder stays.
-        launchd_bootout(label)
-        facts = {k: receipt.get(k) for k in ("holder_pid", "holder_instance_id", "acp_session_id",
-                                             "agent_pid", "platform", "session", "repo", "state")}
-        return {"schema": SCHEMA, "result": "ready", "reconciled": False,
-                "label": label, "backend": backend, **facts}
-    except BrokerError:
-        # Let the job body finish its own failed-start cleanup before unloading,
-        # so a bootout cannot interrupt that cleanup and leak a holder.
-        wait_job_stopped(label, float(args.ready_timeout) + 10.0)
-        launchd_bootout(label)
-        raise
+        write_private_exclusive(spec_path, json.dumps(spec, sort_keys=True).encode())
+        write_private_exclusive(armed_path, json.dumps({"schema": SCHEMA, "nonce": nonce}).encode())
+        plist_core = {k: env[k] for k in ("HOME", "USER", "LOGNAME", "PATH", "LANG", "TMPDIR", "SHELL")
+                      if k in env}
+        plist = {
+            "Label": label,
+            "ProgramArguments": [sys.executable, os.path.realpath(__file__),
+                                 "--internal-run", "--spec", str(spec_path)],
+            "RunAtLoad": True, "KeepAlive": False, "ProcessType": "Interactive",
+            "WorkingDirectory": str(args.cwd or "/"),
+            "EnvironmentVariables": plist_core,
+            "StandardOutPath": str(args.log), "StandardErrorPath": str(args.log),
+        }
+        write_private_exclusive(plist_path, plistlib.dumps(plist))
+        try:
+            if backend == "systemd-user":
+                _systemd_submit(args, spec_path, label)
+            else:
+                launchd_bootstrap(label, plist_path)
+            verified = wait_receipt(record_dir, platform, session, repo, float(args.ready_timeout))
+            if verified is None:
+                raise BrokerError("holder-not-ready",
+                                  "holder did not reach a verified ready state inside the window",
+                                  label=label)
+            if backend == "launchd":
+                wait_job_stopped(label, 5.0)
+                launchd_bootout(label)
+            return {"schema": SCHEMA, "result": "ready", "reconciled": False,
+                    "label": label, "backend": backend, **ready_facts(verified)}
+        except BrokerError:
+            wait_job_stopped(label, float(args.ready_timeout) + 10.0)
+            launchd_bootout(label)
+            raise
     finally:
-        # Failed or successful, keep no stale job or plist history.
-        for path in (plist_path, spec_path, armed_path):
-            try:
-                path.unlink()
-            except OSError:
-                pass
+        remove_quiet(attempt)
+        remove_quiet(record_dir / RECEIPT_NAME)
+        try:
+            if not any(run_dir.iterdir()):
+                remove_quiet(run_dir)
+        except OSError:
+            pass
 
 
 def do_stop(args: argparse.Namespace) -> dict:
-    launched = False
-    if sys.platform == "darwin":
-        launchd_bootout(args.label)
-        launched = True
-    run_dir = _run_dir(args)
-    shutil.rmtree(run_dir, ignore_errors=True)
-    return {"schema": SCHEMA, "result": "stopped", "label": args.label, "job_unloaded": launched}
-
-
-def do_status(args: argparse.Namespace) -> dict:
-    record_dir = Path(args.record_dir)
-    record = holder_record(record_dir)
-    if holder_ready(record, args.platform, args.session, args.repo):
-        return {"schema": SCHEMA, "result": "ready", **ready_facts(record)}
-    receipt = read_json(record_dir / RECEIPT_NAME)
-    return {"schema": SCHEMA, "result": "not-ready", "record": bool(record),
-            "receipt": receipt or None}
+    label = label_for(args.platform, args.session, args.repo)
+    run_dir = run_dir_for(Path(args.run_base) if args.run_base else default_run_base(), label)
+    unloaded = False
+    if sys.platform == "darwin" and job_state(label) != "absent":
+        launchd_bootout(label)
+        wait_job_stopped(label, 5.0)
+        unloaded = True
+    remove_quiet(run_dir)
+    return {"schema": SCHEMA, "result": "stopped", "label": label, "job_unloaded": unloaded}
 
 
 # --------------------------------------------------------------------------- cli
@@ -509,21 +639,20 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--internal-run", action="store_true",
                         help="private one-shot job body; requires --spec")
     parser.add_argument("--spec")
-    parser.add_argument("mode", nargs="?", choices=["submit", "stop", "status"])
-    parser.add_argument("--label")
+    parser.add_argument("mode", nargs="?", choices=["submit", "stop"])
     parser.add_argument("--platform")
     parser.add_argument("--session")
     parser.add_argument("--repo")
     parser.add_argument("--record-dir")
     parser.add_argument("--log")
     parser.add_argument("--cwd")
-    parser.add_argument("--run-dir")
+    parser.add_argument("--run-base")
     parser.add_argument("--ready-timeout", type=float, default=DEFAULT_READY_TIMEOUT)
-    parser.add_argument("--backend", help="force a backend (launchd|systemd-user|direct)")
-    parser.add_argument("--env-json", help="path to a JSON env map (mode 600) merged as the base")
+    parser.add_argument("--backend", default="auto", help="auto | launchd | systemd-user")
+    parser.add_argument("--child-record", help="outer agent child record to append this holder to")
+    parser.add_argument("--argv-json", help="path to a JSON argv list (mode 600); consumed on use")
     parser.add_argument("--env-allow", action="append", default=[],
                         help="extra environment key to allow (repeatable)")
-    parser.add_argument("--argv-json", help="path to a JSON argv list (mode 600); literal argv")
     ns = parser.parse_args(argv)
 
     try:
@@ -534,29 +663,24 @@ def main(argv: list[str]) -> int:
             print(json.dumps(receipt, sort_keys=True))
             return 0 if receipt.get("result") == "ready" else 1
 
-        if not ns.label:
-            raise BrokerError("label-required", "--label is required")
-        if ns.mode in ("stop", "status") and ns.label:
-            if ns.mode == "stop":
-                print(json.dumps(do_stop(ns), sort_keys=True))
-                return 0
-            print(json.dumps(do_status(ns), sort_keys=True))
+        for name in ("platform", "session", "repo"):
+            if not getattr(ns, name):
+                raise BrokerError("argument-required", f"--{name} is required")
+
+        if ns.mode == "stop":
+            print(json.dumps(do_stop(ns), sort_keys=True))
             return 0
 
-        # submit
-        for name in ("platform", "session", "repo", "record_dir", "log"):
-            if not getattr(ns, name):
-                raise BrokerError("argument-required", f"--{name.replace('_','-')} is required for submit")
+        if ns.mode != "submit":
+            raise BrokerError("mode-required", "choose submit or stop")
+        if not ns.record_dir or not ns.log:
+            raise BrokerError("argument-required", "--record-dir and --log are required for submit")
         argv_list: list[str] = []
         if ns.argv_json:
             assert_secure_file(Path(ns.argv_json))
             argv_list = json.loads(Path(ns.argv_json).read_text(encoding="utf-8"))
-        env_from = dict(os.environ)
-        if ns.env_json:
-            assert_secure_file(Path(ns.env_json))
-            env_from = json.loads(Path(ns.env_json).read_text(encoding="utf-8"))
         ns.argv = argv_list
-        ns.env_from = env_from
+        ns.env_from = dict(os.environ)
         receipt = do_submit(ns)
         print(json.dumps(receipt, sort_keys=True))
         return 0 if receipt.get("result") in ("ready", "existing") else 1

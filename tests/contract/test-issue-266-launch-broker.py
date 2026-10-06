@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Issue #266 focused contract: shared outside-caller launcher (macOS launchd).
+"""Issue #266 focused contract: shared outside-caller launcher (helper level).
 
 Model-free. It launches a real ACP holder through ``scripts/kaola-launchd-broker.py``
-using the existing mock ACP agent, then proves the promised behavior:
+with the existing mock ACP agent, and proves:
 
-* broker exit and job unload leave the holder (and its dispatched worker child)
-  alive and re-parented to the service manager;
-* the standard client still controls it (``status`` / ``send`` / ``capture`` /
-  ``steer`` / ``stop``);
-* a repeated submit reconciles the live holder instead of starting a duplicate;
-* a failed bootstrap leaves no stale job or plist;
-* ``stop`` sweeps the detached tree to ``residual_pids: []``.
+* broker exit and job unload leave the detached holder alive (re-parented);
+* the standard client still controls it (status/send/capture/steer/stop);
+* repeat submit reconciles the verified holder; a foreign record/PID is rejected;
+* a concurrent running job for the session is reconciled, never killed;
+* a failed bootstrap cleans up its own holder and leaves no stale job or file;
+* the spawned holder is recorded in the outer agent's child record;
+* failed-start and preserve semantics with raw per-operation evidence.
 
 Every spawned pid is killed at the end. No install, no login, no live session.
 """
@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -35,11 +36,14 @@ HOLDER = ROOT / "scripts" / "kaola-acp-holder.py"
 CLIENT = ROOT / "scripts" / "kaola-acp.py"
 MOCK = ROOT / "tests" / "contract" / "mock-acp-agent.py"
 PYTHON = sys.executable or shutil.which("python3")
+LABEL_PREFIX = "com.kaolabrother.kaola-runner.launch."
 
 CHECKS: list[str] = []
+EVIDENCE: list[dict] = []
 
 
-def check(condition: bool, label: str) -> None:
+def check(condition: bool, label: str, **evidence) -> None:
+    EVIDENCE.append({"check": label, "ok": bool(condition), **evidence})
     if not condition:
         raise AssertionError(label)
     CHECKS.append(label)
@@ -47,6 +51,10 @@ def check(condition: bool, label: str) -> None:
 
 def canonical(path: object) -> str:
     return os.path.realpath(str(path))
+
+
+def sha(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def pid_alive(pid: object) -> bool:
@@ -69,8 +77,11 @@ def wait_until(predicate, timeout: float, label: str) -> None:
     raise AssertionError(f"timeout: {label}")
 
 
-def sha(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+def load_broker_module():
+    spec = importlib.util.spec_from_file_location("kaola_launchd_broker", BROKER)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def write_private(path: Path, data: str) -> Path:
@@ -86,16 +97,13 @@ def write_private(path: Path, data: str) -> Path:
 class Sandbox:
     def __init__(self, name: str):
         base = Path(tempfile.mkdtemp(prefix=f"k266{name}."))
-        # Canonicalize: macOS /tmp is /private/tmp, and the client canonicalizes
-        # --repo with realpath before hashing it.
         self.dir = Path(canonical(base))
-        # AF_UNIX sun_path is ~104 bytes: the socket TMPDIR must stay short.
         self.tmp = Path(tempfile.mkdtemp(prefix="k266.", dir="/tmp"))
         self.home = self.dir / "home"
         self.repo = self.dir / "repo"
         self.record_root = self.dir / "records"
-        self.launch_root = self.dir / "launch"
-        for path in (self.tmp, self.home, self.repo, self.record_root, self.launch_root):
+        self.launch_base = self.dir / "launch-base"
+        for path in (self.home, self.repo, self.record_root, self.launch_base):
             path.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
         self.platform = "codex"
@@ -106,8 +114,9 @@ class Sandbox:
         self.sock = (Path(self.tmp) / f"kaola-{os.getuid()}-acp"
                      / (sha(self.record_dir.as_posix())[:24] + ".sock"))
         self.sock.parent.mkdir(parents=True, exist_ok=True)
+        self.label = LABEL_PREFIX + sha(f"{self.platform}\0{self.session}\0{self.repo.as_posix()}")[:16]
         self.mock_log = self.dir / "mock.jsonl"
-        self.label = f"com.kaolabrother.kaola-runner.test.{uuid.uuid4().hex[:10]}"
+        self.child_record = self.dir / "children.jsonl"
         self.pids: list[int] = []
 
     def env(self) -> dict:
@@ -120,7 +129,6 @@ class Sandbox:
             "TMPDIR": str(self.tmp),
             "KAOLA_ACP_RECORD_ROOT": str(self.record_root),
             "MOCK_ACP_LOG": str(self.mock_log),
-            # A caller-app ownership variable must NOT reach the holder.
             "GROKBOT_APP_SESSION": "must-not-propagate",
         }
 
@@ -133,26 +141,30 @@ class Sandbox:
                 "--platform", self.platform, "--session", self.session,
                 "--command", command]
 
-    def broker(self, *args: str, timeout: float = 90) -> dict:
+    def broker(self, *args: str, timeout: float = 90, env: dict | None = None) -> dict:
         result = subprocess.run([PYTHON, str(BROKER), *args], capture_output=True,
-                                text=True, timeout=timeout, env={**os.environ, **self.env()})
+                                text=True, timeout=timeout,
+                                env={**os.environ, **(env if env is not None else self.env())})
         try:
             return json.loads(result.stdout)
         except ValueError as exc:  # noqa: F841
             raise AssertionError(f"broker printed no JSON: {result.stdout[-400:]} {result.stderr[-400:]}")
 
-    def submit(self, command: str, *, timeout: float = 60) -> dict:
+    def submit(self, command: str, *, timeout: float = 60, child_record: bool = False) -> dict:
         argv_file = write_private(self.dir / f"argv-{uuid.uuid4().hex[:6]}.json",
                                   json.dumps(self.holder_argv(command)))
-        env_file = write_private(self.dir / f"env-{uuid.uuid4().hex[:6]}.json",
-                                 json.dumps(self.env()))
-        return self.broker("submit", "--label", self.label, "--platform", self.platform,
-                           "--session", self.session, "--repo", self.repo.as_posix(),
-                           "--record-dir", str(self.record_dir), "--log", str(self.dir / "holder.log"),
-                           "--cwd", str(self.repo), "--run-dir", str(self.launch_root / "run"),
-                           "--ready-timeout", str(timeout), "--env-json", str(env_file),
-                           "--env-allow", "MOCK_ACP_LOG",
-                           "--argv-json", str(argv_file), timeout=timeout + 30)
+        args = ["submit", "--platform", self.platform, "--session", self.session,
+                "--repo", self.repo.as_posix(), "--record-dir", str(self.record_dir),
+                "--log", str(self.dir / "holder.log"), "--cwd", str(self.repo),
+                "--run-base", str(self.launch_base), "--ready-timeout", str(timeout),
+                "--env-allow", "MOCK_ACP_LOG", "--argv-json", str(argv_file)]
+        if child_record:
+            args += ["--child-record", str(self.child_record)]
+        return self.broker(*args, timeout=timeout + 30)
+
+    def stop(self) -> dict:
+        return self.broker("stop", "--platform", self.platform, "--session", self.session,
+                           "--repo", self.repo.as_posix(), "--run-base", str(self.launch_base))
 
     def client(self, command: str, *args: str, timeout: float = 60) -> dict:
         argv = [PYTHON, str(CLIENT), self.platform, command, "--repo", self.repo.as_posix(),
@@ -170,12 +182,17 @@ class Sandbox:
         except (OSError, ValueError):
             return {}
 
+    def mock_events(self) -> list[dict]:
+        try:
+            return [json.loads(line) for line in self.mock_log.read_text().splitlines() if line.strip()]
+        except OSError:
+            return []
+
     def track(self, pid: object) -> None:
         if isinstance(pid, int) and pid > 0:
             self.pids.append(pid)
 
     def cleanup(self) -> None:
-        # Reap anything this sandbox launched, including a holder whose bootstrap failed.
         record = self.record()
         for key in ("holder_pid", "agent_pid", "agent_pgid"):
             self.track(record.get(key))
@@ -185,34 +202,39 @@ class Sandbox:
                     os.kill(pid, sig)
                 except (ProcessLookupError, PermissionError):
                     break
-        self.broker("stop", "--label", self.label, "--run-dir", str(self.launch_root / "run"),
-                    "--record-dir", str(self.record_dir))
+        self.stop()
         subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{self.label}"],
                        capture_output=True, text=True)
         shutil.rmtree(self.dir, ignore_errors=True)
         shutil.rmtree(self.tmp, ignore_errors=True)
 
 
-def test_literal_argv_and_private_seam(sb: Sandbox) -> None:
-    # A composed shell command is refused; there is no shell execution path.
-    shell_argv = write_private(sb.dir / "shell-argv.json",
-                               json.dumps(["/bin/zsh", "-c", "echo hi"]))
-    env_file = write_private(sb.dir / "env.json", json.dumps(sb.env()))
-    refused = sb.broker("submit", "--label", f"{sb.label}.bad", "--platform", sb.platform,
-                        "--session", sb.session, "--repo", sb.repo.as_posix(),
-                        "--record-dir", str(sb.record_dir), "--log", str(sb.dir / "h.log"),
-                        "--cwd", str(sb.repo), "--run-dir", str(sb.launch_root / "run"),
-                        "--env-json", str(env_file), "--argv-json", str(shell_argv))
-    check(refused.get("result") == "refused" and refused.get("reason") == "argv-shell",
-          "submit refuses a /bin/zsh -c composed argv")
+# ------------------------------------------------------------------ helper-level tests
 
-    # The internal seam refuses without a private armed spec.
-    no_spec = subprocess.run([PYTHON, str(BROKER), "--internal-run", "--spec",
-                              str(sb.dir / "missing.json")], capture_output=True, text=True)
-    check(no_spec.returncode != 0, "internal-run refuses a missing private spec")
 
-    # A world-readable spec is refused.
-    permissive = sb.dir / "permissive.json"
+def test_literal_argv_structure(sb: Sandbox) -> None:
+    module = load_broker_module()
+    # A shell argv is refused (first element is a shell).
+    wrote = write_private(sb.dir / "shell-argv.json", json.dumps(["/bin/zsh", "-c", "echo hi"]))
+    refused = sb.broker("submit", "--platform", sb.platform, "--session", sb.session,
+                        "--repo", sb.repo.as_posix(), "--record-dir", str(sb.record_dir),
+                        "--log", str(sb.dir / "h.log"), "--cwd", str(sb.repo),
+                        "--run-base", str(sb.launch_base), "--argv-json", str(wrote))
+    check(refused.get("reason") == "argv-shell", "submit refuses a shell-first argv",
+          receipt=refused)
+    # A non-holder argv is refused by the known-structure check.
+    wrote = write_private(sb.dir / "svc-argv.json", json.dumps([PYTHON, "-m", "http.server"]))
+    refused = sb.broker("submit", "--platform", sb.platform, "--session", sb.session,
+                        "--repo", sb.repo.as_posix(), "--record-dir", str(sb.record_dir),
+                        "--log", str(sb.dir / "h.log"), "--cwd", str(sb.repo),
+                        "--run-base", str(sb.launch_base), "--argv-json", str(wrote))
+    check(refused.get("reason") == "argv-not-holder",
+          "submit refuses an argv that is not the holder structure", receipt=refused)
+    # The private seam refuses a missing/permissive spec.
+    res = subprocess.run([PYTHON, str(BROKER), "--internal-run", "--spec",
+                          str(sb.dir / "missing.json")], capture_output=True, text=True)
+    check(res.returncode != 0, "internal-run refuses a missing private spec")
+    permissive = sb.dir / "p.json"
     permissive.write_text("{}")
     os.chmod(permissive, 0o644)
     armed = Path(str(permissive) + ".armed")
@@ -223,126 +245,137 @@ def test_literal_argv_and_private_seam(sb: Sandbox) -> None:
     check(res.returncode != 0, "internal-run refuses a permissive spec")
 
 
-def test_broker_survival_and_control(sb: Sandbox) -> None:
-    receipt = sb.submit(sb.mock_command("--scenario", "slow", "--turn-ms", "6000",
-                                        "--steering", "injected"))
-    check(receipt.get("result") == "ready", "broker reports ready from the holder's own record")
-    holder_pid = receipt.get("holder_pid")
-    sb.track(holder_pid)
-    check(pid_alive(holder_pid), "holder is alive after submit returns")
-    ppid = subprocess.run(["ps", "-o", "ppid=", "-p", str(holder_pid)],
-                          capture_output=True, text=True).stdout.strip()
-    check(ppid == "1", "holder is re-parented to the service manager (ppid 1)")
-    listing = subprocess.run(["launchctl", "list"], capture_output=True, text=True).stdout
-    check(sb.label not in listing, "the one-shot job is unloaded after readiness")
-
-    # Caller exit is already the case (submit returned). A later explicit unload
-    # must not touch the detached holder.
-    subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{sb.label}"],
-                   capture_output=True, text=True)
-    time.sleep(0.4)
-    check(pid_alive(holder_pid), "holder survives a later job unload")
-
-    # The standard client still controls the detached holder.
-    status = sb.client("status")
-    check(status.get("holder_instance_id") == receipt.get("holder_instance_id"),
-          "status resolves the same holder instance")
-    sent = sb.client("send", "--no-wait", "--text", "ping-266")
-    check(sent.get("mutation_status") in ("accepted", "in_progress", "completed") or sent.get("turn_active"),
-          "send is accepted by the detached holder")
-
-    def mock_events() -> list[dict]:
-        try:
-            return [json.loads(line) for line in sb.mock_log.read_text().splitlines() if line.strip()]
-        except OSError:
-            return []
-
-    wait_until(lambda: any(e.get("event") == "prompt" and "ping-266" in e.get("text", "")
-                           for e in mock_events()), 10,
-               "the prompt reaches the agent through the detached holder")
-    check(any(e.get("event") == "prompt" and "ping-266" in e.get("text", "") for e in mock_events()),
-          "the detached holder delivered the prompt to the agent (agent-side receipt)")
-
-    capture = sb.client("capture", "--lines", "40")
-    check("error" not in capture or capture.get("error") is None,
-          "capture returns a valid session receipt from the detached holder")
-    steered = sb.client("steer", "--text", "steer-266")
-    check(steered.get("result") is None or "error" not in steered,
-          "steer call reaches the detached holder")
+def test_foreign_identity_rejected(sb: Sandbox) -> None:
+    module = load_broker_module()
+    # A foreign live PID with a matching-looking but identity-less record is not a holder.
+    fake = subprocess.Popen(["sleep", "300"])
+    sb.track(fake.pid)
+    write_private(sb.record_dir / "record.json", json.dumps({
+        "platform": sb.platform, "session": sb.session, "repo": sb.repo.as_posix(),
+        "holder_pid": fake.pid, "state": "ready"}))
+    check(module.verified_holder(sb.record_dir, sb.platform, sb.session, sb.repo.as_posix()) is None,
+          "verified_holder rejects a foreign PID with no holder/ACP identity",
+          fake_pid=fake.pid, record=sb.record())
+    # submit does not reconcile that foreign record; it launches a real holder.
+    receipt = sb.submit(sb.mock_command("--scenario", "normal"))
+    check(receipt.get("result") == "ready", "submit launches a real holder over a foreign record",
+          receipt=receipt)
+    check(receipt.get("holder_pid") != fake.pid, "the new holder is not the foreign PID")
+    sb.track(receipt.get("holder_pid"))
+    check(pid_alive(fake.pid), "the foreign PID was not signalled or killed")
     sb.client("stop", "--force")
-    wait_until(lambda: not pid_alive(holder_pid), 10, "holder gone after stop")
-    check(not pid_alive(holder_pid), "exact stop ends the holder")
+    wait_until(lambda: not pid_alive(receipt.get("holder_pid")), 10, "holder gone")
 
 
-def test_repeat_reconciles(sb: Sandbox) -> None:
+def test_reconcile_and_running_job(sb: Sandbox) -> None:
     first = sb.submit(sb.mock_command("--scenario", "normal"))
     check(first.get("result") == "ready", "first submit is ready")
     sb.track(first.get("holder_pid"))
     second = sb.submit(sb.mock_command("--scenario", "normal"))
     check(second.get("result") == "existing" and second.get("reconciled") is True,
-          "a repeated submit reconciles the live holder instead of a duplicate")
+          "a repeated submit reconciles the verified holder")
     check(second.get("holder_pid") == first.get("holder_pid"),
           "the reconciled holder is the same instance")
     sb.client("stop", "--force")
     wait_until(lambda: not pid_alive(first.get("holder_pid")), 10, "first holder gone")
 
+    # A concurrent running job for this session is not killed or overwritten.
+    plist = sb.dir / "concurrent.plist"
+    plist.write_bytes(__import__("plistlib").dumps({
+        "Label": sb.label, "ProgramArguments": ["/bin/sleep", "300"],
+        "RunAtLoad": True, "KeepAlive": False}))
+    subprocess.run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)],
+                   capture_output=True, text=True)
+    try:
+        wait_until(lambda: sb.label in subprocess.run(["launchctl", "list"], capture_output=True,
+                                                      text=True).stdout, 5, "concurrent job loaded")
+        refused = sb.submit(sb.mock_command("--scenario", "normal"), timeout=5)
+        check(refused.get("reason") == "launch-in-progress",
+              "submit refuses rather than killing a concurrent running job", receipt=refused)
+        listing = subprocess.run(["launchctl", "list"], capture_output=True, text=True).stdout
+        check(sb.label in listing, "the concurrent job is still loaded and alive")
+    finally:
+        subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{sb.label}"],
+                       capture_output=True, text=True)
 
-def test_failed_bootstrap_cleanup(sb: Sandbox) -> None:
-    receipt = sb.submit(f"{PYTHON} {sb.dir}/does-not-exist.py", timeout=6)
-    check(receipt.get("result") == "refused" and receipt.get("reason") == "holder-not-ready",
-          "a failed bootstrap is refused with holder-not-ready")
-    listing = subprocess.run(["launchctl", "list"], capture_output=True, text=True).stdout
-    check(sb.label not in listing, "no stale job remains after a failed bootstrap")
-    run_dir = sb.launch_root / "run"
-    files = list(run_dir.rglob("*")) if run_dir.exists() else []
-    check(not any(p.is_file() for p in files), "no stale plist or spec remains after a failed bootstrap")
-    listing = subprocess.run(["ps", "-axo", "pid,command"], capture_output=True, text=True).stdout
-    check(str(sb.record_dir) not in listing,
-          "failed bootstrap leaves no orphan holder for this record directory")
-    wait_until(lambda: str(sb.record_dir) not in subprocess.run(
-        ["ps", "-axo", "pid,command"], capture_output=True, text=True).stdout,
-        8, "failed-start holder cleanup settles")
 
-
-def test_job_cleanup_preserves_dispatched_tree(sb: Sandbox) -> None:
-    receipt = sb.submit(sb.mock_command("--scenario", "stubborn_child"))
-    check(receipt.get("result") == "ready", "holder with a dispatched child is ready")
+def test_survival_control_and_child_record(sb: Sandbox) -> None:
+    receipt = sb.submit(sb.mock_command("--scenario", "slow", "--turn-ms", "6000",
+                                        "--steering", "injected"), child_record=True)
+    check(receipt.get("result") == "ready", "broker reports ready from the verified holder")
     holder_pid = receipt.get("holder_pid")
     sb.track(holder_pid)
-    sb.client("send", "--no-wait", "--text", "spawn-child")
-    # The mock spawns a `sleep 300` child in the agent's group and ignores SIGTERM.
-    def agent_child() -> int | None:
-        out = subprocess.run(["ps", "-axo", "pid,ppid,command"], capture_output=True, text=True).stdout
-        for line in out.splitlines():
-            parts = line.split(None, 2)
-            if len(parts) == 3 and parts[1] == str(holder_pid) and "mock-acp-agent" in parts[2]:
-                return int(parts[0])
-            if len(parts) == 3 and parts[1] != "1" and parts[2].startswith("sleep 300"):
-                return int(parts[0])
-        return None
-    # A direct job unload must not sweep the detached holder or its worker tree.
+    ppid = subprocess.run(["ps", "-o", "ppid=", "-p", str(holder_pid)],
+                          capture_output=True, text=True).stdout.strip()
+    check(ppid == "1", "holder is re-parented to the service manager (ppid 1)", holder_pid=holder_pid)
+    check(sb.label not in subprocess.run(["launchctl", "list"], capture_output=True, text=True).stdout,
+          "the one-shot job is unloaded after readiness")
+
+    # The spawned holder is in the outer agent's child record (dispatcher ownership).
+    entries = [json.loads(l) for l in sb.child_record.read_text().splitlines() if l.strip()] \
+        if sb.child_record.exists() else []
+    check(any(e.get("pid") == holder_pid and e.get("pgid") == holder_pid for e in entries),
+          "the outside holder is recorded in the outer child record", child_record=entries)
+
     subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{sb.label}"],
                    capture_output=True, text=True)
     time.sleep(0.4)
-    check(pid_alive(holder_pid), "the detached holder survives a job unload (preserve semantics)")
+    check(pid_alive(holder_pid), "holder survives a later job unload")
+
+    status = sb.client("status")
+    check(status.get("holder_instance_id") == receipt.get("holder_instance_id"),
+          "status resolves the same holder instance", status_instance=status.get("holder_instance_id"))
+    sent = sb.client("send", "--no-wait", "--text", "ping-266")
+    check(sent.get("mutation_status") in ("accepted", "in_progress", "completed") or sent.get("turn_active"),
+          "send is accepted by the detached holder", send=sent.get("mutation_status"))
+    wait_until(lambda: any(e.get("event") == "prompt" and "ping-266" in e.get("text", "")
+                           for e in sb.mock_events()), 10, "the prompt reaches the agent")
+    check(any(e.get("event") == "prompt" and "ping-266" in e.get("text", "") for e in sb.mock_events()),
+          "the detached holder delivered the prompt to the agent (agent-side receipt)")
+    capture = sb.client("capture", "--lines", "40")
+    check(not capture.get("error"), "capture returns a valid session receipt", capture_error=capture.get("error"))
+    steered = sb.client("steer", "--text", "steer-266")
+    check(not steered.get("error"), "the steer call is not an error receipt", steer=steered)
+    wait_until(lambda: any(e.get("event") == "steering" and "steer-266" in e.get("text", "")
+                           for e in sb.mock_events()), 10, "the steer reaches the agent")
     stop = sb.client("stop", "--force")
-    wait_until(lambda: not pid_alive(holder_pid), 10, "holder gone after exact stop")
-    residual = stop.get("residual_pids") or []
-    check(residual == [], "exact stop leaves no residual pids")
+    check("residual_pids" in stop and stop["residual_pids"] == [],
+          "exact stop proves no residual pids", stop={k: stop.get(k) for k in ("stopped", "residual_pids")})
+    wait_until(lambda: not pid_alive(holder_pid), 10, "holder gone after stop")
+
+
+def test_failed_start_cleanup(sb: Sandbox) -> None:
+    receipt = sb.submit(f"{PYTHON} {sb.dir}/does-not-exist.py", timeout=6)
+    check(receipt.get("reason") == "holder-not-ready", "a failed start is refused",
+          receipt=receipt)
+    check(sb.label not in subprocess.run(["launchctl", "list"], capture_output=True, text=True).stdout,
+          "no stale job remains after a failed start")
+    wait_until(lambda: str(sb.record_dir) not in subprocess.run(
+        ["ps", "-axo", "pid,command"], capture_output=True, text=True).stdout,
+        8, "failed-start holder/agent group is gone")
+    check(str(sb.record_dir) not in subprocess.run(
+        ["ps", "-axo", "pid,command"], capture_output=True, text=True).stdout,
+        "failed start leaves no orphan holder or agent")
+    check(not (sb.record_dir / "launch.broker.json").exists(),
+          "the readiness receipt is consumed, not left behind")
+    base = sb.launch_base
+    stale = list(base.rglob("spec.json")) + list(base.rglob("*.plist"))
+    check(stale == [], "no stale spec or plist remains", stale=[str(p) for p in stale])
 
 
 TESTS = (
-    ("literal_argv_and_private_seam", test_literal_argv_and_private_seam),
-    ("broker_survival_and_control", test_broker_survival_and_control),
-    ("repeat_reconciles", test_repeat_reconciles),
-    ("failed_bootstrap_cleanup", test_failed_bootstrap_cleanup),
-    ("job_cleanup_preserves_dispatched_tree", test_job_cleanup_preserves_dispatched_tree),
+    ("literal_argv_structure", test_literal_argv_structure),
+    ("foreign_identity_rejected", test_foreign_identity_rejected),
+    ("reconcile_and_running_job", test_reconcile_and_running_job),
+    ("survival_control_and_child_record", test_survival_control_and_child_record),
+    ("failed_start_cleanup", test_failed_start_cleanup),
 )
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--only")
+    parser.add_argument("--evidence-out")
     args = parser.parse_args()
     if sys.platform != "darwin":
         print(json.dumps({"result": "unsupported", "detail": "macOS launchd contract test"}))
@@ -361,9 +394,11 @@ def main() -> int:
             results.append({"test": name, "result": "fail", "detail": str(exc)})
         finally:
             sb.cleanup()
-    print(json.dumps({"result": "pass" if not failures else "fail",
-                      "checks": len(CHECKS), "tests": results, "failures": failures},
-                     indent=2, sort_keys=True))
+    payload = {"result": "pass" if not failures else "fail", "checks": len(CHECKS),
+               "tests": results, "failures": failures, "evidence": EVIDENCE}
+    if args.evidence_out:
+        Path(args.evidence_out).write_text(json.dumps(payload, indent=2, sort_keys=True))
+    print(json.dumps(payload, indent=2, sort_keys=True))
     return 1 if failures else 0
 
 
