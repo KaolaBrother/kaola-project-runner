@@ -102,7 +102,7 @@ whole files into context: receipts, hashes, counts and bounded excerpts are the
 evidence. Ordinary `observe`, `status` and `capture --lines` receipts stay bounded
 (`truncated` names dropped fields); `capture --full` is the only unbounded
 request.
-Never log in, relogin, switch accounts, or repair credentials. A confirmed limit or account refusal follows [quota-packages.md](references/quota-packages.md); that rule does not change the count cap.
+Never log in, relogin, switch accounts, or repair credentials. A confirmed limit or account refusal follows [quota-packages.md](references/quota-packages.md); the count cap is unchanged.
 
 ### Defaults
 
@@ -124,7 +124,7 @@ workflow-next. Without that binding, linked-worktree starts and existing-run
 recovery are Agent decisions, not transport gates. See
 [workflow-worktree.md](references/workflow-worktree.md).
 
-Model mismatches are evidence, not automatic start gates. Bypass is not broader authorization. With no verified ACP skip-all,
+Model mismatches are evidence, not start gates. Bypass is not broader authorization. With no verified ACP skip-all,
 permission may still arise: `permit` settles it; never add a gate.
 
 ## Heartbeat
@@ -175,9 +175,9 @@ sink, and write ownership.
    orchestrator's own call; replace it with `drain-restart` at idle
    (zcode-host-dispatch.md).
    Examine authorized remaining work. Give each clear task directly to a suitable authorized worker as a new session, chosen from the current eligible-candidate projection by owner direction, class responsibility, profile/task fit and capacity; past dispatch or success informs that choice, never replaces it. Split or parallelize when independent parts gain real time or coverage. The count is a ceiling, not a target to fill; never invent work or expand authorization. At the hard cap, stop one seat before starting any new one (stop-before-start).
-   Before planning, assigning or judging QA, read
-   [qa-evidence.md](references/qa-evidence.md) unless the current version is
-   already in context. Planned dispatch (research, QA, report or
+   Before planning, assigning, accepting or judging QA, read
+   [qa-evidence.md](references/qa-evidence.md) unless its current version is in context: it
+   holds the improvement and slow-feedback method. Planned dispatch (research, QA, report or
    implementation) uses `execute`
    ([dispatch-collect.md](references/dispatch-collect.md)): it starts absent
    seats at the preset `--tier` and records their facts. Direct Runner
@@ -188,8 +188,8 @@ sink, and write ownership.
    the doc-impact call in its prompt, plus whether Workflow is on. That prompt
    carries the assignment only: never orchestration policy or the seat roster.
    The worker must not self-finalize before acceptance; irreversible or value
-   choices print `HUMAN_DECISION_REQUIRED` and wait. Merely seeing a
-   worktree or ledger is not write authorization. Same-file collaboration needs explicit
+   choices print `HUMAN_DECISION_REQUIRED` and wait. A worktree or ledger alone
+   is not write authorization. Same-file collaboration needs explicit
    coordination and an integrator, not a blanket disjointness rule. Do not
    expand the authorized goal or duplicate claims. Pass still-valid candidate
    evidence; recheck changed/invalidated facts or actual gaps. Keep required
@@ -204,11 +204,11 @@ sink, and write ownership.
    [issue-dispatch.md](references/issue-dispatch.md).
 3. **Accept the delivery.** Mission-frontier done triggers review, not automatic finalize. When a worker
    claims completion, judge its actual diff, checks, docs and run records
-   against that assignment under the effective global Workflow rules. Reuse
-   sufficient evidence for this candidate; return only concrete routine deviations,
+   against that assignment under the global Workflow rules. Reuse
+   sufficient evidence for this candidate; return only concrete deviations,
    omissions or invalidated evidence to that worker, and never finalize on
    incomplete evidence or lowered assertions. Worker prose, idle, green CI or
-   a successful script exit is not acceptance, and acceptance is not project
+   a script exit is not acceptance, and acceptance is not project
    QA: you pick when aggregate QA/doc checks run; unrun ones stay pending duties.
 4. **Finalize and synchronize.** Acceptance authorizes that candidate's
    pending finalize: direct its owning worker to finalize and merge, then verify
