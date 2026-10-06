@@ -1,13 +1,14 @@
 # Lifecycle implementation completion report — six owner requirements
 
-Scope: the final integrated candidate on `workflow/issue-264` at `f562560f`
-(QA-r2 integration: on-demand capability projection, binding-independent
-recovery-input visibility, handled-decision retire reconciliation, scoped
-count-2 fixture, `t259:1248` repair, template wording) and `082da503`
-(Host capability-gap table: README § "Host runtime capabilities and limits",
-AGENTS.md authoritative sync, `host-entry-matrix` pre-selection disclosure,
-edge r3 folded into `docs/host-compact-capabilities.md` with hashed durable
-evidence). Requirements source: `.kw/worktrees/issue-264/AGENTS.md` §
+Scope: the final integrated candidate on `workflow/issue-264` —
+`f562560f` (QA-r2 integration: on-demand capability projection,
+binding-independent recovery-input visibility, handled-decision retire
+reconciliation, scoped count-2 fixture, `t259:1248` repair), `082da503`
+(Host capability-gap table: README § "Host runtime capabilities and
+limits", AGENTS.md authoritative sync, `host-entry-matrix` pre-selection
+disclosure, edge r3 folded with hashed durable evidence), `544b58c5` (this
+report), `0b3af748` (steer cells from #263 ADOPTED originals), `19faebfd`
+(dot corrections) and `c44e87a7` (Fable R1–R4 wording corrections). Requirements source: `.kw/worktrees/issue-264/AGENTS.md` §
 "Project special requirements — lifecycle implementation (#255)" at
 `3c7e7417`, plus owner clarifications relayed 2026-10-06 through the dot main
 session (capability table Sentinel_27d913395e90819199545f470d8c6421 /

@@ -29,7 +29,7 @@ Skill entry and locator sentence ([inquiry-report.md](inquiry-report.md)). A ful
 already-verified unchanged Host uses the commands below: read this file,
 verify `host` by fresh Runner `status`, report the delegator view, audit the Host `body` (typed current facts: durable grants by exact
 preset id, tasks and duties; Class definitions and capability text are
-on-demand projections, never in that body), send one correction onlyor genuinely stale facts. The correction
+on-demand projections, never in that body), send one correction only for genuinely stale facts. The correction
 may carry `sweep=Delegator inquiry: list --repo, verify identity, stop orphans only, keep in-flight, report`.
 Relay urgent owner stops immediately; never wait to consolidate other changes. Never write
 the Host JSON, copy its rows here, or select workers. Missing or unreadable: report, then recover from owner,

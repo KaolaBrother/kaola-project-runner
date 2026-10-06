@@ -1599,8 +1599,8 @@ class RecordContract(unittest.TestCase):
                     self.assertEqual(saved["source"], doc["source"])
                     # Normalization may drop only fields derived from the
                     # catalog (the stored `class` copy); the effective grant
-                    # authority — presets, count, switch, lifetime, scope —
-                    # must survive exactly, with no expansion.
+                    # authority — presets, count and every non-derived key —
+                    # must survive exactly (any added grant key would fail).
                     self.assertEqual(saved["authorization"].keys(),
                                      doc["authorization"].keys())
                     for saved_g, orig_g in zip(saved["authorization"]["elite_grants"],
