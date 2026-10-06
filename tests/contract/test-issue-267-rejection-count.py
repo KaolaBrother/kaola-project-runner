@@ -3,9 +3,13 @@
 
 A Host ``repair`` verdict is one failed formal submission. The second such
 verdict for the same obligation and the same owner is the escalation trigger.
-Replays, late results, and results whose order cannot be bound do not
-double-count. The count is absent when it is unknown; it is never stored as
-zero. No second ledger or history list is created.
+Replays, late results of the same delivery, and results whose order cannot
+be bound do not double-count. A new repair whose order cannot be determined,
+after a positive count, is a pending-binding duty: the count stays as a
+lower bound and the old binding stays visible. The count is absent when it
+is unknown; it is never stored as zero. No second ledger or history list is
+created. A segment restarts only for a real responsibility handoff or a
+permitted effort that was actually applied.
 """
 
 from __future__ import annotations
@@ -51,7 +55,11 @@ class RejectionCount(unittest.TestCase):
         self.file = self.repo / ".kaola" / "heartbeat-prompt.json"
         code, out, err = self.state("init", "--file", str(self.file), "--writer", "host", "--source", "turn-1",
                                     "--project", json.dumps({"code": "KT", "goal": "ship"}),
-                                    "--authorization", json.dumps({"grants": [{"id": "zcode/default", "state": "granted", "count": 1}]}))
+                                    "--authorization", json.dumps({"grants": [
+                                        {"id": "zcode/default", "state": "granted", "count": 1},
+                                        {"id": "worker-a", "state": "granted", "count": 1},
+                                        {"id": "elite-b", "state": "granted", "count": 1},
+                                    ]}))
         self.assertEqual(code, 0, (out, err))
 
     def tearDown(self) -> None:
@@ -156,12 +164,18 @@ class RejectionCount(unittest.TestCase):
         again = self.reject(why="first again", review=1, evidence="receipt-1b",
                             dispositions={"item-1": "repair"})
         self.assertEqual(again["rejection"]["count"], 1)
-        self.assertEqual(again["rejection"]["receipt"], "receipt-1", "a replay keeps the counted receipt")
+        self.assertEqual(again["rejection"]["receipt"], "receipt-1",
+                         "the counted receipt stays the lower bound")
+        self.assertEqual(again["verdict"]["why"], "first again",
+                         "a different delivery at the same review stays visible")
+        self.assertEqual(again["evidence"], "receipt-1b")
+        self.assertEqual(again["rejection"]["pending"], "binding")
         jumped = self.reject(why="fifth review, second submission", review=5, evidence="receipt-5",
                              dispositions={"item-5": "repair"})
         self.assertEqual(jumped["rejection"]["count"], 2, "the count is submissions, not the review index")
         self.assertEqual(jumped["rejection"]["review"], 5)
         self.assertEqual(jumped["verdict"]["why"], "fifth review, second submission")
+        self.assertNotIn("pending", jumped["rejection"])
 
     def test_host_and_sideagent_replays_of_one_submission_count_once(self) -> None:
         self.open_task()
@@ -189,17 +203,33 @@ class RejectionCount(unittest.TestCase):
         self.open_task()
         self.reject(why="current", review=2, evidence="receipt-2", dispositions={"item-2": "repair"})
         self.assertEqual(self.rejection()["count"], 1)
-        late = self.reject(why="old result", review=1, evidence="receipt-1",
-                           dispositions={"item-1": "repair"})
+        late = self.reject(why="old result", review=1, evidence="receipt-2",
+                           dispositions={"item-2": "repair"})
         self.assertEqual(late["rejection"]["count"], 1)
         self.assertEqual(late["rejection"]["review"], 2)
         self.assertEqual(late["rejection"]["dispatch"], "item-2")
-        self.assertEqual(late["verdict"]["why"], "current")
+        self.assertEqual(late["verdict"]["why"], "current", "the same delivery's older review restores")
+        self.assertNotIn("pending", late["rejection"])
+        other = self.reject(why="older other delivery", review=1, evidence="receipt-older",
+                            dispositions={"item-7": "repair"})
+        self.assertEqual(other["rejection"]["count"], 1)
+        self.assertEqual(other["rejection"]["receipt"], "receipt-2")
+        self.assertEqual(other["rejection"]["dispatch"], "item-2")
+        self.assertEqual(other["verdict"]["why"], "older other delivery")
+        self.assertEqual(other["evidence"], "receipt-older")
+        self.assertEqual(other["rejection"]["pending"], "binding")
         unbound = self.reject(why="no order", review=0, evidence="receipt-x",
                               dispositions={"item-x": "repair"})
         self.assertEqual(unbound["rejection"]["count"], 1)
-        self.assertEqual(unbound["verdict"]["why"], "current")
+        self.assertEqual(unbound["verdict"]["why"], "no order")
+        self.assertEqual(unbound["evidence"], "receipt-x")
         self.assertEqual(unbound["rejection"]["dispatch"], "item-2")
+        self.assertEqual(unbound["rejection"]["pending"], "binding")
+        shown = self._row(self.view("host"), "gate")["rejection"]
+        self.assertEqual(shown["status"], "pending-binding")
+        self.assertEqual(shown["count_bound"], "lower")
+        self.assertEqual(shown["submission"]["dispatch"], "item-2")
+        self.assertEqual(shown["escalation"], "owed")
         self.assertNotIn("history", unbound)
         self.assertNotIn("attempts", unbound)
 
@@ -276,7 +306,7 @@ class RejectionCount(unittest.TestCase):
             self.assertEqual(code, 0, (out, err))
             self.assertEqual(self.rejection()["count"], 2, value)
 
-    def test_a_raised_effort_starts_a_segment_and_other_effort_writes_do_not(self) -> None:
+    def test_a_bare_effort_string_does_not_start_a_segment(self) -> None:
         self.open_task()
         rev = str(self.task()["rev"])
         code, out, err = self.update("host", "tasks", "gate", {"effort": "high"}, "--expect-rev", rev)
@@ -284,30 +314,21 @@ class RejectionCount(unittest.TestCase):
         self.assertEqual(self.rejection()["effort"], "high")
         self.assertNotIn("count", self.rejection())
         self.assertNotIn("effort", self.task())
-        self.reject(why="one")
+        self.reject(why="one", evidence="receipt-1", dispositions={"item-1": "repair"})
         self.reopen()
-        self.reject(why="two")
+        self.reject(why="two", evidence="receipt-2", dispositions={"item-2": "repair"})
         self.assertEqual(self.rejection()["count"], 2)
-        for effort in ("high", "medium", "ultra"):
+        for effort in ("high", "medium", "ultra", "xhigh"):
             rev = str(self.task()["rev"])
             code, out, err = self.update("host", "tasks", "gate", {"effort": effort}, "--expect-rev", rev)
             self.assertEqual(code, 0, (out, err))
             self.assertEqual(self.rejection()["count"], 2, effort)
-            self.assertEqual(self.rejection()["effort"], "high")
+            self.assertEqual(self.rejection()["effort"], "high", effort)
         rev = str(self.task()["rev"])
         code, out, err = self.update("sideagent", "tasks", "gate", {"effort": "xhigh"}, "--expect-rev", rev)
         self.assertEqual(code, 0, (out, err))
         self.assertEqual(self.rejection()["count"], 2, "a Sideagent does not raise effort")
         self.assertEqual(self.rejection()["effort"], "high")
-        rev = str(self.task()["rev"])
-        code, out, err = self.update("host", "tasks", "gate", {"effort": "xhigh"}, "--expect-rev", rev)
-        self.assertEqual(code, 0, (out, err))
-        self.assertNotIn("count", self.rejection())
-        self.assertEqual(self.rejection()["effort"], "xhigh")
-        self.reopen()
-        self.reject(why="after the raise")
-        self.assertEqual(self.rejection()["count"], 1)
-        self.assertEqual(self.view("host")["tasks"][0]["rejection"]["escalation"], "same-assignment")
 
     def test_roles_cannot_write_the_count_or_judge(self) -> None:
         self.open_task()
@@ -368,9 +389,9 @@ class RejectionCount(unittest.TestCase):
         self.assertNotIn("rejection", bare)
         self.assertNotIn("rejection", next(row for row in self.view("host")["tasks"] if row["id"] == "bare"))
         self.open_task()
-        self.reject(why="one")
+        self.reject(why="one", evidence="receipt-1", dispositions={"item-1": "repair"})
         self.reopen()
-        self.reject(why="two")
+        self.reject(why="two", evidence="receipt-2", dispositions={"item-2": "repair"})
         code, out, err = self.update("host", "holds", "no-seat",
                                      {"scope": "gate", "reason": "no authorized seat",
                                       "resume_when": "a seat is granted"})
@@ -616,6 +637,303 @@ class RejectionCount(unittest.TestCase):
         self.assertNotIn("count", review["rejection"])
         doing = self.task("clean-doing")
         self.assertNotIn("rejection", doing)
+
+    def _pending(self, ident: str = "gate", **submission: object) -> dict:
+        shown = {
+            "count": 1,
+            "count_bound": "lower",
+            "owner": "worker-a",
+            "binding": "pending",
+            "status": "pending-binding",
+            "evidence": f"state.tasks.{ident}.evidence",
+            "escalation": "owed",
+        }
+        if submission:
+            shown["submission"] = submission
+        return shown
+
+    def test_count_then_unbound_is_pending_and_completion_counts_once(self) -> None:
+        """count 1, then a new unbound repair, then that submission completed once."""
+        self.open_task()
+        first = self.reject(why="first", review=1, evidence="receipt-1",
+                            dispositions={"item-1": "repair"})
+        self.assertEqual(first["rejection"]["count"], 1)
+        self.assertEqual(first["rejection"]["receipt"], "receipt-1")
+        self.assertEqual(first["rejection"]["review"], 1)
+        before = self._row(self.view("host"), "gate")["rejection"]
+        self.assertEqual(before["count"], 1)
+        self.assertEqual(before["escalation"], "same-assignment")
+        self.assertEqual(before["submission"]["receipt"], "receipt-1")
+        self.assertNotIn("status", before)
+        quiet = self.fingerprint()
+        second = self.reject(why="second names no binding")
+        self.assertEqual(second["verdict"]["why"], "second names no binding")
+        self.assertEqual(second["evidence"], "receipt-1")
+        self.assertEqual(second["prior_verdict"]["why"], "first")
+        stored = second["rejection"]
+        self.assertEqual(stored["count"], 1)
+        self.assertEqual(stored["dispatch"], "item-1")
+        self.assertEqual(stored["receipt"], "receipt-1")
+        self.assertEqual(stored["review"], 1)
+        self.assertEqual(stored["pending"], "binding")
+        self.assertNotIn("unknown", json.dumps(stored))
+        self.assertNotIn("unbound", json.dumps(stored))
+        self.assertNotIn(0, stored.values())
+        self.assertNotIn("unknown", json.dumps(self.doc()["state"]))
+        expected = self._pending(dispatch="item-1", receipt="receipt-1", review=1)
+        host = self.view("host")
+        delegator = self.view("delegator")
+        self.assertEqual(self._row(host, "gate")["rejection"], expected)
+        self.assertEqual(self._row(delegator, "gate")["rejection"], expected)
+        opened = [row for row in host["attention"] if row["why"] == "delivery-open"]
+        self.assertEqual(opened[0]["rejection_count"], 1)
+        self.assertEqual(opened[0]["count_bound"], "lower")
+        self.assertEqual(opened[0]["escalation"], "owed")
+        self.assertEqual(opened[0]["binding"], "pending")
+        self.assertEqual(opened[0]["status"], "pending-binding")
+        self.assertEqual(opened[0]["evidence"], expected["evidence"])
+        self.assertEqual(opened[0]["submission"]["receipt"], "receipt-1")
+        self.assertNotIn("receipt-1", opened[0]["evidence"])
+        self.assertNotEqual(self.fingerprint(), quiet)
+        held_quiet = self.fingerprint()
+        self.reject(why="still no binding")
+        self.assertEqual(self.rejection()["count"], 1)
+        self.assertEqual(self.rejection()["pending"], "binding")
+        self.assertEqual(self.fingerprint(), held_quiet)
+        done = self.reject(why="binding completed", review=2, evidence="receipt-2",
+                           dispositions={"item-2": "repair"})
+        self.assertEqual(done["rejection"]["count"], 2)
+        self.assertEqual(done["rejection"]["receipt"], "receipt-2")
+        self.assertEqual(done["rejection"]["review"], 2)
+        self.assertNotIn("pending", done["rejection"])
+        shown = self._row(self.view("host"), "gate")["rejection"]
+        brief = self._row(self.view("delegator"), "gate")["rejection"]
+        for row in (shown, brief):
+            self.assertEqual(row["count"], 2)
+            self.assertEqual(row["escalation"], "owed")
+            self.assertEqual(row["submission"]["receipt"], "receipt-2")
+            self.assertNotIn("status", row)
+            self.assertNotIn("count_bound", row)
+        replay = self.reject(why="replay completed", review=2, evidence="receipt-2",
+                             dispositions={"item-2": "repair"})
+        self.assertEqual(replay["rejection"]["count"], 2)
+        self.assertEqual(replay["rejection"]["receipt"], "receipt-2")
+        self.assertEqual(replay["rejection"]["review"], 2)
+        self.assertNotIn("pending", replay["rejection"])
+
+    def test_a_missing_dispatch_does_not_increment(self) -> None:
+        self.open_task()
+        self.reject(why="first", review=1, evidence="receipt-1", dispositions={"item-1": "repair"})
+        missing = self.reject(why="no dispatch item", review=3, evidence="receipt-9",
+                              dispositions={"item-9": "accepted"})
+        self.assertEqual(missing["rejection"]["count"], 1)
+        self.assertEqual(missing["rejection"]["dispatch"], "item-1")
+        self.assertEqual(missing["rejection"]["receipt"], "receipt-1")
+        self.assertEqual(missing["rejection"]["pending"], "binding")
+        self.assertEqual(missing["verdict"]["why"], "no dispatch item")
+        self.assertEqual(missing["evidence"], "receipt-9")
+        shown = self._row(self.view("host"), "gate")["rejection"]
+        brief = self._row(self.view("delegator"), "gate")["rejection"]
+        self.assertEqual(shown["status"], "pending-binding")
+        self.assertEqual(shown["submission"]["dispatch"], "item-1")
+        self.assertEqual(brief["status"], "pending-binding")
+        self.assertEqual([row for row in self.view("host")["attention"]
+                          if row["why"] == "delivery-open"][0]["status"], "pending-binding")
+
+    def test_a_missing_receipt_does_not_increment(self) -> None:
+        self.open_task()
+        self.reject(why="first", review=1, evidence="receipt-1", dispositions={"item-1": "repair"})
+        missing = self.reject(why="no delivery receipt", review=3, dispositions={"item-3": "repair"})
+        self.assertEqual(missing["rejection"]["count"], 1)
+        self.assertEqual(missing["rejection"]["receipt"], "receipt-1")
+        self.assertEqual(missing["rejection"]["dispatch"], "item-1")
+        self.assertEqual(missing["rejection"]["pending"], "binding")
+        self.assertEqual(missing["verdict"]["why"], "no delivery receipt")
+        self.assertEqual(missing["evidence"], "receipt-1", "the old receipt is not replaced by silence")
+        shown = self._row(self.view("delegator"), "gate")["rejection"]
+        self.assertEqual(shown["status"], "pending-binding")
+        self.assertEqual(shown["count_bound"], "lower")
+        self.assertEqual(shown["submission"]["receipt"], "receipt-1")
+
+    def test_the_same_binding_with_a_new_review_does_not_increment(self) -> None:
+        self.open_task()
+        self.reject(why="first", review=1, evidence="receipt-1", dispositions={"item-1": "repair"})
+        moved = self.reject(why="review number moved", review=4, evidence="receipt-1",
+                            dispositions={"item-1": "repair"})
+        self.assertEqual(moved["rejection"]["count"], 1)
+        self.assertEqual(moved["rejection"]["review"], 1)
+        self.assertEqual(moved["rejection"]["receipt"], "receipt-1")
+        self.assertEqual(moved["rejection"]["dispatch"], "item-1")
+        self.assertNotIn("pending", moved["rejection"])
+        shown = self._row(self.view("host"), "gate")["rejection"]
+        self.assertEqual(shown["escalation"], "same-assignment")
+        self.assertEqual(shown["submission"]["review"], 1)
+        self.assertNotIn("status", shown)
+
+    def test_the_same_review_with_a_conflicting_binding_stays_visible(self) -> None:
+        self.open_task()
+        self.reject(why="first", review=1, evidence="receipt-1", dispositions={"item-1": "repair"})
+        other = self.reject(why="other delivery", review=1, evidence="receipt-other",
+                            dispositions={"item-8": "repair"})
+        self.assertEqual(other["rejection"]["count"], 1)
+        self.assertEqual(other["rejection"]["receipt"], "receipt-1")
+        self.assertEqual(other["rejection"]["dispatch"], "item-1")
+        self.assertEqual(other["rejection"]["review"], 1)
+        self.assertEqual(other["rejection"]["pending"], "binding")
+        self.assertEqual(other["verdict"]["why"], "other delivery")
+        self.assertEqual(other["evidence"], "receipt-other")
+        shown = self._row(self.view("host"), "gate")["rejection"]
+        brief = self._row(self.view("delegator"), "gate")["rejection"]
+        for row in (shown, brief):
+            self.assertEqual(row["status"], "pending-binding")
+            self.assertEqual(row["count_bound"], "lower")
+            self.assertEqual(row["submission"]["receipt"], "receipt-1")
+            self.assertEqual(row["submission"]["dispatch"], "item-1")
+            self.assertEqual(row["evidence"], "state.tasks.gate.evidence")
+            self.assertNotIn("receipt-other", row["evidence"])
+        opened = [row for row in self.view("host")["attention"] if row["why"] == "delivery-open"]
+        self.assertEqual(opened[0]["status"], "pending-binding")
+        self.assertEqual(opened[0]["submission"]["receipt"], "receipt-1")
+
+    def _set_grants(self, grants: list[dict]) -> None:
+        code, out, err = self.state(
+            "update", "--file", str(self.file), "--writer", "host", "--source", "grant",
+            "--section", "authorization", "--expect-revision", str(self.doc()["revision"]),
+            "--set", json.dumps({"grants": grants}))
+        self.assertEqual(code, 0, (out, err))
+
+    def test_same_owner_reshell_with_a_new_dispatch_does_not_reset(self) -> None:
+        self.open_task()
+        self.reject(why="one", evidence="receipt-1", dispositions={"item-1": "repair"})
+        self.reopen()
+        self.reject(why="two", evidence="receipt-2", dispositions={"item-2": "repair"})
+        self.assertEqual(self.rejection()["count"], 2)
+        rev = str(self.task()["rev"])
+        code, out, err = self.update(
+            "host", "tasks", "gate",
+            {"preset": "worker-a", "dispatch": ["item-1", "item-8"],
+             "dispositions": {"item-1": "handed-off"}},
+            "--expect-rev", rev)
+        self.assertEqual(code, 0, (out, err))
+        self.assertEqual(self.rejection()["count"], 2)
+        self.assertEqual(self.rejection()["owner"], "worker-a")
+        rev = str(self.task()["rev"])
+        code, out, err = self.update(
+            "host", "tasks", "gate",
+            {"preset": "elite-c", "dispatch": ["item-1", "item-8", "item-10"],
+             "dispositions": {"item-10": "handed-off"}},
+            "--expect-rev", rev)
+        self.assertEqual(code, 0, (out, err))
+        self.assertEqual(self.rejection()["count"], 2, "an owner outside the grants does not reset")
+        self.assertEqual(self.rejection()["owner"], "worker-a")
+
+    def test_a_permitted_applied_effort_raise_starts_a_segment(self) -> None:
+        self.open_task()
+        rev = str(self.task()["rev"])
+        code, out, err = self.update("host", "tasks", "gate", {"effort": "high"}, "--expect-rev", rev)
+        self.assertEqual(code, 0, (out, err))
+        self.reject(why="one", evidence="receipt-1", dispositions={"item-1": "repair"})
+        self.reopen()
+        self.reject(why="two", evidence="receipt-2", dispositions={"item-2": "repair"})
+        self.assertEqual(self.rejection()["count"], 2)
+        receipt = {"config_application": {"effort": {"applied": True, "value": "xhigh"}}}
+        rev = str(self.task()["rev"])
+        code, out, err = self.update("host", "tasks", "gate",
+                                     {"effort": "xhigh", "effort_receipt": receipt}, "--expect-rev", rev)
+        self.assertEqual(code, 0, (out, err))
+        self.assertEqual(self.rejection()["count"], 2, "a receipt the grant does not permit does not reset")
+        self.assertEqual(self.rejection()["effort"], "high")
+        self.assertNotIn("effort_receipt", self.task())
+        self._set_grants([
+            {"id": "zcode/default", "state": "granted", "count": 1},
+            {"id": "worker-a", "state": "granted", "count": 1,
+             "special_requirements": {"effort": "xhigh"}},
+            {"id": "elite-b", "state": "granted", "count": 1},
+        ])
+        unapplied = {"config_application": {"effort": {"applied": False, "value": "xhigh"}}}
+        rev = str(self.task()["rev"])
+        code, out, err = self.update("host", "tasks", "gate",
+                                     {"effort": "xhigh", "effort_receipt": unapplied}, "--expect-rev", rev)
+        self.assertEqual(code, 0, (out, err))
+        self.assertEqual(self.rejection()["count"], 2)
+        self.assertEqual(self.rejection()["effort"], "high")
+        self._set_grants([
+            {"id": "zcode/default", "state": "granted", "count": 1},
+            {"id": "worker-a", "state": "granted", "count": 1,
+             "special_requirements": {"effort": "ultra"}},
+            {"id": "elite-b", "state": "granted", "count": 1},
+        ])
+        ultra = {"config_application": {"effort": {"applied": True, "value": "ultra"}}}
+        rev = str(self.task()["rev"])
+        code, out, err = self.update("host", "tasks", "gate",
+                                     {"effort": "ultra", "effort_receipt": ultra}, "--expect-rev", rev)
+        self.assertEqual(code, 0, (out, err))
+        self.assertEqual(self.rejection()["count"], 2, "a permitted token outside the compared pair does not reset")
+        self.assertEqual(self.rejection()["effort"], "high")
+        self._set_grants([
+            {"id": "zcode/default", "state": "granted", "count": 1},
+            {"id": "worker-a", "state": "granted", "count": 1,
+             "special_requirements": {"effort": "xhigh"}},
+            {"id": "elite-b", "state": "granted", "count": 1},
+        ])
+        rev = str(self.task()["rev"])
+        code, out, err = self.update("sideagent", "tasks", "gate",
+                                     {"effort": "xhigh", "effort_receipt": receipt}, "--expect-rev", rev)
+        self.assertEqual(code, 0, (out, err))
+        self.assertEqual(self.rejection()["count"], 2)
+        self.assertEqual(self.rejection()["effort"], "high")
+        rev = str(self.task()["rev"])
+        code, out, err = self.update("host", "tasks", "gate",
+                                     {"effort": "xhigh", "effort_receipt": receipt}, "--expect-rev", rev)
+        self.assertEqual(code, 0, (out, err))
+        self.assertNotIn("count", self.rejection())
+        self.assertEqual(self.rejection()["effort"], "xhigh")
+        self.assertNotIn("effort_receipt", self.task())
+        self.reopen()
+        self.reject(why="after the raise", evidence="receipt-3", dispositions={"item-3": "repair"})
+        self.assertEqual(self.rejection()["count"], 1)
+        self.assertEqual(self.view("host")["tasks"][0]["rejection"]["escalation"], "same-assignment")
+
+    def test_two_bound_repairs_still_reach_count_two(self) -> None:
+        self.open_task()
+        self.reject(why="first", review=1, evidence="receipt-1")
+        second = self.reject(why="second", review=2, evidence="receipt-2",
+                             dispositions={"item-2": "repair"})
+        self.assertEqual(second["rejection"]["count"], 2)
+        self.assertEqual(second["rejection"]["receipt"], "receipt-2")
+        self.assertEqual(second["rejection"]["review"], 2)
+        for role in ("host", "delegator"):
+            shown = self._row(self.view(role), "gate")["rejection"]
+            self.assertEqual(shown["count"], 2)
+            self.assertEqual(shown["escalation"], "owed")
+            self.assertEqual(shown["submission"]["receipt"], "receipt-2")
+            self.assertEqual(shown["submission"]["review"], 2)
+            self.assertNotIn("status", shown)
+            self.assertNotIn("binding", shown)
+
+    def test_an_unbound_repair_then_a_bound_repair_starts_at_one(self) -> None:
+        self.open_task()
+        evidence = ["notes/receipt-a.txt", "notes/receipt-b.txt"]
+        self.reject(why="order not established", review=0, evidence=evidence)
+        self._assert_storage_keeps_typed_facts()
+        marker = self._marker()
+        self.assertEqual(self._row(self.view("host"), "gate")["rejection"], marker)
+        self.assertEqual(self._row(self.view("delegator"), "gate")["rejection"], marker)
+        bound = self.reject(why="bound second", review=1, evidence="receipt-2",
+                            dispositions={"item-2": "repair"})
+        self.assertEqual(bound["rejection"]["count"], 1)
+        self.assertEqual(bound["rejection"]["receipt"], "receipt-2")
+        self.assertEqual(bound["rejection"]["review"], 1)
+        self.assertNotIn("unknown", json.dumps(bound["rejection"]))
+        for role in ("host", "delegator"):
+            shown = self._row(self.view(role), "gate")["rejection"]
+            self.assertEqual(shown["count"], 1)
+            self.assertEqual(shown["escalation"], "same-assignment")
+            self.assertEqual(shown["submission"]["receipt"], "receipt-2")
+            self.assertEqual(shown["submission"]["review"], 1)
+            self.assertNotIn("status", shown)
+            self.assertNotIn("binding", shown)
+            self.assertNotIn("unknown", json.dumps(shown))
 
 
 if __name__ == "__main__":

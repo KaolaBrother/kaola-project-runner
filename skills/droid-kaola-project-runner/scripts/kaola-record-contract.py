@@ -68,6 +68,7 @@ VERDICT_KEYS = frozenset({"value", "by", "host_turn", "why"})
 # lives inside the object as `v`.
 REJECTION_KEYS = frozenset({
     "v", "count", "owner", "dispatch", "receipt", "review", "open_review", "effort",
+    "pending",
 })
 TRANSCRIBED_KEYS = frozenset({"host_turn", "fields"})
 UNVERIFIED_KEYS = frozenset({"summary", "locator", "session", "live", "v1", "unchecked", "source"})
@@ -282,7 +283,7 @@ def reject_record_patch(kind: str, patch: dict[str, Any]) -> dict[str, str] | No
     for key, value in patch.items():
         if value is None:
             continue
-        if kind == "tasks" and key in ("effort", "review"):
+        if kind == "tasks" and key in ("effort", "review", "effort_receipt"):
             # #267 patch-only inputs consumed by apply_task_rejection:
             # never stored, never refused as unknown record keys.
             continue
@@ -1721,14 +1722,51 @@ def _unbound_marker(task: dict[str, Any], task_id: str) -> dict[str, str]:
     }
 
 
+def _submission_binding(rejection: dict[str, Any]) -> dict[str, Any]:
+    return {key: rejection[key] for key in ("dispatch", "receipt", "review")
+            if rejection.get(key) is not None}
+
+
+def _escalation_held(task: dict[str, Any], holds: Any, task_id: str) -> bool:
+    """A hold or ``resume_when`` means escalation is recorded and not done."""
+    if task.get("resume_when"):
+        return True
+    if isinstance(holds, dict):
+        for hold_id, hold in holds.items():
+            if isinstance(hold, dict) and (hold_id == task_id or hold.get("scope") == task_id):
+                return True
+    return False
+
+
+def _repair_still_open(task: dict[str, Any]) -> bool:
+    """The unbound repair is still the current or the immediately prior verdict."""
+    if _verdict_value(task, "verdict") == "repair":
+        return True
+    if _verdict_value(task, "verdict"):
+        return False
+    return _verdict_value(task, "prior_verdict") == "repair"
+
+
+def _duty_fields(projected: dict[str, Any]) -> dict[str, Any]:
+    """Projection fields copied into attention when the binding is not settled."""
+    if projected.get("status") not in ("unknown", "pending-binding"):
+        return {}
+    return {key: projected[key] for key in ("binding", "status", "evidence", "count_bound")
+            if projected.get(key) is not None}
+
+
 def rejection_projection(task: dict[str, Any], holds: Any, task_id: str) -> dict[str, Any] | None:
     """Current-owner rejection facts for the views (#267).
 
     A reliable count is a positive int. Absent is not zero and is never stored
     as the word unknown. The unbound marker is projection-only. It appears
-    only when this task carries a repair verdict, a prior repair, or a known
-    pending submission and still has no reliable count. A never-failed task
-    stays quiet.
+    when this task carries a repair verdict, a prior repair, or a known
+    pending submission and still has no reliable count. When a positive count
+    remains and the rejection stores ``pending == "binding"``, that count is
+    only a lower bound: the stored submission is the old binding, and the
+    current repair is a pending-binding duty with an evidence locator.
+    Escalation is then owed, or held when a hold or ``resume_when`` already
+    records it. A never-failed task stays quiet.
     """
     rejection = task.get("rejection") if isinstance(task.get("rejection"), dict) else None
     count = _positive_count(rejection.get("count")) if isinstance(rejection, dict) else None
@@ -1741,23 +1779,29 @@ def rejection_projection(task: dict[str, Any], holds: Any, task_id: str) -> dict
         if not carries:
             return None
         return _unbound_marker(task, task_id)
+    if rejection.get("pending") == "binding" and _repair_still_open(task):
+        shown = {
+            "count": count,
+            "count_bound": "lower",
+            "binding": "pending",
+            "status": "pending-binding",
+            "evidence": _evidence_locator(task, task_id),
+        }
+        if rejection.get("owner") is not None:
+            shown["owner"] = rejection["owner"]
+        submission = _submission_binding(rejection)
+        if submission:
+            shown["submission"] = submission
+        shown["escalation"] = "held" if _escalation_held(task, holds, task_id) else "owed"
+        return shown
     shown: dict[str, Any] = {"count": count}
     if rejection.get("owner") is not None:
         shown["owner"] = rejection["owner"]
-    submission = {key: rejection[key] for key in ("dispatch", "receipt", "review")
-                  if rejection.get(key) is not None}
+    submission = _submission_binding(rejection)
     if submission:
         shown["submission"] = submission
     if count >= 2:
-        label = "owed"
-        if task.get("resume_when"):
-            label = "held"
-        elif isinstance(holds, dict):
-            for hold_id, hold in holds.items():
-                if isinstance(hold, dict) and (hold_id == task_id or hold.get("scope") == task_id):
-                    label = "held"
-                    break
-        shown["escalation"] = label
+        shown["escalation"] = "held" if _escalation_held(task, holds, task_id) else "owed"
     else:
         shown["escalation"] = "same-assignment"
     return shown
@@ -1772,10 +1816,15 @@ def task_attention(task_id: str, task: dict[str, Any], holds: Any = None) -> lis
                    **({"prior_verdict": prior.get("value")} if prior else {}),
                    "content": judgment_digest(task)}
         projected = rejection_projection(task, holds, task_id) or {}
-        if projected.get("status") == "unknown":
-            waiting["binding"] = projected["binding"]
-            waiting["status"] = projected["status"]
-            waiting["evidence"] = projected["evidence"]
+        duty = _duty_fields(projected)
+        if duty:
+            waiting.update(duty)
+            if projected.get("count") is not None:
+                waiting["rejection_count"] = projected["count"]
+            if projected.get("escalation") is not None:
+                waiting["escalation"] = projected["escalation"]
+            if projected.get("status") == "pending-binding" and projected.get("submission"):
+                waiting["submission"] = projected["submission"]
         found.append(waiting)
     elif (task.get("stage") in ("closeout", "done")
           and (verdict or {}).get("value") not in ("accepted", "partial", "cancelled")):
@@ -1784,14 +1833,12 @@ def task_attention(task_id: str, task: dict[str, Any], holds: Any = None) -> lis
     if isinstance(verdict, dict) and verdict.get("value") == "repair" and task.get("goal"):
         # Host goal, next and verdict, plus the #267 rejection facts: a new
         # counted rejection wakes the Host once; an unchanged row stays quiet.
-        # An unbound repair names its evidence here and does not invent a count.
+        # An unbound repair names its evidence here. It does not invent a count.
+        # A pending binding keeps the last count as a lower bound and escalates.
         projected = rejection_projection(task, holds, task_id) or {}
         body = {"goal": task.get("goal"), "next": task.get("next"), "verdict": verdict.get("value"),
                 "rejection_count": projected.get("count"), "escalation": projected.get("escalation")}
-        if projected.get("status") == "unknown":
-            body["binding"] = projected.get("binding")
-            body["status"] = projected.get("status")
-            body["evidence"] = projected.get("evidence")
+        body.update(_duty_fields(projected))
         text = json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         row = {"kind": "tasks", "id": task_id, "why": "delivery-open",
                "content": hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]}
@@ -1800,10 +1847,7 @@ def task_attention(task_id: str, task: dict[str, Any], holds: Any = None) -> lis
                 row[key if key != "count" else "rejection_count"] = projected[key]
         if projected.get("submission"):
             row["submission"] = projected["submission"]
-        if projected.get("status") == "unknown":
-            row["binding"] = projected["binding"]
-            row["status"] = projected["status"]
-            row["evidence"] = projected["evidence"]
+        row.update(_duty_fields(projected))
         found.append(row)
     if isinstance(task.get("transcribed"), dict):
         found.append({"kind": "tasks", "id": task_id, "why": "transcribed-check",

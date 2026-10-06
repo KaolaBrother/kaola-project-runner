@@ -3624,6 +3624,9 @@ DIGEST_SKIP = (*RECORD_META, "count", "last_seen", "ack")
 # Heartbeat schema stays kaola-heartbeat-prompt/2. Do not bump it: a writer
 # that sees /3 refuses the whole file. Absent count is unknown, never zero.
 REJECTION_VERSION = 1
+# Orders two effort tokens only after the incoming one is proven applied and
+# permitted. Not a platform profile. A renamed string never consults it to
+# reset a segment, and a token outside it is not promoted.
 EFFORT_RANK = {"low": 1, "medium": 2, "high": 3, "xhigh": 4, "max": 5}
 
 
@@ -3699,72 +3702,220 @@ def _stored_rejection(current: dict[str, Any] | None) -> dict[str, Any]:
     return dict(raw) if isinstance(raw, dict) else {}
 
 
-def _handoff_resets(current: dict[str, Any] | None, merged: dict[str, Any]) -> bool:
-    """A new segment needs an actual handed-off disposition and a new dispatch id."""
+def _granted_ids(authorization: dict[str, Any] | None) -> set[str]:
+    """Preset ids whose grant state is granted. No second permission engine."""
+    if not isinstance(authorization, dict) or not isinstance(authorization.get("grants"), list):
+        return set()
+    found: set[str] = set()
+    for grant in authorization["grants"]:
+        if not isinstance(grant, dict) or grant.get("state") not in (None, "granted"):
+            continue
+        ident = grant.get("id")
+        if isinstance(ident, str) and ident.strip():
+            found.add(ident.strip())
+        presets = grant.get("preset_ids")
+        if isinstance(presets, list):
+            found.update(item.strip() for item in presets if isinstance(item, str) and item.strip())
+    return found
+
+
+def _effort_permitted(authorization: dict[str, Any] | None, owner: str | None, effort: str) -> bool:
+    """True when this owner's granted row names that effort."""
+    if not owner or not isinstance(authorization, dict) or not isinstance(authorization.get("grants"), list):
+        return False
+    for grant in authorization["grants"]:
+        if not isinstance(grant, dict) or grant.get("state") not in (None, "granted"):
+            continue
+        ids = []
+        if isinstance(grant.get("id"), str):
+            ids.append(grant["id"])
+        if isinstance(grant.get("preset_ids"), list):
+            ids.extend(item for item in grant["preset_ids"] if isinstance(item, str))
+        if owner not in ids:
+            continue
+        special = grant.get("special_requirements")
+        if isinstance(special, dict) and special.get("effort") == effort:
+            return True
+    return False
+
+
+def _applied_effort(requested: str, receipt: Any) -> str | None:
+    """The effort token a real application receipt proves."""
+    if not isinstance(receipt, dict):
+        return None
+    block, _source = application_of(receipt)
+    slot, state = application_slot(block, "effort")
+    verdict, value = effort_applied_verdict(requested, slot, state)
+    if verdict != "match" or value is None:
+        return None
+    applied = str(value).strip().lower()
+    if applied != requested.strip().lower():
+        return None
+    return applied
+
+
+def _handoff_resets(current: dict[str, Any] | None, merged: dict[str, Any],
+                    authorization: dict[str, Any] | None) -> bool:
+    """A new segment is a real responsibility change.
+
+    The disposition must newly be handed-off, the dispatch ids must gain one,
+    and the responsible owner must change to a different granted preset.
+    Re-shelling the same owner, or naming an owner the authorization does not
+    grant, does not reset.
+    """
     old = (current or {}).get("dispositions") if isinstance((current or {}).get("dispositions"), dict) else {}
     new = merged.get("dispositions") if isinstance(merged.get("dispositions"), dict) else {}
     handed = [key for key, value in new.items() if value == "handed-off" and old.get(key) != "handed-off"]
-    if not handed:
+    if not handed or not (_dispatch_ids(merged) - _dispatch_ids(current)):
         return False
-    return bool(_dispatch_ids(merged) - _dispatch_ids(current))
+    owner = _owner_of(merged)
+    if not owner or owner not in _granted_ids(authorization):
+        return False
+    # The count belongs to rejection.owner. A preset rename alone does not
+    # move it; the handoff may arrive in a later patch, so compare with the
+    # owner the count still names.
+    rejection = _stored_rejection(current)
+    counted = rejection.get("owner")
+    if not isinstance(counted, str) or not counted.strip():
+        counted = _owner_of(current) if isinstance(current, dict) else None
+    return isinstance(counted, str) and bool(counted.strip()) and owner != counted.strip()
 
 
-def _effort_action(patch: dict[str, Any], rejection: dict[str, Any], writer: str) -> str | None:
-    """A Host-recorded higher known effort starts a segment. Unknown is not a raise."""
-    if writer != "host" or "effort" not in patch or not isinstance(patch.get("effort"), str):
+def _effort_action(patch: dict[str, Any], rejection: dict[str, Any], writer: str,
+                   authorization: dict[str, Any] | None, task: dict[str, Any]) -> str | None:
+    """Record a first Host effort token. Raise only on a proven higher one.
+
+    A bare string never replaces a stored effort and never resets. A raise
+    needs a Host writer, an application receipt that matches the requested
+    token, and that token on the owner's grant. ``EFFORT_RANK`` only orders
+    those two proven tokens. It is not a platform profile.
+    """
+    if writer != "host" or not isinstance(patch.get("effort"), str):
         return None
-    rank = EFFORT_RANK.get(patch["effort"].strip().lower())
-    if rank is None:
+    requested = patch["effort"].strip().lower()
+    if not requested:
         return None
     previous = rejection.get("effort")
-    previous_rank = EFFORT_RANK.get(previous) if isinstance(previous, str) else None
-    if previous_rank is None:
+    previous_token = previous.strip().lower() if isinstance(previous, str) and previous.strip() else None
+    applied = _applied_effort(requested, patch.get("effort_receipt"))
+    if applied is None:
+        if previous_token or requested not in EFFORT_RANK:
+            return None
         return "record"
-    if rank > previous_rank:
+    if applied not in EFFORT_RANK or not _effort_permitted(authorization, _owner_of(task), applied):
+        return None
+    if previous_token not in EFFORT_RANK:
+        return "record"
+    if EFFORT_RANK[applied] > EFFORT_RANK[previous_token]:
         return "raise"
     return None
 
 
-def _bind_review(patch: dict[str, Any], rejection: dict[str, Any]) -> int | None:
+def _incoming_binding(task: dict[str, Any], previous: dict[str, Any], patch: dict[str, Any],
+                      rejection: dict[str, Any]) -> dict[str, Any]:
+    """Dispatch item, delivery receipt, and review cycle, or a missing element.
+
+    One repair disposition names the dispatch item. When the patch names no
+    disposition, the task's single existing dispatch id is that item. A review
+    number in the patch is the cycle; otherwise the open slot is. A receipt
+    has to be in this patch to count as a delivery. The stored receipt is only
+    the identity of the same dispatch item when this patch omits evidence but
+    still names another element. A repair that names none of the three is not
+    a replay of the open slot.
+    """
+    if not any(key in patch for key in ("review", "evidence", "dispositions")):
+        # Naming none of the three is a new repair with no binding. Filling the
+        # open slot and the stored receipt here is what let a counted repair
+        # replay itself and hide the new one.
+        return {"dispatch": None, "receipt": None, "review": None,
+                "missing": True, "receipt_from_store": False}
+    missing = False
     if "review" in patch:
-        return _positive_int(patch.get("review"))
-    return _positive_int(rejection.get("open_review"))
+        review = _positive_int(patch.get("review"))
+        missing = review is None
+    else:
+        review = _positive_int(rejection.get("open_review"))
+        missing = review is None
+    if "dispositions" in patch:
+        dispatch = _submission_dispatch(patch)
+        if not dispatch:
+            missing = True
+    else:
+        ids = _dispatch_ids(task)
+        dispatch = next(iter(ids)) if len(ids) == 1 else None
+        if dispatch is None:
+            missing = True
+    receipt_from_store = False
+    if "evidence" in patch:
+        receipt = _submission_receipt(patch)
+        if receipt is None:
+            missing = True
+    else:
+        stored = previous.get("receipt")
+        if (isinstance(stored, str) and stored.strip() and dispatch
+                and dispatch == previous.get("dispatch")):
+            receipt = stored.strip()
+            receipt_from_store = True
+        else:
+            receipt = None
+            missing = True
+    return {"dispatch": dispatch, "receipt": receipt, "review": review,
+            "missing": missing, "receipt_from_store": receipt_from_store}
 
 
 def _submission_relation(rejection: dict[str, Any], incoming: dict[str, Any]) -> str:
-    """`new`, `replay`, or `unknown`. Unknown does not increment and is not zero."""
-    review = incoming.get("review")
-    stored = _positive_int(rejection.get("review"))
-    if isinstance(review, int):
-        if stored is None or review > stored:
-            return "new"
-        if review == stored:
-            return "replay"
-        return "late"
-    dispatch = incoming.get("dispatch")
-    receipt = incoming.get("receipt")
-    if dispatch and dispatch == rejection.get("dispatch"):
-        if receipt and rejection.get("receipt") and receipt != rejection.get("receipt"):
-            return "unknown"
+    """`new`, `replay`, `late`, `conflict`, or `unknown`.
+
+    `new` needs the dispatch item, the delivery receipt, and the review cycle
+    together. The same dispatch and receipt do not increment when only the
+    review number changes. A different delivery at an equal or older review is
+    a conflict, not a silent late result. Unknown does not increment.
+    """
+    if incoming.get("missing"):
+        return "unknown"
+    dispatch, receipt, review = incoming.get("dispatch"), incoming.get("receipt"), incoming.get("review")
+    if not dispatch or not receipt or not isinstance(review, int):
+        return "unknown"
+    stored_review = _positive_int(rejection.get("review"))
+    same = (dispatch == rejection.get("dispatch") and receipt == rejection.get("receipt")
+            and rejection.get("dispatch") and rejection.get("receipt"))
+    if same:
+        if stored_review is not None and review < stored_review:
+            return "late"
         return "replay"
-    if receipt and receipt == rejection.get("receipt") and not dispatch and not rejection.get("dispatch"):
-        return "replay"
-    return "unknown"
+    if incoming.get("receipt_from_store"):
+        return "unknown"
+    if stored_review is None or review > stored_review:
+        return "new"
+    return "conflict"
+
+
+def _keep_prior_repair(current: dict[str, Any] | None, merged: dict[str, Any]) -> None:
+    old = current.get("verdict") if isinstance(current, dict) else None
+    if isinstance(old, dict) and old.get("value") == "repair":
+        merged["prior_verdict"] = {
+            key: old[key] for key in ("value", "by", "host_turn", "why") if old.get(key) is not None
+        }
 
 
 def apply_task_rejection(current: dict[str, Any] | None, merged: dict[str, Any],
-                         patch: dict[str, Any], writer: str) -> None:
+                         patch: dict[str, Any], writer: str,
+                         authorization: dict[str, Any] | None = None) -> None:
     """Keep the current owner's repair count at the verdict transition.
 
-    The binding is the rejected submission's dispatch item, delivery receipt,
-    and review revision. A Host turn id is not that identity. A late older
-    review does not change the current count. `effort` and `review` on the
-    patch are consumed and are not stored as task keys.
+    The binding is the dispatch item, the delivery receipt, and the review
+    cycle together. A Host turn id is not that identity. `effort`, `review`,
+    and `effort_receipt` are consumed and are not stored as task keys.
+
+    Late and replay keep the stored binding. A new repair whose order cannot
+    be determined, after a positive count, stays a pending-binding duty: the
+    count and the old binding remain as a lower bound, and the new verdict is
+    kept. The projection publishes that duty. A later complete binding of a
+    new delivery increments once.
     """
-    if "review" in patch:
-        merged.pop("review", None)
-    if "effort" in patch:
-        merged.pop("effort", None)
+    for key in ("review", "effort", "effort_receipt"):
+        if key in patch:
+            merged.pop(key, None)
     previous = _stored_rejection(current)
     rejection = dict(previous)
     entered = merged.get("stage") == "review" and (not current or current.get("stage") != "review")
@@ -3773,20 +3924,39 @@ def apply_task_rejection(current: dict[str, Any] | None, merged: dict[str, Any],
         rejection["open_review"] = base + 1
     verdict = patch.get("verdict") if isinstance(patch.get("verdict"), dict) else None
     is_repair = bool(verdict and verdict.get("value") == "repair")
-    incoming_review = _bind_review(patch, rejection) if is_repair else None
-    incoming = None
-    relation = None
-    if is_repair:
-        incoming = {"dispatch": _submission_dispatch(patch), "receipt": _submission_receipt(patch),
-                    "review": incoming_review}
-        # Compare with the binding from before this patch. A segment reset below
-        # drops that binding, so the same review number can count again after it.
-        relation = _submission_relation(previous, incoming)
-    resets = _handoff_resets(current, merged) or _effort_action(patch, previous, writer) == "raise"
-    # A late older review, or a repair whose order cannot be bound, must not
-    # replace the current verdict or the current count. A real segment reset in
-    # this same patch still starts the new segment below.
-    if relation == "late" or (relation == "unknown" and _positive_int(previous.get("count")) and not resets):
+    effort_action = _effort_action(patch, previous, writer, authorization, merged)
+    resets = _handoff_resets(current, merged, authorization) or effort_action == "raise"
+    if resets:
+        for key in ("count", "dispatch", "receipt", "review", "pending"):
+            rejection.pop(key, None)
+        owner = _owner_of(merged)
+        if owner:
+            rejection["owner"] = owner
+        else:
+            rejection.pop("owner", None)
+    if effort_action in ("record", "raise") and isinstance(patch.get("effort"), str):
+        rejection["effort"] = patch["effort"].strip().lower()
+    incoming = _incoming_binding(merged, previous, patch, rejection) if is_repair else None
+    # A segment reset drops the old binding first, so this repair is judged
+    # against the new segment. Otherwise the comparison is the stored one.
+    relation = _submission_relation(rejection if resets else previous, incoming) if incoming else None
+    counted = _positive_int(previous.get("count"))
+    if is_repair and relation in ("unknown", "conflict") and counted and not resets:
+        kept = dict(rejection)
+        for key in ("count", "dispatch", "receipt", "review"):
+            if previous.get(key) is not None:
+                kept[key] = previous[key]
+            else:
+                kept.pop(key, None)
+        kept["pending"] = "binding"
+        kept["v"] = REJECTION_VERSION
+        merged["rejection"] = kept
+        _keep_prior_repair(current, merged)
+        return
+    # A late older review of the same delivery keeps the current verdict and
+    # the current count. A conflict or an unbound new repair does not: those
+    # are the pending duty above. A segment reset still falls through.
+    if relation == "late":
         if current and isinstance(current.get("verdict"), dict):
             merged["verdict"] = current["verdict"]
         elif "verdict" in patch:
@@ -3804,38 +3974,22 @@ def apply_task_rejection(current: dict[str, Any] | None, merged: dict[str, Any],
         else:
             merged.pop("rejection", None)
         return
-    effort_action = _effort_action(patch, rejection, writer)
-    if _handoff_resets(current, merged) or effort_action == "raise":
-        for key in ("count", "dispatch", "receipt", "review"):
-            rejection.pop(key, None)
-        owner = _owner_of(merged)
-        if owner:
-            rejection["owner"] = owner
-        else:
-            rejection.pop("owner", None)
-    if effort_action in ("record", "raise") and isinstance(patch.get("effort"), str):
-        rejection["effort"] = patch["effort"].strip().lower()
     if is_repair and incoming is not None and _submission_relation(rejection, incoming) == "new":
         count = _positive_int(rejection.get("count"))
         rejection["count"] = 1 if count is None else count + 1
-        if incoming["dispatch"]:
-            rejection["dispatch"] = incoming["dispatch"]
-        else:
-            rejection.pop("dispatch", None)
-        if incoming["receipt"]:
-            rejection["receipt"] = incoming["receipt"]
-        else:
-            rejection.pop("receipt", None)
-        if incoming["review"] is not None:
-            rejection["review"] = incoming["review"]
-            open_review = _positive_int(rejection.get("open_review")) or 0
-            if incoming["review"] > open_review:
-                rejection["open_review"] = incoming["review"]
+        rejection["dispatch"] = incoming["dispatch"]
+        rejection["receipt"] = incoming["receipt"]
+        rejection["review"] = incoming["review"]
+        rejection.pop("pending", None)
+        open_review = _positive_int(rejection.get("open_review")) or 0
+        if incoming["review"] > open_review:
+            rejection["open_review"] = incoming["review"]
         if not (isinstance(rejection.get("owner"), str) and rejection.get("owner")):
             owner = _owner_of(merged)
             if owner:
                 rejection["owner"] = owner
-    if any(key in rejection for key in ("count", "open_review", "owner", "effort", "review", "dispatch", "receipt")):
+    if any(key in rejection for key in (
+            "count", "open_review", "owner", "effort", "review", "dispatch", "receipt", "pending")):
         rejection["v"] = REJECTION_VERSION
         merged["rejection"] = rejection
     elif not previous:
@@ -4241,6 +4395,7 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
         # never stored, never refused as unknown record keys.
         merged.pop("effort", None)
         merged.pop("review", None)
+        merged.pop("effort_receipt", None)
     unknown = RECORD.unknown_record_keys(kind, merged)
     if unknown:
         raise StateRefusal(
@@ -4299,7 +4454,9 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
         if "verdict" in patch:
             merged["verdict"] = {**merged["verdict"], "by": "host"}
     if kind == "tasks":
-        apply_task_rejection(current if isinstance(current, dict) else None, merged, patch, args.writer)
+        apply_task_rejection(
+            current if isinstance(current, dict) else None, merged, patch, args.writer,
+            state.get("authorization") if isinstance(state.get("authorization"), dict) else None)
     merged["rev"] = int((current or {}).get("rev") or 0) + 1
     merged["updated_at"] = observed_at()
     merged["source"] = args.source
