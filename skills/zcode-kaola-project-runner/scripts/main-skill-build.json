@@ -1,5 +1,5 @@
 {
-  "build": "994ee2ee972f",
+  "build": "64ae7838b34b",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "ceabbc4071f13d9e5ff9731b964c017a7b8c657e3d9ed8a83450a4913a2de08c",
@@ -23,7 +23,7 @@
     "references/zcode-host-dispatch.md": "8ea2c0c95378c4ac24ae70066829e1d2217d5a2adf68d01913ff96a3d3ab6565",
     "references/zcode-native-skill-entry.md": "22f5e4ce50d92a0e264c71252616a9c2db8473817be1c5eb99d0a415f814918f",
     "scripts/kaola-dispatch.py": "f97f764f77c27727fe8758418e5e8e45acf4d5a76c6c666b0c057d16223e2d47",
-    "scripts/kaola-record-contract.py": "341a065451f6207e843d2f4d5355e284eb5f382271fada5b741e9b46e9becdb1"
+    "scripts/kaola-record-contract.py": "ba2ce83f1aaadf028b4ed15efe66e8f5381726c4d1a59171bb78d594871bc9e8"
   },
   "skill": "kaola-project-runner"
 }

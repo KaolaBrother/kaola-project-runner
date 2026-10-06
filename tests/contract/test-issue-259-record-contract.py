@@ -193,6 +193,8 @@ class RecordContract(unittest.TestCase):
                            ({"worker_pool_cap": 1, "grants": []}, "authorization.worker_pool_cap"),
                            ({"grants": [{"id": "droid/default", "count": 1, "shared_seat": "droid", "state": "granted"},
                                         {"id": "droid/opus", "count": 2, "shared_seat": "droid", "state": "granted"}]}, "authorization.grants.droid"),
+                           ({"grants": [{"preset_ids": ["droid/default", "droid/opus"], "count": 2, "shared_seat": "droid", "state": "granted"},
+                                        {"preset_ids": ["droid/core"], "count": 2, "shared_seat": "droid", "state": "granted", "special_requirements": {"droid/core": {"task_scope": "original narrow scope"}}}]}, "authorization.grants.droid"),
                            ({"grants": [{"id": "codex/default", "count": 1, "state": "granted", "model_switch": False}],
                              "model_switches": ["codex/default"]}, "authorization.model_switches")]:
             doc = json.loads(json.dumps(original)); doc["state"]["authorization"] = auth

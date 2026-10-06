@@ -495,6 +495,10 @@ def migrate_authorization_limits(auth: Any, delegator: bool = False, expert_ids:
                 if len(members) == 1:
                     canonical.append(first)
                     continue
+                if any("preset_ids" in member for member in members):
+                    blockers.append(refusal(f"authorization.grants.{group}", "one authoritative grouped row",
+                                            "Host: reconcile original overlapping choice/restriction rows before migration; do not infer or discard per-choice authority"))
+                    continue
                 keys = ("count", "state", "model_switch", "lifetime", "expires")
                 if any(any(row.get(key) != first.get(key) for key in keys) for row in members[1:]):
                     blockers.append(refusal(f"authorization.grants.{group}", "one consistent shared count/state/switch/lifetime",
