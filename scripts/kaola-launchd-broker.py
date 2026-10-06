@@ -91,8 +91,8 @@ class BrokerError(Exception):
                "detail": self.message, "holder_may_exist": bool(self.spawned), **self.facts}
         if self.spawned:
             out["recovery"] = ("An own holder or native agent may still run. Exact-stop this "
-                               "session through the Runner, or re-run broker cleanup after the "
-                               "manager state is readable.")
+                               "session through the Runner. Cleanup removes artifacts only and "
+                               "cannot reclaim a live effect.")
         return out
 
 
@@ -750,47 +750,61 @@ def _own_holder_effect_remains(record_dir: Path, platform: str, session: str, re
 
 
 def do_cleanup(args: argparse.Namespace) -> dict:
-    """Remove only this session's proven completed own attempt artifacts.
+    """Remove this session's proven completed own attempt artifacts.
 
-    A running job, an unknown manager state, or an exited job this session's
-    attempts do not own is left untouched. The manager is never unloaded on a
-    guess, and a nonowned or concurrent resource is preserved.
+    A running job, an unknown manager state, a nonowned exited job, or a leftover
+    attempt whose own holder/native agent is still alive is left untouched. The
+    manager is never unloaded on a guess, and a successful normal launch (which
+    leaves no attempt artifact) is never blocked because its worker is alive.
     """
     backend, _ = backend_for(args.backend)
     label = label_for(args.platform, args.session, args.repo)
     run_dir = run_dir_for(Path(args.run_base) if args.run_base else default_run_base(), label)
-    if backend != "unsupported":
-        state = os_job_state(backend, label)
-        if state == "running":
-            raise BrokerError("job-running",
-                              "the one-shot job for this session is still running; stop the holder "
-                              "through the Runner first", label=label)
-        if state == "unknown":
-            raise BrokerError("job-state-unknown",
-                              "the service-manager state is unreadable; the owned job and its "
-                              "artifacts stay untouched", label=label)
-        if state == "exited":
-            owned = any(os_job_owns(backend, label, spec)
-                        for spec in run_dir.glob("attempt-*/spec.json"))
-            if not owned:
-                raise BrokerError("job-not-owned",
-                                  "an exited job for this session is not owned by a recorded "
-                                  "attempt; leave it", label=label)
-            os_unload(backend, label)
+    record_dir = Path(args.record_dir) if getattr(args, "record_dir", None) else None
+    state = os_job_state(backend, label) if backend != "unsupported" else "absent"
+    if state == "running":
+        raise BrokerError("job-running",
+                          "the one-shot job for this session is still running; stop the holder "
+                          "through the Runner first", label=label)
+    if state == "unknown":
+        raise BrokerError("job-state-unknown",
+                          "the service-manager state is unreadable; the owned job and its "
+                          "artifacts stay untouched", label=label)
+    attempts = sorted(run_dir.glob("attempt-*")) if run_dir.exists() else []
+    if attempts:
+        # A leftover attempt means submit did not complete it. Keep it while this
+        # session's own holder or native agent is still alive.
+        if record_dir is None:
+            raise BrokerError("attempt-custody-unknown",
+                              "leftover attempt artifacts exist and no record directory was given "
+                              "to prove the effect is gone; pass --record-dir", label=label)
+        if _own_holder_effect_remains(record_dir, args.platform, args.session, args.repo):
+            raise BrokerError("attempt-unresolved",
+                              "a failed attempt left an own holder or native agent alive; exact-stop "
+                              "this session through the Runner before cleanup. Cleanup removes "
+                              "artifacts only and cannot reclaim a live effect.", label=label)
+    if state == "exited":
+        owned = any(os_job_owns(backend, label, spec) for spec in
+                    (attempt / "spec.json" for attempt in attempts))
+        if not owned:
+            raise BrokerError("job-not-owned",
+                              "an exited job for this session is not owned by a recorded "
+                              "attempt; leave it", label=label)
+        os_unload(backend, label)
     # Remove only attempt dirs no loaded job references any more.
     removed = 0
-    if run_dir.exists():
-        for attempt in sorted(run_dir.glob("attempt-*")):
-            if backend != "unsupported" and os_job_owns(backend, label, attempt / "spec.json"):
-                continue
-            remove_quiet(attempt)
-            removed += 1
-        try:
-            if not any(run_dir.iterdir()):
-                remove_quiet(run_dir)
-        except OSError:
-            pass
-    return {"schema": SCHEMA, "result": "cleaned", "label": label, "attempts_removed": removed}
+    for attempt in attempts:
+        if backend != "unsupported" and os_job_owns(backend, label, attempt / "spec.json"):
+            continue
+        remove_quiet(attempt)
+        removed += 1
+    try:
+        if run_dir.exists() and not any(run_dir.iterdir()):
+            remove_quiet(run_dir)
+    except OSError:
+        pass
+    return {"schema": SCHEMA, "result": "cleaned", "label": label,
+            "attempts_removed": removed, "unresolved_effect": False}
 
 
 # --------------------------------------------------------------------------- cli

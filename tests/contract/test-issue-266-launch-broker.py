@@ -167,7 +167,8 @@ class Sandbox:
 
     def stop(self) -> dict:
         return self.broker("cleanup", "--platform", self.platform, "--session", self.session,
-                           "--repo", self.repo.as_posix(), "--run-base", str(self.launch_base))
+                           "--repo", self.repo.as_posix(), "--run-base", str(self.launch_base),
+                           "--record-dir", str(self.record_dir))
 
     def client(self, command: str, *args: str, timeout: float = 60) -> dict:
         argv = [PYTHON, str(CLIENT), self.platform, command, "--repo", self.repo.as_posix(),
@@ -423,22 +424,54 @@ def test_recovery_source_probes(sb: Sandbox) -> None:
         try:
             module.do_cleanup(argparse.Namespace(backend="launchd", platform=sb.platform,
                               session=sb.session, repo=sb.repo.as_posix(),
-                              run_base=str(sb.launch_base)))
+                              run_base=str(sb.launch_base), record_dir=str(sb.record_dir)))
         except module.BrokerError as exc:
             reason = exc.code
         check(reason == "job-state-unknown",
               "cleanup leaves an unknown manager state untouched", reason=reason)
         check(attempt.exists(), "cleanup keeps attempt evidence on an unknown state")
+
         module.os_job_state = lambda backend, label: "exited"
         reason = None
         try:
             module.do_cleanup(argparse.Namespace(backend="launchd", platform=sb.platform,
                               session=sb.session, repo=sb.repo.as_posix(),
-                              run_base=str(sb.launch_base)))
+                              run_base=str(sb.launch_base), record_dir=str(sb.record_dir)))
         except module.BrokerError as exc:
             reason = exc.code
         check(reason == "job-not-owned",
               "cleanup does not unload a nonowned exited job", reason=reason)
+
+        # Absent manager with the SAME matching live native agent: cleanup must not
+        # erase the sole failed-attempt evidence.
+        agent = subprocess.Popen(["sleep", "300"])
+        sb.track(agent.pid)
+        write_private(sb.record_dir / "record.json", json.dumps({
+            "platform": sb.platform, "session": sb.session, "repo": sb.repo.as_posix(),
+            "holder_pid": 2 ** 30, "agent_pid": agent.pid, "agent_pgid": agent.pid,
+            "state": "ready"}))
+        module.os_job_state = lambda backend, label: "absent"
+        reason = None
+        try:
+            module.do_cleanup(argparse.Namespace(backend="launchd", platform=sb.platform,
+                              session=sb.session, repo=sb.repo.as_posix(),
+                              run_base=str(sb.launch_base), record_dir=str(sb.record_dir)))
+        except module.BrokerError as exc:
+            reason = exc.code
+        check(reason == "attempt-unresolved",
+              "cleanup keeps a failed attempt whose native agent is alive", reason=reason)
+        check(attempt.exists(), "cleanup keeps the unresolved attempt artifact")
+
+        # After the exact identities are gone, cleanup removes the artifact.
+        os.kill(agent.pid, 9)
+        wait_until(lambda: not pid_alive(agent.pid), 5, "fixture agent gone")
+        cleaned = module.do_cleanup(argparse.Namespace(
+            backend="launchd", platform=sb.platform, session=sb.session,
+            repo=sb.repo.as_posix(), run_base=str(sb.launch_base),
+            record_dir=str(sb.record_dir)))
+        check(cleaned.get("result") == "cleaned" and not attempt.exists()
+              and cleaned.get("unresolved_effect") is False,
+              "cleanup removes the attempt after the exact identities are gone", cleaned=cleaned)
     finally:
         module.os_job_state = original_state
         module.os_job_owns = original_owns
