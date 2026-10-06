@@ -86,10 +86,14 @@ Codex and generic do not.
   recovery; there is no default Workflow command, heartbeat, cadence, lifecycle, or completion policy.
 - Scoped exception (#255, Host carrier and Sideagent nodes only): when a Project Runner Host binds
   its Sideagent with `"mode": "node"`, that Host's holder starts one fresh node per batch of Host
-  business changes from an ended Host turn (worker events still go to the Host), from the recorded
+  business changes or verified session-bound completed HOST compaction recovery inputs
+  at an ended Host turn (worker events still go to the Host), from the recorded
   Runner argument list (never a shell), sends it one batch prompt, reads its state checkpoint,
   wakes the Host once when that changed the Host's attention, and exact-stops it by holder. An explicit `--preserve-dispatched-workers` Host stop keeps
-  that Host's proven worker trees. Standalone Platform Runner transport, default stop and every
+  that Host's proven worker trees. The carrier registers mechanical recovery inputs
+  and failures through the locked state tool, without Host business writes; the node
+  checks original scoped sources and its checkpoint names the actual sent input,
+  batch and node holder. Native Skill reload remains a separate duty. Standalone Platform Runner transport, default stop and every
   session not bound this way are unchanged.
 - The generated Skill `kaola-project-runner` (display name Project Runner) is the main control-plane
   Skill: it owns intake recovery, heartbeat, dispatch, acceptance-before-finalize, and close-out

@@ -1,12 +1,12 @@
 {
-  "build": "5cd77da31a36",
+  "build": "bdc0ad772af3",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "ceabbc4071f13d9e5ff9731b964c017a7b8c657e3d9ed8a83450a4913a2de08c",
     "agents/openai.yaml": "7e353e90103c16b5f3d27855f63087cc4785e77b4d5a4d36118ba3843435640e",
     "references/dispatch-collect.md": "d73c0fb57bd3f0d27ab84020697c5976f59c934305cc6b2b3aad6a3b8b02882d",
     "references/doc-maintenance.md": "6970e4387cf71862da5860710db033582c66ebf7fbc62e2fbda2358f4b25f2a5",
-    "references/duty-reconcile.md": "0c9257570e7ddb072aaabf03449dcfe29cb1b19d80303c4553cda614284df178",
+    "references/duty-reconcile.md": "ab59435d13dcf29f462eeb7813a8d3248265aa48f2364c10acd3090d1c834c4d",
     "references/heartbeat-skeleton.md": "095a0f37279530279e25961729d901b25084c768b6c4160fa55c7d5e0ab78d2e",
     "references/host-entry-matrix.md": "8a1d2b9c4c165fecfe1d1d6c1ee57bdc07c7c508bce828d746b51b06e8fd5370",
     "references/host-startup.md": "897028f4fdf61ea34f96675f98cbf5dc1dc4d7b2d8fc0b386ae749c0b6557637",
@@ -16,14 +16,14 @@
     "references/public-research.md": "86e2ad1cd11840fd58900cde429e9b45457f149b67fa91a32e5fe6429a58407c",
     "references/qa-evidence.md": "6793efce6a91c9348188c277c801fdabb068c0c9189fe586b0543a6e45dd9c0b",
     "references/quota-packages.md": "34ccde184f59fc6f9adb8d008fbb3fb2f8037d8d70480f7738cdab1b2417dbdd",
-    "references/sideagent-node.md": "fc3e335e2e40f794ef452095cc1b253db6ab6d6ac82d1002b86523fab148d6db",
+    "references/sideagent-node.md": "884fc413fdc01c5f094692b00109fb7ba824efe8236d760fb2a89b820a3f3eae",
     "references/task-failure.md": "c3726ca63b29ef01213043589cd3579ee27e6b6ba8eb7d143edb35c75da84a5b",
     "references/worker-profiles.md": "71024a8821e61d762dbe9ace6d5cc75b247d91346d997c5f2f970f83eb57bb67",
     "references/workflow-worktree.md": "814df8b1c8278771381fd683ad1961a6c7afe1244affa0891b28cf6cc14f7ce7",
     "references/zcode-host-dispatch.md": "8ea2c0c95378c4ac24ae70066829e1d2217d5a2adf68d01913ff96a3d3ab6565",
     "references/zcode-native-skill-entry.md": "22f5e4ce50d92a0e264c71252616a9c2db8473817be1c5eb99d0a415f814918f",
-    "scripts/kaola-dispatch.py": "0868fe1617fa24d1ba89f8ccc98d40f75ea66eacc42872a375107cfeae8e54d6",
-    "scripts/kaola-record-contract.py": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda"
+    "scripts/kaola-dispatch.py": "01ad8e11a533c9a059ccb2d0e4bb4d97b5a0c6174e8572cbc5e8ac9d26b298f7",
+    "scripts/kaola-record-contract.py": "b6bb2cb13bee0ba59cd1839bbff6ef6f7114d1f129aa39cedced59235cc1d848"
   },
   "skill": "kaola-project-runner"
 }

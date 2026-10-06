@@ -246,7 +246,7 @@ HEARTBEAT_PROMPT_MAX_BYTES = 65536
 HEARTBEAT_STATE_FILE_MAX_BYTES = 1048576
 HEARTBEAT_STATE_SCHEMA = "kaola-heartbeat-prompt/2"
 HOLDER_FEATURES = ("heartbeat-state/2", "sideagent-relay/1", "preserve-dispatched/1", "steer-after-turn/1",
-                   "sideagent-node/1", "project-compact-notice/1")
+                   "sideagent-node/1", "project-compact-notice/1", "host-compact-maintenance/1")
 # Issue #255 node mode: the Host carrier starts one fresh maintenance node per
 # batch from the binding's exact Runner argv (never a shell string), and
 # exact-stops it after its turn end. Bounds on that one start and stop only.
@@ -2076,8 +2076,11 @@ class Holder:
         self.write_record()
         capabilities = {"fs": {"readTextFile": False, "writeTextFile": False},
                         "terminal": False}
+        if self.args.platform == "codex":
+            capabilities["session"] = {"compaction": {}}
         if self.init_meta:
             capabilities["_meta"] = self.init_meta
+        self.events.append({"kind": "initialize_request", "clientCapabilities": capabilities})
         request_id = self.agent.send_request(
             "initialize",
             {
@@ -3319,6 +3322,12 @@ class Holder:
         binding = self._node_binding()
         if binding is not None:
             return self._node_relay_pass(binding)
+        if self.session_role == "host" and not self.stop_requested:
+            doc = self._lifecycle_state()
+            recovery = self._node_recovery_pending(doc)
+            through = self._node_host_pending(doc)
+            if recovery or through is not None:
+                self._maintenance_failure("binding-or-recipe-unavailable", through, recovery)
         if not self.pending_worker_events:
             return {}
         target = self._sideagent_relay_target()
@@ -3433,8 +3442,11 @@ class Holder:
         current = doc.get("host_revision")
         maintenance = (doc.get("state") or {}).get("maintenance") or {}
         handled = maintenance.get("handled_host_revision") or 0
+        returned = (((doc.get("state") or {}).get("alerts") or {}).get("maintenance-returned") or {}).get("inputs") or {}
+        returned_through = max([0] + [row["host_revision_through"] for row in returned.values()
+                                      if isinstance(row, dict) and isinstance(row.get("host_revision_through"), int)])
         after = max(int(handled) if isinstance(handled, int) else 0,
-                    self.node.get("sent_through") or 0)
+                    self.node.get("sent_through") or 0, returned_through)
         if (isinstance(current, int) and not isinstance(current, bool)
                 and current > after):
             selector = getattr(_RECORD, "host_changes", None)
@@ -3444,6 +3456,100 @@ class Holder:
                 return None
             return current
         return None
+
+    def _node_recovery_pending(self, doc: dict[str, Any] | None) -> dict[str, Any] | None:
+        state = (doc or {}).get("state") or {}
+        item = (state.get("maintenance") or {}).get("recovery_input")
+        if not isinstance(item, dict) or not isinstance(item.get("seq"), int):
+            return None
+        ident = f"recovery#{item['seq']}"
+        # A returned obligation stays visible. A scoped request creates the
+        # next input; it does not replay a failed or unknown batch.
+        returned = ((state.get("alerts") or {}).get("maintenance-returned") or {}).get("inputs") or {}
+        if ident in returned or item["seq"] <= (self.node.get("recovery_sent") or 0):
+            return None
+        return item
+
+    def _maintenance_tool(self, argv: list[str]) -> dict[str, Any]:
+        tool = self._state_tool()
+        if tool is None:
+            return {"error": "state tool unavailable; Host must recover from the original receipt"}
+        env = dict(os.environ)
+        env[DISPATCHER_ENV] = json.dumps(self.dispatcher_identity(), sort_keys=True)
+        env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_dir.parent.parent.parent)
+        try:
+            run = subprocess.run([sys.executable, tool, "state", "recovery-input", "--file",
+                                  str(Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"), *argv],
+                                 cwd=self.args.repo, env=env, stdin=subprocess.DEVNULL,
+                                 capture_output=True, text=True)
+            try:
+                value = json.loads(run.stdout)
+            except ValueError:
+                return {"error": "state entry unavailable", "exit": run.returncode,
+                        "detail": "read original tool stderr; update the matching state tool at a safe boundary"}
+            if run.returncode:
+                return {"error": value, "exit": run.returncode}
+            return value
+        except (OSError, ValueError) as exc:
+            return {"error": str(exc)}
+
+    def _register_compact_maintenance(self, cursor: int) -> None:
+        if self.stop_requested or self.session_role != "host":
+            return
+        self.node["registration_cursor"] = cursor
+        if self.node.get("registration_active"):
+            return
+        self.node["registration_active"] = True
+        def register():
+            receipt = self._maintenance_tool(["--kind", "host-compaction", "--source", "completed-host-signal",
+                                              "--signal-cursor", str(cursor)])
+            with self.worker_events_lock:
+                self.node.pop("registration_active", None)
+                if "error" not in receipt:
+                    self.events.append({"kind": "host_compact_maintenance_registered", "signal_cursor": cursor,
+                                        "input": receipt.get("value")})
+                    if self.node.get("registration_cursor") == cursor:
+                        self.node.pop("registration_cursor", None)
+                else:
+                    self.events.append({"kind": "host_compact_maintenance_registration_failed",
+                                        "signal_cursor": cursor, "receipt": receipt})
+                    key = f"register:{cursor}"
+                    if self.node.get("registration_reported") != key:
+                        self.node["registration_reported"] = key
+                        self._node_to_host(self.dispatcher_identity(),
+                            f"Host compact maintenance registration failed; read {self.events.path}#{cursor}; "
+                            "repair the state tool and request bounded reconciliation from this original signal")
+            self._kick_worker_events()
+        threading.Thread(target=register, daemon=True).start()
+
+    def _maintenance_failure(self, why: str, through: Any = None,
+                             recovery: dict[str, Any] | None = None, wake: bool = True) -> None:
+        if self.session_role != "host":
+            return
+        doc = self._lifecycle_state()
+        recovery = recovery or (self.node.get("recovery_input") if self.node.get("batch") else None)
+        recovery = recovery or self._node_recovery_pending(doc)
+        ident = f"recovery#{recovery['seq']}" if recovery else f"batch:{self.node.get('batch') or through}"
+        if recovery is None and through is None and not self.node.get("batch"):
+            return
+        key = (ident, why)
+        if self.node.get("failure_reported") == key:
+            return
+        self.node["failure_reported"] = key
+        evidence = f"{self.events.path}#{self.events.cursor}"
+        binding = (((doc or {}).get("state") or {}).get("sideagent") or self.dispatcher_identity())
+        if wake:
+            self._node_to_host(binding, f"maintenance {ident}: {why}; Host must reconcile original receipts, "
+                                       "repair the binding and request a bounded check", record=False)
+        def record_failure():
+            receipt = self._maintenance_tool(["--source", "carrier-maintenance-failure", "--fail", why,
+                                              "--input", ident, "--evidence", evidence,
+                                              *(["--through-host-revision", str(through)]
+                                                if isinstance(through, int) else [])])
+            self.events.append({"kind": "sideagent_maintenance_failure_recorded", "input": ident,
+                                "reason": why, "receipt": receipt})
+            self._kick_worker_events()
+        threading.Thread(target=record_failure, daemon=True).start()
 
     def _node_relay_pass(self, binding: dict[str, Any]) -> dict[str, Any]:
         """Node mode of the relay. Caller holds ``worker_events_lock``.
@@ -3505,8 +3611,9 @@ class Holder:
             return result
         doc = self._lifecycle_state()
         through = self._node_host_pending(doc)
+        recovery = self._node_recovery_pending(doc)
         target = self._sideagent_relay_target()
-        if through is None:
+        if through is None and recovery is None:
             if (doc and isinstance(doc.get("host_revision"), int)
                     and not isinstance(doc["host_revision"], bool)
                     and callable(getattr(_RECORD, "host_changes", None))
@@ -3520,6 +3627,12 @@ class Holder:
                                  args=(target["holder_instance_id"],), daemon=True).start()
             return result
         if target is None:
+            old = self._node_record(binding) or {}
+            old_holder = old.get("holder_instance_id")
+            if old_holder and self._node_holder_alive(binding, old_holder):
+                node["stop_unconfirmed"] = {"holder": old_holder}
+                self._maintenance_failure("old-node-live", through, recovery)
+                return result
             node.update(phase="starting", binding=fingerprint)
             self.node_start = threading.Thread(target=self._start_node, args=(binding, fingerprint),
                                                daemon=True)
@@ -3528,17 +3641,24 @@ class Holder:
             return result
         maintenance = ((doc or {}).get("state") or {}).get("maintenance") or {}
         handled = maintenance.get("handled_host_revision") or 0
-        batch = "b-" + hashlib.sha256(json.dumps([target["holder_instance_id"], through])
+        through = through if through is not None else int(handled)
+        batch = "b-" + hashlib.sha256(json.dumps([target["holder_instance_id"], through, recovery])
                                       .encode("utf-8")).hexdigest()[:12]
-        receipt = self._relay_send(target, self._node_prompt(batch, handled, through))
+        receipt = self._relay_send(target, self._node_prompt(batch, handled, through, recovery))
         error = receipt.get("error") if isinstance(receipt.get("error"), dict) else None
         if (error is None and receipt.get("outcome") == "in_progress"
                 and isinstance(receipt.get("prompt_fingerprint"), str)):
             node.update(batch=batch, fingerprint=receipt["prompt_fingerprint"], sent_through=through,
-                        attention_sent=target["attention"])
+                        attention_sent=target["attention"], recovery_input=recovery,
+                        recovery_sent=(recovery or {}).get("seq", node.get("recovery_sent", 0)))
             self.events.append({"kind": "sideagent_node_batch", "batch": batch,
                                 "target_holder": target["holder_instance_id"],
-                                "host_revision_through": through,
+                                "host_revision_through": through, "host_holder": self.holder_instance_id,
+                                "recovery_input": recovery,
+                                "recovery_alerts": {ident: value for ident, value in
+                                    (((doc or {}).get("state") or {}).get("alerts") or {}).get(
+                                        "maintenance-returned", {}).get("inputs", {}).items()
+                                    if ident.startswith("recovery#")},
                                 "prompt_fingerprint": receipt["prompt_fingerprint"]})
             result["receipt"] = {"batch": batch, "target_session": session}
         else:
@@ -3548,6 +3668,7 @@ class Holder:
             # Recorded once and not resent: the node is stopped and no other
             # starts until the binding changes.
             node.update(failed={"binding": fingerprint, "code": reason})
+            self._maintenance_failure(reason, through, recovery, wake=False)
             self._node_to_host(binding, f"sideagent node {target['holder_instance_id']} did not admit "
                                         f"batch {batch} ({reason}); {self._unhandled(through)}")
             holder = target["holder_instance_id"]
@@ -3564,10 +3685,14 @@ class Holder:
             return f"host revision {handled + 1}..{through} not handled"
         return "no Host change left unhandled"
 
-    def _node_to_host(self, binding: dict[str, Any], reason: str) -> None:
+    def _node_to_host(self, binding: dict[str, Any], reason: str, record: bool = True) -> None:
         """Stage a node failure for the Host like a worker event: there is
         no node turn end to carry it, and an unknown outcome is the Host's to
         see. Caller holds ``worker_events_lock``."""
+        if record and (self.node.get("batch") or self._node_host_pending(self._lifecycle_state()) is not None
+                       or self._node_recovery_pending(self._lifecycle_state())):
+            self._maintenance_failure(reason, self.node.get("sent_through") or
+                                      self._node_host_pending(self._lifecycle_state()), wake=False)
         cursor = self.events.append({"kind": "sideagent_node_returned", "reason": reason})
         self.pending_worker_events.append({
             "schema": WORKER_EVENT_SCHEMA, "event_id": f"{binding['platform']}/{binding['session']}/node/{cursor}",
@@ -3575,7 +3700,7 @@ class Holder:
             "repo": self.args.repo, "reason": reason, "event_cursor": cursor,
             "staged_at": round(time.time(), 3), "host_owned": True})
 
-    def _node_prompt(self, batch: str, handled: Any, through: int) -> str:
+    def _node_prompt(self, batch: str, handled: Any, through: int, recovery: dict[str, Any] | None = None) -> str:
         lines = [f"{RELAY_SCHEMA}: maintenance node batch {batch} from the {self.host_name} Host holder "
                  f"{self.args.session}"]
         if isinstance(handled, int) and through > handled:
@@ -3595,6 +3720,20 @@ class Holder:
                      f"--source {batch} --batch {batch} --through-host-revision {through} "
                      f"--entries '[{{\"input\": ID, \"applied\": "
                      f"[\"tasks/ID\"]}} or {{\"input\": ID, \"retained\": \"tasks/ID\" or \"section/NAME\"}}, ...]'`.")
+        if recovery:
+            lines.append(f"Recovery input recovery#{recovery['seq']}: {json.dumps(recovery, sort_keys=True)}. "
+                         f"Use --recovery-seq {recovery['seq']} in this batch's checkpoint. Read original current "
+                         f"sources: {Path(self.args.repo) / 'AGENTS.md'}, "
+                         f"{Path(self.args.repo) / '.kaola/delegator-heartbeat.json'}, Workflow state and "
+                         "the main checkout's immutable mission ledger; task dispatch locators lead to the "
+                         f"original index and Runner records under {self.record_dir.parent.parent.parent}. "
+                         "Check current goal/grants (authorization), pending decisions/duties (duties), and "
+                         "task-dispatch-result-reclaim links (links). Record one entry with input recovery#N, "
+                         "checked:{authorization:[original refs],duties:[original refs],links:[original refs]}, "
+                         "and unavailable:{scope:reason} for a scope whose originals cannot be read. "
+                         "Unavailable originals stay Host recovery obligations; empty sources cannot PASS. "
+                         "Related recovery alerts may be checked in separate scoped entries; do not clear "
+                         "unread, newer or unrelated alert inputs. Preserve original Host retirement references.")
         lines.append("Role limits: you are a maintenance node, not the Host or a worker. Records you write "
                      "carry source pointers (record ids, receipt or log paths, event ids), never a restated, "
                      "summarized or judged worker result; the Host reads originals. Do not dispatch, start "
@@ -3645,7 +3784,10 @@ class Holder:
             # is the carrier's fact. An omitted or lowered range left Host
             # changes unhandled, which the next batch would not re-select.
             short_range = ours and not (isinstance(covered, int) and covered >= sent)
-            verified = bool(ours and last.get("verified") and not short_range
+            recovery = node.get("recovery_input")
+            recovery_covered = (not recovery or (ours and (last.get("recovery") or {}).get("input") == recovery
+                                and f"recovery#{recovery['seq']}" in (last.get("settled") or [])))
+            verified = bool(ours and last.get("verified") and not short_range and recovery_covered
                             and end.get("turn_outcome") == "turn_completed")
             attention = attention_fingerprint(body) if doc else None
             changed = (verified and attention is not None and attention != node.get("attention_sent")
@@ -3670,6 +3812,9 @@ class Holder:
                                 **({"checkpoint_through": covered} if ours else {}),
                                 "host_woken": bool(end.get("host_owned")),
                                 **({"attention_changed": True} if changed else {})})
+            if not verified:
+                self._maintenance_failure("checkpoint-partial" if ours else "checkpoint-missing", sent,
+                                          recovery, wake=False)
             holder = node["holder"]
             node.update(phase="stopping", batch=None, fingerprint=None)
             threading.Thread(target=self._stop_node, args=(holder,), daemon=True).start()
@@ -3790,6 +3935,8 @@ class Holder:
                 self.node.update(phase="stopped", stop_unconfirmed={"holder": holder})
                 self.events.append({"kind": "sideagent_node_stop_unconfirmed", "holder": holder,
                                     "receipt": receipt})
+                self._maintenance_failure("stop-unconfirmed", self.node.get("sent_through"),
+                                          self.node.get("recovery_input"))
             else:
                 self.node.update(phase="stopped")
                 self.events.append({"kind": "sideagent_node_stopped", "holder": holder,
@@ -3970,11 +4117,14 @@ class Holder:
                 self.compact_reload = module.CompactReloadTracker()
             if not self.compact_reload.observe(signal):
                 return
-        self.events.append({"kind": "compact_reload_detected",
+        cursor = self.events.append({"kind": "compact_reload_detected",
                             "source": signal.source,
                             "occurrence_id": signal.occurrence_id,
-                            "session_id": signal.session_id})
+                            "session_id": signal.session_id, "holder": self.holder_instance_id,
+                            "role": self.session_role, "signal": message})
         self.write_record()
+        if self.session_role == "host":
+            self._register_compact_maintenance(cursor)
         self._deliver_compact_reload()
 
     def _deliver_compact_reload(self) -> dict[str, Any]:
@@ -4357,8 +4507,17 @@ class Holder:
         confirmed: dict[str, int] = {}
         overflow_generation = 0
         overflow_confirmed = 0
+        compact_pending = {}
         for entry in self.events.read_since(0, None):
             kind = entry.get("kind")
+            if (kind == "compact_reload_detected" and entry.get("role") == "host"
+                    and entry.get("session_id") == self.acp_session_id):
+                compact_pending[entry["cursor"]] = entry
+            elif kind == "host_compact_maintenance_registered":
+                through_cursor = entry.get("signal_cursor")
+                if isinstance(through_cursor, int):
+                    compact_pending = {cursor: signal for cursor, signal in compact_pending.items()
+                                       if cursor > through_cursor}
             if kind == "worker_event":
                 event = entry.get("event")
                 if isinstance(event, dict) and isinstance(event.get("event_id"), str):
@@ -4398,6 +4557,8 @@ class Holder:
             overflow_generation += 1
             self.events.append({"kind": "worker_event_overflow",
                                 "generation": overflow_generation})
+        if compact_pending and self.session_role == "host":
+            self._register_compact_maintenance(max(compact_pending))
         self.pending_worker_events = pending
         self.confirmed_worker_events = {}
         self.confirmed_worker_events_partial = False
@@ -5761,8 +5922,9 @@ class Holder:
                     # Issue #255: the same tick offers new maintenance inputs
                     # to a node; it never re-delivers to the Host.
                     with self.worker_events_lock:
-                        if self._node_binding() is not None:
-                            self._relay_pass()
+                        if self.node.get("registration_cursor") and not self.node.get("registration_active"):
+                            self._register_compact_maintenance(self.node["registration_cursor"])
+                        self._relay_pass()
                 except Exception:
                     pass
             if self.agent.exited.is_set() and not self.turn["active"]:
@@ -5921,6 +6083,9 @@ def run_probe(args: argparse.Namespace) -> int:
     ).start()
     capabilities = {"fs": {"readTextFile": False, "writeTextFile": False},
                     "terminal": False}
+    if args.platform == "codex":
+        capabilities["session"] = {"compaction": {}}
+    result["client_capabilities"] = capabilities
     init_meta = parse_init_meta(getattr(args, "init_meta", "") or "")
     if init_meta:
         capabilities["_meta"] = init_meta

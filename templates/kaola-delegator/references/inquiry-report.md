@@ -72,7 +72,14 @@ report has these five parts, in order. An empty part says
    again each time, coalesced, never escalated by elapsed time alone. With a
    node-mode Sideagent, `maintenance.last_verified` (batch, node, time) beside
    open duties shows whether maintenance still progresses; a
-   `maintenance-returned` alert is the Host's to resolve.
+   `maintenance-returned` alert is the Host's to resolve. The view also shows
+   pending Host changes and `maintenance.recovery_input`/`recovery_seq`. Correlate
+   an owed batch, failed/missing recipe, checkpoint or stop with original receipts.
+   Ask the sole Host for bounded reconciliation from those sources; it can call
+   `state recovery-input --kind request` without a new business revision. Keep your
+   recovery watch until scoped action evidence. Equal sequence, elapsed time or
+   generic `last_verified` alone proves neither failure nor settlement. Reuse a
+   justified in-flight node; do not control workers or request an all-state audit.
 3. Tasks in progress (`doing`).
 4. Tasks to do (`todo`).
 5. This round's outcomes and next steps.

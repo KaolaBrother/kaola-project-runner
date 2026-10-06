@@ -7,8 +7,9 @@ mismatch, an unreconciled latest owner change, genuinely unaccounted coverage
 after a handoff, or an explicit owner/Delegator request calls for one bounded,
 read-only Sideagent check. Remembered confidence alone is insufficient. Reuse
 sufficient unchanged evidence for the same scope and candidate; reuse a check
-already in flight. A heartbeat, issue completion, compaction, Host replacement
-or multi-issue closeout alone does not require an audit.
+already in flight. A heartbeat, issue completion, Host replacement or multi-issue closeout alone
+does not require an audit. A verified completed HOST compaction owes the bounded
+recovery check below; a worker compaction owes no node.
 
 ## Brief and sources
 
@@ -64,20 +65,11 @@ Write in accordance with ASD-STE100.
 
 ## Independent Delegator inquiry and scheduling
 
-The Delegator may initiate a request during its existing inquiry even when the
-Host has not requested a check. For example: “Please check this mandate for
-omitted duties against these goal/stop, correction and run-record pointers;
-reuse the same in-flight check or sufficient unchanged result.” The sole Host
-deduplicates and, if needed, assigns an authorized Sideagent. This preserves
-independent initiation without a second inner-worker controller; an
-unresponsive Host may delay the check, not transfer control to the Delegator.
-An interval without a check is not alone a failure or reason for another audit.
-
-Reuse existing Delegator `cadence`, `timer_owner` and the static Skill/project
-entry: the single native timer wakes an inquiry, not an unconditional Sideagent
-every interval. This gives the owner a recurring opportunity for independent
-reconciliation while preserving scoped pauses, current authorization and Host
-identity recovery under the existing snapshot/handoff rules.
+The Delegator can request one source-scoped check during its existing inquiry.
+The sole Host deduplicates it and uses an authorized Sideagent or sufficient
+unchanged evidence. An unresponsive Host delays this path; it does not transfer
+worker control. The existing `cadence`, `timer_owner` and static entry wake an
+inquiry, not a node every interval. No interval alone calls for an audit.
 
 ## Owner changes at a decision boundary
 
@@ -100,9 +92,55 @@ without an extra reply. Identical values do not prove a one-shot action ran;
 urgent stops require actual cessation evidence. Keep independent pending
 actions and partial effects, not one scalar or an exactly-once claim.
 
-Authority/scope precede time. Later explicit owner direction may supersede
-earlier direction, including reauthorization after a stop. Stale drafts
-cannot overwrite newer grants or runtime revocation. Re-evaluate only affected
-items. Recover ambiguous sends, partial fan-out and interrupted Host/Sideagent
-from existing records before replaying admitted work; unaffected authorized
-work continues. No new queue, marker/revision protocol, ledger or scheduler.
+Later owner direction can supersede earlier scope, including a stop. Preserve
+newer grants/revocation. Reconcile ambiguous sends, partial effects and interrupted
+Host/Sideagent from original records before replay; continue unaffected work.
+Use no new queue, marker protocol, ledger or scheduler.
+
+## Recovery input and checkpoint
+
+The exact verified Host registers an inquiry without a business write:
+
+```bash
+$S recovery-input --file FILE --kind request --source '<inquiry>' --evidence '<original locator>'
+```
+
+The carrier uses `--kind host-compaction --signal-cursor C`. The tool verifies the
+original completed, session-bound HOST event. Kind alone attests nothing.
+`maintenance.recovery_input` has closed fields `seq`, `kind`, `occurrence_id`,
+`source`, `holder`, `at`, `evidence`; `recovery_seq` is monotonic. The existing
+batch receipt owns sent identity. Repeats coalesce; unsent work uses one node.
+Occurrence-less signals can owe another check. This is not exactly-once.
+
+At an unchanged handled revision, the carrier sends a recovery-only batch.
+Read goal/grants, duties/decisions and task-dispatch-result-reclaim links from
+AGENTS, Delegator locators, Workflow, index and Runner originals. Preserve original Host retirement references.
+Invent, accept and judge no tasks. Add `--recovery-seq N` to the sent checkpoint:
+
+```json
+{"input":"recovery#N","checked":{"authorization":["original"],"duties":["original"],"links":["original"]}}
+```
+
+Use `unavailable:{scope:reason}` for unread originals instead of a checked scope.
+Missing/empty sources cannot PASS and stay visible Host duties. Optional `applied`
+needs records this node wrote. Settlement requires the original sent batch,
+selected input and node holder. Revision-only checkpoints and `last_verified`
+cannot settle it. Related alerts need separate scoped entries and unchanged
+selection evidence. Keep newer/unrelated inputs; checkpoint N leaves N+1 pending.
+
+Recipe/start/admission/lost-node/checkpoint/stop failures keep the duty and a
+`maintenance-returned` obligation with original evidence and Host next action.
+One safe wake and both current views expose it. Reconcile original effects,
+confirm the old holder stopped, repair the binding, then request a bounded check.
+Equal sequence, elapsed time or a justified live node needs no repeated reminder.
+
+The existing resume event scan reoffers an unregistered Host completion. Failed
+writes retain the signal locator and Host notice; the existing tick can retry.
+An old tool refuses visibly. A new tool reports `carrier_supported:false` for an
+old holder and retains the request; update at an authorized safe boundary.
+Migration preserves typed input/scalar or refuses malformed data with the duty
+intact. No install is implicit.
+
+Codex alone adds `session.compaction:{}` at both initialize paths and records its
+request. Installed codex-acp 2.0.1 supports the shape (inspected child 0.160.1).
+Live proof is pending. Without a verified signal, use inquiry recovery.

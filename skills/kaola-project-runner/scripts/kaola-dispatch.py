@@ -3442,7 +3442,7 @@ def maintenance_brief(state: dict[str, Any]) -> dict[str, Any]:
     a reader can see whether maintenance is progressing. No history."""
     maintenance = state.get("maintenance") or {}
     brief = {key: maintenance[key] for key in ("last_verified", "acked_host_revision",
-                                               "handled_host_revision") if maintenance.get(key) is not None}
+                                               "handled_host_revision", "recovery_seq", "recovery_input") if maintenance.get(key) is not None}
     last = maintenance.get("last_checkpoint")
     if isinstance(last, dict) and not last.get("verified"):
         brief["last_checkpoint"] = {key: last.get(key) for key in ("batch", "at", "verified")}
@@ -3530,6 +3530,8 @@ def delegator_view(doc: dict[str, Any], path: Path, repo: Path) -> dict[str, Any
         "sideagent": projected.get("sideagent"),
         "unknown": RECORD.unknown_paths(state),
         "maintenance": maintenance_brief(state),
+        "pending_host_changes": sorted(host_changes(doc, int((state.get("maintenance") or {}).get(
+            "handled_host_revision") or 0), int(doc.get("host_revision") or 0))),
     }
 
 
@@ -3541,6 +3543,9 @@ def render_state(doc: dict[str, Any], path: Path, *, unchecked_live: bool = Fals
     live rows are not an old holder, so the current file bound applies.
     ``carrier-limit`` remains when a supplied live holder does not prove
     ``heartbeat-state/2``."""
+    blockers = RECORD.maintenance_blockers(doc["state"].get("maintenance"))
+    if blockers:
+        raise StateRefusal("invalid-maintenance", "repair the current duty from original receipts", blocked=blockers)
     view = host_view(doc, path)
     body = json.dumps(view, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     doc["body"] = body
@@ -4367,12 +4372,147 @@ def already_settled_input(state: dict[str, Any], ident: str) -> bool:
     return (state.get(kind) or {}).get(record_id) is None
 
 
+def caller_record(caller: dict[str, str]) -> tuple[Path, dict[str, Any]]:
+    digest = hashlib.sha256(caller["repo"].encode("utf-8")).hexdigest()[:16]
+    directory = runner_record_root() / caller["platform"] / caller["session"] / digest
+    try:
+        record = json.loads((directory / "record.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise StateRefusal("identity-unavailable", f"read original holder record: {exc}")
+    if record.get("holder_instance_id") != caller["holder_instance_id"]:
+        raise StateRefusal("identity-mismatch", "original holder record names another holder")
+    return directory, record
+
+
+def original_events(directory: Path):
+    # Use the existing bounded rotations. No state copy or second event store.
+    for path in [*sorted(directory.glob("events.jsonl.*")), directory / "events.jsonl"]:
+        if not path.is_file():
+            continue
+        with path.open(encoding="utf-8") as stream:
+            for line in stream:
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(event, dict):
+                    yield event
+
+
+def command_state_recovery_input(args: argparse.Namespace) -> int:
+    path = Path(args.file)
+    try:
+        caller = caller_dispatcher()
+        if not caller or caller_role(caller) != "host" or not same_repo(caller["repo"], str(repo_of_state_file(path))):
+            raise StateRefusal("host-identity-required", "use the exact verified Host holder in this project")
+        directory, record = caller_record(caller)
+        evidence = args.evidence or args.source
+        occurrence = None
+        if args.kind == "host-compaction" and not args.fail:
+            event = next((row for row in original_events(directory) if row.get("cursor") == args.signal_cursor), None)
+            if not event or event.get("kind") != "compact_reload_detected" or not isinstance(event.get("holder"), str):
+                raise StateRefusal("signal-unverified", "read the original completed Host signal receipt")
+            spec = importlib.util.spec_from_file_location("kpr_recovery_signal", Path(__file__).with_name("kaola-compact-recovery.py"))
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[spec.name] = module
+            spec.loader.exec_module(module)
+            signal = module.classify(event.get("signal") or {}, caller["platform"])
+            if (signal is None or event.get("role") != "host"
+                    or not module.is_same_session(signal, record.get("acp_session_id"))):
+                raise StateRefusal("signal-unverified", "kind alone does not attest a completed Host compaction")
+            occurrence = signal.occurrence_id
+            evidence = f"{directory / 'events.jsonl'}#{args.signal_cursor}"
+        with StateLock(path):
+            doc = require_current(read_state_file(path)[0], path)
+            maintenance = doc["state"].setdefault("maintenance", {})
+            prior = maintenance.get("recovery_input") or {}
+            if args.fail:
+                ident = args.input
+                if args.through_host_revision is not None and not 0 <= args.through_host_revision <= int(doc.get("host_revision") or 0):
+                    raise StateRefusal("invalid-input", "failure range must be an actual current Host revision")
+                if not ident:
+                    raise StateRefusal("invalid-input", "a failure names its actual input or batch")
+                last = maintenance.get("last_checkpoint") or {}
+                if args.fail not in ("stop-unconfirmed", "old-node-live") and last.get("verified") and ident in (last.get("settled") or []):
+                    return emit({"result": "unchanged", "value": prior, "reason": "scoped-checkpoint-already-settled"})
+                alerts = doc["state"].setdefault("alerts", {})
+                alert = alerts.get("maintenance-returned") or {}
+                inputs = dict(alert.get("inputs") or {})
+                row = {"why": args.fail, "evidence": evidence,
+                       "next": "Host: reconcile the original node and stop receipts; repair the binding; request a bounded check",
+                       **({"host_revision_through": args.through_host_revision}
+                          if args.through_host_revision is not None else {})}
+                if inputs.get(ident) == row:
+                    return emit({"result": "unchanged", "value": prior})
+                inputs[ident] = row
+                alerts["maintenance-returned"] = {**alert, "level": "warn", "owner": "host", "inputs": inputs,
+                    "summary": "maintenance needs Host recovery from original receipts", "next": row["next"],
+                    "source": args.source, "writer": "tool:carrier", "writer_holder": caller["holder_instance_id"],
+                    "rev": int(alert.get("rev") or 0) + 1, "updated_at": observed_at(),
+                    "evidence": list(dict.fromkeys([*(alert.get("evidence") or []), evidence]))}
+                value = row
+            else:
+                last = maintenance.get("last_checkpoint") or {}
+                previous = (last.get("recovery") or {}).get("input") or {}
+                if (args.kind == "host-compaction" and previous.get("evidence") == evidence
+                        and f"recovery#{previous.get('seq')}" in (last.get("settled") or [])):
+                    return emit({"result": "unchanged", "value": previous, "reason": "original-signal-already-settled"})
+                if (args.kind == prior.get("kind") and
+                    ((occurrence is not None and occurrence == prior.get("occurrence_id")) or evidence == prior.get("evidence"))):
+                    return emit({"result": "unchanged", "value": prior})
+                seq = int(maintenance.get("recovery_seq") or 0) + 1
+                value = {"seq": seq, "kind": args.kind, "occurrence_id": occurrence, "source": args.source,
+                         "holder": caller["holder_instance_id"], "at": observed_at(), "evidence": evidence}
+                maintenance.update(recovery_seq=seq, recovery_input=value)
+            write_state(path, doc)
+        return emit({"result": "written", "value": value, "host_revision": doc.get("host_revision", 0),
+                     "carrier_supported": "host-compact-maintenance/1" in (record.get("holder_features") or [])})
+    except StateRefusal as exc:
+        return emit(exc.payload, 2)
+    except (OSError, ValueError) as exc:
+        return fail("invalid-input", str(exc))
+
+
+def recovery_batch(caller: dict[str, str], batch: str, through: int) -> dict[str, Any]:
+    _, node = caller_record(caller)
+    carrier = node.get("dispatcher")
+    if not isinstance(carrier, dict) or caller_role(carrier) != "host" or not same_repo(carrier["repo"], caller["repo"]):
+        raise StateRefusal("batch-unverified", "node has no original bound Host carrier")
+    directory, _ = caller_record(carrier)
+    event = next((row for row in original_events(directory)
+                  if row.get("kind") == "sideagent_node_batch" and row.get("batch") == batch
+                  and row.get("target_holder") == caller["holder_instance_id"]
+                  and row.get("host_holder") == carrier["holder_instance_id"]
+                  and row.get("host_revision_through") == through), None)
+    if event is None or not isinstance(event.get("recovery_input"), dict):
+        raise StateRefusal("batch-unverified", "no original sent recovery input for this batch and node holder")
+    return event
+
+
 def checkpoint_entry(state: dict[str, Any], entry: Any, holder: str) -> tuple[str | None, str | None]:
     """(input id, why it is not settled) for one checkpoint entry. Applied
     evidence names a record this node wrote or a current retirement; a
     retained duty must be a current record with a responsible next reader."""
     if not isinstance(entry, dict) or not isinstance(entry.get("input"), str) or not entry["input"]:
         return None, "entry-unreadable"
+    if entry["input"].startswith("recovery#"):
+        if entry.keys() - {"input", "checked", "unavailable", "applied"}:
+            return entry["input"], "recovery-entry-unknown"
+        checked, unavailable = entry.get("checked") or {}, entry.get("unavailable") or {}
+        if not isinstance(checked, dict) or not isinstance(unavailable, dict) or (checked.keys() | unavailable.keys()) != RECORD.RECOVERY_SCOPES:
+            return entry["input"], "recovery-scopes-missing"
+        if checked.keys() & unavailable.keys():
+            return entry["input"], "recovery-scope-conflict"
+        if any(not isinstance(refs, list) or not refs or not all(isinstance(ref, str) and ref for ref in refs)
+               for refs in checked.values()):
+            return entry["input"], "recovery-sources-empty"
+        if any(not isinstance(reason, str) or not reason for reason in unavailable.values()):
+            return entry["input"], "recovery-unavailable-unreadable"
+        if unavailable:
+            return entry["input"], "recovery-originals-unavailable"
+        if "applied" not in entry:
+            return entry["input"], None
+        # Optional applied facts still require this node's own records.
     applied, retained = entry.get("applied"), entry.get("retained")
     if (applied is None) == (retained is None):
         return entry["input"], "entry-needs-applied-or-retained"
@@ -4432,6 +4572,18 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
     through = args.through_host_revision if args.through_host_revision is not None else handled
     if through < handled or through > current:
         raise StateRefusal("invalid-input", f"--through-host-revision must be within {handled}..{current}")
+    recovery = None
+    recovery_ids = set()
+    if getattr(args, "recovery_seq", None) is not None or any(
+            isinstance(entry, dict) and str(entry.get("input", "")).startswith("recovery#") for entry in entries):
+        receipt = recovery_batch(caller, args.batch, through)
+        recovery = receipt["recovery_input"]
+        if args.recovery_seq != recovery["seq"]:
+            raise StateRefusal("batch-unverified", "checkpoint must name the actual selected recovery sequence")
+        recovery_ids.add(f"recovery#{recovery['seq']}")
+        current_alerts = ((state.get("alerts") or {}).get("maintenance-returned") or {}).get("inputs") or {}
+        recovery_ids.update(ident for ident, value in (receipt.get("recovery_alerts") or {}).items()
+                            if current_alerts.get(ident) == value)
     selected = host_changes(doc, handled, through)
     # A batch input the Host rewrote after this batch was selected shows
     # only its later change, which is past `through` and so in the next
@@ -4447,16 +4599,18 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
             raise StateRefusal("invalid-input", "each entry names its `input`")
         seen.add(ident)
         revision = revision_of(ident)
-        if problem and not already_settled_input(state, ident):
+        if ident.startswith("recovery#") and ident not in recovery_ids:
+            raise StateRefusal("batch-unverified", "recovery entry is not in the original selected batch")
+        elif problem and not already_settled_input(state, ident):
             returned[ident] = problem
-        elif ident in selected or ident in events or already_settled_input(state, ident):
+        elif ident in selected or ident in recovery_ids or ident in events or already_settled_input(state, ident):
             settled.append(ident)
         elif (revision is not None and handled < revision <= through
               and ident.rpartition("@")[0] in later):
             superseded.append(ident)
         else:
             returned[ident] = "not-in-batch"
-    for ident in [*selected, *events]:
+    for ident in [*selected, *events, *([f"recovery#{recovery['seq']}"] if recovery else [])]:
         if ident not in seen:
             if already_settled_input(state, ident):
                 settled.append(ident)
@@ -4474,6 +4628,13 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
               "host_revision": {"from": handled, "through": through, "current": current},
               "settled": sorted(settled), "returned_to_host": dict(sorted(returned.items())),
               **({"superseded": sorted(superseded)} if superseded else {})}
+    if recovery:
+        ident = f"recovery#{recovery['seq']}"
+        entry = next((item for item in entries if item.get("input") == ident), {})
+        record["recovery"] = {"seq": recovery["seq"], "input": recovery,
+                              "checked": entry.get("checked") or {}, "unavailable": entry.get("unavailable") or {}}
+        if ident in settled and (maintenance.get("recovery_input") or {}).get("seq") == recovery["seq"]:
+            maintenance.pop("recovery_input", None)
     maintenance["last_checkpoint"] = record
     if verified:
         maintenance["last_verified"] = {key: record[key] for key in ("batch", "node", "at")}
@@ -4492,7 +4653,7 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
         alerts[alert_id] = {**prior, "level": "warn", "owner": "host",
                             "summary": f"{len(inputs)} maintenance input(s) not applied by a node; "
                                        "judge or re-dispatch them from their sources",
-                            "inputs": inputs, "evidence": [f"checkpoint:{args.batch}"],
+                            "inputs": inputs, "evidence": list(dict.fromkeys([*(prior.get("evidence") or []), f"checkpoint:{args.batch}"])),
                             "rev": int(prior.get("rev") or 0) + 1,
                             "created_at": prior.get("created_at") or observed_at(),
                             "updated_at": observed_at(), "source": args.source,
@@ -5039,9 +5200,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     update.add_argument("--index", help="dispatch index to mirror this task's dispositions onto")
 
+    recovery = actions.add_parser("recovery-input", help="register a bounded Host recovery duty without a business write")
+    recovery.add_argument("--file", required=True)
+    recovery.add_argument("--kind", choices=("host-compaction", "request"), default="request")
+    recovery.add_argument("--source", required=True)
+    recovery.add_argument("--evidence")
+    recovery.add_argument("--signal-cursor", type=int)
+    recovery.add_argument("--fail")
+    recovery.add_argument("--input")
+    recovery.add_argument("--through-host-revision", type=int)
+    recovery.set_defaults(func=command_state_recovery_input)
+
     checkpoint = actions.add_parser("checkpoint", help="a maintenance node's input accounting")
     writer_args(checkpoint)
     checkpoint.add_argument("--batch", required=True, help="the batch id the carrier sent")
+    checkpoint.add_argument("--recovery-seq", type=int, help="the recovery sequence the carrier actually sent")
     checkpoint.add_argument("--events", help="JSON array of the batch's worker event ids, or @path")
     checkpoint.add_argument("--through-host-revision", type=int,
                             help="the Host revision this batch selected; later changes stay pending")

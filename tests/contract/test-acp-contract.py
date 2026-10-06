@@ -1963,6 +1963,22 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.cli("preflight", platform="codex", check=False)
         self.assertEqual(self.initialize_meta(), {})
 
+    def test_codex_alone_advertises_completed_compaction_at_probe_and_start(self) -> None:
+        self.cli("preflight", platform="codex", check=False)
+        packets = [row["params"]["clientCapabilities"] for row in self.read_mock_log()
+                   if row.get("event") == "initialize"]
+        self.assertTrue(packets)
+        self.assertEqual(packets[-1]["session"], {"compaction": {}})
+        self.start("codex")
+        packets = [row["params"]["clientCapabilities"] for row in self.read_mock_log()
+                   if row.get("event") == "initialize"]
+        self.assertEqual(packets[-1]["session"], {"compaction": {}})
+        self.cli("preflight", platform="cursor-cli", check=False, caps="cursor-params")
+        packets = [row["params"]["clientCapabilities"] for row in self.read_mock_log()
+                   if row.get("event") == "initialize"]
+        self.assertNotIn("session", packets[-1])
+        self.assertEqual(packets[-1]["_meta"], {"parameterizedModelPicker": True})
+
     def test_cursor_preflight_reports_parameterized_options(self) -> None:
         receipt = self.cli("preflight", platform="cursor-cli", check=False,
                            caps="cursor-params")

@@ -78,6 +78,37 @@ SIDEAGENT_KEYS = frozenset({
     "since", "authorization_source", "recipe",
 })
 RECIPE_KEYS = frozenset({"argv", "runner", "state_tool"})
+MAINTENANCE_KEYS = frozenset({"last_verified", "acked_host_revision", "handled_host_revision",
+                              "last_checkpoint", "recovery_seq", "recovery_input"})
+RECOVERY_INPUT_KEYS = frozenset({"seq", "kind", "occurrence_id", "source", "holder", "at", "evidence"})
+RECOVERY_SCOPES = frozenset({"authorization", "duties", "links"})
+
+
+def maintenance_blockers(value: Any) -> list[dict[str, str]]:
+    if value is None:
+        return []
+    if not isinstance(value, dict):
+        return [refusal("maintenance", "object", "retain the original; repair with the state tool")]
+    bad = [refusal(f"maintenance.{key}", ", ".join(sorted(MAINTENANCE_KEYS)),
+                   "retain the original; remove the unknown key") for key in value.keys() - MAINTENANCE_KEYS]
+    seq = value.get("recovery_seq", 0)
+    if not isinstance(seq, int) or isinstance(seq, bool) or seq < 0:
+        bad.append(refusal("maintenance.recovery_seq", "nonnegative integer", "repair from original receipts"))
+    item = value.get("recovery_input")
+    if item is not None:
+        valid = (isinstance(item, dict) and item.keys() == RECOVERY_INPUT_KEYS
+                 and isinstance(item.get("seq"), int) and not isinstance(item.get("seq"), bool)
+                 and item["seq"] > 0 and item["seq"] == seq
+                 and item.get("kind") in ("host-compaction", "request")
+                 and (item.get("occurrence_id") is None or isinstance(item.get("occurrence_id"), str))
+                 and all(isinstance(item.get(key), str) and item[key]
+                         for key in ("source", "holder", "at", "evidence")))
+        if not valid:
+            bad.append(refusal("maintenance.recovery_input", "closed typed recovery input",
+                               "keep the duty; repair from the signal or inquiry receipt"))
+    return bad
+
+
 WATCH_STATUS = frozenset({"pending", "sent", "adopted", "open", "settled", "blocked"})
 WATCH_KIND = frozenset({"relay", "observation", "recovery", "decision"})
 WATCH_KEYS = frozenset({
@@ -668,6 +699,8 @@ def unknown_paths(state: dict[str, Any]) -> list[dict[str, str]]:
             for nested in state["recovery"]["host"]:
                 if nested not in V1_IDENTITY:
                     add(f"state.recovery.host.{nested}")
+    for item in maintenance_blockers(state.get("maintenance")):
+        add("state." + item["path"])
     auth = state.get("authorization")
     if isinstance(auth, dict):
         for key in auth:
@@ -750,7 +783,7 @@ def projected_state(state: dict[str, Any]) -> dict[str, Any]:
     if isinstance(state.get("maintenance"), dict):
         out["maintenance"] = {
             key: state["maintenance"][key]
-            for key in ("last_verified", "acked_host_revision", "handled_host_revision", "last_checkpoint")
+            for key in MAINTENANCE_KEYS
             if key in state["maintenance"]
         }
     if isinstance(state.get("section_sources"), dict):
@@ -789,6 +822,7 @@ def cleanup_current(state: dict[str, Any]) -> tuple[list[dict[str, str]], dict[s
             legacy.get("protected_untracked"), "recovery.legacy.protected_untracked"))
     blockers.extend(authorization_blockers(state.get("authorization")))
     blockers.extend(project_blockers(state.get("project")))
+    blockers.extend(maintenance_blockers(state.get("maintenance")))
     if blockers:
         return blockers, state, False, []
     cleaned = json.loads(json.dumps(state))
@@ -1549,11 +1583,17 @@ def host_view(doc: dict[str, Any], path: Path | None) -> dict[str, Any]:
         else:
             unverified.append({"id": key, "summary": "unreadable"})
     maintenance = state.get("maintenance") or {}
-    brief = {key: maintenance[key] for key in ("last_verified", "acked_host_revision", "handled_host_revision")
+    brief = {key: maintenance[key] for key in ("last_verified", "acked_host_revision", "handled_host_revision",
+                                          "recovery_seq", "recovery_input")
              if isinstance(maintenance, dict) and maintenance.get(key) is not None}
     last = maintenance.get("last_checkpoint") if isinstance(maintenance, dict) else None
     if isinstance(last, dict) and not last.get("verified"):
         brief["last_checkpoint"] = {key: last.get(key) for key in ("batch", "at", "verified")}
+    owed = bool(maintenance.get("recovery_input") or host_changes(
+        doc, int(maintenance.get("handled_host_revision") or 0), int(doc.get("host_revision") or 0)))
+    if owed:
+        attention.append({"kind": "maintenance", "id": "pending", "why": "bounded reconciliation owed",
+                          "next": "use the bound node or recover from original receipts"})
     view: dict[str, Any] = {
         "view": "host",
         "revision": doc.get("revision"),
@@ -1576,6 +1616,7 @@ def host_view(doc: dict[str, Any], path: Path | None) -> dict[str, Any]:
                 view["sideagent_maintenance"] = "a node is running"
             elif running is False:
                 view["sideagent_maintenance"] = (
+                    "no node is running; an idle binding is not missing; bounded reconciliation is owed" if owed else
                     "no node is running; an idle binding is not missing maintenance"
                 )
             else:

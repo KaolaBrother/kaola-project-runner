@@ -2435,6 +2435,153 @@ class MaintenanceCheckpoint(StateProject):
         code, out = self.checkpoint(stray, "b-1", 0, [])
         self.assertEqual(out["reason"], "binding-superseded")
 
+    def recovery_host(self) -> tuple[Path, dict]:
+        host = {"platform": "zcode", "session": "zcode-KT-orchestrator-main", "repo": str(self.repo),
+                "holder_instance_id": "host-recovery"}
+        directory = self.records / "zcode" / host["session"] / hashlib.sha256(str(self.repo).encode()).hexdigest()[:16]
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "record.json").write_text(json.dumps({"holder_instance_id": host["holder_instance_id"],
+            "session_role": "host", "acp_session_id": "original-host", "holder_features": ["host-compact-maintenance/1"]}))
+        env = self.caller_env(host["session"], host["holder_instance_id"])
+        return directory, env
+
+    def recovery_request(self, evidence: str = "inquiry-original") -> dict:
+        _, env = self.recovery_host()
+        code, out = self.state("recovery-input", "--file", str(self.file), "--source", "inquiry",
+                               "--evidence", evidence, env=env)
+        self.assertEqual(code, 0, out)
+        return out["value"]
+
+    def recovery_receipt(self, item: dict, batch: str = "b-recovery", holder: str = "node-recovery") -> dict:
+        directory, _ = self.recovery_host()
+        env = self.node(holder)
+        node_dir = self.records / "zcode" / self.SESSION / directory.name
+        record = json.loads((node_dir / "record.json").read_text())
+        record["dispatcher"] = {"platform": "zcode", "session": "zcode-KT-orchestrator-main",
+                                "holder_instance_id": "host-recovery", "repo": str(self.repo)}
+        (node_dir / "record.json").write_text(json.dumps(record))
+        alerts = ((self.doc()["state"].get("alerts") or {}).get("maintenance-returned") or {}).get("inputs") or {}
+        (directory / "events.jsonl").write_text(json.dumps({"kind": "sideagent_node_batch", "batch": batch,
+            "target_holder": holder, "host_holder": "host-recovery", "host_revision_through": self.doc()["host_revision"],
+            "recovery_input": item, "recovery_alerts": alerts}) + "\n")
+        return env
+
+    def recovery_checkpoint(self, env: dict, item: dict, entries: list, batch: str = "b-recovery") -> tuple[int, dict]:
+        return self.state("checkpoint", "--file", str(self.file), "--writer", "sideagent", "--source", batch,
+            "--batch", batch, "--through-host-revision", str(self.doc()["host_revision"]),
+            "--recovery-seq", str(item["seq"]), "--entries", json.dumps(entries), env=env)
+
+    @staticmethod
+    def scoped_entry(seq: int) -> dict:
+        return {"input": f"recovery#{seq}", "checked": {"authorization": ["owner-original"],
+                "duties": ["original-run"], "links": ["original-index-and-runner"]}}
+
+    def test_recovery_request_and_repeat_preserve_business_revision_and_migrate(self) -> None:
+        self.init()
+        revision = self.doc()["host_revision"]
+        item = self.recovery_request()
+        again = self.recovery_request()
+        self.assertEqual(item, again)
+        self.assertEqual(self.doc()["host_revision"], revision)
+        for _ in range(2):
+            code, out = self.state("migrate", "--file", str(self.file), "--write")
+            self.assertEqual(code, 0, out)
+            self.assertEqual(self.doc()["state"]["maintenance"]["recovery_input"], item)
+        for role in ("host", "delegator", "sideagent"):
+            code, out = self.state("view", "--file", str(self.file), "--role", role)
+            self.assertEqual(code, 0, out)
+            maintenance = out["state"]["maintenance"] if role == "sideagent" else out["maintenance"]
+            self.assertEqual(maintenance["recovery_input"], item)
+
+    def test_malformed_recovery_migration_refuses_without_losing_duty(self) -> None:
+        self.init(); item = self.recovery_request()
+        doc = self.doc(); doc["state"]["maintenance"]["recovery_input"]["history"] = ["pending-original"]
+        self.file.write_text(json.dumps(doc)); before = self.file.read_bytes()
+        for _ in range(2):
+            code, out = self.state("migrate", "--file", str(self.file), "--write")
+            self.assertEqual(code, 2, out)
+            self.assertEqual(self.file.read_bytes(), before)
+        self.assertEqual(self.doc()["state"]["maintenance"]["recovery_input"]["evidence"], item["evidence"])
+
+    def test_recovery_kind_requires_original_completed_session_bound_host_signal(self) -> None:
+        self.init()
+        directory, env = self.recovery_host()
+        before = self.file.read_bytes()
+        args = ["recovery-input", "--file", str(self.file), "--kind", "host-compaction",
+                "--source", "caller-kind", "--signal-cursor", "5"]
+        code, out = self.state(*args, env=env)
+        self.assertEqual((code, out["reason"]), (2, "signal-unverified"))
+        self.assertEqual(self.file.read_bytes(), before)
+        event = {"cursor": 5, "kind": "compact_reload_detected", "holder": "host-recovery", "role": "host",
+            "signal": {"method": "session/update", "params": {"sessionId": "original-host", "update": {
+                "sessionUpdate": "compaction_update", "status": "completed", "compactionId": "occurrence"}}}}
+        # zcode uses the common structured completed variant.
+        (directory / "events.jsonl").write_text(json.dumps(event) + "\n")
+        code, out = self.state(*args, env=env)
+        self.assertEqual(code, 0, out)
+        item = out["value"]
+        code, out = self.state(*args, env=env)
+        self.assertEqual((code, out["result"], out["value"]), (0, "unchanged", item))
+        event["signal"]["params"]["sessionId"] = "foreign"
+        (directory / "events.jsonl").write_text(json.dumps(event) + "\n")
+        before = self.file.read_bytes()
+        code, out = self.state(*args, env=env)
+        self.assertEqual((code, out["reason"]), (2, "signal-unverified"))
+        self.assertEqual(self.file.read_bytes(), before)
+
+    def test_recovery_checkpoint_binds_sent_input_batch_and_holder_keeps_newer(self) -> None:
+        self.init()
+        self.bind()
+        through = self.doc()["host_revision"]
+        doc = self.doc(); doc["state"]["maintenance"] = {"handled_host_revision": through}
+        self.file.write_text(json.dumps(doc))
+        first = self.recovery_request()
+        env = self.recovery_receipt(first)
+        second = self.recovery_request("newer-original")
+        before = self.file.read_bytes()
+        code, out = self.recovery_checkpoint(env, second, [self.scoped_entry(second["seq"])])
+        self.assertEqual((code, out["reason"]), (2, "batch-unverified"))
+        self.assertEqual(self.file.read_bytes(), before)
+        code, out = self.recovery_checkpoint(env, first, [self.scoped_entry(first["seq"])], "foreign-batch")
+        self.assertEqual((code, out["reason"]), (2, "batch-unverified"))
+        self.assertEqual(self.file.read_bytes(), before)
+        code, out = self.recovery_checkpoint(env, first, [self.scoped_entry(first["seq"])])
+        self.assertEqual(code, 0, out)
+        self.assertTrue(out["value"]["verified"])
+        self.assertEqual(self.doc()["state"]["maintenance"]["recovery_input"], second)
+        self.assertEqual(self.doc()["host_revision"], through)
+        # Another node holder cannot borrow the first node's sent input.
+        wrong = self.node("other-node")
+        before = self.file.read_bytes()
+        code, out = self.recovery_checkpoint(wrong, first, [self.scoped_entry(first["seq"])])
+        self.assertEqual((code, out["reason"]), (2, "batch-unverified"))
+        self.assertEqual(self.file.read_bytes(), before)
+
+    def test_recovery_unavailable_sources_stay_visible_and_scoped_clear_keeps_other_alerts(self) -> None:
+        self.init(); self.bind()
+        doc = self.doc(); doc["state"]["maintenance"] = {"handled_host_revision": doc["host_revision"]}
+        doc["state"]["alerts"] = {"maintenance-returned": {"owner": "host", "level": "warn", "summary": "original",
+            "evidence": ["original-retirement-reference"], "inputs": {"recovery#90": {"why": "unrelated"},
+            "host:tasks/original@1": {"why": "owner-judged-reference"}}}}
+        self.file.write_text(json.dumps(doc))
+        item = self.recovery_request(); env = self.recovery_receipt(item)
+        entry = {"input": f"recovery#{item['seq']}", "checked": {},
+                 "unavailable": {key: "original unavailable" for key in ("authorization", "duties", "links")}}
+        code, out = self.recovery_checkpoint(env, item, [entry])
+        self.assertEqual(code, 0, out); self.assertFalse(out["value"]["verified"])
+        self.assertEqual(self.doc()["state"]["maintenance"]["recovery_input"], item)
+        alert = self.doc()["state"]["alerts"]["maintenance-returned"]
+        self.assertIn(f"recovery#{item['seq']}", alert["inputs"])
+        # The later alert did not exist in the original selection receipt.
+        doc = self.doc(); doc["state"]["alerts"]["maintenance-returned"]["inputs"]["recovery#91"] = {"why": "newer"}
+        self.file.write_text(json.dumps(doc))
+        code, out = self.recovery_checkpoint(env, item, [self.scoped_entry(item["seq"])])
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("recovery_input", self.doc()["state"]["maintenance"])
+        inputs = self.doc()["state"]["alerts"]["maintenance-returned"]["inputs"]
+        self.assertEqual(set(inputs), {"recovery#90", "recovery#91", "host:tasks/original@1"})
+
+
 
 FAKE_NODE_RUNNER = textwrap.dedent("""\
     #!/usr/bin/env python3
@@ -2453,6 +2600,7 @@ FAKE_NODE_RUNNER = textwrap.dedent("""\
     time.sleep(float(os.environ.get("FAKE_NODE_DELAY") or 0))
     print(json.dumps({"holder_instance_id": holder, "session": "zcode-KT-sideagent"}))
 """)
+
 
 
 class FakeNode(FakeSideagent):
@@ -2625,6 +2773,199 @@ class HolderNodeMode(HolderFixture):
         doc["state"].pop("section_sources", None)
         path.write_text(json.dumps(doc))
         return path.read_bytes()
+
+    def prepare_recovery_host(self) -> None:
+        self.holder.session_role = "host"
+        self.holder.write_record()
+        self.write_node_state({"handled_host_revision": 0}, host_revision=0)
+
+    def compact_signal(self, occurrence: str = "host-occurrence") -> dict:
+        return {"method": "session/update", "params": {"sessionId": self.holder.acp_session_id, "update": {
+            "sessionUpdate": "compaction_update", "status": "completed", "compactionId": occurrence}}}
+
+    def wait_registration(self) -> dict:
+        self.wait_for(lambda: "host_compact_maintenance_registered" in self.log_kinds(), "registration receipt")
+        return self.holder._lifecycle_state()["state"]["maintenance"]["recovery_input"]
+
+    def test_recovery_only_batch_at_same_revision_coalesces_and_keeps_safe_boundary(self) -> None:
+        self.prepare_recovery_host()
+        self.holder.turn["active"] = True
+        signal = self.compact_signal()
+        self.holder._observe_compact_signal(signal)
+        item = self.wait_registration()
+        self.holder._observe_compact_signal(signal)
+        self.assertEqual(self.holder._lifecycle_state()["host_revision"], 0)
+        self.assertEqual(item["seq"], 1)
+        self.assertEqual(self.node_count(), 0)
+        self.holder.turn["active"] = False
+        self.boundary()
+        self.wait_for(lambda: len(self.fake.prompts) == 1, "recovery-only batch")
+        self.assertIn("--recovery-seq 1", self.fake.prompts[0]["params"]["text"])
+        self.assertEqual(self.holder.node["sent_through"], 0)
+        self.assertEqual(self.holder.node["recovery_input"], item)
+        self.assertEqual(self.node_count(), 1)
+        self.holder._reclaim_node()
+
+    def test_recipe_refusal_for_owed_recovery_is_visible_once_in_both_views(self) -> None:
+        self.prepare_recovery_host()
+        self.holder.turn["active"] = True
+        self.holder._observe_compact_signal(self.compact_signal())
+        item = self.wait_registration()
+        doc = self.holder._lifecycle_state(); doc["state"]["sideagent"]["recipe"]["runner"] = "/absent-runner"
+        path = self.repo / ".kaola/heartbeat-prompt.json"; path.write_text(json.dumps(doc))
+        self.boundary()
+        self.wait_for(lambda: "sideagent_maintenance_failure_recorded" in self.log_kinds(), "visible failure")
+        before = len([row for row in self.holder.pending_worker_events if row.get("kind") == "node"])
+        for _ in range(2): self.boundary()
+        self.assertEqual(len([row for row in self.holder.pending_worker_events if row.get("kind") == "node"]), before)
+        for role in ("host", "delegator"):
+            code, out = run(["state", "view", "--file", str(path), "--role", role])
+            self.assertEqual(code, 0, out)
+            alerts = out["alerts"] if role == "host" else out["special"]["alerts"]
+            self.assertTrue(alerts)
+        self.assertEqual(self.holder._lifecycle_state()["state"]["maintenance"]["recovery_input"], item)
+        self.assertEqual(self.node_count(), 0)
+
+    def test_worker_foreign_start_precompact_and_unknown_role_register_no_recovery(self) -> None:
+        self.prepare_recovery_host()
+        signal = self.compact_signal()
+        for role in ("worker", "sideagent", None):
+            self.holder.session_role = role
+            self.holder._observe_compact_signal(self.compact_signal(str(role)))
+        self.holder.session_role = "host"
+        foreign = self.compact_signal("foreign"); foreign["params"]["sessionId"] = "foreign"
+        self.holder._observe_compact_signal(foreign)
+        self.holder.state = "starting"; self.holder._observe_compact_signal(signal)
+        self.holder.state = "ready"
+        start = self.compact_signal("start"); start["params"]["update"]["status"] = "started"
+        self.holder._observe_compact_signal(start)
+        self.assertNotIn("recovery_input", self.holder._lifecycle_state()["state"]["maintenance"])
+        self.assertNotIn("host_compact_maintenance_registered", self.log_kinds())
+
+    def test_native_owned_reload_does_not_clear_host_maintenance(self) -> None:
+        args = argparse.Namespace(**vars(self.holder.args))
+        args.platform = "codex"
+        args.record_dir = str(self.records / "codex" / args.session / self.side_dir.name)
+        Path(args.record_dir).mkdir(parents=True)
+        self.holder = holder_module.Holder(args)
+        self.holder.agent = self.agent; self.holder.acp_session_id = "actual-stub-host"
+        self.holder.state = "ready"; self.holder.heartbeat_host = None
+        self.prepare_recovery_host()
+        self.holder.turn["active"] = True
+        self.holder._observe_compact_signal(self.compact_signal())
+        item = self.wait_registration()
+        self.assertIn("compact_reload_native_owned", self.log_kinds())
+        self.assertFalse(self.holder.compact_reload.pending)
+        self.assertEqual(item["kind"], "host-compaction")
+        self.assertEqual(self.holder._lifecycle_state()["host_revision"], 0)
+
+    def test_sent_recovery_checkpoint_keeps_later_signal_and_exact_reclaims_first_node(self) -> None:
+        self.prepare_recovery_host(); self.holder.turn["active"] = True
+        self.holder._observe_compact_signal(self.compact_signal("first")); first = self.wait_registration()
+        self.holder.turn["active"] = False; self.boundary()
+        self.wait_for(lambda: len(self.fake.prompts) == 1, "first sent batch")
+        self.holder.turn["active"] = True
+        self.holder._observe_compact_signal(self.compact_signal("second"))
+        self.wait_for(lambda: self.holder._lifecycle_state()["state"]["maintenance"]["recovery_seq"] == 2,
+                      "second pending input")
+        env = dict(os.environ); env["KAOLA_ACP_RECORD_ROOT"] = str(self.records)
+        env["KAOLA_ACP_DISPATCHER"] = json.dumps({"platform": "zcode", "session": "zcode-KT-sideagent",
+            "repo": str(self.repo), "holder_instance_id": "node-1"})
+        code, out = run(["state", "checkpoint", "--file", str(self.repo / ".kaola/heartbeat-prompt.json"),
+            "--writer", "sideagent", "--source", self.batch_of(0), "--batch", self.batch_of(0),
+            "--through-host-revision", "0", "--recovery-seq", str(first["seq"]),
+            "--entries", json.dumps([MaintenanceCheckpoint.scoped_entry(first["seq"])])], env)
+        self.assertEqual(code, 0, out); self.assertTrue(out["value"]["verified"])
+        self.assertEqual(self.holder._lifecycle_state()["state"]["maintenance"]["recovery_input"]["seq"], 2)
+        self.sideagent_end(9, 1, holder="node-1")
+        self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "first exact reclaim")
+        self.assertEqual(self.fake.stops[0]["params"]["expected_holder_instance_id"], "node-1")
+        self.assertEqual(self.node_count(), 1)
+        self.holder.turn["active"] = False; self.boundary()
+        self.wait_for(lambda: len(self.fake.prompts) == 2, "next recovery batch")
+        self.assertEqual(self.holder.node["recovery_input"]["seq"], 2)
+        self.assertEqual(self.holder._lifecycle_state()["host_revision"], 0)
+        self.holder._reclaim_node()
+
+    def test_recovery_receipt_missing_in_checkpoint_is_partial_and_visible(self) -> None:
+        self.prepare_recovery_host(); self.holder.turn["active"] = True
+        self.holder._observe_compact_signal(self.compact_signal()); item = self.wait_registration()
+        self.holder.turn["active"] = False; self.boundary()
+        self.wait_for(lambda: len(self.fake.prompts) == 1, "sent batch")
+        path = self.repo / ".kaola/heartbeat-prompt.json"
+        doc = self.holder._lifecycle_state()
+        doc["state"]["maintenance"]["last_checkpoint"] = {"batch": self.batch_of(0),
+            "node": {"holder_instance_id": "node-1"}, "host_revision": {"through": 0}, "verified": True}
+        path.write_text(json.dumps(doc))
+        self.sideagent_end(9, 1, holder="node-1")
+        self.wait_for(lambda: "sideagent_maintenance_failure_recorded" in self.log_kinds(), "partial obligation")
+        self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "exact stop")
+        doc = self.holder._lifecycle_state()
+        self.assertEqual(doc["state"]["maintenance"]["recovery_input"], item)
+        self.assertIn(f"recovery#{item['seq']}", doc["state"]["alerts"]["maintenance-returned"]["inputs"])
+        self.assertEqual(self.node_count(), 1)
+
+    def test_resume_scan_repairs_registration_window_and_pending_blocks_old_live_node(self) -> None:
+        self.prepare_recovery_host(); self.holder.turn["active"] = True
+        cursor = self.holder.events.append({"kind": "compact_reload_detected", "source": "acp-compaction-update",
+            "role": "host", "holder": "old-host-holder", "session_id": self.holder.acp_session_id,
+            "signal": self.compact_signal("crash-window")})
+        self.holder._restore_worker_events()
+        item = self.wait_registration()
+        self.assertTrue(item["evidence"].endswith(f"#{cursor}"))
+        self.fake.record.write_text(json.dumps({"holder_instance_id": "old-node", "holder_pid": os.getpid(),
+                                              "session_role": "sideagent", "state": "ready"}))
+        self.holder.turn["active"] = False; self.boundary()
+        self.wait_for(lambda: "sideagent_maintenance_failure_recorded" in self.log_kinds(), "old node obligation")
+        self.assertEqual(self.node_count(), 0)
+        self.assertEqual(self.holder.node["stop_unconfirmed"]["holder"], "old-node")
+        self.assertEqual(self.holder._lifecycle_state()["state"]["maintenance"]["recovery_input"], item)
+        self.boundary(); self.assertEqual(self.node_count(), 0)
+
+    def test_owed_business_recipe_failure_survives_carrier_memory_loss(self) -> None:
+        self.prepare_recovery_host(); self.host_change(3)
+        doc = self.holder._lifecycle_state(); doc["state"]["sideagent"]["recipe"]["runner"] = "/absent"
+        path = self.repo / ".kaola/heartbeat-prompt.json"; path.write_text(json.dumps(doc))
+        self.boundary()
+        self.wait_for(lambda: "sideagent_maintenance_failure_recorded" in self.log_kinds(), "business failure")
+        self.holder.node.clear()
+        self.assertIsNone(self.holder._node_host_pending(self.holder._lifecycle_state()))
+        self.assertEqual(self.holder._lifecycle_state()["host_revision"], 3)
+        code, out = run(["state", "view", "--file", str(path), "--role", "delegator"])
+        self.assertEqual(code, 0, out)
+        self.assertTrue(out["pending_host_changes"])
+        self.assertTrue(out["special"]["alerts"])
+
+    def test_inquiry_request_recovers_recipe_without_business_write(self) -> None:
+        self.prepare_recovery_host(); self.holder.turn["active"] = True
+        self.holder._observe_compact_signal(self.compact_signal()); original = self.wait_registration()
+        path = self.repo / ".kaola/heartbeat-prompt.json"
+        doc = self.holder._lifecycle_state(); doc["state"]["sideagent"]["recipe"]["runner"] = "/absent"
+        path.write_text(json.dumps(doc)); self.boundary()
+        self.wait_for(lambda: "sideagent_maintenance_failure_recorded" in self.log_kinds(), "recipe refusal")
+        doc = self.holder._lifecycle_state(); doc["state"]["sideagent"]["recipe"]["runner"] = str(self.runner)
+        path.write_text(json.dumps(doc))  # fixture binding repair; the inquiry itself is the real tool call
+        before = self.holder._lifecycle_state()["host_revision"]
+        receipt = self.holder._maintenance_tool(["--kind", "request", "--source", "inquiry-original",
+                                                "--evidence", f"{path}#maintenance-returned"])
+        self.assertNotIn("error", receipt)
+        request = receipt["value"]
+        self.assertEqual(self.holder._lifecycle_state()["host_revision"], before)
+        self.holder.turn["active"] = False; self.boundary()
+        self.wait_for(lambda: len(self.fake.prompts) == 1, "inquiry batch")
+        env = dict(os.environ); env["KAOLA_ACP_RECORD_ROOT"] = str(self.records)
+        env["KAOLA_ACP_DISPATCHER"] = json.dumps({"platform": "zcode", "session": "zcode-KT-sideagent",
+            "repo": str(self.repo), "holder_instance_id": "node-1"})
+        code, out = run(["state", "checkpoint", "--file", str(path), "--writer", "sideagent", "--source", self.batch_of(0),
+            "--batch", self.batch_of(0), "--through-host-revision", str(before), "--recovery-seq", str(request["seq"]),
+            "--entries", json.dumps([MaintenanceCheckpoint.scoped_entry(original["seq"]),
+                                      MaintenanceCheckpoint.scoped_entry(request["seq"])])], env)
+        self.assertEqual(code, 0, out); self.assertTrue(out["value"]["verified"])
+        self.assertNotIn("recovery_input", self.holder._lifecycle_state()["state"]["maintenance"])
+        self.assertNotIn("maintenance-returned", self.holder._lifecycle_state()["state"].get("alerts") or {})
+        self.sideagent_end(9, 1, holder="node-1")
+        self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "inquiry reclaim")
+        self.assertEqual(self.holder._lifecycle_state()["host_revision"], before)
 
     def test_retirement_only_starts_no_node_and_later_work_selects_the_full_range(self) -> None:
         raw = self.retire_input(4)

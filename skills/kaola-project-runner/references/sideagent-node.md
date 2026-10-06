@@ -43,7 +43,7 @@ that task without a disposition becomes `undecided` with a note, never left
 ## Host revision
 
 Each Host business write raises the file's `host_revision` and stamps the
-record. Tool and Sideagent writes raise nothing and stamp `writer_holder`. The
+record. Tool and Sideagent writes keep `host_revision` and stamp `writer_holder`. The
 Sideagent view lists `pending_host_changes`: `host:<kind>/<id>@<rev>`,
 `host:section/<name>@<rev>`. A settled record leaves the file. It creates
 no retirement input or stored tombstone.
@@ -58,13 +58,14 @@ checkout `kaola-tmux.sh` takes the platform before `start`), without
 `kaola-dispatch.py` when it is not beside the holder or in the sibling Skill). Worker
 returns and terminations are not node inputs: they reach the Host at its next
 idle boundary as without a binding, and the Host reads the original. A Host
-holder advertising `sideagent-node/1` starts a node only for Host business
-changes past the handled revision, selected when the Host turn has ended, so
-one turn's writes are one batch. It starts one fresh node from that argv (no
+holder advertising `sideagent-node/1` selects current Host business changes
+past the handled revision. `host-compact-maintenance/1` also selects a pending
+recovery input, at the same safe boundary after the Host turn ends. It starts one fresh node from that argv (no
 shell), sends one prompt with the batch id, the Host revision range and the
 node's role limits (source pointers only, no restated result, no dispatch or
 judgment, exact-stop only a Host-recorded reclaim), and reads the node's checkpoint at its turn end. A turn end alone
-acknowledges nothing. A refused recipe is logged once.
+acknowledges nothing. An owed batch with a refused recipe reaches both current views
+and wakes the Host once. An idle binding with no owed input stays quiet.
 With the shared current-input selector, retirement alone starts or sends no
 node when no input remains. It advances no checkpoint revision. If startup
 finishes after the input disappears, the carrier waits for the Host turn end
@@ -99,8 +100,16 @@ that range again. A failed start or refused batch starts no further node until
 the binding changes. After `sideagent_node_stop_unconfirmed` no node starts
 while that holder process still runs. A Host stop in any mode also stops its
 own node, a start in flight included. A replaced node's late write is
-`binding-superseded`. There is no timer: the next Host change starts the next
-node at a Host turn end or the existing idle tick.
+`binding-superseded`. The next owed input starts a node
+at a Host turn end or the existing idle tick. No new timer runs.
+
+## Completed Host compaction
+
+The carrier registers one tool-owned `maintenance.recovery_input` and monotonic
+`recovery_seq` from an original, session-bound completed HOST signal before reload
+routing. Worker signals, startup replay and PreCompact register nothing. Native
+Skill reload stays independent. A request uses the same path without a business
+write. Read [duty-reconcile.md](duty-reconcile.md) for sources, checkpoint and recovery.
 
 ## Host continuity stop
 
