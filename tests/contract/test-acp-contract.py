@@ -1970,6 +1970,14 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertTrue(packets)
         self.assertEqual(packets[-1]["session"], {"compaction": {}})
         self.start("codex")
+        digest = hashlib.sha256(str(self.repo.resolve()).encode()).hexdigest()[:16]
+        log = self.record_root / "codex" / self.session / digest / "events.jsonl"
+        frame = next(json.loads(line) for line in log.read_text().splitlines()
+                     if json.loads(line).get("kind") == "initialize_request")
+        self.assertTrue(frame["written"])
+        self.assertEqual(frame["request"]["method"], "initialize")
+        self.assertEqual(frame["request"]["jsonrpc"], "2.0")
+        self.assertEqual(frame["request"]["params"]["clientCapabilities"]["session"], {"compaction": {}})
         packets = [row["params"]["clientCapabilities"] for row in self.read_mock_log()
                    if row.get("event") == "initialize"]
         self.assertEqual(packets[-1]["session"], {"compaction": {}})

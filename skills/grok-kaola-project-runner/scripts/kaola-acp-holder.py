@@ -1001,9 +1001,10 @@ class AgentConnection:
             request_id = self.next_id
             slot = {"event": threading.Event(), "response": None}
             self.pending_out[normalize_id(request_id)] = slot
-        written = self.send_message(
-            {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}
-        )
+        frame = {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}
+        written = self.send_message(frame)
+        if method == "initialize":
+            self.holder.events.append({"kind": "initialize_request", "request": frame, "written": written})
         if not written:
             # Issue #174: remember the write failure on the connection. The
             # popped slot's resolution never reaches a waiter, so a boot that
@@ -2080,7 +2081,6 @@ class Holder:
             capabilities["session"] = {"compaction": {}}
         if self.init_meta:
             capabilities["_meta"] = self.init_meta
-        self.events.append({"kind": "initialize_request", "clientCapabilities": capabilities})
         request_id = self.agent.send_request(
             "initialize",
             {
@@ -6034,12 +6034,16 @@ def run_probe(args: argparse.Namespace) -> int:
             next_id[0] += 1
             rid = next_id[0]
             pending[str(rid)] = {"event": threading.Event(), "response": None}
+        frame = {"jsonrpc": "2.0", "id": rid, "method": method, "params": params}
+        written = False
         try:
-            proc.stdin.write(canonical({"jsonrpc": "2.0", "id": rid,
-                                        "method": method, "params": params}) + b"\n")
+            proc.stdin.write(canonical(frame) + b"\n")
             proc.stdin.flush()
+            written = True
         except OSError:
             pass
+        if method == "initialize":
+            result["initialize_request"] = {"request": frame, "written": written}
         return rid
 
     def wait(rid: int, timeout: float) -> dict[str, Any] | None:
