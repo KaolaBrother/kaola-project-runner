@@ -109,7 +109,10 @@ DISPOSITIONS = ("accepted", "repair", "cancelled", "superseded", "handed-off")
 CHECK_PREFIX = "chk:"
 USER_REQUIREMENT_MARKERS = ("<!-- KPR-USER-REQUIREMENTS-START -->",
                             "<!-- KPR-USER-REQUIREMENTS-END -->")
-USER_REQUIREMENT_HEADINGS = ("user requirements", "user special requirements", "用户特殊要求")
+USER_REQUIREMENT_HEADINGS = {
+    "project": ("project special requirements", "user requirements", "user special requirements", "用户特殊要求"),
+    "delegator": ("delegator special requirements",),
+}
 # The whole native timer body: the Skill entry line and one locator sentence.
 # templates/kaola-delegator/references/snapshot.md quotes the same sentence.
 TIMER_LOCATOR = ("Kaola-Delegator inquiry: read {repo}/.kaola/delegator-heartbeat.json "
@@ -3621,45 +3624,56 @@ def maintenance_brief(state: dict[str, Any]) -> dict[str, Any]:
     return brief
 
 
-def requirement_heading(title: str) -> bool:
+def requirement_scope(title: str) -> str | None:
     title = title.strip().lower()
-    for name in USER_REQUIREMENT_HEADINGS:
-        if title == name or (title.startswith(name) and not title[len(name)].isalnum()):
-            return True
-    return False
+    for scope, names in USER_REQUIREMENT_HEADINGS.items():
+        for name in names:
+            if title == name or (title.startswith(name) and not title[len(name)].isalnum()):
+                return scope
+    return None
 
 
 def requirement_lines(repo: Path) -> dict[str, Any]:
-    """User special requirements, read from their one source: AGENTS.md."""
+    """Derive both owner scopes from current AGENTS.md; never store them."""
     source = repo / "AGENTS.md"
+    result: dict[str, Any] = {"source": str(source), "project": [], "delegator": []}
     try:
         lines = source.read_text(encoding="utf-8").splitlines()
     except OSError:
-        return {"source": str(source), "missing": "AGENTS.md is unreadable or absent", "items": []}
+        return {**result, "missing": "AGENTS.md is unreadable or absent"}
     start_marker, end_marker = USER_REQUIREMENT_MARKERS
-    picked: list[str] | None = None
-    if start_marker in lines and end_marker in lines:
-        first, last = lines.index(start_marker), lines.index(end_marker)
-        if first < last:
-            picked = lines[first + 1:last]
-    if picked is None:
-        for number, line in enumerate(lines):
-            match = re.match(r"^(#+)\s+(.*?)\s*$", line)
-            if match and requirement_heading(match.group(2)):
-                # A scoped heading such as "User special requirements — X (#N)"
-                # counts too; every such section is reported, in file order.
-                depth = len(match.group(1))
-                picked = picked if picked is not None else []
-                picked.append(line.strip())
-                for follow in lines[number + 1:]:
-                    heading = re.match(r"^(#+)\s", follow)
-                    if heading and len(heading.group(1)) <= depth:
-                        break
-                    picked.append(follow)
-    if picked is None:
-        return {"source": str(source), "missing": "no user requirements region in AGENTS.md", "items": []}
-    items = [line.strip() for line in picked if line.strip()]
-    return {"source": str(source), "items": items}
+    marked = (start_marker in lines and end_marker in lines
+              and lines.index(start_marker) < lines.index(end_marker))
+    # Unscoped legacy marker content and headings remain project requirements.
+    scope = None
+    depth = 0
+    found = False
+    pending_heading = None
+    for line in lines:
+        if marked and line == start_marker:
+            scope, depth, found = "project", 0, True
+            pending_heading = None
+            continue
+        if marked and line == end_marker:
+            scope = pending_heading = None
+            continue
+        match = re.match(r"^(#+)\s+(.*?)\s*$", line)
+        if match:
+            selected = requirement_scope(match.group(2))
+            if selected:
+                scope, depth, found = selected, len(match.group(1)), True
+                pending_heading = line.strip()
+                continue
+            elif scope and depth and len(match.group(1)) <= depth:
+                scope = pending_heading = None
+        if scope and line.strip():
+            if pending_heading:
+                result[scope].append(pending_heading)
+                pending_heading = None
+            result[scope].append(line.strip())
+    if not found:
+        result["missing"] = "no user requirements region in AGENTS.md"
+    return result
 
 
 def delegator_view(doc: dict[str, Any], path: Path, repo: Path) -> dict[str, Any]:

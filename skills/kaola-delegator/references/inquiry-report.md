@@ -72,9 +72,18 @@ Pass valid evidence forward; recheck only changed facts or gaps. Every inquiry
 report has these five parts, in order. An empty part says
 “none”; a missing source is named.
 
-1. User special requirements, listed in full from the `AGENTS.md` region
-   (`user_requirements`). New owner direction replaces a conflicting old
-   requirement; a received message is not proof it was adopted. Include one
+1. User special requirements: list **Project special requirements** and
+   **Delegator special requirements** separately, in full, from current
+   `AGENTS.md` (`user_requirements.project` and `.delegator`). Each empty scope
+   says “none”. Project requirements apply to Host and Delegator within their
+   responsibilities; Delegator requirements apply only to outer supervision
+   and user communication. Legacy unscoped requirements stay project-scoped.
+   Add only explicit owner requests or confirmed proposals; replace conflicting
+   old requirements. Ordinary Delegators may have none: a personal audit, Opus
+   review or extra approval is required only by an explicit scoped appointment.
+   Roles can read AGENTS normally. Copy neither scope into JSON or timer text;
+   typed language, cadence and grants keep their sources. A received message
+   is not proof it was adopted. Include one
    concise `seats` summary for the user: Elite/Expert exact preset ids, counts,
    Expert task/standing lifetime, occupied linked tasks and idle available
    capacity. Count each shared tier group once (Claude one; Droid count two

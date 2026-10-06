@@ -665,9 +665,26 @@ class StateTool(StateProject):
         self.update("host", "tasks", "t1", {"stage": "todo", "goal": "g"})
         self.update("host", "holds", "h1", {"scope": "codex/default", "reason": "limit"})
         code, out = self.state("view", "--file", str(self.file), "--role", "delegator")
-        self.assertEqual(out["user_requirements"]["items"], ["- Never log in.", "- Ask before release."])
+        self.assertEqual(out["user_requirements"]["project"], ["- Never log in.", "- Ask before release."])
+        self.assertEqual(out["user_requirements"]["delegator"], [], "ordinary projects have no appointment")
         self.assertEqual([row["id"] for row in out["todo"]], ["t1"])
         self.assertEqual(out["special"]["holds"][0]["id"], "h1")
+        before = self.file.read_bytes()
+        (self.repo / "AGENTS.md").write_text(
+            "<!-- KPR-USER-REQUIREMENTS-START -->\n- Keep pending work.\n"
+            "<!-- KPR-USER-REQUIREMENTS-END -->\n"
+            "## Delegator special requirements\n- Report the release decision.\n", encoding="utf-8")
+        code, out = self.state("view", "--file", str(self.file), "--role", "delegator")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["user_requirements"]["project"], ["- Keep pending work."])
+        self.assertEqual(out["user_requirements"]["delegator"],
+                         ["## Delegator special requirements", "- Report the release decision."])
+        for role in ("host", "sideagent"):
+            code, view = self.state("view", "--file", str(self.file), "--role", role)
+            self.assertEqual(code, 0, view)
+            self.assertNotIn("user_requirements", view, "scopes add no compulsory role injection")
+            self.assertNotIn("Report the release decision", json.dumps(view))
+        self.assertEqual(self.file.read_bytes(), before, "reports never copy requirements into state")
         (self.repo / "AGENTS.md").unlink()
         code, out = self.state("view", "--file", str(self.file), "--role", "delegator")
         self.assertIn("missing", out["user_requirements"], "a missing source is named")
@@ -680,11 +697,31 @@ class StateTool(StateProject):
             "## Notes\n\n- not a requirement\n\n## User requirements: style\n\n- Plain words.\n",
             encoding="utf-8")
         code, out = self.state("view", "--file", str(self.file), "--role", "delegator", "--repo", str(self.repo))
-        items = out["user_requirements"]["items"]
+        items = out["user_requirements"]["project"]
         self.assertEqual(items, ["## User special requirements — release (#9)", "Source: owner, 2026-10-04.",
                                  "1. **Fidelity.** Keep templates exact.", "2. **Upgrade.** Migrate.",
                                  "## User requirements: style", "- Plain words."])
         self.assertNotIn("missing", out["user_requirements"])
+        self.assertEqual(out["user_requirements"]["delegator"], [])
+        path = self.repo / "AGENTS.md"
+        path.write_text(path.read_text() +
+                        "\n## Project special requirements — delivery\n- Preserve grants.\n"
+                        "### Evidence\n- Original receipt.\n"
+                        "## Delegator special requirements — this run\n- Audit this candidate.\n"
+                        "## Notes\n- Not an obligation.\n", encoding="utf-8")
+        code, out = self.state("view", "--file", str(self.file), "--role", "delegator")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["user_requirements"]["project"], items +
+                         ["## Project special requirements — delivery", "- Preserve grants.",
+                          "### Evidence", "- Original receipt."])
+        self.assertEqual(out["user_requirements"]["delegator"],
+                         ["## Delegator special requirements — this run", "- Audit this candidate."])
+        path.write_text("## Project special requirements\n## Delegator special requirements\n",
+                        encoding="utf-8")
+        code, out = self.state("view", "--file", str(self.file), "--role", "delegator")
+        # Headings label a scope; an empty section has no requirement items.
+        self.assertEqual(out["user_requirements"]["project"], [])
+        self.assertEqual(out["user_requirements"]["delegator"], [])
 
     def test_repeated_cycles_keep_current_records_not_history(self) -> None:
         self.init()
@@ -3581,6 +3618,13 @@ class RenderedGuidance(unittest.TestCase):
         locator = dispatch_module.TIMER_LOCATOR.format(repo="<repo>", target="<target>")
         self.assertIn(f"`{locator}`", report)
         self.assertIn("view --role delegator", report)
+        self.assertEqual(report.encode(), (REPO / "templates/kaola-delegator/references/inquiry-report.md").read_bytes())
+        self.assertLessEqual(len(report.encode()), 8192)
+        for term in ("Project special requirements", "Delegator special requirements",
+                     "user_requirements.project", ".delegator", "Each empty scope",
+                     "within their\n   responsibilities", "only to outer supervision",
+                     "Legacy unscoped", "explicit scoped appointment", "Roles can read AGENTS normally"):
+            self.assertIn(term, report)
         for part in ("User special requirements", "Special situations", "Tasks in progress",
                      "Tasks to do", "outcomes and next steps"):
             self.assertIn(part, report)
