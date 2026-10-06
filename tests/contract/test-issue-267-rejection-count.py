@@ -448,6 +448,36 @@ class RejectionCount(unittest.TestCase):
         self.reject(why="three", review=3, evidence="receipt-3")
         self.assertEqual(self.rejection()["count"], 3)
 
+    def test_a_closed_contract_writer_without_the_allowlist_refuses(self) -> None:
+        """Root-demanded mixed-version proof: the issue-264-line CLOSED writer
+        (94f62785, unknown_record_keys enforced, no `rejection` in TASK_KEYS)
+        refuses a task row carrying the rejection object instead of silently
+        dropping it; recovery is this writer's allowlist, carried in the same
+        change. Open-writer preservation above is NOT the compatibility proof."""
+        closed_dir = Path(self.tmp.name) / "closed-writer"
+        closed_dir.mkdir()
+        for name in ("kaola-dispatch.py", "kaola-record-contract.py"):
+            show = subprocess.run(["git", "-C", str(REPO), "show",
+                                   f"94f6278523cca13c120264eaae7b77ee79dcae0c:scripts/{name}"],
+                                  check=True, capture_output=True)
+            (closed_dir / name).write_bytes(show.stdout)
+        closed_path = closed_dir / "kaola-dispatch.py"
+        self.open_task()
+        self.reject(why="one", review=1, evidence="receipt-1")
+        self.assertEqual(self.rejection()["count"], 1)
+        before = self.file.read_bytes()
+        rev = str(self.task()["rev"])
+        code, out, err = self.update("host", "tasks", "gate", {"next": "older closed writer"},
+                                     "--expect-rev", rev, script=closed_path)
+        self.assertEqual(code, 2, (out, err))
+        self.assertIn("rejection", out["detail"])
+        self.assertEqual(self.file.read_bytes(), before, "the refusal wrote nothing")
+        rev = str(self.task()["rev"])
+        code, out, err = self.update("host", "tasks", "gate", {"next": "recovered by the new writer"},
+                                     "--expect-rev", rev)
+        self.assertEqual(code, 0, (out, err))
+        self.assertEqual(self.rejection()["count"], 1)
+
     def test_policy_text_replaces_the_conflicting_sentences(self) -> None:
         failure = (REPO / "templates" / "orchestrator" / "references" / "task-failure.md").read_text(encoding="utf-8")
         skill = (REPO / "templates" / "orchestrator" / "SKILL.md.tmpl").read_text(encoding="utf-8")
