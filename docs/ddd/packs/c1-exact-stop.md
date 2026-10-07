@@ -323,7 +323,7 @@ never refused.
   3907-3980, 4629-4650, 5532-5692, 5832-5833, 5876-5889`;
   `templates/SKILL.md.tmpl:125-140`; `templates/orchestrator/references/workflow-worktree.md:30-38`;
   `templates/orchestrator/references/dispatch-collect.md:58-61`;
-  `docs/designs/modular-core-2026-10-07/design.md:26-33` (C1/C3 rows).
+  `kpm/docs/history/kpr/docs/designs/modular-core-2026-10-07/design.md:26-33` (C1/C3 rows).
 - Suites read for seam coverage (all in `./scripts/validate.sh --list`):
   - test-acp-contract.py (AcpContractTests :354, Issue132HolderIdentityTests :1043,
     Issue132AnchorUnitTests :1384, StoppedStatusTests :2480)
@@ -344,3 +344,5 @@ never refused.
   - S1/S2: dead holder + identity-verified orphan + `stop --expected-holder-instance-id 000…0`
     without `--force` → `stopped: true, holder_lost: true, force_killed_pids: [<orphan>],
     residual_pids: []`; orphan gone; record `state: stopped`; recorded id ≠ expected.
+
+Mirror citations: `kpm/…` paths = github.com/KaolaBrother/kaola-project-manager at fixed commit a13c6d6f264cf965ca45a07670dbf46cd1eb1e5f, subpath history/kpr/ — duplicate KPR source copies retired 2026-10-07; full mapping in `docs/kpm-transfer/HANDOFF.md`.

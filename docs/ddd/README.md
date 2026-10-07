@@ -5,9 +5,11 @@ delivered these documents. Phase 3 of [#282](https://github.com/KaolaBrother/kao
 adds the optional checker `scripts/kaola-ddd-pack.py`. Phase 4
 ([#283](https://github.com/KaolaBrother/kaola-project-runner/issues/283)) adds a second pack and the
 Host usage decision. Design:
-[`docs/designs/ddd-component-2026-10-07/design.md`](../designs/ddd-component-2026-10-07/design.md)
-revision 2 at `8b3779c9c9c76e03f6794b5bf5cf6ffb76bd27c0`. Method baseline:
-[`docs/research/i279-ddd-method.md`](../research/i279-ddd-method.md) (§4, §5, §6b), accepted as a
+[`docs/designs/ddd-component-2026-10-07/design.md`](https://github.com/KaolaBrother/kaola-project-manager/blob/a13c6d6f264cf965ca45a07670dbf46cd1eb1e5f/docs/history/kpr/docs/designs/ddd-component-2026-10-07/design.md)
+revision 2 at `8b3779c9c9c76e03f6794b5bf5cf6ffb76bd27c0` (KPR Git history; the duplicate source
+copy was retired to the KPM mirror on 2026-10-07 — path mapping in
+[`docs/kpm-transfer/HANDOFF.md`](../kpm-transfer/HANDOFF.md)). Method baseline:
+[`docs/research/i279-ddd-method.md`](https://github.com/KaolaBrother/kaola-project-manager/blob/a13c6d6f264cf965ca45a07670dbf46cd1eb1e5f/docs/history/kpr/docs/research/i279-ddd-method.md) (§4, §5, §6b), accepted as a
 documentation-design baseline at `f4accb11`.
 
 This directory is an optional design aid. It is not a B0 or migration precondition, a permission

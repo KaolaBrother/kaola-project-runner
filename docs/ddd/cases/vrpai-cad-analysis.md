@@ -4,9 +4,9 @@ Status: **analysis only.** It writes no consumer file, starts no session, and ch
 bridge, timer, task graph, orchestration or deployment. Every claim about a consumer is cited to
 the evidence read below, or marked `[ASSUMPTION]`.
 
-Method: [`docs/research/i279-ddd-method.md`](../../research/i279-ddd-method.md) §4–§5 and the
+Method: [`kpm/docs/history/kpr/docs/research/i279-ddd-method.md`](https://github.com/KaolaBrother/kaola-project-manager/blob/a13c6d6f264cf965ca45a07670dbf46cd1eb1e5f/docs/history/kpr/docs/research/i279-ddd-method.md) §4–§5 and the
 counter-example rule (§5 "Counter-example", §6b). Pack/context vocabulary:
-[`docs/designs/ddd-component-2026-10-07/design.md`](../../designs/ddd-component-2026-10-07/design.md)
+[`kpm/docs/history/kpr/docs/designs/ddd-component-2026-10-07/design.md`](https://github.com/KaolaBrother/kaola-project-manager/blob/a13c6d6f264cf965ca45a07670dbf46cd1eb1e5f/docs/history/kpr/docs/designs/ddd-component-2026-10-07/design.md)
 revision 2 (`8b3779c9`, §2.1, §5) and the merged phase-1 outputs at `4c30b71d`
 ([`README.md`](../README.md), [`context-map.md`](../context-map.md),
 [`packs/c4-state-retire.md`](../packs/c4-state-retire.md)).
@@ -160,9 +160,9 @@ designed.
 
 KPR-side, at `4c30b71d` unless noted:
 
-- `docs/designs/ddd-component-2026-10-07/design.md` (revision 2, `8b3779c9`) §2.1, §5, §6
+- `kpm/docs/history/kpr/docs/designs/ddd-component-2026-10-07/design.md` (revision 2, `8b3779c9`) §2.1, §5, §6
 - `docs/ddd/README.md`, `docs/ddd/context-map.md`, `docs/ddd/packs/c4-state-retire.md`
-- `docs/research/i279-ddd-method.md` (§4, §5 counter-example, §6b)
+- `kpm/docs/history/kpr/docs/research/i279-ddd-method.md` (§4, §5 counter-example, §6b)
 - `docs/cad-recurrence-diagnosis-2026-10-07.md`
 - issue #269 body and comments: `gh issue view 269 --json body,comments`
 - `scripts/kaola-record-contract.py:22, 119-123, 136-166, 1416, 1440-1442, 1452-1453, 1463-1465, 1472-1476, 1537-1551`
@@ -204,3 +204,5 @@ otherwise.
   **does not apply**; the simplified form is the fit.
 - No consumer file touched: no write, no session, no timer, orchestration, task-graph or code
   change in VRPAI/CAD or their bridges.
+
+Mirror citations: `kpm/…` paths = github.com/KaolaBrother/kaola-project-manager at fixed commit a13c6d6f264cf965ca45a07670dbf46cd1eb1e5f, subpath history/kpr/ — duplicate KPR source copies retired 2026-10-07; full mapping in `docs/kpm-transfer/HANDOFF.md`.

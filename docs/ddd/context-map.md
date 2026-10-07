@@ -22,7 +22,7 @@ product value (baseline §4), not technical layers. `owner` means content respon
 (design §2, revision 2). It is not a lock and not an approval step.
 
 The components C1–C8 and CORE are defined in
-[`docs/designs/modular-core-2026-10-07/design.md`](../designs/modular-core-2026-10-07/design.md):26-33.
+[`kpm/docs/history/kpr/docs/designs/modular-core-2026-10-07/design.md`](https://github.com/KaolaBrother/kaola-project-manager/blob/a13c6d6f264cf965ca45a07670dbf46cd1eb1e5f/docs/history/kpr/docs/designs/modular-core-2026-10-07/design.md):26-33.
 They are measured function seams, **not** bounded contexts. A component may sit in one grouping
 and still be a separate consistency boundary there.
 
@@ -120,7 +120,7 @@ change to it.
 
 - **Evidence so far:** none collected in phase 1. The only input is the vocabulary listed in
   baseline §4 (manifest, `provides`/`requires`, budget, pin, install-verify) and the C7 row of
-  the modular-core design (`docs/designs/modular-core-2026-10-07/design.md:32`, `:51`).
+  the modular-core design (`kpm/docs/history/kpr/docs/designs/modular-core-2026-10-07/design.md:32`, `:51`).
 - **Open question:** is C7 a separate language, or build tooling that only carries the other
   groupings' schemas? No pack touches it yet.
 
@@ -241,3 +241,5 @@ separated by a language change today.
 ## Change log
 
 Git history is the change log. This map keeps no history section.
+
+Mirror citations: `kpm/…` paths = github.com/KaolaBrother/kaola-project-manager at fixed commit a13c6d6f264cf965ca45a07670dbf46cd1eb1e5f, subpath history/kpr/ — duplicate KPR source copies retired 2026-10-07; full mapping in `docs/kpm-transfer/HANDOFF.md`.
