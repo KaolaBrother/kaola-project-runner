@@ -129,8 +129,9 @@ class ActivationBoundaries(unittest.TestCase):
         self.assertFalse((PROJECT / "skills" / ORCHESTRATOR_ID / "workers").exists())
         scripts = PROJECT / "skills" / ORCHESTRATOR_ID / "scripts"
         self.assertEqual(sorted(p.name for p in scripts.iterdir()),
-                         ["kaola-dispatch.py", "kaola-record-contract.py"],
-                         "control plane ships the dispatch entry and its record contract, and no transport scripts")
+                         ["kaola-compact-recovery.py", "kaola-dispatch.py", "kaola-record-contract.py"],
+                         "control plane ships the dispatch entry, its record contract and the "
+                         "compact-recovery helper (#274 package closure), and no transport scripts")
         self.assertIn("Load one selected worker Skill only at dispatch", text)
         external = (PROJECT / "skills" / EXTERNAL_ID / "SKILL.md").read_bytes()
         self.assertLessEqual(len(external), BUDGETS["external_skill_bytes"])
