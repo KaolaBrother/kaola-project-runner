@@ -280,3 +280,41 @@ ownership, not a second-user integration run. Native paid CLI execution,
 production installation and a corrected release pin remain outside this repair.
 
 Final selected log SHA256: `dc818b0343a6e26113e31df54300686e4dd2db67e8794e048e2da8909cd8dbc5`.
+
+
+## Accepted candidate integration (2026-10-07)
+
+Host verdict: **ACCEPTED** on `86c873e373eac7f580ff0be252bf7899032c52f0`. Owner authorized Workflow
+finalization/merge/push with a strict pre-push path boundary and explicitly
+required issue #278 to remain open pending release/install (root gate).
+
+`git rebase origin/main` completed without conflicts onto
+`4c30b71d0b964628c5a39159ff0cd89504adcd6b`; rebased runtime candidate:
+`b81f2734ee944964b5f173eac2961d08eb277cf7`. `git diff 86c873e373eac7f580ff0be252bf7899032c52f0 b81f2734ee944964b5f173eac2961d08eb277cf7 -- scripts skills tests`
+is empty, so the accepted four-suite evidence remains applicable. Current
+origin/main's DDD documents and issue-280 archive are retained.
+
+Post-rebase QA clone: `.kw/qa-278/rebased`, freshly cloned from the rebased
+issue worktree; only its disposable pin uses the existing content stage.
+Exact invocation from the issue worktree:
+
+```bash
+.kw/qa-278/rebased/scripts/render-skills.py --write
+.kw/qa-278/rebased/scripts/render-skills.py --check
+PATH="/Users/ylmacstudio/.local/bin:$PATH" /Users/ylmacstudio/.local/bin/bash \
+  .kw/qa-278/rebased/scripts/validate.sh --suite test-issue-278-record-root.py
+```
+
+Both render commands **PASS, exit 0**. Selected validation **PASS, exit 0**:
+10 tests in 8.263 s; suite entry 8.318 s; total validation 9.22137 s.
+Cleanup reports `residual_pids: []`. All Skill validators and Grok Bot shape
+verification also PASS in the content-stage QA copy. No native paid CLI,
+production install or corrected release pin is claimed.
+
+Post-rebase log SHA256:
+`6dedafecd956ca24350518b6e3d5db6df21aa4d32e7ab9c2ee1b147dd14d1595`.
+
+Publication is not established by these local receipts. Before any push,
+`git diff --name-only origin/main...HEAD` must match only the issue's allowed
+files plus `kaola-workflow/archive/issue-278/**`. Any protected/unexpected
+path stops publication; protected main-checkout bytes must remain unchanged.
