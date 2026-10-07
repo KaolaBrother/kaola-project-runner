@@ -1,22 +1,26 @@
 # KPR source inventory for the KPM programme mapping
 
-Version: 2026-10-07 v2 (supersedes `363c8747` v1). Git-versioned; this file is the single
+Version: 2026-10-07 v3 (supersedes v2 `de26b31c`). Git-versioned; this file is the single
 KPR-side input to the two-repo responsibility/issue/evidence mapping. Owner of this file:
 the KPR Host. Programme lead: the KPM bridge (`01a11660-1189-77d1-8639-40e896a4a025`,
-repo `/Users/ylmacstudio/Workspace/kaola-project-manager`), which creates the new KPM issues
+repo `/Users/ylmacstudio/Workspace/kaola-project-manager`), which will create the KPM issues
 with back-links; original tickets keep cross-references marking migrated-out/stopped (never
-"implemented"). No ticket is blind-closed and no implementation is copied: KPM reuses
-KPR/KW from the single original repositories through versioned interfaces (no repo copy,
-vendor, or fork).
+"implemented"). No ticket is blind-closed and no implementation is copied. The
+single-implementation constraint (no repo copy, vendor, or fork) stands; beyond that,
+**no final migration mechanism is predetermined here**: KW updates are currently stopped,
+how KPR and KW would incorporate any new architecture awaits KPM design confirmation, and
+**nothing has actually been migrated yet**. No KPM issue numbers exist yet — reference the
+KPM repo and bridge above instead of guessing them.
 
-Scope of this revision (owner direction `Sentinel_64a7198f` / `f8a26d7b`, read back against
-v1): ALL KPR architecture-upgrade implementation is revoked in this repo — including the
-earlier allowance for KPR/KW component-interface, lifecycle and recovery-contract
-transformation. KPR executes only limited fixes, verification and release closeout of
-pre-existing defects. P2/P3 results stay in place solely for KPM classification; nothing
-architectural lands in this repo under any classification outcome. KPR does not modify KW;
-work requiring KW changes is planned by KPM with KW's owner. No new KPR issues are created
-for architecture work.
+Scope of this revision (owner direction `Sentinel_64a7198f` / `f8a26d7b` and the final
+boundary round): ALL KPR architecture-upgrade implementation is revoked in this repo —
+including the earlier allowance for KPR/KW component-interface, lifecycle and
+recovery-contract transformation. KPR executes only limited fixes, verification and release
+closeout of pre-existing defects. P2/P3 results stay in place solely for KPM
+classification; nothing architectural lands in this repo under any classification outcome.
+KPR does not modify KW; KW updates are stopped and this inventory sets no future KW-change
+path — any question of KW incorporation belongs to the pending KPM design confirmation.
+No new KPR issues are created at all (not only architecture ones).
 
 Facts discipline: `main` content ≠ release ≠ installed runtime. Release v0.9.1 = content R
 `3de9f61a` + pin P `1112070e`. Everything merged after R is unreleased; the installed main
@@ -43,9 +47,9 @@ separated from runtime evidence rows.
 
 | Issue / artifact | Fixed at / evidence | Status | Real dependencies | Interface contract | Acceptance owner | Next action |
 |---|---|---|---|---|---|---|
-| #275 core extraction (P1) | slice 1 characterization contracts merged `9c88c0ef` (archive bundle-275); design `docs/designs/modular-core-2026-10-07/migration.md` in set `889f12bb` + tail `85d84525` | slice 1 done and retained as evidence; all further slices revoked here; OPEN, migrated out | none active | minimal core as an internal package; versioned reuse from the single repo — planning and implementation by KPM only | root, via KPM | KPM re-stages; no KPR dispatch; already-merged code is not reverted |
+| #275 core extraction (P1) | slice 1 characterization contracts merged `9c88c0ef` (archive bundle-275); design `docs/designs/modular-core-2026-10-07/migration.md` in set `889f12bb` + tail `85d84525` | slice 1 done and retained as evidence; all further slices revoked here; OPEN, migrated out | none active | minimal core as an internal package — the interface/reuse mechanism itself is PENDING KPM design confirmation; only the single-implementation/no-copy constraint is fixed | root, via KPM | KPM re-stages after its design confirmation; no KPR dispatch; already-merged code is not reverted |
 | #276 P2 gates / P3 C6 | P2: worktree `workflow/issue-276-p2-gates` @`4751d9aa`, 31 dirty paths (worker `f8c0c922` stopped, fresh receipt state=stopped); P3: worktree `issue-276` @`70892471`, 9 dirty paths (worker `b211fb4c` stopped, fresh receipt state=stopped) | IN PLACE, unmerged, unpushed, preserved verbatim; for KPM classification ONLY — no classification outcome lands architecture transformation in this repo | none active | P2: render findings classified per class, pure length as dev advisory, pin/drift/closure/identity/route keep blocking. P3: recovery-input queue-when-absent + deployment-isolation regression | root, via KPM | KPM classifies and adopts as it sees fit; KPR moves nothing |
-| #277 P4 KW read-only index (P5 remaining) | merged `21ec9a37`; #277 OPEN for P5 | P4 done+archived (evidence); P5 revoked here | KW read-only usage only | read-only reader reconciling `computeCodeTreeHash` vs `computeLandableTreeDigest`; writes nothing; typed absent/unsupported | root, via KPM | P5 → KPM; KPR does not modify KW — any KW change is planned by KPM with KW's owner |
+| #277 P4 KW read-only index (P5 remaining) | merged `21ec9a37`; #277 OPEN for P5 | P4 done+archived (evidence); P5 revoked here | KW read-only usage only | read-only reader reconciling `computeCodeTreeHash` vs `computeLandableTreeDigest`; writes nothing; typed absent/unsupported | root, via KPM | P5 → KPM; KPR does not modify KW; KW updates are stopped — KW incorporation, if any, is part of the pending KPM design confirmation, not a path set here |
 | #291 lifecycle contract | design comment `6035861090` (3 open questions) | design only; root six-item revision undelivered; Fable not started; revoked here | #288/#289 identity semantics exist as A-line defect fixes; KPR adds nothing further | minimal lifecycle contract for resource/duty-holding components | root (dot first), then bounded Fable — in KPM | all lifecycle-contract design and implementation in KPM; KPR contributes only the existing #288/#289 semantics as they land |
 
 ## Research / DDD — originals retained as evidence; continuation revoked here
