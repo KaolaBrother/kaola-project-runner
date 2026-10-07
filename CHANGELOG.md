@@ -39,6 +39,19 @@ Seats: restart required
   pending Host changes, including a failed batch's range, with a Host recovery
   request, so recovery needs no fake business write. Restart Host seats at a
   safe boundary to load the holder change.
+- **Dead-holder stop keeps the expected-holder check (Issue #289).** A `stop`
+  whose holder pid is already dead, including the `holder-unreachable` race,
+  refuses a foreign `--expected-holder-instance-id` with the same
+  `holder-instance-mismatch` receipt as a silent live holder
+  (`mutation_status: not_started`, `mutation_performed: false`) and writes one
+  `holder_instance_mismatch` event. The record and processes stay unchanged.
+  A matching id, or none, still sweeps the identity-verified recorded groups
+  without `--force`. The silent live `--force` path writes that same event.
+  This change is `scripts/kaola-acp.py` only, outside the operator test in
+  `docs/conventions.md` (`scripts/kaola-acp.py` is not in that diff). A running
+  seat loads the Runner on the next `stop`, so this change is `Seats: restart
+  not required`. The Unreleased section stays `Seats: restart required` because
+  #278 changed the holder path helper.
 
 ## 0.9.1 — 2026-10-07 (compaction recovery, steer adaptations, launch broker, task-failure count, selection continuity)
 

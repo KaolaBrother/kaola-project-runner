@@ -745,7 +745,11 @@ they were given, so an existing session stays observable and exactly stoppable.
 `--expected-holder-instance-id ID` binds `send`, `permit`, `cancel`, `key`, and `stop` to one ACP holder
 instance. A mismatch returns `{"error":{"code":"holder-instance-mismatch"}}` with
 `mutation_performed: false` and changes nothing, so a same-named session rebuilt by a later holder
-is never stopped in place of the one the Agent verified.
+is never stopped in place of the one the Agent verified. A `stop` whose holder pid is already dead
+uses that same receipt (`expected_holder_instance_id`, `holder_instance_id`,
+`mutation_status: not_started`) and writes one `holder_instance_mismatch` event; the record and
+processes stay unchanged. A matching id, or no expected id, still sweeps that dead holder's
+identity-verified recorded groups without `--force`.
 
 `send` preserves omitted wait selection through `runtime-tmux.sh`, `kaola-tmux.sh`,
 and direct `kaola-acp.py`. Explicit `--wait` blocks and `--no-wait` returns admission;
@@ -1072,7 +1076,7 @@ passes the check or whose live PID's argv still names this record directory (`er
 reports the check). A live PID whose argv is provably another process is a reused PID: the start
 replaces the stale record without signalling it and reports `replaced_record.pid_reused: true`.
 `stop --force` on a live PID whose socket is absent or silent checks
-`--expected-holder-instance-id` against the record (`holder-instance-mismatch`, nothing written),
+`--expected-holder-instance-id` against the record (`holder-instance-mismatch`, one `holder_instance_mismatch` event, record and processes unchanged),
 stops a holder that answers, as the record's own instance, on the `--socket` its own argv names (a holder started under another
 spelling of the same record root, e.g. `/tmp` vs `/private/tmp`, derives another socket path) with an
 ordinary stop over that socket (`answering_socket`), and signals only a silent PID whose argv anchors
@@ -1083,8 +1087,8 @@ while its live leader has exactly the start second the holder recorded as `agent
 seconds, so time zones do not matter) at spawn; plus
 child groups that still match their recorded start time), and the record is retired once nothing of them is left
 (later `status` reads `no-session`; a survivor keeps the record and appears in `residual_pids`). An
-unreadable argv refuses `holder-unreachable`. A force stop of a dead
-holder that leaves nothing of its recorded groups marks the record `stopped`, so `status` reads
+unreadable argv refuses `holder-unreachable`. A stop of a dead
+holder, with or without `--force`, after a matching or omitted expected holder id, that leaves nothing of its recorded groups marks the record `stopped`, so `status` reads
 `stopped` with `residual_pids: []`. Issue #191: macOS reuses a pgid once its group empties, so a
 record written before `agent_started`, or an agent group whose leader is gone, proves no identity.
 When such a recorded `agent_pgid` still has live members, either force-stop path signals none of
@@ -1522,8 +1526,8 @@ Noted groups are recorded as `agent_child_pgids` with the member pids and start 
 recorded member is still alive under its recorded start time, or under a start time at or before
 its recorded spawn and within five seconds of it (SIGTERM, grace, SIGKILL), so a reused pid or group id is never
 signalled; the stop receipt lists the signalled groups as `swept_child_pgids` and `residual_pids`
-covers them. A holder-lost `stop --force` applies the same identity checks to `record.json` and
-`children.jsonl`, SIGKILLs the live members of the recorded agent group (only under a live leader
+covers them. A holder-lost `stop`, with or without `--force`, applies the same identity checks to `record.json` and
+`children.jsonl` after a matching or omitted `--expected-holder-instance-id` (a foreign id is refused and writes one `holder_instance_mismatch` event), SIGKILLs the live members of the recorded agent group (only under a live leader
 with the recorded `agent_started`, Issue #191) plus the confirmed child
 groups at once, and reports those groups as `swept_pgids`; a recorded normal stop reads as
 `stopped` only when none of them is
