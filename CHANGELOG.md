@@ -29,6 +29,16 @@ Seats: restart required
   help and the `$LIVE` doc name `kaola-dispatch-index/1` and
   `list --repo --include-dead` rows. This entry alone is state tooling only;
   the section restart comes from the #278 holder change.
+- **Multi-index dispatch close-out (Issue #290).** `state retire --kind
+  tasks` accepts a repeatable `--index`, so a done+accepted task whose items
+  were dispatched by more than one `execute` run (separate
+  `kaola-dispatch-index/1` files) retires once every item is closed and every
+  seat is stopped. Every supplied file must still pass the index identity
+  check, and every dispatch ref must be found in exactly one supplied index:
+  a ref in no file is still named open, and a ref in two files is refused.
+  The index mirror writes each supplied file. No hand-merged index, forced
+  removal or tombstone. This entry alone is state tooling only; the section
+  restart comes from the #278 holder change.
 - **Per-input maintenance settlement (Issue #287).** `state update --kind alerts
   --evidence checkpoint:B --set '{"inputs":{"ID":null}}'` removes one handled
   `maintenance-returned` input when the recorded node checkpoint settled it or

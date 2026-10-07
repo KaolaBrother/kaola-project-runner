@@ -5031,18 +5031,38 @@ def index_identity_problem(index: dict[str, Any], repo: str) -> str | None:
     return None
 
 
+def supplied_index_paths(args: argparse.Namespace) -> list[str]:
+    """Every --index this command holds, in order (Issue #290).
+
+    A task's items can be dispatched by more than one execute run, each
+    writing its own kaola-dispatch-index/1. `state retire` therefore accepts a
+    repeatable --index; every other command still supplies at most one.
+    """
+    raw = getattr(args, "index", None)
+    if raw is None:
+        return []
+    values = raw if isinstance(raw, list) else [raw]
+    return [item for item in values if isinstance(item, str) and item]
+
+
 def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
     """Why a task's dispatched items are not shown closed: each needs an index
     row that is no longer in flight and stopped seats. A Host can reconcile
     an initial fingerprint against its accepted same-holder continuation;
-    this does not change the original unknown collect result."""
+    this does not change the original unknown collect result.
+
+    Issue #290: the closure proof may span several of this project's index
+    files. Every supplied file still identifies itself as this project's
+    kaola-dispatch-index/1, and every dispatch ref must be found in exactly
+    one of them."""
     refs = task.get("dispatch")
     refs = [refs] if isinstance(refs, str) else [ref for ref in refs or [] if isinstance(ref, str)]
     seats = task_seats(task)
     if not refs and not seats:
         return []
     problems: list[str] = []
-    if refs and (not getattr(args, "index", None) or not getattr(args, "live", None)):
+    indices = supplied_index_paths(args)
+    if refs and (not indices or not getattr(args, "live", None)):
         problems.append(f"dispatch {', '.join(refs)} needs --index and --live to show it closed and stopped")
     if seats and not getattr(args, "live", None):
         problems.append(f"seat {', '.join(sorted(seats))} needs --live to show it stopped, or "
@@ -5051,21 +5071,40 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
         return problems
     live = live_rows_of(args.live) or []
     if refs:
-        index = load_object(Path(args.index))
-        mismatch = index_identity_problem(index, str(repo_of_state_file(Path(args.file))))
-        if mismatch:
-            raise StateRefusal(
-                "index-unidentified",
-                f"the index at {args.index} {mismatch}; retire proves closure only from this "
-                "project's dispatch index",
-                recovery="pass --index pointing at this project's kaola-dispatch-index/1, the "
-                         "file execute and collect write here")
-        rows = {row.get("item_id"): row for row in index.get("items") or []
-                if isinstance(row, dict)}
+        repo = str(repo_of_state_file(Path(args.file)))
+        rows: dict[str, dict[str, Any]] = {}
+        row_index: dict[str, str] = {}
+        ambiguous: set[str] = set()
+        for index_path in indices:
+            index = load_object(Path(index_path))
+            mismatch = index_identity_problem(index, repo)
+            if mismatch:
+                raise StateRefusal(
+                    "index-unidentified",
+                    f"the index at {index_path} {mismatch}; retire proves closure only from this "
+                    "project's dispatch index",
+                    recovery="pass --index pointing at this project's kaola-dispatch-index/1, the "
+                             "file execute and collect write here")
+            for index_row in index.get("items") or []:
+                if not isinstance(index_row, dict):
+                    continue
+                item_id = index_row.get("item_id")
+                if not isinstance(item_id, str):
+                    continue
+                if item_id in row_index and row_index[item_id] != index_path:
+                    # Issue #290: a ref in two supplied indices is not in
+                    # exactly one, so the pair proves no single closure.
+                    ambiguous.add(item_id)
+                row_index[item_id] = index_path
+                rows[item_id] = index_row
         for ref in refs:
             row = rows.get(ref)
             if row is None:
                 problems.append(f"{ref} is not in the index")
+                continue
+            if ref in ambiguous:
+                problems.append(f"{ref} is in more than one supplied index; closure needs exactly "
+                                "one --index file to show it closed")
                 continue
             status = row.get("status")
             if status in CLOSED_COVERAGE:
@@ -5095,7 +5134,7 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
                 and isinstance(collected.get("repo"), str) and bool(collected.get("repo"))
                 and isinstance(row.get("repo"), str) and bool(row.get("repo"))
                 and same_repo(collected.get("repo"), row.get("repo"))
-                and same_repo(row.get("repo"), repo_of_state_file(Path(args.file)))
+                and same_repo(row.get("repo"), repo)
                 and any(live_row.get("session") == session
                         and live_row.get("holder_instance_id") == holder
                         and live_row.get("platform") == row.get("platform")
@@ -5109,7 +5148,8 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
                      "disposition": "accepted"}]
             else:
                 problems.append(f"{ref} is {row.get('status')}")
-        sessions = {rows[ref].get("session") for ref in refs if ref in rows} - set(seats)
+        sessions = {rows[ref].get("session") for ref in refs
+                    if ref in rows and ref not in ambiguous} - set(seats)
         for row in live:
             if row.get("state") != "stopped" and row.get("session") in sessions:
                 problems.append(f"{row.get('session')} is still live")
@@ -5313,21 +5353,33 @@ def state_mutation(args: argparse.Namespace, change, limit_removal: dict[str, An
                  "value": changed, **({"index_mirror": mirrored} if mirrored else {}), **sizes})
 
 
-def mirror_dispositions(args: argparse.Namespace, doc: dict[str, Any], path: Path) -> dict[str, Any] | None:
+def mirror_dispositions(args: argparse.Namespace, doc: dict[str, Any], path: Path) -> dict[str, Any] | list[dict[str, Any]] | None:
     """Copy one task's Host-recorded per-assignment dispositions onto the
     existing index rows. A linked row the Host gave no disposition after a
-    verdict reads `undecided`, never a misleading `pending`."""
-    index_path = getattr(args, "index", None)
-    if not index_path or getattr(args, "kind", None) != "tasks" or getattr(args, "command", "") != "state":
+    verdict reads `undecided`, never a misleading `pending`.
+
+    Issue #290: a retire closure proof may span several indices, so the mirror
+    writes each supplied file. One supplied file keeps the single-object
+    result every existing reader expects; several return one result per file."""
+    paths = supplied_index_paths(args)
+    if not paths or getattr(args, "kind", None) != "tasks" or getattr(args, "command", "") != "state":
         return None
     task = getattr(args, "_retired_task", None) or doc["state"].get("tasks", {}).get(args.id)
     if not isinstance(task, dict):
         return None
-    try:
-        return mirror_task(args, task, path, index_path)
-    except (OSError, ValueError) as exc:
-        # The state write already landed; the index stays as it was and says so.
-        return {"index": index_path, "error": str(exc), "changed": {}}
+    if len(paths) == 1:
+        try:
+            return mirror_task(args, task, path, paths[0])
+        except (OSError, ValueError) as exc:
+            # The state write already landed; the index stays as it was and says so.
+            return {"index": paths[0], "error": str(exc), "changed": {}}
+    mirrored: list[dict[str, Any]] = []
+    for index_path in paths:
+        try:
+            mirrored.append(mirror_task(args, task, path, index_path))
+        except (OSError, ValueError) as exc:
+            mirrored.append({"index": index_path, "error": str(exc), "changed": {}})
+    return mirrored
 
 
 def mirror_task(args: argparse.Namespace, task: dict[str, Any], path: Path, index_path: str) -> dict[str, Any]:
@@ -6353,8 +6405,9 @@ def build_parser() -> argparse.ArgumentParser:
     retire.add_argument("--evidence", required=True)
     retire.add_argument("--cite", help="JSON {commit, path} for a completed outcome that must survive")
     retire.add_argument("--outcome")
-    retire.add_argument("--index", help="JSON file path: this project's kaola-dispatch-index/1 "
-                        "showing the task's items closed")
+    retire.add_argument("--index", action="append",
+                        help="JSON file path: this project's kaola-dispatch-index/1 showing the task's "
+                             "items closed; repeatable when separate execute runs wrote separate indices")
     retire.add_argument("--live", help="JSON file path: kaola-acp.py list --repo --include-dead rows "
                         "(kaola-acp-list/1) showing its sessions stopped")
     retire.add_argument("--handoff", help="current task that takes over its seats and dispatch")
