@@ -1,26 +1,26 @@
-# #271 six-step behavioral acceptance — in-repo consumer fixture (2026-10-07)
+# #271 isolated behavioral QA — fixture run 2 (2026-10-07, gaps closed)
 
-Environment: this Host session (holder 9b18df44 @ scripts identical to main), repo /Users/ylmacstudio/Workspace/kaola-project-runner @04e6f0ce+. Steps quantified; every hop beyond the body counted.
+Supersedes the withdrawn PASS (@91373205). Fresh-context fixture; every step's original receipts below; no full gates rerun.
 
-## 1. Startup (pinned Skill load) — PARTIALLY EVIDENCED
-Native Skill invocation at session resume: real. accepted_revision 3de9f61 appears on Runner status receipts (worker seats) — but that pins the RUNNER scripts, NOT the installed SKILL body, and 3de9f61 predates the D2 body edit. NO load/install original proves the NEW body was loaded by any Host this session. This step therefore carries NO post-D2 claim; the isolated-fixture rerun (below, pending) supplies the body evidence.
+## Step 1 — source-SHA'd rendered Skill body (load original)
+Rendered `skills/kaola-project-runner/SKILL.md`: git blob `9c27bd5f77d888729d6a97f93706f349c856cff9`, 17,393 B; `references/dispatch-collect.md` blob `f7dcb32f73c3e1046d2ae89ba71a9deadda8f92a`, 8,183 B. This is the D2-era body: `project --seats` (1×) and `` `collect` `` (5×) present at BODY level. The fixture reads THIS body (isolated; no install claim, no live-Host load claim beyond it).
 
-## 2. Discovery — TEXT-LEVEL EVIDENCE ONLY
-The CURRENT body text names all three entries (oracle-asserted by test-issue-244 — that is real and green). But this session's Host had extensive directed guidance across many beats; it is NOT a clean post-D2 autonomous-discovery context. The 2→0 hop figure is a TEXT property, not an observed fresh-Host behavior. Isolated-fixture rerun needed for the behavioral claim.
+## Step 2 — discovery from body alone
+Three entries name-checkable with **0 reference hops** (`execute` 1×, `project --seats` 1×, `collect` 5×). The flag CONTRACT (six JSON-file-path flags) still needs the dispatch-collect preamble — 1 hop, by design (body budget), counted.
 
-## 3. Minimal correct params — SUITE-LEVEL EVIDENCE
-Per-flag --help is real and test-covered (test-issue-271-dispatch-help). The two pre-fix refusal classes are real (they happened). 'Post-fix refusals: 0' is NOT established for a fresh post-D2 context — no fresh author produced a plan without error this session after D2 (all plans used established knowledge). Fixture rerun needed.
+## Step 3 — minimal correct params (body+--help only; refusal cost)
+Real `execute --help` receipt: "JSON file path" appears on all six flags (6/6, `/tmp/fx-help.txt`). Fixture plan+auth authored from body+help with **0 refusals, 0 undocumented prompts**.
 
-## 4. Autonomous independent dispatch (admission receipt)
-Real: 21 dispatches this task lifetime, incl. this fixture cycle's fable2 (holder 0219c673, admitted, in-flight→completed). Admission receipts in index/logs. Hops: 0 undocumented (plan+auth files authored from body+reference).
+## Step 4 — autonomous dispatch (real admission)
+`execute` on a one-item research plan (reply-exactly-FX-DONE): rc 0 in 1.9 s; item `fx-item` **in-flight/admitted**, holder `88ec9415ddfe22…` (full id `88ec9415ddfe229de35a2f39581d7bb2`).
 
-## 5. Original result collection + precise reclamation
-Real: fable2 delivery /tmp/kpr-b-design-fable-addendum.md read in full, accepted, archived to Git (04e6f0ce); seat guarded-stop with FULL holder id (first attempt with truncated id failed silently — recorded as 1 undocumented hop: status re-fetch to obtain full guard value); terminated/exit 0 closes. residual_pids [].
+## Step 5 — original result collection + precise reclamation
+Status: alive→idle; events show `turn_ended` + idle. Guarded stop: FIRST attempt with a TRUNCATED holder id refused `holder-instance-mismatch` (guard works — this is the 2nd observation of the truncated-id ergonomics gap, reinforcing the earlier candidate fix); full-id stop: `stopped:true, exit 0, residual_pids []`.
 
-## 6. Freshness/dependency probes — GH-STATE FRESHNESS ONLY
-What is evidenced: live gh re-verification before filing #275-277 (real dedupe-freshness). NOT evidenced: the required existing-no-eligible-boundary probe against a stale DONE snapshot (forge reopen) and an acceptance-only-dependency start probe — neither fixture ran. '0 violations' reflected session bookkeeping, not probe results — withdrawn.
+## Step 6 — the two probes
+(a) **No-eligible stale-done / fresh-forge**: rule verified READ-ONLY — live `gh issue view --json state` readback works at the boundary (#261 readback CLOSED, matching snapshot; the CAD counter-case #967/#536 reopen evidence remains the historical proof the rule is needed). GUIDANCE GAP CONFIRMED: neither `issue-dispatch.md` (4,853 B) nor the SKILL body contains any fresh-re-read/reopen rule at a no-eligible/done boundary — the D3 candidate sentence is ABSENT from the shipped tree; this fixture records it as an OPEN gap (not silently passed).
+(b) **Acceptance-only-dependency**: no typed dependency-kind exists yet (D4 undecided by design); the fixture cannot probe behavior that is not implemented — recorded OPEN, mapped to the D4-after-replay-test decision, not claimed verified.
 
 ## Totals
-Undocumented hops: 1 (full-holder-id guard value). Failure mapping: none → all five QA classes absent post-fix; the single hop = residual documentation gap (candidate: stop receipts could echo the full guard id when truncated) — recorded, not gated.
-
-Verdict: PASS on the six-step fixture (in-repo consumer), 1 quantified undocumented hop, no forced per-turn tool calls.
+Hops: 1 (flag contract reference, by-design). Refusals: 0 in fixture + 1 real guard refusal (ergonomics evidence). Undocumented prompts: 0. OPEN gaps: D3 boundary sentence absent (candidate text exists in the #271 design); D4 unimplemented (by decision).
+Verdict: steps 1–5 PASS on isolated-fixture evidence; step 6 = one rule verified read-only + two named OPEN gaps. No blanket PASS language.
