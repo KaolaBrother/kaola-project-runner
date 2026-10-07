@@ -5,7 +5,7 @@ status: current
 owner: host
 context_primary: kw-model/C8-kw-bridge
 contexts_touched: kw-model/kw-run-lifecycle, kw-model/kw-validation
-baseline_commit: 4c30b71d0b964628c5a39159ff0cd89504adcd6b
+baseline_commit: 21ec9a3754aaaecd25350ae995f4704ab9ea441e
 related_issues: 279, 280, 284, 277, 270
 ---
 
@@ -18,67 +18,77 @@ alignment target is a contract per shared artifact, not a merge of implementatio
 
 This pack is written from KW source **read-only**. No KW file is written, branched or run
 mutating. Q1 (is KW one context or several) is resolved in
-[`../context-map.md`](../context-map.md);
-this pack uses the candidate context names that section introduces.
+[`../context-map.md`](../context-map.md); this pack uses the candidate context names that section
+introduces.
+
+**Citation convention.** KPR paths are written unprefixed and are relative to this repository
+(e.g. `templates/orchestrator/references/issue-dispatch.md`). Every Kaola-Workflow path is written
+with a `KW/` prefix and is NOT a path in this repository: it lives in the Kaola-Workflow checkout
+read read-only at `16cab12d41cd72818c40f3773068145b35f3f776`, e.g.
+`KW/scripts/kaola-workflow-claim.js:1-16`. KPR-side design records used here:
+`docs/designs/ddd-component-2026-10-07/design.md` (the optional DDD component, `kaola-ddd/1`) and
+`docs/designs/modular-core-2026-10-07/design.md` plus
+`docs/designs/modular-core-2026-10-07/adr.md` (the component cut and ADR-7).
 
 Context names follow [`../context-map.md`](../context-map.md): `<candidate grouping>/<component>`.
-`kw-model/C8-kw-bridge` is the KPR-side component that faces KW. The seam reaches two KW
-candidate contexts: `kw-model/kw-run-lifecycle` (the ledger and claim records) and
+`kw-model/C8-kw-bridge` is the KPR-side component that faces KW. The seam reaches two KW candidate
+contexts: `kw-model/kw-run-lifecycle` (the ledger and claim records) and
 `kw-model/kw-validation` (the tree-digest views).
-
-KPR citations are at `4c30b71d`; `H` means `templates/orchestrator/references/`. `KW` prefixes a
-path inside Kaola-Workflow, read read-only at `16cab12d` (e.g. `KW scripts/kaola-workflow-claim.js`).
 
 ## Vocabulary
 
 | Term | Meaning in this unit | Defined at |
 |---|---|---|
-| C8 / KW bridge | The KPR component that faces KW. Its one implemented form today is the control-plane Host reading KW artifacts read-only; no shared process, schema or store is created. | `docs/designs/modular-core-2026-10-07/design.md:33`, `:147` |
+| C8 / KW bridge | The KPR component that faces KW. Its one implemented form today is the control-plane Host reading KW artifacts read-only; no shared process, schema or store is created. | `docs/designs/modular-core-2026-10-07/design.md:33`, `docs/designs/ddd-component-2026-10-07/design.md:146-147` |
 | "one contract with two named views" | ADR-7's rule: a shared artifact gets ONE contract with named views, not one function or two divergent implementations. Its current instance is KW's code-tree digest pair (finalize gate vs landable record). | `docs/designs/modular-core-2026-10-07/adr.md:35-38` |
-| mission ledger | KW's run coordination record: one JSON object per line, keys `n`/`name`/`details`/`status`; the run's sole coordination record, written by the run's Main Orchestrator. | `KW scripts/kaola-workflow-adaptive-schema.js:58-68`, `KW docs/decisions/0027-the-mission-ledger.md:31-47` |
-| `{n,status}` projection | KPR's read of the ledger: `done` lines / total lines, plus the `failed`/`blocked` rows. It never opens `details` except to decide one mission. | `H issue-dispatch.md:63-69` |
-| claim / `workflow-state.md` | KW's claim/sink/liveness record, written once at claim and patched only for sink and terminal closure. Carries `issue_number` and the claim identity block. | `KW docs/workflow-state-contract.md:119-122`, `:243-284` |
-| `claim_repository_id` / `issue_number` | The identity pair KPR checks before showing issue progress. | `H issue-dispatch.md:52-53`, `KW scripts/kaola-workflow-adaptive-schema.js:129` |
-| `codeTreeHash` / `computeCodeTreeHash` | KW's finalize-gate code-tree hash. Canonical for the gate; read from the shared kernel by both producer and gate. | `KW scripts/kaola-workflow-adaptive-schema.js:1124` |
-| `computeLandableTreeDigest` | KW's SEPARATE landable-tree digest over the same visibility band, a different algorithm that yields a different value. Recording it as the candidate hash buys `final_validation_stale`. | `KW scripts/kaola-workflow-validation-runner.js:554`, `:1167-1172` |
-| "stale" (collision) | Same word, three models: `lane_bucket: stale` (resume age), `chains_stale` (chain receipt vs head), `final_validation_stale` (candidate-hash vs tree). Listed because the pack must not coin a synonym across them. | `KW scripts/kaola-workflow-adaptive-schema.js:292`, `:1244`, `:1461` |
-| "receipt" (collision) | Same word, several schemas in KW: chain receipt, sink receipt, closure receipt, global-contract receipt. The C8 seam names only the ones it reads/aligns. | `KW scripts/kaola-workflow-adaptive-schema.js:867-870`, `KW scripts/kaola-workflow-closure-contract.js:5-11`, `KW scripts/kaola-workflow-global-contract.js:12` |
-| read-only | The direction rule: "the Runner never writes" any KW artifact. | `H issue-dispatch.md:60-61` |
+| mission ledger | KW's run coordination record: one JSON object per line, keys `n`/`name`/`details`/`status`; the run's sole coordination record, written by the run's Main Orchestrator. | `KW/scripts/kaola-workflow-adaptive-schema.js:58-68`, `KW/docs/decisions/0027-the-mission-ledger.md:31-47` |
+| `{n,status}` projection | KPR's read of the ledger: `done` lines / total lines, plus the `failed`/`blocked` rows. It never opens `details` except to decide one mission. | `templates/orchestrator/references/issue-dispatch.md:63-69` |
+| claim / `workflow-state.md` | KW's claim/sink/liveness record, written once at claim and patched only for sink and terminal closure. Carries `issue_number` and the claim identity block. | `KW/docs/workflow-state-contract.md:119-122`, `KW/docs/workflow-state-contract.md:243-284` |
+| `claim_repository_id` / `issue_number` | The identity pair KPR checks before showing issue progress. | `templates/orchestrator/references/issue-dispatch.md:52-53`, `KW/scripts/kaola-workflow-adaptive-schema.js:129` |
+| `codeTreeHash` / `computeCodeTreeHash` | KW's finalize-gate code-tree hash. Canonical for the gate; read from the shared kernel by both producer and gate. | `KW/scripts/kaola-workflow-adaptive-schema.js:1124` |
+| `computeLandableTreeDigest` | KW's SEPARATE landable-tree digest over the same visibility band, a different algorithm that yields a different value. Recording it as the candidate hash buys `final_validation_stale`. | `KW/scripts/kaola-workflow-validation-runner.js:554`, `KW/scripts/kaola-workflow-validation-runner.js:1167-1172` |
+| "stale" (collision) | Same word, three models: `lane_bucket: stale` (resume age), `chains_stale` (chain receipt vs head), `final_validation_stale` (candidate-hash vs tree). Listed because the pack must not coin a synonym across them. | `KW/scripts/kaola-workflow-adaptive-schema.js:292`, `KW/scripts/kaola-workflow-adaptive-schema.js:1244`, `KW/scripts/kaola-workflow-adaptive-schema.js:1461` |
+| "receipt" (collision) | Same word, several schemas in KW: chain receipt, sink receipt, closure receipt, global-contract receipt. The C8 seam names only the ones it reads/aligns. | `KW/scripts/kaola-workflow-adaptive-schema.js:867-870`, `KW/scripts/kaola-workflow-closure-contract.js:5-11`, `KW/scripts/kaola-workflow-global-contract.js:12` |
+| read-only | The direction rule: "the Runner never writes" any KW artifact. | `templates/orchestrator/references/issue-dispatch.md:60-61` |
 
 ## Inputs and outputs
 
 | Direction | Artifact | Schema / version | Owner of the format |
 |---|---|---|---|
-| in | KW mission ledger `<canonical-root>/kaola-workflow/.ledger/issue-<N>.jsonl` | one JSON object per line; keys exactly `n`/`name`/`details`/`status`; `status` ∈ `todo`/`in-flight`/`done`/`failed`/`blocked` | KW (the global Workflow contract); KPR reads only (`KW scripts/kaola-workflow-adaptive-schema.js:58-68`) |
-| in | KW `workflow-state.md` | flat claim/sink/liveness blocks; `issue_number`, `claim_repository_id`, branch/worktree, closure facts | KW (claim scripts); KPR reads only (`KW docs/workflow-state-contract.md:243-284`) |
-| in | KPR rendered surfaces that carry the read | `kaola-project-runner` Skill references rendered from `templates/orchestrator/` | KPR (`H issue-dispatch.md`, `H host-startup.md.tmpl:135-146`, `docs/architecture.md:234`, `docs/issue-dispatch-display.md`) |
-| out | KPR progress projection | stdout only: `done / total` + `(n,status)` for `failed`/`blocked`; absent ledger → `unknown` | KPR, display only, never stored (`H issue-dispatch.md:63-69`) |
-| design-intent (not built) | the ADR-7 aligned tree-digest contract "one contract with two named views" | not yet specified; today two KW-side digests with distinct semantics | KW owns both views; the reconciliation text is P4 (#277) design (`docs/designs/modular-core-2026-10-07/adr.md:35-38`, `design.md:18`) |
+| in | KW mission ledger `<canonical-root>/kaola-workflow/.ledger/issue-<N>.jsonl` | one JSON object per line; keys exactly `n`/`name`/`details`/`status`; `status` ∈ `todo`/`in-flight`/`done`/`failed`/`blocked` | KW (the global Workflow contract); KPR reads only (`KW/scripts/kaola-workflow-adaptive-schema.js:58-68`) |
+| in | KW `workflow-state.md` | flat claim/sink/liveness blocks; `issue_number`, `claim_repository_id`, branch/worktree, closure facts | KW (claim scripts); KPR reads only (`KW/docs/workflow-state-contract.md:243-284`) |
+| in | KPR rendered surfaces that carry the read | `kaola-project-runner` Skill references rendered from `templates/orchestrator/` | KPR (`templates/orchestrator/references/issue-dispatch.md`, `templates/orchestrator/references/host-startup.md.tmpl:135-146`, `docs/architecture.md:274`, `docs/issue-dispatch-display.md`) |
+| out | KPR progress projection | stdout only: `done / total` + `(n,status)` for `failed`/`blocked`; absent ledger → `unknown` | KPR, display only, never stored (`templates/orchestrator/references/issue-dispatch.md:63-69`) |
+| design-intent (not built) | the ADR-7 aligned tree-digest contract "one contract with two named views" | not yet specified; today two KW-side digests with distinct semantics | KW owns both views; the reconciliation text is P4 (#277) design (`docs/designs/modular-core-2026-10-07/adr.md:35-38`, `docs/designs/modular-core-2026-10-07/design.md:18`) |
 
 ## Invariants
 
 - **I1 — The ledger has one writer, and it is not KPR.** Boundary: the ledger file. KW's Main
-  Orchestrator writes it at three moments; KPR only reads. `H issue-dispatch.md:60-61`;
-  `KW docs/decisions/0027-the-mission-ledger.md:44-47`.
+  Orchestrator writes it at three moments; KPR only reads.
+  `templates/orchestrator/references/issue-dispatch.md:60-61`;
+  `KW/docs/decisions/0027-the-mission-ledger.md:44-47`.
 - **I2 — Ledger shape is fixed.** Boundary: the ledger file. Keys exactly
   `n`/`name`/`details`/`status` in that order; no header or goal line; `status` from a closed set.
-  `KW scripts/kaola-workflow-adaptive-schema.js:67-68`.
+  `KW/scripts/kaola-workflow-adaptive-schema.js:67-68`.
 - **I3 — The ledger lives only in the main checkout.** Boundary: main checkout vs child worktree.
   Gitignored, never mirrored into a worktree; at archive it moves to
-  `kaola-workflow/archive/<project>/mission-ledger.jsonl`. `KW docs/workflow-state-contract.md:105-118`.
+  `kaola-workflow/archive/<project>/mission-ledger.jsonl`.
+  `KW/docs/workflow-state-contract.md:105-118`.
 - **I4 — Progress is a count, not a lifecycle verdict.** Boundary: KPR display vs KW lifecycle.
   An absent file is `unknown`; a missing file or all-terminal lines alone prove neither archive,
-  finalize-in-progress, nor a reason to wait. `H issue-dispatch.md:63`, `:77-81`.
+  finalize-in-progress, nor a reason to wait. `templates/orchestrator/references/issue-dispatch.md:63`,
+  `templates/orchestrator/references/issue-dispatch.md:77-81`.
 - **I5 — Identity precedes progress.** Boundary: KPR dispatch naming vs KW claim identity. The
   claimed `workflow-state.md` `issue_number` must equal the dispatch name's `ISSUE` under the same
-  repository identity. `H issue-dispatch.md:52-53`.
+  repository identity. `templates/orchestrator/references/issue-dispatch.md:52-53`.
 - **I6 — KW is untouched.** Boundary: repository ownership. KW keeps claim, ledger, worktree and
   finalize; the seam adds no shared-schema write, no KW change, no new KW state.
-  `docs/designs/modular-core-2026-10-07/design.md:147`, `:199-201`.
+  `docs/designs/ddd-component-2026-10-07/design.md:146-147`,
+  `docs/designs/ddd-component-2026-10-07/design.md:197-201`.
 - **I7 — Two views keep distinct semantics until reconciled.** Boundary: KW validation. ADR-7
   aligns the code-tree digests to one contract with two named views; it does not erase the second
   function, and the digest pair stays deliberately different algorithms.
-  `docs/designs/modular-core-2026-10-07/adr.md:35-38`; `KW scripts/kaola-workflow-validation-runner.js:1167-1172`.
+  `docs/designs/modular-core-2026-10-07/adr.md:35-38`; `KW/scripts/kaola-workflow-validation-runner.js:1167-1172`.
 
 ## Dependency contracts
 
@@ -135,10 +145,10 @@ Planning information only. Legitimate work outside it is coordinated with the ow
   `docs/issue-dispatch-display.md`, and this pack. Suites: `test-issue-133-mission-ledger.py`,
   `test-issue-72-session-naming.py`, `test-issue-75-codex-compact-hook.py`.
 - KW (read-only for this unit): the ledger contract and its constants
-  (`KW scripts/kaola-workflow-adaptive-schema.js`), `workflow-state.md` fields, and ADR 0027.
+  (`KW/scripts/kaola-workflow-adaptive-schema.js`), `workflow-state.md` fields, and ADR 0027.
   Any of these changing is a KW-owned event; this pack only refreshes citations.
 - P1 module moves (#275–#277) may relocate the KPR surfaces above; the pack's owner then refreshes
-  the citations. The pack never blocks a move (design §7).
+  the citations. The pack never blocks a move (`docs/designs/ddd-component-2026-10-07/design.md:197-201`).
 
 ## Evolution
 
@@ -150,27 +160,39 @@ Planning information only. Legitimate work outside it is coordinated with the ow
 - **Split signal** if KPR ever needs to WRITE a KW record: that would be a new contract on both
   sides, not a widening of this read-only pack.
 - **Retire** this pack if KPR no longer consumes any KW read contract (unlikely) or if KW withdraws
-  the ledger/Runner contract (ADR 0027 §Contract with the Runner).
+  the ledger/Runner contract (`KW/docs/decisions/0027-the-mission-ledger.md:55-64`).
 - A finer split of KW's internal contexts does not change this pack: every seam here stays in
   `kw-run-lifecycle` or `kw-validation`.
 
 ## Evidence
 
 - KW commit read read-only: `16cab12d41cd72818c40f3773068145b35f3f776` (`main`, clean tree).
-  Files read: `README.md:72-217`, `AGENTS.md`, `docs/architecture.md`, `docs/workflow-state-contract.md`,
-  `docs/decisions/0016`, `0017`, `0022`, `0027`, `0030`, `docs/api.md:33-62`,
-  `scripts/kaola-workflow-adaptive-schema.js:1-115`, `:275-360`, `:838-917`, `:1118-1157`,
-  `scripts/kaola-workflow-validation-runner.js:545-590`, `:1160-1189`,
-  `scripts/kaola-workflow-claim.js:1-16`, `scripts/kaola-workflow-classifier.js:430-476`,
-  `scripts/kaola-workflow-sink-merge.js:1-16`, `scripts/kaola-workflow-sink-pr.js:1-20`,
-  `scripts/kaola-workflow-closure-contract.js:1-13`, `scripts/kaola-workflow-install-manifest.js:1-16`,
-  `scripts/kaola-workflow-global-contract.js:1-16`.
-- KPR commit: `4c30b71d0b964628c5a39159ff0cd89504adcd6b` (the phase-1 merge; this pack's
-  `baseline_commit`). Design: `docs/designs/modular-core-2026-10-07/design.md` (§3 C8, §7),
-  `adr.md` (ADR-7). Research: `docs/research/modular-architecture-and-unified-data-2026-10-07.md` §3.
-  Phase 1: `docs/ddd/README.md`, `docs/ddd/context-map.md`, `docs/ddd/packs/c4-state-retire.md`.
+  Files read: `KW/README.md:72-217`, `KW/AGENTS.md`, `KW/docs/architecture.md`,
+  `KW/docs/workflow-state-contract.md`, `KW/docs/decisions/0016-the-substrate-bookkeeping-over-gates.md`,
+  `KW/docs/decisions/0017-the-mission-list.md`, `KW/docs/decisions/0022-machine-global-workflow-contract.md`,
+  `KW/docs/decisions/0027-the-mission-ledger.md`, `KW/docs/decisions/0030-forge-and-engineering-lifecycle.md`,
+  `KW/docs/api.md:33-62`, `KW/scripts/kaola-workflow-adaptive-schema.js:1-115`,
+  `KW/scripts/kaola-workflow-adaptive-schema.js:275-360`,
+  `KW/scripts/kaola-workflow-adaptive-schema.js:838-917`,
+  `KW/scripts/kaola-workflow-adaptive-schema.js:1118-1157`,
+  `KW/scripts/kaola-workflow-validation-runner.js:545-590`,
+  `KW/scripts/kaola-workflow-validation-runner.js:1160-1189`,
+  `KW/scripts/kaola-workflow-claim.js:1-16`, `KW/scripts/kaola-workflow-classifier.js:430-476`,
+  `KW/scripts/kaola-workflow-sink-merge.js:1-16`, `KW/scripts/kaola-workflow-sink-pr.js:1-20`,
+  `KW/scripts/kaola-workflow-closure-contract.js:1-13`,
+  `KW/scripts/kaola-workflow-install-manifest.js:1-16`,
+  `KW/scripts/kaola-workflow-global-contract.js:1-16`.
+- KPR commit: `21ec9a3754aaaecd25350ae995f4704ab9ea441e` (this pack's `baseline_commit`, current
+  `origin/main`; the pack was rebased onto it). Design: `docs/designs/ddd-component-2026-10-07/design.md`
+  (§3, §7), `docs/designs/modular-core-2026-10-07/design.md` (§2, §3 C8, §7),
+  `docs/designs/modular-core-2026-10-07/adr.md` (ADR-7). Research:
+  `docs/research/modular-architecture-and-unified-data-2026-10-07.md` §3. Phase 1:
+  `docs/ddd/README.md`, `docs/ddd/context-map.md`, `docs/ddd/packs/c4-state-retire.md`.
 - KPR suites read for seam coverage: `test-issue-133-mission-ledger.py`, `test-issue-72-session-naming.py`,
   `test-issue-75-codex-compact-hook.py`. No other suite references the KW ledger or `workflow-state.md`
   as a KPR read.
+- Checker (`kaola-ddd-check/1`, merged in #282): `python3 scripts/kaola-ddd-pack.py check --repo .`
+  reports `result: ok` with `counts: {ok: 3, invalid: 0, unsupported: 0}` — `kw-c8-seam`,
+  `c4-state-retire` and `c1-exact-stop` each `ok` with no findings.
 - Q1 evidence (language, invariants, change coupling) is recorded in
   [`../context-map.md`](../context-map.md).
