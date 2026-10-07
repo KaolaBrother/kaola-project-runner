@@ -61,3 +61,14 @@ O1 contract registry: would catch drift **only where documents are generated fro
 
 ## 6. Uncertainty register
 Owner-name resolutions unconfirmed (Py/Pi, Pass.io/Paseo, Worker=A-or-B, T3, "KWL"); pi-fabric's actual mechanism differs from its relay description (recorded as-found); dual-digest causality unproven; external facts are 2026-10-07 live reads; KW README drift could be stale-doc-only.
+
+
+---
+
+## 9. Independent tool-entry audit + dot corrections (2026-10-07, final phase)
+
+**Independent auditor deliverable** (droid, seat exact-stopped clean): `docs/research/i270-tool-entry-audit-final.md` (22,227 B; intermediate `…-complete.md` preserved). Headline evidence-backed finding — **wrong-oracle, proven by the actual assertions**: `tests/contract/test-issue-244-dispatch.py:3706-3714` asserts execute-only body wording (`assertIn "uses execute"`, `assertNotIn` prior phrasings) and asserts nothing about `project --seats` / `collect` — the oracle certifies exactly the shape that hides those entries and would fail a naming fix unless updated. Minimal design D2: one byte-budgeted clause each naming `project --seats` (step 2) and `collect` (step 3) + update the same oracle; acceptance = updated oracle + render `--check` + budget check. Static/word tests are NOT accepted as substitutes for behavioral acceptance of startup→discovery→correct-params→autonomous-dispatch→collection; unknown older-reader/rollback is not presumed safe.
+
+**dot's corrections governing the design phase** (dot personally re-read Fable's stage critique @59b82b39): R1 — do not mechanically ban vocabulary ("blocked" etc.) in the data layer; ban the data layer making autonomous decisions/business-scheduling changes; consumers may declare states with source attribution. R5 — embedded DB does not inherently dual-write every runtime fact to Git; first draw the runtime-projection vs archival-evidence boundary, then test projection/archive failure recovery. R6 — `verified_at` is not a freshness guarantee (needs source version + decision-point recheck); whether a dependency-kind field fixes the AI case must be TESTED, not presumed. Drills: `kill -9` only on clearly-identified disposable fixtures; secret canary only synthetic tokens in isolated dirs, never real auth or live consumers. The eight owner value choices are NOT pre-approved by this research — evidence-based recommendations with alternative costs first. **Absolute-statement corrections** (dot): a source-only observation that SQLite WAL lacks custom cross-process locks does NOT prove the database is single-process; Apache-2.0 does not forbid vendoring — any contrary absolutes in worker reports (e.g., f1a) are overturned by this note. PID-92376 kill signal result and historical ownership remain UNKNOWN.
+
+Issue filing for the corrective design waits for dot's confirmation per the owner sequence; self-evolution design boundaries absorb all corrections above.
