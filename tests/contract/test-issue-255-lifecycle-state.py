@@ -234,18 +234,22 @@ class StateTool(StateProject):
         code, out = retire()
         self.assertEqual(out["reason"], "retire-unmet")
         self.assertIn("--index and --live", out["detail"])
-        index.write_text(json.dumps({"items": [{"item_id": "i7", "status": "in-flight",
+        index.write_text(json.dumps({"schema": "kaola-dispatch-index/1", "repo": str(self.repo),
+                                     "items": [{"item_id": "i7", "status": "in-flight",
                                                 "session": "codex-KT-i7-a"}]}), encoding="utf-8")
-        live.write_text(json.dumps({"rows": [{"session": "codex-KT-i7-a", "state": "ready"}]}),
+        live.write_text(json.dumps({"schema": "kaola-acp-list/1",
+                                    "rows": [{"session": "codex-KT-i7-a", "state": "ready"}]}),
                         encoding="utf-8")
         code, out = retire("--index", str(index), "--live", str(live))
         self.assertIn("i7 is in-flight", out["detail"])
         self.assertIn("still live", out["detail"])
         code, check = self.state("check", "--file", str(self.file), "--index", str(index))
         self.assertIn("done-dispatch-open", [p["code"] for p in check["problems"]])
-        index.write_text(json.dumps({"items": [{"item_id": "i7", "status": "returned",
+        index.write_text(json.dumps({"schema": "kaola-dispatch-index/1", "repo": str(self.repo),
+                                     "items": [{"item_id": "i7", "status": "returned",
                                                 "session": "codex-KT-i7-a"}]}), encoding="utf-8")
-        live.write_text(json.dumps({"rows": [{"session": "codex-KT-i7-a", "state": "stopped"}]}),
+        live.write_text(json.dumps({"schema": "kaola-acp-list/1",
+                                    "rows": [{"session": "codex-KT-i7-a", "state": "stopped"}]}),
                         encoding="utf-8")
         code, out = retire("--index", str(index), "--live", str(live))
         self.assertEqual(code, 0, out)
@@ -256,10 +260,12 @@ class StateTool(StateProject):
                                              "sessions": ["codex-KT-i7-a"], "verdict": {"value": "accepted"}})
         self.update("host", "tasks", "t6", {"stage": "doing", "goal": "next", "dispatch": ["i8"]})
         index = self.repo / "index.json"
-        index.write_text(json.dumps({"items": [{"item_id": "i7", "status": "returned",
+        index.write_text(json.dumps({"schema": "kaola-dispatch-index/1", "repo": str(self.repo),
+                                     "items": [{"item_id": "i7", "status": "returned",
                                                 "session": "codex-KT-i7-a"}]}), encoding="utf-8")
         live = self.repo / "live.json"
-        live.write_text(json.dumps({"rows": [{"session": "codex-KT-i7-a", "state": "ready"}]}),
+        live.write_text(json.dumps({"schema": "kaola-acp-list/1",
+                                    "rows": [{"session": "codex-KT-i7-a", "state": "ready"}]}),
                         encoding="utf-8")
         retire = lambda *extra: self.state("retire", "--file", str(self.file), "--writer", "sideagent",
                                            "--source", "s", "--kind", "tasks", "--id", "t5",
@@ -293,7 +299,7 @@ class StateTool(StateProject):
     def test_a_known_holder_in_any_seat_shape_survives_a_handoff(self) -> None:
         self.init()
         live = self.repo / "live.json"
-        rows = lambda holder: live.write_text(json.dumps({"rows": [
+        rows = lambda holder: live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": [
             {"session": name, "state": "stopped", "holder_instance_id": holder}
             for name in ("worker-a", "worker-b")]}), encoding="utf-8")
         accepted = {"stage": "done", "goal": "g", "verdict": {"value": "accepted"}}
@@ -326,7 +332,7 @@ class StateTool(StateProject):
         self.update("host", "tasks", "next", {"sessions": receiver["sessions"] + [
             {"session": "worker-a", "holder_instance_id": "other-a"}]}, "--expect-rev", rev)
         rev = str(self.doc()["state"]["tasks"]["next"]["rev"])
-        live.write_text(json.dumps({"rows": [
+        live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": [
             {"session": "worker-a", "state": "stopped", "holder_instance_id": "owned-a"},
             {"session": "worker-b", "state": "stopped", "holder_instance_id": "owned-b"}]}), encoding="utf-8")
         code, out = retire("next", rev, "--live", str(live))
@@ -866,11 +872,12 @@ class StateTool(StateProject):
         self.init()
         self.update("host", "tasks", "t1", {"stage": "doing", "goal": "g"})
         index = self.repo / "index.json"
-        index.write_text(json.dumps({"items": [
+        index.write_text(json.dumps({"schema": "kaola-dispatch-index/1", "repo": str(self.repo),
+                                     "items": [
             {"item_id": "i1", "status": "in-flight", "session": "codex-KT-i1-a"},
             {"item_id": "i2", "status": "in-flight", "task_id": "gone"}]}), encoding="utf-8")
         live = self.repo / "live.json"
-        live.write_text(json.dumps({"rows": [
+        live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": [
             {"session": "zcode-KT-helper", "session_role": "sideagent", "repo": str(self.repo),
              "state": "ready"}]}), encoding="utf-8")
         code, out = self.state("check", "--file", str(self.file), "--index", str(index), "--live", str(live))
@@ -910,11 +917,12 @@ class Migration(StateProject):
         (self.repo / "AGENTS.md").write_text("## User special requirements\nNo Friday release.\n")
         raw = self.write_legacy()
         index = self.repo / "index.json"
-        index.write_text(json.dumps({"items": [
+        index.write_text(json.dumps({"schema": "kaola-dispatch-index/1", "repo": str(self.repo),
+                                     "items": [
             {"item_id": "qa", "status": "in-flight", "session": "codex-KT-i12-qa"},
             {"item_id": "lost", "status": "unknown", "session": "droid-KT-i99-x"}]}), encoding="utf-8")
         live = self.repo / "live.json"
-        live.write_text(json.dumps({"rows": [
+        live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": [
             {"session": "zcode-KT-orchestrator-main", "host_class": True, "session_role": "host",
              "repo": str(self.repo), "state": "ready", "holder_instance_id": "host-1",
              "holder_features": ["heartbeat-state/2", "sideagent-relay/1"]},
@@ -983,7 +991,7 @@ class Migration(StateProject):
         }
         raw = self.write_legacy(body)
         live = self.repo / "live.json"
-        live.write_text(json.dumps({"rows": [
+        live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": [
             {"session": "zcode-KT-sideagent", "platform": "zcode", "session_role": "sideagent",
              "repo": str(self.repo), "state": "ready", "holder_instance_id": "side-1"}]}), encoding="utf-8")
         code, out = self.state("migrate", "--file", str(self.file), "--live", str(live), "--write")
@@ -1067,15 +1075,16 @@ class Migration(StateProject):
                  ([{"session": "still-working", "state": "stopped", "holder_instance_id": "h2"}],
                   "stopped under holder h2"))
         for rows, why in cases:
-            live.write_text(json.dumps({"rows": rows}), encoding="utf-8")
+            live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": rows}), encoding="utf-8")
             code, out = retire("--live", str(live))
             self.assertEqual(out["reason"], "retire-unmet", why)
             self.assertIn(why, out["detail"])
             self.assertIn("#255", self.doc()["state"]["tasks"], "the cleanup duty stays current")
             code, check = self.state("check", "--file", str(self.file), "--live", str(live))
             self.assertIn("done-seat-open", [p["code"] for p in check["problems"]], why)
-        live.write_text(json.dumps({"rows": [{"session": "still-working", "state": "stopped",
-                                              "holder_instance_id": "h"}]}), encoding="utf-8")
+        live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": [
+            {"session": "still-working", "state": "stopped",
+             "holder_instance_id": "h"}]}), encoding="utf-8")
         code, out = self.state("check", "--file", str(self.file), "--live", str(live))
         self.assertNotIn("done-seat-open", [p["code"] for p in out["problems"]])
         code, out = retire("--live", str(live))
@@ -1087,7 +1096,7 @@ class Migration(StateProject):
                                             "authorization_source": "owner", "state": "active"})
         self.write_legacy(body)
         live = self.repo / "live.json"
-        live.write_text(json.dumps({"rows": [
+        live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": [
             {"session": "zcode-KT-sideagent", "platform": "zcode", "session_role": "sideagent",
              "repo": str(self.repo), "state": "ready", "holder_instance_id": "side-9"}]}), encoding="utf-8")
         code, out = self.state("migrate", "--file", str(self.file), "--live", str(live), "--write")
@@ -1171,7 +1180,7 @@ class Migration(StateProject):
         self.assertIsNone(self.doc().get("carrier"))
         raw = self.write_legacy(body)
         live = self.repo / "live.json"
-        live.write_text(json.dumps({"rows": [{
+        live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": [{
             "platform": "zcode", "session": "zcode-KT-orchestrator-main", "session_role": "host",
             "repo": str(self.repo), "state": "ready", "holder_instance_id": "host-old",
             "holder_features": []}]}), encoding="utf-8")

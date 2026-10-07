@@ -87,7 +87,9 @@ class RetireInput(unittest.TestCase):
         return self.file.read_bytes()
 
     def live_rows(self, rows: list[dict]) -> Path:
-        self.live.write_text(json.dumps({"rows": rows}), encoding="utf-8")
+        # The real producer form: `kaola-acp.py list` declares kaola-acp-list/1.
+        self.live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": rows}),
+                             encoding="utf-8")
         return self.live
 
     def stopped_live(self) -> Path:
@@ -102,6 +104,13 @@ class RetireInput(unittest.TestCase):
         row.update(row_extra)
         return self.index_at({"items": [row]})
 
+    def ident_index(self, **row_extra) -> Path:
+        # The real producer form: execute and collect write schema and repo.
+        row = {"item_id": "i1", "session": "codex-KT-i1-a"}
+        row.update(row_extra)
+        return self.index_at({"schema": "kaola-dispatch-index/1", "repo": str(self.repo),
+                              "items": [row]})
+
     def retire(self, *extra: str) -> tuple[int, dict]:
         return run(["state", "retire", "--file", str(self.file), "--writer", "sideagent",
                     "--source", "s", "--kind", "tasks", "--id", "t1", "--expect-rev", "1",
@@ -110,7 +119,7 @@ class RetireInput(unittest.TestCase):
     # G6 — one closed-status vocabulary, shared with the index mirror.
 
     def test_regression_an_absent_status_is_still_a_duty(self) -> None:
-        self.bare_index()  # no status key at all
+        self.ident_index()  # no status key at all
         self.stopped_live()
         before = self.state_bytes()
         code, out = self.retire("--index", str(self.index), "--live", str(self.live))
@@ -120,7 +129,7 @@ class RetireInput(unittest.TestCase):
         self.assertEqual(self.state_bytes(), before, "a refused retire writes no state byte")
 
     def test_regression_an_unrecognized_status_is_still_a_duty(self) -> None:
-        self.bare_index(status="inflight")  # a renamed in-flight, known to no vocabulary
+        self.ident_index(status="inflight")  # a renamed in-flight, known to no vocabulary
         self.stopped_live()
         before = self.state_bytes()
         code, out = self.retire("--index", str(self.index), "--live", str(self.live))
@@ -154,6 +163,30 @@ class RetireInput(unittest.TestCase):
         self.assertIn("kaola-dispatch-index/1", out["detail"], out)
         self.assertEqual(self.state_bytes(), before, "an unidentified index writes no state byte")
 
+    def test_regression_an_index_with_no_schema_is_refused_unchanged(self) -> None:
+        self.index_at({"repo": str(self.repo), "items": [
+            {"item_id": "i1", "status": "returned", "session": "codex-KT-i1-a"}]})
+        self.stopped_live()
+        before = self.state_bytes()
+        code, out = self.retire("--index", str(self.index), "--live", str(self.live))
+        self.assertEqual(code, 2, out)
+        self.assertEqual(out.get("result"), "refused", out)
+        self.assertEqual(out.get("reason"), "index-unidentified", out)
+        self.assertIn("declares no schema", out["detail"], out)
+        self.assertEqual(self.state_bytes(), before, "an unidentified index writes no state byte")
+
+    def test_regression_an_index_with_no_repo_is_refused_unchanged(self) -> None:
+        self.index_at({"schema": "kaola-dispatch-index/1", "items": [
+            {"item_id": "i1", "status": "returned", "session": "codex-KT-i1-a"}]})
+        self.stopped_live()
+        before = self.state_bytes()
+        code, out = self.retire("--index", str(self.index), "--live", str(self.live))
+        self.assertEqual(code, 2, out)
+        self.assertEqual(out.get("result"), "refused", out)
+        self.assertEqual(out.get("reason"), "index-unidentified", out)
+        self.assertIn("declares no repo", out["detail"], out)
+        self.assertEqual(self.state_bytes(), before, "an unidentified index writes no state byte")
+
     def test_regression_the_mirror_leaves_a_foreign_index_unchanged(self) -> None:
         """The mirror runs after the state write lands (I12): a foreign index
         is reported in ``index_mirror.error`` and keeps its bytes, instead of
@@ -179,7 +212,7 @@ class RetireInput(unittest.TestCase):
     # G9 — the live input is identified (kaola-acp-list/1).
 
     def test_regression_an_unidentified_live_input_is_refused_unchanged(self) -> None:
-        self.bare_index(status="returned")
+        self.ident_index(status="returned")
         # A wrong file with usable rows: valid JSON, a declared schema that is
         # not kaola-acp-list/1, and rows main accepts as a stop.
         self.live.write_text(json.dumps({"schema": "kaola-dispatch-index/1", "rows": [
@@ -190,6 +223,18 @@ class RetireInput(unittest.TestCase):
         self.assertEqual(out.get("result"), "refused", out)
         self.assertEqual(out.get("reason"), "live-unidentified", out)
         self.assertIn("kaola-acp-list/1", out["detail"], out)
+        self.assertEqual(self.state_bytes(), before, "an unidentified live input writes no state byte")
+
+    def test_regression_a_live_input_with_no_schema_is_refused_unchanged(self) -> None:
+        self.ident_index(status="returned")
+        self.live.write_text(json.dumps({"rows": [  # bare rows: no schema at all
+            {"session": "codex-KT-i1-a", "state": "stopped"}]}), encoding="utf-8")
+        before = self.state_bytes()
+        code, out = self.retire("--index", str(self.index), "--live", str(self.live))
+        self.assertEqual(code, 2, out)
+        self.assertEqual(out.get("result"), "refused", out)
+        self.assertEqual(out.get("reason"), "live-unidentified", out)
+        self.assertIn("declare no schema", out["detail"], out)
         self.assertEqual(self.state_bytes(), before, "an unidentified live input writes no state byte")
 
     def test_regression_check_identifies_the_live_input_too(self) -> None:
@@ -203,7 +248,7 @@ class RetireInput(unittest.TestCase):
 
     # Guards — the already accepted retire paths stay unchanged.
 
-    def test_guard_closed_statuses_and_undeclared_identity_still_retire(self) -> None:
+    def test_guard_a_declared_index_and_closed_statuses_still_retire(self) -> None:
         for n, status in enumerate(("returned", "failed", "not-run")):
             ident, item = f"t2{n}", f"i2{n}"
             code, out = run(["state", "update", "--file", str(self.file), "--writer", "host",
@@ -211,8 +256,9 @@ class RetireInput(unittest.TestCase):
                              json.dumps({**ACCEPTED, "dispatch": [item]})])
             self.assertEqual(code, 0, out)
             rev = str(self.doc()["state"]["tasks"][ident]["rev"])
-            self.index.write_text(json.dumps({"items": [  # bare: no schema, no repo
-                {"item_id": item, "status": status, "session": f"codex-KT-{item}-a"}]}),
+            self.index.write_text(json.dumps({  # the form execute and collect write
+                "schema": "kaola-dispatch-index/1", "repo": str(self.repo),
+                "items": [{"item_id": item, "status": status, "session": f"codex-KT-{item}-a"}]}),
                 encoding="utf-8")
             self.live_rows([{"session": f"codex-KT-{item}-a", "state": "stopped"}])
             code, out = run(["state", "retire", "--file", str(self.file), "--writer", "sideagent",
@@ -225,7 +271,7 @@ class RetireInput(unittest.TestCase):
     def test_guard_in_flight_and_unknown_messages_are_stable(self) -> None:
         self.stopped_live()
         for status, fragment in (("in-flight", "i1 is in-flight"), ("unknown", "i1 is unknown")):
-            self.bare_index(status=status)
+            self.ident_index(status=status)
             code, out = self.retire("--index", str(self.index), "--live", str(self.live))
             self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), (status, out))
             self.assertIn(fragment, out["detail"], (status, out))
@@ -233,7 +279,7 @@ class RetireInput(unittest.TestCase):
     def test_guard_a_declared_live_list_still_retires(self) -> None:
         """The real producer form: `kaola-acp.py list` output declares
         kaola-acp-list/1, so retire keeps reading it."""
-        self.bare_index(status="returned")
+        self.ident_index(status="returned")
         self.live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": [
             {"session": "codex-KT-i1-a", "state": "stopped"}]}), encoding="utf-8")
         code, out = self.retire("--index", str(self.index), "--live", str(self.live))

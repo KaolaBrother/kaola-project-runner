@@ -4888,14 +4888,19 @@ def open_seats(seats: dict[str, list[str]], rows: list[dict[str, Any]]) -> list[
 
 def index_identity_problem(index: dict[str, Any], repo: str) -> str | None:
     """Issue #286 (G5): retire and its index mirror read only this project's
-    dispatch index. A file that declares another schema or another project's
-    repo proves no closure; an index that declares no identity stays the
-    accepted input."""
+    dispatch index, identified the way every index execute and collect write
+    identifies itself: kaola-dispatch-index/1 for this project's repo. A
+    missing, wrong, or foreign identity proves no closure."""
     declared = index.get("schema")
-    if declared is not None and declared != "kaola-dispatch-index/1":
+    if declared != "kaola-dispatch-index/1":
+        if declared is None:
+            return "declares no schema, not kaola-dispatch-index/1"
         return f"declares schema {declared!r}, not kaola-dispatch-index/1"
-    if not same_repo(index.get("repo"), repo):
-        return f"declares repo {index.get('repo')!r}, not this project"
+    seen = index.get("repo")
+    if not isinstance(seen, str) or not seen:
+        return "declares no repo, not this project's index"
+    if not same_repo(seen, repo):
+        return f"declares repo {seen!r}, not this project"
     return None
 
 
@@ -5697,13 +5702,13 @@ def live_rows_of(path: str | None) -> list[dict[str, Any]] | None:
         return None
     rows_document = load_object(Path(path))
     declared = rows_document.get("schema")
-    if declared is not None and declared != "kaola-acp-list/1":
-        # Issue #286 (G9): identify the --live input. `kaola-acp.py list`
-        # output declares kaola-acp-list/1; a file that declares another
-        # schema is not live rows and proves no seat state.
-        raise StateRefusal("live-unidentified", f"the live rows at {path} declare schema "
-                           f"{declared!r}, not kaola-acp-list/1; pass `kaola-acp.py list` output "
-                           "for this repo")
+    # Issue #286 (G9): identify the --live input. `kaola-acp.py list` output
+    # declares kaola-acp-list/1; a file that declares another schema, or no
+    # schema at all, is not live rows and proves no seat state.
+    if declared != "kaola-acp-list/1":
+        what = "no schema" if declared is None else f"schema {declared!r}"
+        raise StateRefusal("live-unidentified", f"the live rows at {path} declare {what}, "
+                           "not kaola-acp-list/1; pass `kaola-acp.py list` output for this repo")
     rows = rows_document.get("rows")
     if not isinstance(rows, list):
         raise ValueError("live rows must be an array")

@@ -1913,13 +1913,14 @@ class RecordContract(unittest.TestCase):
         self.init()
         index = self.repo / "index.json"
         live = self.repo / "live.json"
-        live.write_text('{"rows": []}', encoding="utf-8")
+        live.write_text('{"schema": "kaola-acp-list/1", "rows": []}', encoding="utf-8")
         rows = [{"item_id": "closed", "task_id": "done", "status": "returned", "acceptance": "pending"},
                 {"item_id": "open", "task_id": "done", "status": "in-flight", "acceptance": "accepted"},
                 {"item_id": "unknown", "task_id": "done", "status": "unknown"},
                 {"item_id": "unaccepted", "task_id": "missing", "status": "returned", "acceptance": "pending"},
                 {"item_id": "bad-acceptance", "task_id": "missing", "status": "returned", "acceptance": "unreadable"}]
-        index.write_text(json.dumps({"items": rows}), encoding="utf-8")
+        index.write_text(json.dumps({"schema": "kaola-dispatch-index/1", "repo": str(self.repo),
+                                     "items": rows}), encoding="utf-8")
         code, out = self.state("update", "--file", str(self.file), "--writer", "host", "--source", "accepted",
                                "--kind", "tasks", "--id", "done", "--set",
                                json.dumps({"stage": "done", "goal": "deliver the accepted result",
@@ -1988,8 +1989,11 @@ class RecordContract(unittest.TestCase):
                 elif change == "foreign-collected-holder":
                     candidate["evidence"]["collect_status"]["holder_instance_id"] = "foreign"
                 self.file.write_text(json.dumps(doc), encoding="utf-8")
-                index.write_text(json.dumps({"items": [candidate]}), encoding="utf-8")
-                live.write_text(json.dumps({"rows": [] if change == "missing-stop" else [current_live]}),
+                index.write_text(json.dumps({"schema": "kaola-dispatch-index/1",
+                                             "repo": str(self.repo), "items": [candidate]}),
+                                 encoding="utf-8")
+                live.write_text(json.dumps({"schema": "kaola-acp-list/1",
+                                            "rows": [] if change == "missing-stop" else [current_live]}),
                                 encoding="utf-8")
                 before_state, before_index = self.file.read_bytes(), index.read_bytes()
                 code, out = self.state("retire", "--file", str(self.file), "--writer",
@@ -2003,8 +2007,10 @@ class RecordContract(unittest.TestCase):
                 self.assertEqual(self.file.read_bytes(), before_state)
                 self.assertEqual(index.read_bytes(), before_index)
         self.file.write_bytes(baseline)
-        index.write_text(json.dumps({"items": [item]}), encoding="utf-8")
-        live.write_text(json.dumps({"rows": [stopped]}), encoding="utf-8")
+        index.write_text(json.dumps({"schema": "kaola-dispatch-index/1", "repo": str(self.repo),
+                                     "items": [item]}), encoding="utf-8")
+        live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": [stopped]}),
+                        encoding="utf-8")
         before_index = index.read_bytes()
         code, out = self.state("retire", "--file", str(self.file), "--writer", "host",
             "--source", "original accepted continuation and exact reclaim",
