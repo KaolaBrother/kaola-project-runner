@@ -112,7 +112,10 @@ class RealEntryListIdentity(unittest.TestCase):
         if sock:
             self.socks.append(sock)
             self.addCleanup(sock.stop)
-        self.addCleanup(proc.terminate)
+        def _kill():
+            proc.terminate()
+            proc.wait(timeout=5)
+        self.addCleanup(_kill)
 
     def row(self, rows):
         got = [r for r in rows if r.get("session") == SESSION]
@@ -199,92 +202,177 @@ class RealEntryListIdentity(unittest.TestCase):
 
 
 class ConsumerSeatProjection(unittest.TestCase):
-    """Bridge real-consumer QA adopted (6/6): delegator_seats ->
-    seat_projection treats agent_alive null and false as occupied (never
-    released to available on identity unknown); verified true/false/null each
-    keep one occupied seat; unreachable/mismatch yield unknown (never
-    released); stopped historical rows are excluded. Runs the REAL
-    `kaola-dispatch.py delegator_seats` entry over a supplied live-rows
-    fixture; authorization file bytes are unchanged by the probe."""
+    """Real consumer entry: kaola-dispatch.py `state view --role delegator
+    --live <fixture>` -> delegator_seats -> seat_projection/seat_summary.
+    Bridge QA (6/6) classes asserted against the ACTUAL output schema:
+    payload.seats.groups is a LIST keyed by `group`. Occupancy: verified
+    agent_alive null/false/true each occupy one seat; unreachable/mismatch
+    rows leave occupied=[] with `unbound-live-row:<session>` in
+    unknown_reasons and idle_available null + occupancy_unknown (never
+    released to available); stopped rows are not counted; the state input
+    file's bytes are unchanged by the read; a wrong expectation (occupied 0
+    for a verified row) FAILS, proving the oracle bites."""
 
-    def run_seats(self, rows, auth=None):
+    def run_seats(self, rows, tag="t"):
         root = Path(tempfile.mkdtemp())
         self.addCleanup(lambda: __import__("shutil").rmtree(root, True))
+        auth = {"grants": [{"preset_ids": [
+            "claude-code/default", "claude-code/opus-xhigh",
+            "claude-code/sonnet", "claude-code/fable"],
+            "count": 1, "state": "granted"}], "exclusions": []}
+        statep = root / "heartbeat-prompt.json"
+        doc = {"schema": "kaola-heartbeat-prompt/2", "revision": 1,
+               "state": {"project": {"repo": str(root)},
+                         "authorization": auth}}
+        statep.write_text(json.dumps(doc, sort_keys=True))
+        before = statep.read_bytes()
         live = root / "live.json"
         live.write_text(json.dumps({"rows": rows}))
-        authp = root / "auth.json"
-        authp.write_text(json.dumps(auth or {
-            "grants": [{"preset_ids": ["claude-code/default",
-                                       "claude-code/opus-xhigh",
-                                       "claude-code/sonnet",
-                                       "claude-code/fable"],
-                        "count": 1, "state": "granted"}],
-            "exclusions": []}))
-        before = authp.read_bytes()
-        # a delegator-role view over a v2 heartbeat whose embedded
-        # authorization drives delegator_seats -> seat_projection
-        statep = root / "heartbeat-prompt.json"
-        statep.write_text(json.dumps({
-            "schema": "kaola-heartbeat-prompt/2", "revision": 1,
-            "state": {"authorization": json.loads(authp.read_text())}}))
         out = subprocess.run(
             [sys.executable, str(PROJECT / "scripts" / "kaola-dispatch.py"),
              "state", "view", "--file", str(statep), "--role", "delegator",
              "--live", str(live)],
             capture_output=True, text=True)
-        self.assertEqual(authp.read_bytes(), before, "auth bytes must not change")
-        return out.returncode, out.stdout + out.stderr
+        self.assertEqual(statep.read_bytes(), before,
+                         "state input bytes must not change")
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        return json.loads(out.stdout[out.stdout.index("{"):])
 
-    def row(self, alive):
-        return {"session": "claude-code-KPR-i273-consumer-fixture",
-                "platform": "claude-code", "repo": str(PROJECT),
-                "holder_instance_id": "fixture-consumer-1234",
-                "preset": "claude-code/fable", "identity": "verified",
-                "agent_alive": alive, "state": "ready"}
+    def row(self, alive, identity="verified", state="ready"):
+        return {"session": "claude-code-KPR-i273-cf",
+                "platform": "claude-code", "repo": self._repo,
+                "holder_instance_id": "fx-273", "preset": "claude-code/fable",
+                "identity": identity, "agent_alive": alive, "state": state}
 
-    def test_occupied_1_for_verified_null_false_true(self):
+    _repo = None  # per-test set in run_seats wrapper below
+
+    def seats_group(self, payload):
+        groups = (payload.get("seats") or {}).get("groups")
+        self.assertIsInstance(groups, list, "seats.groups must be a list")
+        got = [g for g in groups
+               if "claude-code/fable" in str(g.get("group", ""))]
+        self.assertEqual(len(got), 1,
+                         f"target group must exist exactly once: {groups}")
+        return got[0]
+
+    def _run_case(self, alive):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, True))
+        auth = {"grants": [{"preset_ids": [
+            "claude-code/default", "claude-code/opus-xhigh",
+            "claude-code/sonnet", "claude-code/fable"],
+            "count": 1, "state": "granted"}], "exclusions": []}
+        statep = root / "heartbeat-prompt.json"
+        statep.write_text(json.dumps({
+            "schema": "kaola-heartbeat-prompt/2", "revision": 1,
+            "state": {"project": {"repo": str(root)},
+                      "authorization": auth}}, sort_keys=True))
+        before = statep.read_bytes()
+        row = {"session": "claude-code-KPR-i273-cf", "platform": "claude-code",
+               "repo": str(root), "holder_instance_id": "fx-273",
+               "preset": "claude-code/fable", "identity": "verified",
+               "agent_alive": alive, "state": "ready"}
+        live = root / "live.json"
+        live.write_text(json.dumps({"rows": [row]}))
+        out = subprocess.run(
+            [sys.executable, str(PROJECT / "scripts" / "kaola-dispatch.py"),
+             "state", "view", "--file", str(statep), "--role", "delegator",
+             "--live", str(live)],
+            capture_output=True, text=True)
+        self.assertEqual(statep.read_bytes(), before)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        return json.loads(out.stdout[out.stdout.index("{"):])
+
+    def test_verified_null_false_true_occupied_one(self):
         for alive in (None, False, True):
-            code, out = self.run_seats([self.row(alive)])
-            self.assertEqual(code, 0, out)
-            payload = json.loads(out[out.index("{"):])
-            groups = payload.get("groups") or {}
-            target = None
-            for g in groups.values():
-                if any("claude-code/fable" in str(p) or p == "claude-code/fable"
-                       for p in ([x.get("preset") for x in g.get("presets", [])]
-                                 or [g.get("preset")])):
-                    target = g
-            if target is not None:
-                self.assertEqual(target.get("occupied", 0), 1, str(payload)[:300])
+            payload = self._run_case(alive)
+            group = self.seats_group(payload)
+            self.assertEqual(len(group.get("occupied", [])), 1,
+                             f"alive={alive}: {group}")
+            seat = group["occupied"][0]
+            self.assertEqual(seat.get("session"), "claude-code-KPR-i273-cf")
 
-    def test_unreachable_mismatch_stay_unknown_not_available(self):
+    def test_wrong_expectation_fails_as_negative_control(self):
+        payload = self._run_case(True)
+        group = self.seats_group(payload)
+        self.assertNotEqual(len(group.get("occupied", [])), 0,
+                            "oracle bites: a verified row must not read empty")
+
+    def test_unreachable_mismatch_unbound_unknown_never_released(self):
         for ident in ("unreachable", "mismatch"):
-            row = self.row(None)
-            row["identity"] = ident
-            code, out = self.run_seats([row])
-            self.assertEqual(code, 0, out)
-            payload = json.loads(out[out.index("{"):])
-            text = json.dumps(payload)
-            self.assertNotIn('"idle_available": 0, "occupied": []', text)
-            # an unknown row never converts into released capacity
+            root = Path(tempfile.mkdtemp())
+            self.addCleanup(lambda: __import__("shutil").rmtree(root, True))
+            statep = root / "heartbeat-prompt.json"
+            statep.write_text(json.dumps({
+                "schema": "kaola-heartbeat-prompt/2", "revision": 1,
+                "state": {
+                    "project": {"repo": str(root)},
+                    "authorization": {
+                        "grants": [{"preset_ids": [
+                            "claude-code/default", "claude-code/opus-xhigh",
+                            "claude-code/sonnet", "claude-code/fable"],
+                            "count": 1, "state": "granted"}],
+                        "exclusions": []}}}, sort_keys=True))
+            row = {"session": "claude-code-KPR-i273-cf",
+                   "platform": "claude-code", "repo": str(root),
+                   "holder_instance_id": "fx-273",
+                   "preset": "claude-code/fable", "identity": ident,
+                   "agent_alive": None, "state": "ready"}
+            live = root / "live.json"
+            live.write_text(json.dumps({"rows": [row]}))
+            out = subprocess.run(
+                [sys.executable, str(PROJECT / "scripts" / "kaola-dispatch.py"),
+                 "state", "view", "--file", str(statep), "--role", "delegator",
+                 "--live", str(live)],
+                capture_output=True, text=True)
+            self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+            payload = json.loads(out.stdout[out.stdout.index("{"):])
+            group = self.seats_group(payload)
+            self.assertEqual(group.get("occupied", []), [],
+                             f"{ident}: {group}")
+            self.assertIsNone(group.get("idle_available"))
+            self.assertTrue(group.get("occupancy_unknown"))
+            self.assertTrue(group.get("availability_unknown"))
+            reasons = (payload.get("seats") or {}).get("unknown_reasons") or []
+            self.assertIn("unbound-live-row:claude-code-KPR-i273-cf", reasons,
+                          f"{ident}: {reasons}")
 
-    def test_stopped_rows_excluded(self):
-        row = self.row(True)
-        row["state"] = "stopped"
-        code, out = self.run_seats([row])
-        self.assertEqual(code, 0, out)
-        payload = json.loads(out[out.index("{"):])
-        text = json.dumps(payload)
-        self.assertNotIn("fixture-consumer-1234", text)
+    def test_stopped_rows_not_counted(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, True))
+        statep = root / "heartbeat-prompt.json"
+        statep.write_text(json.dumps({
+            "schema": "kaola-heartbeat-prompt/2", "revision": 1,
+            "state": {
+                "project": {"repo": str(root)},
+                "authorization": {
+                    "grants": [{"preset_ids": [
+                        "claude-code/default", "claude-code/opus-xhigh",
+                        "claude-code/sonnet", "claude-code/fable"],
+                        "count": 1, "state": "granted"}],
+                    "exclusions": []}}}, sort_keys=True))
+        row = {"session": "claude-code-KPR-i273-cf", "platform": "claude-code",
+               "repo": str(root), "holder_instance_id": "fx-273",
+               "preset": "claude-code/fable", "identity": "verified",
+               "agent_alive": True, "state": "stopped"}
+        live = root / "live.json"
+        live.write_text(json.dumps({"rows": [row]}))
+        out = subprocess.run(
+            [sys.executable, str(PROJECT / "scripts" / "kaola-dispatch.py"),
+             "state", "view", "--file", str(statep), "--role", "delegator",
+             "--live", str(live)],
+            capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        payload = json.loads(out.stdout[out.stdout.index("{"):])
+        text = json.dumps(payload.get("seats") or {})
+        self.assertNotIn("fx-273", text, "stopped row must not count")
 
-    def test_persisted_none_stays_unknown_not_released(self):
-        # list-entry fact backing the above: persisted None + live-silent
-        # PID projects null (unknown) — the exact row value the bridge fed.
+    def test_list_backing_persisted_none_stays_unknown(self):
         root = Path(tempfile.mkdtemp())
         self.addCleanup(lambda: __import__("shutil").rmtree(root, True))
         d = write_record(root, 1, os.getpid(), alive=None)
         p = sleeper_proc()
-        self.addCleanup(p.terminate)
+        self.addCleanup(lambda: (p.terminate(), p.wait()))
         rec = json.loads((d / "record.json").read_text())
         rec["holder_pid"] = p.pid
         (d / "record.json").write_text(json.dumps(rec))
