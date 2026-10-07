@@ -128,7 +128,7 @@ The resident core (per-user/per-machine) owns ONLY: the local registry of adopte
 
 Each component ships its own suite plus cross-module acceptance over the REAL seams: isolated install closure; real start/adopt/send/collect/stop; core-crash with holders continuing; two-core contention; stale registry entry + unrelated PID; event replay with duplicates and gaps; component absence and retirement; version mismatch producing no wrong writes. Fixtures are minimal per affected surface — never a fixed full-gate every round. Development mode and accepted deployments keep isolated namespaces/entries (no global mutable-dev refusal). A module suite passing alone never replaces cross-module migration/retirement proof. Pilot candidates from current reality: #274 package-closure test (C7 proving C6's helper closure), #273 real-entry suites (CORE process facts through C1 CLI and C5 consumer), #271 chain (real execute→result→correlated collect→guarded reclaim).
 
-## 8. Open decisions for root/Fable convergence
+## 8. Remaining open items (root-decided directions are closed; these are detail decisions, not direction re-opens)
 
 1. DECIDED (root): Python internal package. (Was: packaging language.)
 2. DECIDED (root): C5 owns seat_projection semantics; core stays free of grant semantics. Open remainder: the C4/C5 interface contract text (P1).
