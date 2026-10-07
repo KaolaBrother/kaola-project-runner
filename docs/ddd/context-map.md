@@ -41,7 +41,7 @@ change to it.
 | `orchestration-state` | `C4-state`, `C5-dispatch`, `C6-recovery` | supporting, possibly a differentiator |
 | `build-install` | `C7-render-install` | generic |
 | `kw-model` | `C8-kw-bridge` (KW itself is external) | a separate domain model; internal context count unverified |
-| `consumer-*` | VRPAI, CAD (external) | `[ASSUMPTION]`, source not read |
+| `consumer-*` | VRPAI, CAD (external) | bridge record read in phase 6; consumer domain model still `[ASSUMPTION]` |
 
 ## session-runtime — `candidate`
 
@@ -126,11 +126,35 @@ change to it.
 - **Open question:** Q1 — is KW one context or several? This is resolved in phase 5 (#284),
   reading KW source read-only. It is never a precondition for KPR packs or B0.
 
-## consumer-* (VRPAI, CAD) — `candidate`, `[ASSUMPTION]`
+## consumer-* (VRPAI, CAD) — `candidate`
 
-- **Evidence so far:** none from source. Every statement in baseline §4 is an assumption.
-- **Open question:** Q2 — do their bridges expose a Published Language or an ad-hoc field set?
-  This is resolved in phase 6 (#285), as analysis of existing bridge evidence only.
+- **Evidence so far (phase 6, #285; read-only bridge evidence only, no consumer write):** see
+  [`cases/vrpai-cad-analysis.md`](cases/vrpai-cad-analysis.md).
+  - The outer consumer bridge's own record is a **published** language. Both projects declare
+    `schema: kaola-delegator-heartbeat/1`; KPR owns that versioned, closed schema
+    (`scripts/kaola-record-contract.py:22`, `:1416`, `:1472-1476`) and exercises it
+    (`tests/contract/test-issue-259-record-contract.py`, read at source; suite not executed here —
+    see the case §7). The two projects' optional fields differ but are all schema-allowed.
+  - The consumer's **semantic payload** is ad-hoc. CAD's governance content that the owner forbids
+    outside typed state was carried in prose
+    (`vrpcadcore/.kaola/e2s1-d1c7-confirmation-20261006/delivery-log.md:283`;
+    [`docs/cad-recurrence-diagnosis-2026-10-07.md`](../cad-recurrence-diagnosis-2026-10-07.md);
+    issue #269), with no version or schema.
+  - The separate VRPAI↔CAD `cad.execution-envelope.review.20261006` /
+    `cad.runtime-receipt.review.20261006` wire contract is a Published-Language **proposal**
+    technically confirmed for later docking, but explicitly "not a registered or negotiated
+    production protocol"
+    (`vrpcadcore/.kaola/crossproj-wire-contract-confirmation-20261006/decision.md:39`).
+- **Q2 — do the VRPAI/CAD bridges expose a Published Language? Result: a published envelope with
+  an ad-hoc semantic layer.** The bridge record is published and enforced; consumer meaning is not.
+  The VRPAI↔CAD cross-project contract is a documented language *proposal*, not a negotiated one.
+- **Counter-example verdict (this case's output):** a context pack **does not apply** at this seam.
+  It would duplicate the existing enforced schema, and — because a pack never carries authority —
+  it cannot affect the prose-relocation gap. The method's simplified form (a short
+  vocabulary/invariant note, or nothing) is the fit.
+- **Still open:** the consumer's internal domain model (revision identity, task semantics) was not
+  read at source in phase 6, so `consumer-*` remains a **candidate** on `[ASSUMPTION]` for
+  language/invariants/change coupling. No `observed` label is claimed.
 
 ## Change log
 
