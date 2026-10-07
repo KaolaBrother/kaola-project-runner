@@ -178,6 +178,7 @@ sink, and write ownership.
    [qa-evidence.md](references/qa-evidence.md) unless its current version is in context: it
    holds the improvement and slow-feedback method. Planned dispatch (research, QA, report or
    implementation) uses `execute`
+    (with `project --seats` and `collect`;
    ([dispatch-collect.md](references/dispatch-collect.md)): it starts absent
    seats at the preset `--tier` and records their facts. Direct Runner
    `start`/`send` is standalone, degraded or same-assignment recovery

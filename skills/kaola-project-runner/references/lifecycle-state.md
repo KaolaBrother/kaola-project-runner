@@ -23,8 +23,8 @@ The Host gets outcomes, capacity and pending decisions.
 
 ## Commands
 
-`S="python3 $SKILL_DIR/scripts/kaola-dispatch.py state"`. Every write takes
-`--file "$PROJECT/.kaola/heartbeat-prompt.json" --writer host|sideagent
+`S="python3 $SKILL_DIR/scripts/kaola-dispatch.py state". Writes take
+(`--file "$PROJECT/.kaola/heartbeat-prompt.json" --writer host|sideagent
 --source "<event, receipt or Host turn>"`.
 
 - `$S init [--project JSON] [--authorization JSON]`: Host only; refuses an

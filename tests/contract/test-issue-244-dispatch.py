@@ -3709,6 +3709,11 @@ class RenderedGuidance(unittest.TestCase):
         skill = flat("SKILL.md")
         self.assertIn("Planned dispatch (research, QA, report or implementation) uses `execute`", skill)
         self.assertIn("it starts absent seats at the preset `--tier`", skill)
+        # Issue #271 D2: the body also names the seat projection and result
+        # collection entries (compatible additions; the original asserts above
+        # are unchanged and still hold).
+        self.assertIn("project --seats", skill)
+        self.assertIn("`collect`", skill)
         self.assertIn("Direct Runner `start`/`send` is standalone, degraded or same-assignment recovery", skill)
         self.assertNotIn("Pass the selected authorized `--tier`", skill)
         self.assertNotIn("An adopted research, QA, or report plan", skill)

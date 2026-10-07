@@ -312,6 +312,8 @@ python_suites_all=(
   "test-issue-259-record-contract.py"
   "test-issue-267-rejection-count.py"
   "test-issue-268-selection-continuity.py"
+  "test-issue-273-list-identity.py"
+  "test-issue-271-dispatch-help.py"
   "test-issue-264-validate-lane-integrity.py"
 )
 python_suites_a=(
@@ -348,6 +350,8 @@ python_suites_a=(
   "test-issue-266-launch-broker-composed.py"
   "test-issue-267-rejection-count.py"
   "test-issue-268-selection-continuity.py"
+  "test-issue-273-list-identity.py"
+  "test-issue-271-dispatch-help.py"
   "test-issue-264-validate-lane-integrity.py"
 )
 python_suites_b=(

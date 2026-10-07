@@ -895,7 +895,7 @@ def command_list(args: argparse.Namespace) -> dict[str, Any]:
             continue
         if repo_filter is not None and repo != repo_filter:
             continue
-        identity, _ = holder_identity(directory, record, LIST_IDENTITY_TIMEOUT)
+        identity, state_reply = holder_identity(directory, record, LIST_IDENTITY_TIMEOUT)
         pending = record.get("pending_permissions") or []
         last = record.get("last_prompt") or {}
         mutation = last.get("mutation_status") if isinstance(last, dict) else None
@@ -913,6 +913,21 @@ def command_list(args: argparse.Namespace) -> dict[str, Any]:
         persisted_role = record.get("session_role")
         if persisted_role not in SESSION_ROLES:
             persisted_role = None
+        # Issue #273: persisted agent_alive is a receipt-time fact, never a
+        # current-liveness claim, and no record field proves its receipt
+        # time. Project a current claim ONLY from the verified holder's own
+        # type-checked state reply; every other identity (including a PID
+        # later held by an unrelated program) yields null — unknown, never
+        # dead — and nothing here releases or stops any process.
+        if identity == "verified":
+            agent_alive: bool | None = bool(state_reply.get("agent_alive")) \
+                if isinstance(state_reply, dict) and isinstance(
+                    state_reply.get("agent_alive"), bool) else None
+        else:
+            if identity == "unreachable" and holder_argv_anchor(
+                    pid, directory) is False:
+                identity = "mismatch"
+            agent_alive = None
         rows.append({
             "platform": row_platform,
             "session": row_session,
@@ -920,7 +935,7 @@ def command_list(args: argparse.Namespace) -> dict[str, Any]:
             "state": state,
             "holder_pid": pid,
             "holder_instance_id": record.get("holder_instance_id"),
-            "agent_alive": bool(record.get("agent_alive")),
+            "agent_alive": agent_alive,
             "event_cursor": cursor,
             "mutation_status": mutation,
             "pending_count": len(pending) if isinstance(pending, list) else 0,

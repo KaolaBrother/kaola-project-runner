@@ -1,15 +1,15 @@
 # QA evidence: Host-owned adaptive coverage
 
-Testing yields results. QA judges whether product, docs and evidence satisfy the
-work and verification is proportionate. QA is not a second test phase; never
-repeat a suite under a QA label.
+Testing yields results. QA judges whether product, docs and evidence satisfy
+the work and verification is proportionate. QA is not a second test phase;
+never repeat a suite under a QA label.
 
 ## Ownership
 
 The Host owns quality: it decides what evidence is needed, who supplies it,
-whether it suffices, and when project QA and doc accuracy are checked, from
-change scope, risk, integration state and the delivery boundary. No fixed
-interval, issue count, mandatory reviewer or extra seat.
+whether it suffices, and when QA and doc accuracy are checked, from change
+scope, risk, integration state and the delivery boundary. No fixed interval,
+issue count, mandatory reviewer or extra seat.
 
 A worker supplies outcomes, checks, results and affected docs. Task acceptance (main Skill step 3)
 judges that assignment, not
@@ -27,16 +27,15 @@ produces them honestly, without bypassing a mechanic or fabricating a receipt.
 
 ## When to check
 
-Reuse valid evidence first. Finishing a worker or issue does not itself trigger
-a QA round, full suite or doc review; related issues may share one bounded
-integration pass. Check earlier, still bounded, for a concrete uncertainty,
-high-risk affected behavior, an undemonstrated in-scope user-facing outcome
-(behavior, output, rendering, doc accuracy), evidenced redundancy, or an
-explicit user request (exploratory, user-flow, release QA). Small changes normally
-end at reuse. Check relevant edge cases and failure paths by risk; avoid duplicate
-testing. Required checks stay binding: reduce redundant optional coverage, never
-silently waive a binding check or claim unperformed validation. Uncertainty
-about edges or expected behavior may justify public research
+Reuse valid evidence first. Finishing a worker or issue does not itself
+trigger a QA round, full suite or doc review; related issues may share one
+bounded integration pass. Check earlier, still bounded, for a concrete
+uncertainty, high-risk affected behavior, an undemonstrated in-scope
+user-facing outcome, evidenced redundancy, or an explicit user request
+(exploratory, user-flow, release QA). Small changes normally end at reuse.
+Check edge and failure paths by risk; avoid duplicate testing. Required
+checks stay binding: reduce redundant optional coverage, never silently waive
+a binding check. Uncertainty about edges may justify public research
 ([public-research.md](public-research.md)); routine planning does not.
 
 ## Who
@@ -93,24 +92,22 @@ Write in accordance with ASD-STE100.
 ## Reading a failure
 
 Keep separate: the **observation** (exact command/step and result, on which
-build); the **plausible cause** (candidate regression; pre-existing bug on
-baseline; misconfigured setup; tool/environment failure; flake); the
-**uncertainty** (what was and was not tried). A judgment with no spec, including
-an unspecified preference, is an observation, not a proven failure. Failing on
-the baseline too does not prove an environment cause. The Host decides whether
+build); the **plausible cause** (regression; pre-existing bug on baseline;
+misconfigured setup; tool/env failure; flake); the **uncertainty**
+(what was/tried). A judgment with no spec is an observation, not a proven failure. Failing on baseline too does not prove an environment cause. The Host decides whether
 it blocks, needs a narrower repro, is an open observation, or is out of scope.
 
 ## Continuous improvement
 
 Look for structural waste during normal planning, result review and QA; failure
 is not necessary. Judge duplicated responsibilities, unnecessary tests, coupled
-modules, functions or interfaces, long waits, costly checks, and configuration,
+modules, functions or interfaces, long waits, costly checks, configuration,
 documentation or coordination overlap against the simplest sufficient design.
 Deliberate isolation and a different contract are not automatically redundant.
 
 Use this path:
 
-1. Read the actual change, dependencies, entry points and original results;
+1. Read the actual change, dependencies, entry points, original results;
    name the affected boundary.
 2. State the end-to-end behavior, compatibility and constraints to keep.
 3. Compare a bounded merge, split, reuse or removal with the current form.
@@ -122,27 +119,30 @@ Use this path:
    recovery. Reuse valid evidence; a mutation invalidates only affected
    evidence. Keep it only when outcomes justify it.
 
+A symptom first pins each hypothesis to source evidence (causal role + QA
+class); unproven stays open, not false. Adopt only on an independent
+verification result; watch recurrence via existing heartbeat/issue and
+retreat on evidence.
+
 The Host keeps architecture, scheduling and verdict. A Sideagent keeps process
-facts and unresolved duties, not verdicts. The Delegator compares useful
-outcomes over time and relays pacing problems through existing supervision.
-Keep current duties in existing task fields; use normal issues and Git history.
-No compulsory optimization phase, audit, queue, ledger, or new mechanism
-without a demonstrated gap.
+facts and unresolved duties, not verdicts. The Delegator compares outcomes
+over time and relays pacing problems through existing supervision.
+Keep current duties in existing task fields; use normal issues and Git history. No compulsory optimization phase, audit, queue, ledger, or new
+mechanism without a demonstrated gap.
 
 ## Slow feedback, redundancy and repair
 
-When feedback is slow or repeats coverage, give the owner a bounded task: reuse
-valid results, name the coverage a cut removes and why none is lost; keep required
-contracts, meaningful coverage and unresolved failures. State one concrete corrective
-action: a smaller justified scope, a reused result, or a bounded
-fixture/module split or decoupling. If a costly check cannot shrink, name its unique
-coverage and reason and move it to
-the allowed integration or release boundary. Keep the pacing problem in the
-existing task or warning field. Do not only raise a timeout or run more copies
-of the full gate; the watchdog is not a feedback budget, and no universal
-elapsed gate or monitor is added.
+When feedback is slow or repeats coverage, give the owner a bounded task:
+reuse valid results, name the coverage a cut removes and why none is lost;
+keep required contracts, meaningful coverage and unresolved failures. Name
+one corrective action: a smaller justified scope, a reused result, or a
+bounded fixture/module split or decoupling. If a costly check cannot shrink,
+name its unique coverage and move it to the allowed integration or release
+boundary. Keep the pacing problem in the existing task or warning field. Do
+not only raise a timeout or run more copies of the full gate; the watchdog
+is not a feedback budget, and no universal elapsed gate or monitor is added.
 
-Development feedback runs affected suites and preparation through the
+Development feedback runs affected suites and preparation through
 controlled entry. Integration and release run the checks that actual change,
 remaining gaps and binding release and live-ACP contracts require, not the label
 alone. An unchanged valid result stays valid; a new commit does not invalidate
