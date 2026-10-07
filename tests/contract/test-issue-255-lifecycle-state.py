@@ -174,6 +174,24 @@ class StateTool(StateProject):
         code, out = self.update("sideagent", "decisions", "d1", {"question": "again"}, "--expect-rev", "1")
         self.assertEqual(out["reason"], "record-retired", "an old revision does not restore the removed question")
 
+    def test_retire_names_record_missing_and_evidence_required(self) -> None:
+        # G2: the two refusal codes retire reaches before it judges the duty.
+        self.init()
+        code, out = self.update("host", "holds", "h1", {"scope": "account", "reason": "quota",
+                                                       "preset": "zcode/default", "owner": "user"})
+        self.assertEqual(code, 0, out)
+        before = self.file.read_bytes()
+        code, out = self.state("retire", "--file", str(self.file), "--writer", "host", "--source", "s",
+                               "--kind", "holds", "--id", "absent", "--expect-rev", "1", "--evidence", "ended")
+        self.assertEqual((code, out["reason"]), (2, "record-missing"), out)
+        self.assertIn("holds/absent", out["detail"])
+        self.assertEqual(self.file.read_bytes(), before)
+        code, out = self.state("retire", "--file", str(self.file), "--writer", "host", "--source", "s",
+                               "--kind", "holds", "--id", "h1", "--expect-rev", "1", "--evidence", "")
+        self.assertEqual((code, out["reason"]), (2, "evidence-required"), out)
+        self.assertEqual(self.file.read_bytes(), before)
+        self.assertIn("h1", self.doc()["state"]["holds"])
+
     def test_maintenance_attention_separates_unbound_change_and_recovery_input(self) -> None:
         owed = ("pending", "bounded reconciliation owed")
 
@@ -535,6 +553,19 @@ class StateTool(StateProject):
             self.assertEqual((code, out["reason"]), (2, "schema-unsupported"), out)
         code, out = run(["snapshot", "--state", str(self.file), "--out", str(self.file)])
         self.assertEqual(out["reason"], "state-managed")
+        self.assertEqual(self.file.read_bytes(), raw)
+
+    def test_a_v1_file_is_legacy_format_on_retire(self) -> None:
+        # G1: retire reaches require_current, so a v1 file is legacy-format and stays byte-identical.
+        self.file.write_text(json.dumps({
+            "schema": "kaola-heartbeat-prompt/1", "revision": 2, "body": "{}",
+            "state": {"holds": {"h1": {"scope": "account", "reason": "quota", "rev": 1}}},
+        }), encoding="utf-8")
+        raw = self.file.read_bytes()
+        code, out = self.state("retire", "--file", str(self.file), "--writer", "host", "--source", "s",
+                               "--kind", "holds", "--id", "h1", "--expect-rev", "1", "--evidence", "ended")
+        self.assertEqual((code, out["reason"]), (2, "legacy-format"), out)
+        self.assertIn("state migrate", out["detail"])
         self.assertEqual(self.file.read_bytes(), raw)
 
     def test_alerts_coalesce_and_stay_after_acknowledgement(self) -> None:
@@ -2364,6 +2395,65 @@ class ConsolidatedDispatch(StateProject):
         self.assertEqual(out["reason"], "invalid-input")
         view = json.loads(self.doc()["body"])
         self.assertEqual(view["tasks"][0]["dispositions"], {"w1": "accepted", "w2": "cancelled"})
+
+    def test_retire_reads_the_index_execute_and_collect_wrote(self) -> None:
+        # G7: retire's --index is the file execute created and collect rewrote, not a hand-written row.
+        self.init()
+        self.update("host", "tasks", "t1", {"stage": "doing", "goal": "parser"})
+        self.sessions(["zcode-KT-i1-a"])
+        code, out = self.execute({
+            "scope": "research",
+            "items": [{"item_id": "w1", "preset": "zcode/default", "session": "zcode-KT-i1-a",
+                       "prompt": "read the parser", "task_id": "t1"}]}, "--state", str(self.file))
+        self.assertEqual(code, 0, out)
+        produced = {row["item_id"]: row for row in json.loads(self.index.read_text(encoding="utf-8"))["items"]}
+        self.assertEqual(produced["w1"]["status"], "in-flight", produced["w1"])
+        self.assertEqual(self.doc()["state"]["tasks"]["t1"]["dispatch"], ["w1"])
+        finger = produced["w1"].get("prompt_fingerprint") or produced["w1"].get("prompt_sha256")
+        holder = produced["w1"].get("holder_instance_id")
+        self.assertTrue(finger and holder, produced["w1"])
+        repo = produced["w1"].get("repo") or str(self.repo)
+        spec = json.loads(self.spec.read_text(encoding="utf-8"))
+        session = spec["sessions"]["zcode-KT-i1-a"]
+        session["status"] = {
+            "repo": repo, "session": "zcode-KT-i1-a", "holder_instance_id": holder,
+            "turn_active": False, "turn_outcome": "turn_completed", "stop_reason": "end_turn",
+            "mutation_status": "completed", "prompt_fingerprint": finger,
+            "last_prompt": {"fingerprint": finger, "stop_reason": "end_turn",
+                            "mutation_status": "completed"},
+        }
+        session["capture"] = {
+            "repo": repo, "session": "zcode-KT-i1-a", "events": [
+                {"cursor": 12, "kind": "session_update", "update": {
+                    "sessionUpdate": "agent_message_chunk",
+                    "content": {"type": "text", "text": "done"}}}],
+        }
+        self.spec.write_text(json.dumps(spec), encoding="utf-8")
+        code, collected = run(["collect", "--index", str(self.index), "--skills-root", str(self.skills)],
+                              self.env)
+        self.assertEqual(code, 0, collected)
+        closed = {row["item_id"]: row for row in json.loads(self.index.read_text(encoding="utf-8"))["items"]}
+        self.assertEqual(closed["w1"]["status"], "returned", closed["w1"])
+        task = self.doc()["state"]["tasks"]["t1"]
+        code, out = self.update("host", "tasks", "t1", {"stage": "done", "verdict": {"value": "accepted"}},
+                                "--expect-rev", str(task["rev"]))
+        self.assertEqual(code, 0, out)
+        rev = str(self.doc()["state"]["tasks"]["t1"]["rev"])
+        live = self.repo / "stopped-live.json"
+        live.write_text(json.dumps({"rows": [{
+            "session": "zcode-KT-i1-a", "state": "stopped", "holder_instance_id": holder, "repo": repo,
+        }]}), encoding="utf-8")
+        code, out = self.state(
+            "retire", "--file", str(self.file), "--writer", "host", "--source", "collect returned w1",
+            "--kind", "tasks", "--id", "t1", "--expect-rev", rev, "--evidence", "collect returned the item",
+            "--cite", CITE, "--index", str(self.index), "--live", str(live))
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("t1", self.doc()["state"]["tasks"])
+        self.assertFalse(self.doc()["state"].get("retired"))
+        mirrored = {row["item_id"]: row for row in json.loads(self.index.read_text(encoding="utf-8"))["items"]}
+        self.assertEqual(mirrored["w1"]["status"], "returned")
+        self.assertEqual(mirrored["w1"]["acceptance"], "accepted")
+        self.assertEqual(mirrored["w1"]["acceptance_source"]["task_id"], "t1")
 
 
 class MaintenanceCheckpoint(StateProject):

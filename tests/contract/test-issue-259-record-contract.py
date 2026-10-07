@@ -912,6 +912,62 @@ class RecordContract(unittest.TestCase):
         self.assertEqual(stale.read_text(encoding="utf-8"), "unique-old-bytes")
         self.assertFalse(list(self.file.parent.glob("heartbeat-prompt.v2-*.json")))
 
+    def test_a_pending_reclaim_stone_is_kept_and_blocks_its_id(self) -> None:
+        # G4: a stone with seats or dispatch and no handed_to stays; that id cannot be reused.
+        self.init()
+        code, out = self.state(
+            "update", "--file", str(self.file), "--writer", "host", "--source", "s",
+            "--kind", "holds", "--id", "h1",
+            "--set", json.dumps({"scope": "account", "reason": "quota", "preset": "zcode/default",
+                                 "owner": "user"}))
+        self.assertEqual(code, 0, out)
+        doc = self.doc()
+        doc["state"]["retired"] = [
+            {"kind": "tasks", "id": "reclaim-1", "outcome": "accepted",
+             "at": "2026-10-05T00:00:00+00:00", "evidence": "prose that must not stay",
+             "seats": ["codex-KT-reclaim"], "dispatch": ["item-reclaim"]},
+            {"kind": "tasks", "id": "settled-old", "outcome": "accepted",
+             "at": "2026-10-05T00:00:00+00:00", "evidence": "drop this prose"},
+            {"kind": "tasks", "id": "handed-old", "at": "2026-10-05T00:00:00+00:00",
+             "seats": ["codex-KT-handed"], "handed_to": "other-task"},
+        ]
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        code, out = self.state("migrate", "--file", str(self.file), "--write")
+        self.assertEqual(code, 0, out)
+        kept = self.doc()["state"].get("retired") or []
+        self.assertEqual([stone["id"] for stone in kept], ["reclaim-1"])
+        self.assertEqual(kept[0]["seats"], ["codex-KT-reclaim"])
+        self.assertEqual(kept[0]["dispatch"], ["item-reclaim"])
+        self.assertNotIn("evidence", kept[0])
+        self.assertNotIn("handed_to", kept[0])
+        self.assertIn("retired.tasks/settled-old", out["removed"])
+        self.assertIn("retired.tasks/handed-old", out["removed"])
+        self.assertNotIn("retired.tasks/reclaim-1", out["removed"])
+        doc = self.doc()
+        doc["state"]["retired"] = kept + [{
+            "kind": "holds", "id": "settled-hold", "outcome": "resolved",
+            "at": "2026-10-05T00:00:00+00:00",
+        }]
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        hold_rev = str(self.doc()["state"]["holds"]["h1"]["rev"])
+        code, out = self.state(
+            "retire", "--file", str(self.file), "--writer", "host", "--source", "quota cleared",
+            "--kind", "holds", "--id", "h1", "--expect-rev", hold_rev, "--evidence", "owner cleared the hold")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("h1", self.doc()["state"]["holds"])
+        after = self.doc()["state"].get("retired") or []
+        self.assertEqual([stone["id"] for stone in after], ["reclaim-1"])
+        self.assertEqual(after[0]["dispatch"], ["item-reclaim"])
+        self.assertNotIn("h1", [stone.get("id") for stone in after])
+        before = self.file.read_bytes()
+        code, out = self.state(
+            "update", "--file", str(self.file), "--writer", "host", "--source", "s",
+            "--kind", "tasks", "--id", "reclaim-1", "--expect-rev", "0",
+            "--set", json.dumps({"stage": "todo", "goal": "a new duty"}))
+        self.assertEqual((code, out["reason"]), (2, "record-retired"), out)
+        self.assertIn("pending reclaim", out["detail"])
+        self.assertEqual(self.file.read_bytes(), before)
+
     def test_malformed_hold_stays_visible_and_timer_mismatch_does_not_block_stop(self) -> None:
         self.init()
         self.file.write_text(json.dumps(self.doc()), encoding="utf-8")
@@ -2355,6 +2411,53 @@ class RecordContract(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertEqual(out["value"]["cite"]["path"], "README.md")
         self.assertNotIn("commit", out["value"]["cite"])
+        self.assertFalse(self.doc()["state"].get("retired"))
+
+    def test_an_accepted_task_without_cite_is_cite_required(self) -> None:
+        # G3: an accepted task with no --cite is cite-required, and the row stays.
+        self.init()
+        code, out = self.state(
+            "update", "--file", str(self.file), "--writer", "host", "--source", "s",
+            "--kind", "tasks", "--id", "done-one",
+            "--set", json.dumps({"stage": "done", "goal": "finished", "verdict": {"value": "accepted"}}))
+        self.assertEqual(code, 0, out)
+        before = self.file.read_bytes()
+        code, out = self.state(
+            "retire", "--file", str(self.file), "--writer", "host", "--source", "s",
+            "--kind", "tasks", "--id", "done-one", "--expect-rev", "1", "--evidence", "README.md")
+        self.assertEqual((code, out["reason"]), (2, "cite-required"), out)
+        self.assertEqual(out["path"], "cite")
+        self.assertIn("cite is an object with path", out["detail"])
+        self.assertEqual(self.file.read_bytes(), before)
+        self.assertIn("done-one", self.doc()["state"]["tasks"])
+
+    def test_index_mirror_error_is_reported_after_retire_writes(self) -> None:
+        # G8: the state write lands, then a mirror failure is index_mirror.error and the index stays.
+        self.init()
+        code, out = self.state(
+            "update", "--file", str(self.file), "--writer", "host", "--source", "s",
+            "--kind", "tasks", "--id", "done-one",
+            "--set", json.dumps({"stage": "done", "goal": "finished", "verdict": {"value": "accepted"}}))
+        self.assertEqual(code, 0, out)
+        index = self.repo / "index.json"
+        index.write_text("{not-json", encoding="utf-8")
+        before_index = index.read_bytes()
+        previous = self.doc()["revision"]
+        code, out = self.state(
+            "retire", "--file", str(self.file), "--writer", "host", "--source", "s",
+            "--kind", "tasks", "--id", "done-one", "--expect-rev", "1", "--evidence", "README.md",
+            "--cite", CITE, "--index", str(index))
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["result"], "written")
+        self.assertEqual(out["previous_revision"], previous)
+        self.assertEqual(out["revision"], previous + 1)
+        self.assertEqual(out["index_mirror"]["changed"], {})
+        self.assertIn("error", out["index_mirror"])
+        self.assertTrue(out["index_mirror"]["error"])
+        self.assertEqual(out["index_mirror"]["index"], str(index))
+        self.assertEqual(index.read_bytes(), before_index)
+        self.assertNotIn("done-one", self.doc()["state"]["tasks"])
+        self.assertEqual(self.doc()["revision"], previous + 1)
         self.assertFalse(self.doc()["state"].get("retired"))
 
     def test_delegator_role_view_uses_locators(self) -> None:
