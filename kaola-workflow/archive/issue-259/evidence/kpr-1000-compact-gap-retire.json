@@ -1,0 +1,29 @@
+{
+  "body_bytes": 27303,
+  "file_bytes": 78333,
+  "file_limit": 1048576,
+  "host_revision": 744,
+  "index_mirror": {
+    "changed": {
+      "i264-claude-kimi-behavior": "accepted",
+      "i264-droid-cursor-behavior": "accepted"
+    },
+    "index": "/tmp/kpr-1000-retirement-correlation/8.json"
+  },
+  "previous_revision": 999,
+  "result": "written",
+  "revision": 1000,
+  "value": {
+    "at": "2026-10-06T07:51:12.703177+00:00",
+    "cite": {
+      "commit": "5079042e12e17182897866a589e6b3a5d2248383",
+      "locator": "/tmp/kpr-i264-claude-kimi-behavior-delivery.md; /tmp/kpr-i264-droid-cursor-behavior-delivery.md; /tmp/kpr-i264-droid-cursor-exact-stop.json; /tmp/kpr-i264-606-dedicated-owner-handoff-send.json",
+      "path": "scripts/kaola-compact-recovery.py"
+    },
+    "host_revision": 744,
+    "id": "compact-gap-followup",
+    "kind": "tasks",
+    "outcome": "resolved",
+    "writer_holder": "e4d8aaf7b644cdf422605c04bb297b1c"
+  }
+}

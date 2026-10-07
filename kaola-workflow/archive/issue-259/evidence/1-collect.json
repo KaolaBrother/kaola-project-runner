@@ -1,0 +1,412 @@
+{
+  "correlation_only": true,
+  "coverage": {
+    "failed": [],
+    "in-flight": [],
+    "not-run": [],
+    "returned": [
+      "i259-recent-self-evolution"
+    ],
+    "unknown": [
+      "i259-recent-self-healing",
+      "i259-recent-adaptive-graphs"
+    ]
+  },
+  "dispatcher": {
+    "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+    "platform": "codex",
+    "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+    "session": "codex-KPR-orchestrator-main"
+  },
+  "effective_cap": 4,
+  "index_path": "/tmp/kpr-1000-retirement-correlation/1.json",
+  "items": [
+    {
+      "acceptance": "pending",
+      "capture_since": 6,
+      "dispatch_event_cursor": 6,
+      "dispatcher": {
+        "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "evidence": {
+        "capture": {
+          "acp_session_id": "01a10cdd-8a37-78b2-b68b-a224471da417",
+          "dispatch_event_cursor": null,
+          "error_code": "holder-lost",
+          "exit_code": 0,
+          "holder_instance_id": "400a6b1ff8b72dba20be22633bc766cb",
+          "mutation_status": "completed",
+          "outcome": "holder_lost",
+          "prompt_fingerprint": "sha256:64ac8631f4311fc42899600553be9d429625e2c40c81968603b02caa839d2b3c",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "collect_status": {
+          "acp_session_id": "01a10cdd-8a37-78b2-b68b-a224471da417",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "400a6b1ff8b72dba20be22633bc766cb",
+          "mutation_status": "completed",
+          "outcome": "stopped",
+          "prompt_fingerprint": "sha256:64ac8631f4311fc42899600553be9d429625e2c40c81968603b02caa839d2b3c",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "send": {
+          "acp_session_id": "01a10cdd-8a37-78b2-b68b-a224471da417",
+          "dispatch_event_cursor": 6,
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": "in_progress",
+          "outcome": "in_progress",
+          "prompt_fingerprint": "sha256:64ac8631f4311fc42899600553be9d429625e2c40c81968603b02caa839d2b3c",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "start": {
+          "acp_session_id": "01a10cdd-8a37-78b2-b68b-a224471da417",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "400a6b1ff8b72dba20be22633bc766cb",
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "status": {
+          "acp_session_id": null,
+          "dispatch_event_cursor": null,
+          "error_code": "no-session",
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        }
+      },
+      "holder_instance_id": "400a6b1ff8b72dba20be22633bc766cb",
+      "item_id": "i259-recent-self-evolution",
+      "notify_target": {
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "output": "/tmp/kpr-recent-harness-self-evolution-research.md",
+      "platform": "codex",
+      "preset": "codex/luna",
+      "prompt_fingerprint": "sha256:64ac8631f4311fc42899600553be9d429625e2c40c81968603b02caa839d2b3c",
+      "prompt_sha256": "sha256:64ac8631f4311fc42899600553be9d429625e2c40c81968603b02caa839d2b3c",
+      "prompt_source": {
+        "kind": "full",
+        "prompt_sha256": "sha256:64ac8631f4311fc42899600553be9d429625e2c40c81968603b02caa839d2b3c"
+      },
+      "reason": "collected",
+      "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+      "result": {
+        "cursor": 6,
+        "excerpt": null,
+        "excerpt_truncated": false,
+        "gaps": [
+          "reply-text-absent"
+        ],
+        "locator": {
+          "argv": [
+            "capture",
+            "--repo",
+            "/Users/ylmacstudio/Workspace/kaola-project-runner",
+            "--session",
+            "codex-KPR-i259-recent-self-evolution",
+            "--full",
+            "--inline"
+          ],
+          "event_log_path": null,
+          "platform": "codex",
+          "session": "codex-KPR-i259-recent-self-evolution",
+          "since": 6
+        },
+        "output": {
+          "checked": true,
+          "declared": "/tmp/kpr-recent-harness-self-evolution-research.md",
+          "kind": "file",
+          "path": "/tmp/kpr-recent-harness-self-evolution-research.md",
+          "present": true
+        },
+        "reply_chars": null,
+        "stop_reason": "end_turn",
+        "turn": {
+          "holder_instance_id": "400a6b1ff8b72dba20be22633bc766cb",
+          "prompt_fingerprint": "sha256:64ac8631f4311fc42899600553be9d429625e2c40c81968603b02caa839d2b3c"
+        }
+      },
+      "selection": {
+        "advertised": {
+          "effort": "max",
+          "model_id": "gpt-6-luna"
+        },
+        "advertised_source": "effective_selection",
+        "applied": {
+          "effort": "max",
+          "model_id": "gpt-6-luna"
+        },
+        "applied_state": {
+          "effort": "applied",
+          "model_id": "applied"
+        },
+        "comparison": "match",
+        "fields": {
+          "effort": {
+            "advertised": "match",
+            "applied": "match"
+          },
+          "model_id": {
+            "advertised": "match",
+            "applied": "match"
+          }
+        },
+        "requested": {
+          "effort": "max",
+          "model_id": "gpt-6-luna",
+          "preset": "codex/luna",
+          "tier": "luna"
+        },
+        "source": "config_application"
+      },
+      "session": "codex-KPR-i259-recent-self-evolution",
+      "status": "returned",
+      "stop_reason": "end_turn",
+      "task_id": "recent-harness-research",
+      "turn_active": null,
+      "turn_outcome": "stopped"
+    },
+    {
+      "acceptance": "pending",
+      "dispatch_event_cursor": 1,
+      "dispatcher": {
+        "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "evidence": {
+        "collect_status": {
+          "acp_session_id": "3ba80dfe-807a-4599-b13a-52a75b73955c",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "e2a7ae0c0cd99fd8f912632a4b22974f",
+          "mutation_status": "completed",
+          "outcome": "stopped",
+          "prompt_fingerprint": "sha256:db688340124a81abdbbba5dbb21d6fd76b69755e3f31e2c6579ec1446446917b",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "send": {
+          "acp_session_id": "3ba80dfe-807a-4599-b13a-52a75b73955c",
+          "dispatch_event_cursor": 1,
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": "in_progress",
+          "outcome": "in_progress",
+          "prompt_fingerprint": "sha256:21a1440b6d81cf771e7b49de868957cc3df9326f4431a555f6a85da9ba85e061",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "start": {
+          "acp_session_id": "3ba80dfe-807a-4599-b13a-52a75b73955c",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "e2a7ae0c0cd99fd8f912632a4b22974f",
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "status": {
+          "acp_session_id": null,
+          "dispatch_event_cursor": null,
+          "error_code": "no-session",
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        }
+      },
+      "holder_instance_id": "e2a7ae0c0cd99fd8f912632a4b22974f",
+      "item_id": "i259-recent-self-healing",
+      "notify_target": {
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "output": "/tmp/kpr-recent-harness-self-healing-research.md",
+      "platform": "dsh",
+      "preset": "dsh/default",
+      "prompt_fingerprint": "sha256:db688340124a81abdbbba5dbb21d6fd76b69755e3f31e2c6579ec1446446917b",
+      "prompt_sha256": "sha256:21a1440b6d81cf771e7b49de868957cc3df9326f4431a555f6a85da9ba85e061",
+      "prompt_source": {
+        "kind": "full",
+        "prompt_sha256": "sha256:21a1440b6d81cf771e7b49de868957cc3df9326f4431a555f6a85da9ba85e061"
+      },
+      "reason": "fingerprint-differs",
+      "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+      "selection": {
+        "advertised": {
+          "effort": "",
+          "model_id": "[\"opencode-go\",\"deepseek-v4.1-flash\"]"
+        },
+        "advertised_source": "effective_selection",
+        "applied": {
+          "effort": null,
+          "model_id": "opencode-go/deepseek-v4.1-flash"
+        },
+        "applied_state": {
+          "effort": "unapplied",
+          "model_id": "applied"
+        },
+        "comparison": "match",
+        "fields": {
+          "effort": {
+            "advertised": "not-requested",
+            "applied": "not-requested"
+          },
+          "model_id": {
+            "advertised": "unknown",
+            "applied": "match"
+          }
+        },
+        "requested": {
+          "effort": null,
+          "model_id": "opencode-go/deepseek-v4.1-flash",
+          "preset": "dsh/default",
+          "tier": "default"
+        },
+        "source": "config_application"
+      },
+      "session": "dsh-KPR-i259-recent-self-healing",
+      "status": "unknown",
+      "task_id": "recent-harness-research"
+    },
+    {
+      "acceptance": "pending",
+      "dispatch_event_cursor": 5,
+      "dispatcher": {
+        "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "evidence": {
+        "collect_status": {
+          "acp_session_id": "ses_ef3227e26ffeVNYtGc2pjXO7xy",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "03c2bd0d6322d7b225c4a89eab3a4dc8",
+          "mutation_status": "completed",
+          "outcome": "stopped",
+          "prompt_fingerprint": "sha256:fbff18da344eb84319385f27d511038fdf20e8562ea07d9ccc0a6515dec66691",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "send": {
+          "acp_session_id": "ses_ef3227e26ffeVNYtGc2pjXO7xy",
+          "dispatch_event_cursor": 5,
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": "in_progress",
+          "outcome": "in_progress",
+          "prompt_fingerprint": "sha256:35889b2151e2315cf9939061abcacfff4bfae1c6c53be2825668bd09bedf8518",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "start": {
+          "acp_session_id": "ses_ef3227e26ffeVNYtGc2pjXO7xy",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "03c2bd0d6322d7b225c4a89eab3a4dc8",
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "status": {
+          "acp_session_id": null,
+          "dispatch_event_cursor": null,
+          "error_code": "no-session",
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        }
+      },
+      "holder_instance_id": "03c2bd0d6322d7b225c4a89eab3a4dc8",
+      "item_id": "i259-recent-adaptive-graphs",
+      "notify_target": {
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "output": "/tmp/kpr-recent-harness-adaptive-graphs-research.md",
+      "platform": "opencode",
+      "preset": "opencode/default",
+      "prompt_fingerprint": "sha256:fbff18da344eb84319385f27d511038fdf20e8562ea07d9ccc0a6515dec66691",
+      "prompt_sha256": "sha256:35889b2151e2315cf9939061abcacfff4bfae1c6c53be2825668bd09bedf8518",
+      "prompt_source": {
+        "kind": "full",
+        "prompt_sha256": "sha256:35889b2151e2315cf9939061abcacfff4bfae1c6c53be2825668bd09bedf8518"
+      },
+      "reason": "fingerprint-differs",
+      "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+      "selection": {
+        "advertised": {
+          "effort": "default",
+          "model_id": "opencode-go/deepseek-v4.1-flash"
+        },
+        "advertised_source": "effective_selection",
+        "applied": {
+          "effort": null,
+          "model_id": "opencode-go/deepseek-v4.1-flash"
+        },
+        "applied_state": {
+          "effort": "unapplied",
+          "model_id": "applied"
+        },
+        "comparison": "match",
+        "fields": {
+          "effort": {
+            "advertised": "not-requested",
+            "applied": "not-requested"
+          },
+          "model_id": {
+            "advertised": "match",
+            "applied": "match"
+          }
+        },
+        "requested": {
+          "effort": null,
+          "model_id": "opencode-go/deepseek-v4.1-flash",
+          "preset": "opencode/default",
+          "tier": "default"
+        },
+        "source": "config_application"
+      },
+      "session": "opencode-KPR-i259-recent-adaptive-graphs",
+      "status": "unknown",
+      "task_id": "recent-harness-research"
+    }
+  ],
+  "occupancy": "known",
+  "phase": "collection",
+  "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+  "schema": "kaola-dispatch-index/1",
+  "scope": "research",
+  "task_links": {
+    "linked": {}
+  }
+}

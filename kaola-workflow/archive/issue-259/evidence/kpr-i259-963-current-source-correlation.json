@@ -1,0 +1,251 @@
+{
+  "scope": "read-only current source keys and original259 task/holder links; no native call, live write, index reconstruction or new occupancy state",
+  "heartbeat-prompt.json": {
+    "path": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/heartbeat-prompt.json",
+    "sha256": "7341b954d08053f521db2024ebcc252d4c113e869b6f512067951c5adb2fea88",
+    "revision": 969,
+    "schema": "kaola-heartbeat-prompt/2",
+    "authorization_keys": [
+      "account_token_quotas",
+      "capability_summary",
+      "classes",
+      "exclusions",
+      "grants",
+      "model_switches",
+      "paused",
+      "revoked"
+    ],
+    "project_keys": [
+      "code",
+      "goal",
+      "issue",
+      "repo",
+      "requirements_source",
+      "rules",
+      "skill_adoption_source",
+      "status",
+      "stop"
+    ],
+    "original259_tasks": {
+      "i259-impl": {
+        "acceptance": "Current authoritative #259 owner-approved contract and latest grant-count-only/minimal-current-facts corrections. Preserve six AGENTS owner requirements, accepted263/264/265 proof, pending instructions/grants/in-flight duties, exact identities and recovery sequences. Actual contract/write/admission/projection/migration evidence, meaningful affected QA and final integrated six answers plus fresh affected Opus/outer acceptance precede normal lifecycle and conditional PATCH. No install or consumer mutation.",
+        "created_at": "2026-10-05T04:59:04.744412+00:00",
+        "depends": [
+          "i259-amend"
+        ],
+        "dispatch": [
+          "i259-impl",
+          "i259-record-outcomes",
+          "i259-current-operation-qa",
+          "i259-opus-integrated-review",
+          "i259-opus-source-repair",
+          "i259-required-validation",
+          "i259-opus-affected-rereview",
+          "i259-validation-repair",
+          "i259-opus-final-34-review",
+          "i259-prior-verdict-repair",
+          "i259-opus-host-compact-design",
+          "i259-265-source-integration",
+          "i259-host-compact-implementation"
+        ],
+        "dispositions": {
+          "i259-265-source-integration": "accepted",
+          "i259-current-operation-qa": "accepted",
+          "i259-host-compact-implementation": "repair",
+          "i259-impl": "repair",
+          "i259-opus-affected-rereview": "accepted",
+          "i259-opus-final-34-review": "accepted",
+          "i259-opus-host-compact-design": "accepted",
+          "i259-opus-integrated-review": "accepted",
+          "i259-opus-source-repair": "accepted",
+          "i259-prior-verdict-repair": "accepted",
+          "i259-record-outcomes": "accepted",
+          "i259-required-validation": "accepted",
+          "i259-validation-repair": "accepted"
+        },
+        "evidence": [
+          "/tmp/kpr-i259-945-host-review.md",
+          "/tmp/kpr-i259-945-upgrade-verification.json",
+          "/tmp/kpr-i259-955-owner-minimal-current-issue.json",
+          "/tmp/kpr-i259-955-minimal-current-steer.json",
+          "/tmp/kpr-i266-963-host-review.md",
+          "/tmp/kpr-i259-963-i266-source-handoff-steer.json"
+        ],
+        "goal": "Implement current issue259 including approved current-only JSON authority/duties/lifecycles, preserved index repair and sections6-9 under six corrected owner requirements.",
+        "holder_instance_id": "f888667b7e6a5071753d218d0cc0484f",
+        "host_revision": 724,
+        "next": "Original259 completes seven-group field/source consolidation and adopts accepted266 source, then returns exact integrated candidate, affected proof and six-answer report for final affected Opus/outer review.",
+        "platform": "codex",
+        "rev": 163,
+        "scope": "Issue #259 only. Do not edit the #258 Unreleased assertion. Do not change the Droid grant or shared-seat admission.",
+        "session": "codex-KPR-i259-host-compact-impl",
+        "source": "/tmp/kpr-i266-963-host-review.md",
+        "stage": "doing",
+        "updated_at": "2026-10-06T05:17:05.714107+00:00",
+        "verdict": {
+          "by": "host",
+          "value": "partial",
+          "why": "Prior scoped source/upgrade proof retained. Grant-only contract edits observed; seven consolidation groups injected into original request16 without interruption. Actual corrected source/proof pending."
+        },
+        "wait": "Same sole-writer request16 retained; accepted266 handoff injected. Implementation, affected proof, final Opus/outer verdict and original lifecycle pending.",
+        "writer": "host:codex-KPR-orchestrator-main",
+        "writer_holder": "e4d8aaf7b644cdf422605c04bb297b1c"
+      }
+    },
+    "grant_rows": [
+      {
+        "count": 1,
+        "id": "grok/default",
+        "state": "granted"
+      },
+      {
+        "count": 1,
+        "id": "cursor-cli/default",
+        "state": "granted"
+      },
+      {
+        "count": 1,
+        "id": "codex/default",
+        "state": "granted"
+      },
+      {
+        "count": 2,
+        "id": "droid/default",
+        "model_switch": true,
+        "shared_seat": "droid",
+        "state": "granted"
+      },
+      {
+        "count": 2,
+        "id": "droid/opus",
+        "model_switch": true,
+        "shared_seat": "droid",
+        "state": "granted"
+      },
+      {
+        "count": 2,
+        "id": "droid/core",
+        "model_switch": true,
+        "shared_seat": "droid",
+        "state": "granted"
+      },
+      {
+        "count": 1,
+        "id": "claude-code/default",
+        "model_switch": true,
+        "shared_seat": "claude-code",
+        "state": "granted"
+      },
+      {
+        "count": 1,
+        "id": "claude-code/opus-xhigh",
+        "model_switch": true,
+        "shared_seat": "claude-code",
+        "special_requirements": {
+          "task_scope": "thinking and review only"
+        },
+        "state": "granted"
+      },
+      {
+        "count": 1,
+        "id": "claude-code/sonnet",
+        "model_switch": true,
+        "shared_seat": "claude-code",
+        "state": "granted"
+      }
+    ]
+  },
+  "delegator-heartbeat.json": {
+    "path": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json",
+    "sha256": "2dbd50988ad1e35fdc3ad19e89b1a39708d2801d571b7bcb65ae9477929c3550",
+    "revision": null,
+    "schema": null,
+    "authorization_keys": [
+      "account_token_quotas",
+      "dispatch_enabled",
+      "elite_grants",
+      "expert_task_grants",
+      "known_resource_limits",
+      "priority",
+      "run_state",
+      "sideagent",
+      "worker_pool"
+    ],
+    "project_keys": [
+      "forge",
+      "goal",
+      "release_install",
+      "root",
+      "scope"
+    ],
+    "grant_rows": {
+      "elite_grants": [
+        {
+          "preset_id": "grok/default",
+          "count": 1,
+          "class": "Elite"
+        },
+        {
+          "preset_id": "cursor-cli/default",
+          "count": 1,
+          "class": "Elite"
+        },
+        {
+          "preset_ids": [
+            "droid/default",
+            "droid/opus",
+            "droid/core"
+          ],
+          "count": 2,
+          "switch_authorization": "Same runtime, at safe idle, through existing lifecycle.",
+          "class": "Elite"
+        },
+        {
+          "preset_ids": [
+            "claude-code/default",
+            "claude-code/opus-xhigh",
+            "claude-code/sonnet"
+          ],
+          "count": 1,
+          "switch_authorization": "Owner authorizes default Opus/high, opus-xhigh Opus/xhigh thinking only, and sonnet Sonnet/high in ONE shared Elite seat; same-runtime safe-idle switching. High replaces medium per #243; existing native sessions retain their saved selection unless explicitly changed.",
+          "class": "Elite"
+        },
+        {
+          "preset_id": "codex/default",
+          "count": 1,
+          "class": "Elite"
+        }
+      ],
+      "expert_task_grants": []
+    }
+  },
+  "dispatch-index.json": {
+    "path": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/dispatch-index.json",
+    "sha256": "f746b1624a33e63ed90f5bd9751a6c6422f52ad194d33e9a4c3242d16c4b7657",
+    "revision": null,
+    "schema": "kaola-dispatch-index/1",
+    "items": [
+      {
+        "item_id": "i264-dsh-badca-live-proof",
+        "task_id": "compact-behavior-implementation",
+        "session": "zcode-KPR-i264-dsh-live-proof",
+        "holder_instance_id": "199de75464bd5fa471cde32e45126f68",
+        "status": "in-flight"
+      },
+      {
+        "item_id": "i266-grok-entry-investigation",
+        "task_id": "i266-grok-bot-entry",
+        "session": "opencode-KPR-i266-grok-entry",
+        "holder_instance_id": "e57ac24a859d36d9cf896cddaf3e755b",
+        "status": "in-flight"
+      },
+      {
+        "item_id": "i264-host-compact-actual-proof",
+        "task_id": "compact-behavior-implementation",
+        "session": "devin-KPR-i264-host-compact-proof",
+        "holder_instance_id": "2a13d1d4575de57e2ee6f3cfee4c7748",
+        "status": "in-flight"
+      }
+    ]
+  }
+}

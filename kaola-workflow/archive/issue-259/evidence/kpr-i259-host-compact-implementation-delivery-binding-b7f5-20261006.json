@@ -1,0 +1,178 @@
+{
+  "candidate": "b7f5bc265c3fb447c0e519984b002f5517dcc3f4",
+  "parent": "848e2804d2ed36eba81be1b1125b92382142e16a",
+  "refinement_base": "2989c8cfe61db1f98902fa7759d2fbb55e382fcc",
+  "base": "77d57fc0bae03cbcb70aa0b0b618c76ea7499a33",
+  "branch": "workflow/issue-259",
+  "clean": true,
+  "delivery": {
+    "path": "/tmp/kpr-i259-host-compact-implementation-delivery-20261006.md",
+    "sha256": "7d9f1233a4e0522e6cc67e79e8176f7ab753b0776a584517f2c800e70cd2f251"
+  },
+  "six_answers": {
+    "path": "/tmp/kpr-i259-six-requirement-answers-20261006.md",
+    "sha256": "67f544ddbfa60fe3ab48a02ef220efd6383e33a0da33b924e05946d687f86775",
+    "body_sha256": "a1914d787551b9550be0a20de07c92874be7a6fde5d25315b2fa40a3f6c50022"
+  },
+  "six_body_matches_delivery": true,
+  "manifest": {
+    "path": "/tmp/kpr-i259-host-compact-implementation-hashes-20261006.json",
+    "sha256": "2ceee536669b3db0926100ba428112c0dcf48e30583eb820f87de37bbe2fe9c8"
+  },
+  "patch": {
+    "path": "/tmp/kpr-i259-host-compact-implementation.patch",
+    "sha256": "e93daa2795e6c9cf118fd4c1349436c4cbe3bf8f0fdaf6526c40a0222234519c",
+    "bytes": 2291976
+  },
+  "authored_patch": {
+    "path": "/tmp/kpr-i259-host-compact-implementation-authored.patch",
+    "sha256": "c7441e48e5c7be6cbc20ef3ae1b662c9c8c65af74fbe00081f32460992d773d9",
+    "bytes": 589857
+  },
+  "refinement_patch": {
+    "path": "/tmp/kpr-i259-982-consolidated-refinement.patch",
+    "sha256": "bc332bd13c8ec3151fc5ad508dc6cd01d5e9bbe9d377cb2baa49507d1a34ffa1",
+    "bytes": 308044
+  },
+  "all_changed_candidate_hashes_match": true,
+  "all_changed_committed_hashes_match": true,
+  "changed_path_count": 129,
+  "refinement_path_count": 52,
+  "repair_path_count": 49,
+  "claim": {
+    "digest": "5ea624f9b9c061bd8c53dc4e20b20ac5a7c35ce95f4d1f244b17fd164f9a29d5",
+    "state_sha256": "610d647040b2ad4c948e36ee9480f14d92e96ade95aa3449210808fd7ef9cb75",
+    "ledger_sha256": "2efb63f6fb7c9da77f74d12abb4754d3e1b4de558599057bd9a2b59a133ab53b",
+    "statuses": [
+      "done",
+      "done",
+      "done",
+      "done"
+    ]
+  },
+  "native_proof": "No new native model run; unchanged925/926/929 immutable055, DSH and266 boundaries reused only at their actual scope",
+  "copied_report_history": {
+    "candidate": "2989c8cfe61db1f98902fa7759d2fbb55e382fcc",
+    "calls": 25,
+    "seconds": 1.825492,
+    "cleanup": {
+      "scratch": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o",
+      "exists_after": false
+    },
+    "receipt_sha256": "f51953b2ae5a87cc6a47a74ca8498b8d6442584c809eed1ba5a425cc74b80bf6"
+  },
+  "266_handoff": {
+    "commit": "cfa491dda33a1130746743ff15e10bdbbf11a324",
+    "files": {
+      "scripts/kaola-launchd-broker.py": {
+        "sha256": "63cc4efb2e03eac2766c4c06a69e073ffb6c836e22b3a91ca0e235bc2e73b6d4",
+        "equal_handoff": true
+      },
+      "tests/contract/test-issue-266-launch-broker.py": {
+        "sha256": "5c3b55150e2aebbb0abd8e3ee5741dd3e11567272d936669d31a9f7c15dbc3cc",
+        "equal_handoff": true
+      },
+      "tests/contract/test-issue-266-launch-broker-composed.py": {
+        "sha256": "7044000052f47581cdf6aea52de52a948dfbbf890be4c7bb5006e6d2bbded249",
+        "equal_handoff": true
+      }
+    },
+    "original_writer_stopped": "Host963 handoff receipt; no new native control call"
+  },
+  "current_state_write": false,
+  "index_reconstruction": false,
+  "installation": false,
+  "lifecycle": false,
+  "source_custody": "Fresh ACP recovery, same original259 claim/worktree; sole writer61df per Host982/988. Original f888 exact-stopped after handoff. No native resume asserted.",
+  "mixed_version_988": {
+    "installed_tool_sha256": "9fef880e28d94caad43f347fdf9d1e1e25e8de20c72967b935e2a49cdbfabe2b",
+    "main_tool_sha256": "baaedc029bfc8bb05aef1b74913ed417eb443d4511e21bd1822cf187b2662c4c",
+    "actual_2989_tool_sha256": "2db85d7597f42d93b1d47a0f0f95216eef650b0b961ec07d866af14f633d7ae7",
+    "candidate_retire_record_unchanged_from_2989": true,
+    "candidate_host_changes_unchanged_from_2989": true,
+    "candidate_node_guidance_unchanged_from_2989": true,
+    "installed_activation_unmeasured": true
+  },
+  "pending": "Fresh affected Opus Extra High review atb7f5 + outer personal integrated judgment; original259/263/264/265/266 lifecycle/reclaim, pins/Seats and conditional PATCH; owner legacy mapping and named installed/native boundaries",
+  "checks": [
+    {
+      "receipt": "/tmp/kpr-i259-982-final-records.json",
+      "sha256": "55b1a87cfad85a6d5a9b055da24e26c0c7a05744d7f81e38c666576efd5ab267",
+      "exit": 0,
+      "seconds": 6.636510999989696
+    },
+    {
+      "receipt": "/tmp/kpr-i259-982-final-dispatch.json",
+      "sha256": "9bd393d17e3277b5e955b922c3bb2eba462858ac8e315074b16044e65ff5948b",
+      "exit": 0,
+      "seconds": 4.966795583022758
+    },
+    {
+      "receipt": "/tmp/kpr-i259-982-final-reader.json",
+      "sha256": "4d9211e9ae2a168c1f9a951d37145c35bf418e022f99e92c63487213a1fb3429",
+      "exit": 0,
+      "seconds": 2.3622722920263186
+    },
+    {
+      "receipt": "/tmp/kpr-i259-982-final-generated.json",
+      "sha256": "199145eed65785de1b9a6bbf38663dd222f3b05c07b014334bc0b7b5bb381dbc",
+      "exit": 0,
+      "seconds": 4.234249291999731
+    },
+    {
+      "receipt": "/tmp/kpr-i259-982-role-final.json",
+      "sha256": "6bf51485529b003ef1321e2b9784616ee3ffbbf6f27ff1a06c7554232321d674",
+      "exit": 0,
+      "seconds": 14.128142250003293
+    },
+    {
+      "receipt": "/tmp/kpr-i259-982-upgrade-short-root.json",
+      "sha256": "5594482c0248f9ff22ba14ce74eb6ba684b1caef04b3728a878fd15e390c94d0",
+      "exit": 0,
+      "seconds": 2.14561370795127
+    },
+    {
+      "receipt": "/tmp/kpr-i259-982-bridge-facts.json",
+      "sha256": "6486a218edb8fd8aead3c073434d7b4d51958e51e82c647a8e55c569d2285e23",
+      "exit": 0,
+      "seconds": 2.0145447499817237
+    },
+    {
+      "receipt": "/tmp/kpr-i259-982-delegator-transport.json",
+      "sha256": "ec64414ac9baea90c778ba11ede873ce2cb7a81c1657187d9f2ab9e99294acb8",
+      "exit": 0,
+      "seconds": 4.560837124998216
+    },
+    {
+      "receipt": "/tmp/kpr-i259-982-broker-structure.json",
+      "sha256": "5405c222fe36e9e2045389833373e64de082d812fdb07b4232a069428f954223",
+      "exit": 0,
+      "seconds": 0.20497349998913705
+    },
+    {
+      "receipt": "/tmp/kpr-i259-982-validate-routes.json",
+      "sha256": "e78024140b2e12040a61b5926e0a5ca88b3de2a8b736ccfc84ec1b65908b6501",
+      "exit": null,
+      "seconds": 0.013101166987325996
+    },
+    {
+      "receipt": "/tmp/kpr-i259-988-retirement-reconciliation.json",
+      "sha256": "528c77998fbf1f2bf8116bc81e4f2eda741241fad4ea74c7e0295073da760f41",
+      "exit": 0,
+      "seconds": 4.315932790981606
+    },
+    {
+      "receipt": "/tmp/kpr-i259-988-retirement-checkpoint.json",
+      "sha256": "615eaba8df067de52529b6b88e0332858c495f6a87d3555b8c0af51f7a69620c",
+      "exit": 0,
+      "seconds": 0.9630976670305245
+    },
+    {
+      "receipt": "/tmp/kpr-i259-982-fixture-names.json",
+      "sha256": "26a256e158e2c0f9d2825fbb57c6db91033389343bb2259c0a47e1283f89bb88",
+      "exit": 0,
+      "seconds": 3.273870832985267
+    }
+  ],
+  "repair_base": "03e0cb21f22330841dd9edece264124d635f225c"
+}

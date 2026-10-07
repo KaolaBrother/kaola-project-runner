@@ -1,0 +1,14 @@
+{
+  "name": "role-repair",
+  "argv": [
+    "/Users/ylmacstudio/.local/share/bash-5.3.20/bin/bash",
+    "./scripts/validate.sh",
+    "--suite",
+    "test-issue-245-session-role.py"
+  ],
+  "fixture_launch_backend": "direct",
+  "exit": 1,
+  "seconds": 14.063512708002236,
+  "output_sha256": "cff17cead9fa423bbdd1842243887c25ede8aad7ed687d007a5f8e002ccd641c",
+  "log": "/tmp/kpr-i259-982-role-repair.log"
+}

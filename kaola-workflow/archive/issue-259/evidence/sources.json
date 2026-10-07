@@ -1,0 +1,17 @@
+{
+  "0": "/tmp/kpr-test-efficiency-public-research-execute-20261005.json",
+  "1": "/tmp/kpr-recent-harness-research-execute-20261006.json",
+  "2": "/tmp/kpr-continuous-improvement-opus-execute-20261006.json",
+  "3": "/tmp/kpr-i262-language-dispatch.json",
+  "4": "/tmp/kpr-i262-writing-dispatch.json",
+  "5": "/tmp/kpr-i261-live-pair-execute.json",
+  "6": "/tmp/kpr-replacement-frontier-dispatch.json",
+  "7": "/tmp/kpr-i263-i264-parallel-execute-20261005.json",
+  "8": "/tmp/kpr-i264-behavior-gap-parallel-execute-20261005.json",
+  "9": "/tmp/kpr-steer-gap-parallel-execute-20261005.json",
+  "10": "/tmp/kpr-dsh-compact-proof-dispatch.json",
+  "11": "/tmp/kpr-grok-compact-proof-dispatch.json",
+  "12": "/tmp/kpr-current-record-opus-execute.json",
+  "13": "/tmp/kpr-harness-paper-opus-dispatch.json",
+  "14": "/tmp/kpr-opus-reconsideration-collect.json"
+}

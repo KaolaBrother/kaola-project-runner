@@ -1,0 +1,54 @@
+{
+  "candidate": "cefcda13980b888c731a31e4069429412b3a6fba",
+  "parent": "1acf4b1263e1345d4df83ef9f63e5371f82c4d06",
+  "clean": true,
+  "source_paths_verified": 62,
+  "named_behavior_interface_cases": 33,
+  "checks": [
+    "899-current",
+    "913-seats",
+    "899-255",
+    "913-244",
+    "899-injection",
+    "899-relay",
+    "899-inquiry",
+    "899-render-r2",
+    "899-generated-r2",
+    "899-syntax-r2"
+  ],
+  "claim": {
+    "identity": "5ea624f9b9c061bd8c53dc4e20b20ac5a7c35ce95f4d1f244b17fd164f9a29d5",
+    "state_sha256": "610d647040b2ad4c948e36ee9480f14d92e96ade95aa3449210808fd7ef9cb75",
+    "ledger_sha256": "2efb63f6fb7c9da77f74d12abb4754d3e1b4de558599057bd9a2b59a133ab53b",
+    "mission_statuses": [
+      "done",
+      "done",
+      "done",
+      "done"
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "/tmp/kpr-i259-host-compact-implementation-delivery-20261006.md",
+      "bytes": 36652,
+      "sha256": "46d6afc88e5a47cf16de247b9aec0a827224ada5d631e58c3741496d65db0bcf"
+    },
+    {
+      "path": "/tmp/kpr-i259-host-compact-implementation.patch",
+      "bytes": 801783,
+      "sha256": "a8ba10f1b48e9c444ce4ad4633d8abea821e8fa3bfec6808af1e5f5a03f941a0"
+    },
+    {
+      "path": "/tmp/kpr-i259-host-compact-implementation-authored.patch",
+      "bytes": 222702,
+      "sha256": "5fbe44c2346c11230b46db0759b3bfc6a634d18da5f83995d467f2990c85d7ad"
+    },
+    {
+      "path": "/tmp/kpr-i259-host-compact-implementation-hashes-20261006.json",
+      "bytes": 129018,
+      "sha256": "b42674fcd4d5b9c41bf1f1309ae28beed8b8465829e5087b4b0f70aa9541af69"
+    }
+  ],
+  "native": "Host929 accepted independent immutable055 evidence reused; no new native model run",
+  "custody": "Original259/f888 sole writer; Host owns acceptance and exact stop; no lifecycle/install/live-state write"
+}

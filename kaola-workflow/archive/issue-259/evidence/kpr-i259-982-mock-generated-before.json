@@ -1,0 +1,19 @@
+{
+  "name": "mock-generated",
+  "argv": [
+    "/Users/ylmacstudio/.local/share/bash-5.3.20/bin/bash",
+    "./scripts/validate.sh",
+    "--suite",
+    "test-issue-64-receipt-bound.py",
+    "--suite",
+    "test-acp-holder-continue.py",
+    "--suite",
+    "test-issue-245-session-role.py",
+    "--suite",
+    "test-generated-skills.py"
+  ],
+  "exit": 1,
+  "seconds": 23.23248283402063,
+  "output_sha256": "9f0cd590d512ad9d713fd6f817f7a92f86af1c268a3e0f04d4e24e6eeb0b5900",
+  "log": "/tmp/kpr-i259-982-mock-generated.log"
+}

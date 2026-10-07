@@ -1,0 +1,27 @@
+{
+  "commit": "2989c8cfe61db1f98902fa7759d2fbb55e382fcc",
+  "dispatch_sha256": "2db85d7597f42d93b1d47a0f0f95216eef650b0b961ec07d866af14f633d7ae7",
+  "contract_sha256": "ba2ce83f1aaadf028b4ed15efe66e8f5381726c4d1a59171bb78d594871bc9e8",
+  "operation": [
+    "state",
+    "retire",
+    "--file",
+    "/Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/heartbeat-prompt.json",
+    "--writer",
+    "host",
+    "--source",
+    "/tmp/kpr-985-maintenance-returned-disposition.md",
+    "--kind",
+    "alerts",
+    "--id",
+    "maintenance-returned",
+    "--expect-rev",
+    "1",
+    "--evidence",
+    "/tmp/kpr-985-maintenance-returned-disposition.md",
+    "--outcome",
+    "resolved"
+  ],
+  "exit_code": 0,
+  "loader": "Git objects; only record-module load is substituted in memory; original source paths preserved; no installed or repository writes"
+}

@@ -1,0 +1,6 @@
+test_plan_then_write_preserves_duties_and_lists_unknowns (__main__.Migration.test_plan_then_write_preserves_duties_and_lists_unknowns) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.216s
+
+OK

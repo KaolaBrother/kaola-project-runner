@@ -1,0 +1,34 @@
+diff --git a/templates/kaola-delegator/references/snapshot.md b/templates/kaola-delegator/references/snapshot.md
+index 76e8e467..1e6e3b57 100644
+--- a/templates/kaola-delegator/references/snapshot.md
++++ b/templates/kaola-delegator/references/snapshot.md
+@@ -7,8 +7,8 @@ Both files hold current facts only:
+ - `project`; `host` (platform, exact `--session`, `holder_instance_id`,
+   attested native id); `authorization` a safe handoff needs — each applicable grant and active restriction named by its exact catalog preset id
+   (`<platform>/<tier>`, e.g. `cursor-cli/default` vs `grok/default`), with
+-  count, Class grant lifetime, cap, quota units, seat identity and switch
+-  authorization kept as separate facts, and an optional
++  count as the sole capacity, and Class grant lifetime, quota units, seat identity
++  and switch authorization kept as separate facts, and an optional
+   `special_requirements` only when the owner actually supplied one (absent
+   means none); an Expert grant is `task` unless the owner said `standing`, and
+   you infer no standing grant; relay owner-explicit model/seat choices unchanged and infer no
+diff --git a/templates/orchestrator/references/worker-profiles.md.tmpl b/templates/orchestrator/references/worker-profiles.md.tmpl
+index a664dbf4..b0b28181 100644
+--- a/templates/orchestrator/references/worker-profiles.md.tmpl
++++ b/templates/orchestrator/references/worker-profiles.md.tmpl
+@@ -60,10 +60,10 @@ session keeps its ownership when availability changes.
+ 
+ ## Preset IDs in authorization
+ 
+-A granted, paused, or revoked seat is named by its exact catalog Preset ID
+-`<platform>/<tier>`; a platform word alone names no seat. Count, Class grant
+-lifetime, cap, quota units, seat identity and switch authorization stay
+-separate facts; an Expert grant's `lifetime` is `task` when absent, or
++Name applicable grants and active restrictions by exact Preset ID
++`<platform>/<tier>`; a platform names no seat. Count alone sets capacity;
++Class grant lifetime, quota units, seat identity and switch authorization stay
++separate facts. Remove revoked grants. An Expert grant's `lifetime` is `task` when absent, or
+ `standing`, and `expires` is optional; a Worker exclusion names its exact ID. An authorization item
+ carries `special_requirements` only when the owner actually supplied a
+ deviation (`{"effort":"high"}`, `{"task_scope":"visual QA"}`); omit by

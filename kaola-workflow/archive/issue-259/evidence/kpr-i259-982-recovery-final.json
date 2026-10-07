@@ -1,0 +1,16 @@
+{
+  "name": "recovery-final",
+  "argv": [
+    "python3",
+    "tests/contract/test-issue-259-record-contract.py",
+    "RecordContract.test_legacy_capacity_and_group_conflicts_stay_actionable_migration_repeats"
+  ],
+  "env": {
+    "TMPDIR": "/tmp",
+    "KAOLA_LAUNCH_BACKEND": "direct"
+  },
+  "exit": 1,
+  "seconds": 1.0073192910058424,
+  "output_sha256": "9f9cda8ae57e3b1aa27179c5088dac7b0cedcfe6bc89c5979aca7b467f4c5e48",
+  "log": "/tmp/kpr-i259-982-recovery-final.log"
+}

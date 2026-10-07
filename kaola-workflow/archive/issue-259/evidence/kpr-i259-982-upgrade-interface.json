@@ -1,0 +1,13 @@
+{
+  "name": "upgrade-interface",
+  "argv": [
+    "python3",
+    "tests/contract/test-issue-162-upgrade-safety.py",
+    "UpgradeSafetyTests.test_drain_restart_replaces_the_process_and_adopts_the_new_host"
+  ],
+  "fixture_launch_backend": "direct",
+  "exit": 1,
+  "seconds": 90.16118933301186,
+  "output_sha256": "a9f56860be9b377816320f450dcf3dc9f48bf9e875d49d690e72974d5cf8346b",
+  "log": "/tmp/kpr-i259-982-upgrade-interface.log"
+}

@@ -1,0 +1,69 @@
+{
+  "checks": 4,
+  "evidence": [
+    {
+      "check": "a required child-record write failure refuses through the real entry",
+      "ok": true,
+      "receipt": {
+        "bridge": {
+          "layout": "checkout",
+          "path": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/vendor/claude-code-acp/dist/index.js",
+          "present": true,
+          "relative": "vendor/claude-code-acp/dist/index.js",
+          "sha256": "2135ad71793902a3a5e91118ddf6d7c8ef46477e3db051fc834de1be0d9efd51",
+          "upstream_pin": "6c20f2802e390c80b0542247c6b9738e11efdc11",
+          "verified_versions": "cli=2.1.280;bridge=6c20f28;protocol=1"
+        },
+        "dispatcher": null,
+        "error": {
+          "code": "child-record-failed",
+          "message": "[Errno 21] Is a directory: '/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/k266comp.044tkyi0/child-dir'"
+        },
+        "git": {
+          "branch": null,
+          "dirty": false
+        },
+        "heartbeat_host_requested": null,
+        "heartbeat_host_source": "none",
+        "mutation_performed": false,
+        "mutation_status": "not_started",
+        "platform": "claude-code",
+        "repo": "/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/k266comp.044tkyi0/repo",
+        "runtime_binary": {
+          "absolute": true,
+          "env": "CLAUDE_BIN",
+          "passed_as": "CLAUDE_ACP_CLAUDE_BIN",
+          "path": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/tests/contract/fake-claude.py",
+          "present": true
+        },
+        "schema_version": 3,
+        "session": "claude-code-K266cust-ca68db",
+        "session_role": "elite",
+        "transport": {
+          "selected": "acp"
+        }
+      }
+    },
+    {
+      "check": "the custody failure reports truthful mutation state",
+      "mutation": "not_started",
+      "ok": true
+    },
+    {
+      "check": "the recorded exact holder and agent identities are gone after the custody rollback",
+      "ok": true
+    },
+    {
+      "check": "the custody rollback leaves no ready session",
+      "ok": true,
+      "status": {
+        "error": null,
+        "state": "stopped"
+      }
+    }
+  ],
+  "failures": [],
+  "only": "child_record",
+  "result": "pass",
+  "root": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259"
+}

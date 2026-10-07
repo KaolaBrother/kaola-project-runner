@@ -1,0 +1,25 @@
+{
+  "candidate": "c33724048418fa75ff0ed2e7c356d50183fb702b",
+  "head": "c33724048418fa75ff0ed2e7c356d50183fb702b",
+  "clean": true,
+  "path_hashes_checked": 137,
+  "receipt_hashes_checked": 35,
+  "mismatches": [],
+  "changed_since469": [
+    "docs/dispatch-collect.md",
+    "scripts/kaola-dispatch.py",
+    "skills/claude-code-kaola-project-runner/scripts/main-skill-build.json",
+    "skills/codex-kaola-project-runner/scripts/main-skill-build.json",
+    "skills/cursor-cli-kaola-project-runner/scripts/main-skill-build.json",
+    "skills/devin-kaola-project-runner/scripts/main-skill-build.json",
+    "skills/droid-kaola-project-runner/scripts/main-skill-build.json",
+    "skills/dsh-kaola-project-runner/scripts/main-skill-build.json",
+    "skills/grok-kaola-project-runner/scripts/main-skill-build.json",
+    "skills/kaola-project-runner/scripts/kaola-dispatch.py",
+    "skills/kimi-cli-kaola-project-runner/scripts/main-skill-build.json",
+    "skills/opencode-kaola-project-runner/scripts/main-skill-build.json",
+    "skills/zcode-kaola-project-runner/scripts/main-skill-build.json",
+    "tests/contract/test-issue-259-record-contract.py"
+  ],
+  "launch_scope_changed": []
+}

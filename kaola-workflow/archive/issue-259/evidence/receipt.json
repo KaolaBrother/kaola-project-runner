@@ -1,0 +1,2835 @@
+{
+  "candidate": "2989c8cfe61db1f98902fa7759d2fbb55e382fcc",
+  "result": "pass",
+  "calls": 25,
+  "seconds": 1.825492,
+  "tool_bindings": [
+    {
+      "copied": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-delegator/references/inquiry-report.md",
+      "candidate": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/skills/kaola-delegator/references/inquiry-report.md",
+      "sha256": "6b3e697ec5bdfd238e16120bd06e1ae2f921b14f67c89c0bd5121f9235df90e0",
+      "equal_candidate": true
+    },
+    {
+      "copied": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/references/heartbeat-skeleton.md",
+      "candidate": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/skills/kaola-project-runner/references/heartbeat-skeleton.md",
+      "sha256": "fe20a5c7eea60351f0109ff08773a87a9d8890d9de71548cc5e9e91f1a1080aa",
+      "equal_candidate": true
+    },
+    {
+      "copied": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+      "candidate": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+      "sha256": "2db85d7597f42d93b1d47a0f0f95216eef650b0b961ec07d866af14f633d7ae7",
+      "equal_candidate": true
+    },
+    {
+      "copied": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-record-contract.py",
+      "candidate": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/skills/kaola-project-runner/scripts/kaola-record-contract.py",
+      "sha256": "ba2ce83f1aaadf028b4ed15efe66e8f5381726c4d1a59171bb78d594871bc9e8",
+      "equal_candidate": true
+    },
+    {
+      "copied": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/references/worker-profiles.md",
+      "candidate": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/skills/kaola-project-runner/references/worker-profiles.md",
+      "sha256": "729a978d85443cd5f353e760f7107bbfc8f559889355ef40c60b4a31780fc628",
+      "equal_candidate": true
+    }
+  ],
+  "fixture": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/tests/contract/test-issue-259-record-contract.py",
+  "fixture_sha256": "fe62d0a651040800fb18a344351aee119b9b160bc772c479442c6aaf452a49c7",
+  "catalog_source": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/platforms",
+  "mapping": "existing259 fixture sources; disposable consumer roots and copied tool path only. Canonical source/catalog and grant intent unchanged. Legacy conflicts remain refused; no real Host judgments rewritten.",
+  "timer_body_sha256": "e0aa47ba7c65de3d123884862d0c6ce8c4a73a081ac2ef6c6670641df3b17554",
+  "timer_entry_unchanged": true,
+  "cleanup": {
+    "scratch": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o",
+    "exists_after": false
+  },
+  "native_model": false,
+  "live_install_or_consumer_write": false,
+  "trace": [
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "state",
+        "init",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json",
+        "--writer",
+        "host",
+        "--source",
+        "turn-1",
+        "--project",
+        "{\"code\": \"KT\", \"goal\": \"close the selected issues\", \"repo\": \"/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer\"}",
+        "--authorization",
+        "{\"grants\": [{\"id\": \"codex/default\", \"state\": \"granted\", \"count\": 1}]}"
+      ],
+      "exit": 0,
+      "seconds": 0.092203,
+      "stdout_json": {
+        "body_bytes": 1743,
+        "file_bytes": 2806,
+        "file_limit": 65536,
+        "result": "written",
+        "revision": 1
+      },
+      "before": {},
+      "after": {},
+      "stored_json": {
+        "body": "{\"as_of\":\"2026-10-06T05:51:19.469787+00:00\",\"attention\":[{\"id\":\"pending\",\"kind\":\"maintenance\",\"next\":\"use the bound node or recover from original receipts\",\"why\":\"bounded reconciliation owed\"}],\"authorization\":{\"grants\":[{\"count\":1,\"id\":\"codex/default\",\"state\":\"granted\"}]},\"capability\":{\"catalog_source\":[\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/codex-kaola-project-runner/scripts/platform.yaml\",\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/droid-kaola-project-runner/scripts/platform.yaml\"],\"presets\":[\"codex/default\",\"codex/luna\"],\"shared_seats\":[],\"text\":\"availability unknown: codex/default, codex/luna\",\"withheld\":[]},\"catalog\":{\"classes\":{\"Elite\":\"Main execution workforce: primary implementation and demanding execution.\",\"Expert\":\"Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat.\",\"Worker\":\"Cheaper and generally weaker; simpler, bounded work supporting parallel throughput.\"},\"sha256\":\"729a978d85443cd5f353e760f7107bbfc8f559889355ef40c60b4a31780fc628\",\"source\":\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/references/worker-profiles.md\"},\"detail\":\"heartbeat-prompt.json state; `state view --role sideagent` for evidence and dispatch rows\",\"host_revision\":1,\"project\":{\"code\":\"KT\",\"goal\":\"close the selected issues\",\"repo\":\"/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer\"},\"revision\":1,\"sideagent\":null,\"sideagent_maintenance\":\"no binding; that is not evidence maintenance ran\",\"tasks\":[],\"view\":\"host\"}",
+        "created_from": "turn-1",
+        "host_revision": 1,
+        "revision": 1,
+        "schema": "kaola-heartbeat-prompt/2",
+        "state": {
+          "alerts": {},
+          "authorization": {
+            "grants": [
+              {
+                "count": 1,
+                "id": "codex/default",
+                "state": "granted"
+              }
+            ]
+          },
+          "decisions": {},
+          "holds": {},
+          "maintenance": {},
+          "project": {
+            "code": "KT",
+            "goal": "close the selected issues",
+            "repo": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer"
+          },
+          "recovery": {},
+          "retired": [],
+          "section_sources": {
+            "authorization": {
+              "at": "2026-10-06T05:51:19.469782+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            },
+            "project": {
+              "at": "2026-10-06T05:51:19.469640+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            }
+          },
+          "sideagent": null,
+          "tasks": {},
+          "unverified": {}
+        },
+        "updated_at": "2026-10-06T05:51:19.469787+00:00"
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "state",
+        "update",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json",
+        "--writer",
+        "host",
+        "--source",
+        "original-source",
+        "--kind",
+        "tasks",
+        "--id",
+        "active-work",
+        "--set",
+        "{\"stage\": \"doing\", \"goal\": \"pending original task\", \"next\": \"read original result\", \"holder_instance_id\": \"original\"}"
+      ],
+      "exit": 0,
+      "seconds": 0.100531,
+      "stdout_json": {
+        "body_bytes": 1840,
+        "file_bytes": 3280,
+        "file_limit": 65536,
+        "host_revision": 2,
+        "previous_revision": 1,
+        "result": "written",
+        "revision": 2,
+        "value": {
+          "created_at": "2026-10-06T05:51:19.568685+00:00",
+          "goal": "pending original task",
+          "holder_instance_id": "original",
+          "host_revision": 2,
+          "next": "read original result",
+          "rev": 1,
+          "source": "original-source",
+          "stage": "doing",
+          "updated_at": "2026-10-06T05:51:19.568854+00:00",
+          "writer": "host"
+        }
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json": "2aab348862f395303b012bb0f51132a2e2bec53b10e2a9a2203983dcec50c6a0"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json": "8d2606e9b4d69aa0f0888fe184718c2a5663b5cd706a76898bef876b889417ac"
+      },
+      "stored_json": {
+        "body": "{\"as_of\":\"2026-10-06T05:51:19.568864+00:00\",\"attention\":[{\"id\":\"pending\",\"kind\":\"maintenance\",\"next\":\"use the bound node or recover from original receipts\",\"why\":\"bounded reconciliation owed\"}],\"authorization\":{\"grants\":[{\"count\":1,\"id\":\"codex/default\",\"state\":\"granted\"}]},\"capability\":{\"catalog_source\":[\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/codex-kaola-project-runner/scripts/platform.yaml\",\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/droid-kaola-project-runner/scripts/platform.yaml\"],\"presets\":[\"codex/default\",\"codex/luna\"],\"shared_seats\":[],\"text\":\"availability unknown: codex/default, codex/luna\",\"withheld\":[]},\"catalog\":{\"classes\":{\"Elite\":\"Main execution workforce: primary implementation and demanding execution.\",\"Expert\":\"Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat.\",\"Worker\":\"Cheaper and generally weaker; simpler, bounded work supporting parallel throughput.\"},\"sha256\":\"729a978d85443cd5f353e760f7107bbfc8f559889355ef40c60b4a31780fc628\",\"source\":\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/references/worker-profiles.md\"},\"detail\":\"heartbeat-prompt.json state; `state view --role sideagent` for evidence and dispatch rows\",\"host_revision\":2,\"project\":{\"code\":\"KT\",\"goal\":\"close the selected issues\",\"repo\":\"/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer\"},\"revision\":2,\"sideagent\":null,\"sideagent_maintenance\":\"no binding; that is not evidence maintenance ran\",\"tasks\":[{\"goal\":\"pending original task\",\"id\":\"active-work\",\"next\":\"read original result\",\"stage\":\"doing\"}],\"view\":\"host\"}",
+        "created_from": "turn-1",
+        "host_revision": 2,
+        "revision": 2,
+        "schema": "kaola-heartbeat-prompt/2",
+        "state": {
+          "alerts": {},
+          "authorization": {
+            "grants": [
+              {
+                "count": 1,
+                "id": "codex/default",
+                "state": "granted"
+              }
+            ]
+          },
+          "decisions": {},
+          "holds": {},
+          "maintenance": {},
+          "project": {
+            "code": "KT",
+            "goal": "close the selected issues",
+            "repo": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer"
+          },
+          "recovery": {},
+          "retired": [],
+          "section_sources": {
+            "authorization": {
+              "at": "2026-10-06T05:51:19.469782+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            },
+            "project": {
+              "at": "2026-10-06T05:51:19.469640+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            }
+          },
+          "sideagent": null,
+          "tasks": {
+            "active-work": {
+              "created_at": "2026-10-06T05:51:19.568685+00:00",
+              "goal": "pending original task",
+              "holder_instance_id": "original",
+              "host_revision": 2,
+              "next": "read original result",
+              "rev": 1,
+              "source": "original-source",
+              "stage": "doing",
+              "updated_at": "2026-10-06T05:51:19.568854+00:00",
+              "writer": "host"
+            }
+          },
+          "unverified": {}
+        },
+        "updated_at": "2026-10-06T05:51:19.568864+00:00"
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "state",
+        "migrate",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json",
+        "--write"
+      ],
+      "exit": 2,
+      "seconds": 0.074402,
+      "stdout_json": {
+        "blockers": [
+          {
+            "allowed": "exact preset/shared grant counts; no independent aggregate limit",
+            "detail": "authorization.elite_cap is not allowed. Allowed: exact preset/shared grant counts; no independent aggregate limit. Owner: resolve this legacy limit against the original grants. Use the existing revision-bound authorization update to remove it with null after explicit owner revocation or confirmed unchanged grant authority; otherwise retain the original evidence through the current decision/watch route. Do not infer counts, copy this limit to prose or another field, or stop active work. Then repeat migration.",
+            "path": "authorization.elite_cap",
+            "recovery": "Owner: resolve this legacy limit against the original grants. Use the existing revision-bound authorization update to remove it with null after explicit owner revocation or confirmed unchanged grant authority; otherwise retain the original evidence through the current decision/watch route. Do not infer counts, copy this limit to prose or another field, or stop active work. Then repeat migration."
+          }
+        ],
+        "detail": "unresolved original authorization; active work stays current",
+        "result": "blocked",
+        "writes": false
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json": "400c7e9151e6b6c16034d64795ef28176f209bb5eea85c305d3165ad9882e6d0"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json": "400c7e9151e6b6c16034d64795ef28176f209bb5eea85c305d3165ad9882e6d0"
+      },
+      "stored_json": {
+        "body": "{\"as_of\":\"2026-10-06T05:51:19.568864+00:00\",\"attention\":[{\"id\":\"pending\",\"kind\":\"maintenance\",\"next\":\"use the bound node or recover from original receipts\",\"why\":\"bounded reconciliation owed\"}],\"authorization\":{\"grants\":[{\"count\":1,\"id\":\"codex/default\",\"state\":\"granted\"}]},\"capability\":{\"catalog_source\":[\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/codex-kaola-project-runner/scripts/platform.yaml\",\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/droid-kaola-project-runner/scripts/platform.yaml\"],\"presets\":[\"codex/default\",\"codex/luna\"],\"shared_seats\":[],\"text\":\"availability unknown: codex/default, codex/luna\",\"withheld\":[]},\"catalog\":{\"classes\":{\"Elite\":\"Main execution workforce: primary implementation and demanding execution.\",\"Expert\":\"Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat.\",\"Worker\":\"Cheaper and generally weaker; simpler, bounded work supporting parallel throughput.\"},\"sha256\":\"729a978d85443cd5f353e760f7107bbfc8f559889355ef40c60b4a31780fc628\",\"source\":\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/references/worker-profiles.md\"},\"detail\":\"heartbeat-prompt.json state; `state view --role sideagent` for evidence and dispatch rows\",\"host_revision\":2,\"project\":{\"code\":\"KT\",\"goal\":\"close the selected issues\",\"repo\":\"/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer\"},\"revision\":2,\"sideagent\":null,\"sideagent_maintenance\":\"no binding; that is not evidence maintenance ran\",\"tasks\":[{\"goal\":\"pending original task\",\"id\":\"active-work\",\"next\":\"read original result\",\"stage\":\"doing\"}],\"view\":\"host\"}",
+        "created_from": "turn-1",
+        "host_revision": 2,
+        "revision": 2,
+        "schema": "kaola-heartbeat-prompt/2",
+        "state": {
+          "alerts": {},
+          "authorization": {
+            "elite_cap": 4
+          },
+          "decisions": {},
+          "holds": {},
+          "maintenance": {},
+          "project": {
+            "code": "KT",
+            "goal": "close the selected issues",
+            "repo": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer"
+          },
+          "recovery": {},
+          "retired": [],
+          "section_sources": {
+            "authorization": {
+              "at": "2026-10-06T05:51:19.469782+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            },
+            "project": {
+              "at": "2026-10-06T05:51:19.469640+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            }
+          },
+          "sideagent": null,
+          "tasks": {
+            "active-work": {
+              "created_at": "2026-10-06T05:51:19.568685+00:00",
+              "goal": "pending original task",
+              "holder_instance_id": "original",
+              "host_revision": 2,
+              "next": "read original result",
+              "rev": 1,
+              "source": "original-source",
+              "stage": "doing",
+              "updated_at": "2026-10-06T05:51:19.568854+00:00",
+              "writer": "host"
+            }
+          },
+          "unverified": {}
+        },
+        "updated_at": "2026-10-06T05:51:19.568864+00:00"
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "state",
+        "migrate",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json",
+        "--write"
+      ],
+      "exit": 2,
+      "seconds": 0.069106,
+      "stdout_json": {
+        "blockers": [
+          {
+            "allowed": "exact preset/shared grant counts; no independent aggregate limit",
+            "detail": "authorization.elite_cap is not allowed. Allowed: exact preset/shared grant counts; no independent aggregate limit. Owner: resolve this legacy limit against the original grants. Use the existing revision-bound authorization update to remove it with null after explicit owner revocation or confirmed unchanged grant authority; otherwise retain the original evidence through the current decision/watch route. Do not infer counts, copy this limit to prose or another field, or stop active work. Then repeat migration.",
+            "path": "authorization.elite_cap",
+            "recovery": "Owner: resolve this legacy limit against the original grants. Use the existing revision-bound authorization update to remove it with null after explicit owner revocation or confirmed unchanged grant authority; otherwise retain the original evidence through the current decision/watch route. Do not infer counts, copy this limit to prose or another field, or stop active work. Then repeat migration."
+          }
+        ],
+        "detail": "unresolved original authorization; active work stays current",
+        "result": "blocked",
+        "writes": false
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json": "0fd0f7552424eaab9c595f3e7172b88a9c7eebccfee4ad836e3c37f48840cb3a"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json": "0fd0f7552424eaab9c595f3e7172b88a9c7eebccfee4ad836e3c37f48840cb3a"
+      },
+      "stored_json": {
+        "body": "{\"as_of\":\"2026-10-06T05:51:19.568864+00:00\",\"attention\":[{\"id\":\"pending\",\"kind\":\"maintenance\",\"next\":\"use the bound node or recover from original receipts\",\"why\":\"bounded reconciliation owed\"}],\"authorization\":{\"grants\":[{\"count\":1,\"id\":\"codex/default\",\"state\":\"granted\"}]},\"capability\":{\"catalog_source\":[\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/codex-kaola-project-runner/scripts/platform.yaml\",\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/droid-kaola-project-runner/scripts/platform.yaml\"],\"presets\":[\"codex/default\",\"codex/luna\"],\"shared_seats\":[],\"text\":\"availability unknown: codex/default, codex/luna\",\"withheld\":[]},\"catalog\":{\"classes\":{\"Elite\":\"Main execution workforce: primary implementation and demanding execution.\",\"Expert\":\"Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat.\",\"Worker\":\"Cheaper and generally weaker; simpler, bounded work supporting parallel throughput.\"},\"sha256\":\"729a978d85443cd5f353e760f7107bbfc8f559889355ef40c60b4a31780fc628\",\"source\":\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/references/worker-profiles.md\"},\"detail\":\"heartbeat-prompt.json state; `state view --role sideagent` for evidence and dispatch rows\",\"host_revision\":2,\"project\":{\"code\":\"KT\",\"goal\":\"close the selected issues\",\"repo\":\"/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer\"},\"revision\":2,\"sideagent\":null,\"sideagent_maintenance\":\"no binding; that is not evidence maintenance ran\",\"tasks\":[{\"goal\":\"pending original task\",\"id\":\"active-work\",\"next\":\"read original result\",\"stage\":\"doing\"}],\"view\":\"host\"}",
+        "created_from": "turn-1",
+        "host_revision": 2,
+        "revision": 2,
+        "schema": "kaola-heartbeat-prompt/2",
+        "state": {
+          "alerts": {},
+          "authorization": {
+            "elite_cap": 1,
+            "grants": [
+              {
+                "id": "codex/default",
+                "count": 2,
+                "state": "granted"
+              }
+            ]
+          },
+          "decisions": {},
+          "holds": {},
+          "maintenance": {},
+          "project": {
+            "code": "KT",
+            "goal": "close the selected issues",
+            "repo": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer"
+          },
+          "recovery": {},
+          "retired": [],
+          "section_sources": {
+            "authorization": {
+              "at": "2026-10-06T05:51:19.469782+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            },
+            "project": {
+              "at": "2026-10-06T05:51:19.469640+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            }
+          },
+          "sideagent": null,
+          "tasks": {
+            "active-work": {
+              "created_at": "2026-10-06T05:51:19.568685+00:00",
+              "goal": "pending original task",
+              "holder_instance_id": "original",
+              "host_revision": 2,
+              "next": "read original result",
+              "rev": 1,
+              "source": "original-source",
+              "stage": "doing",
+              "updated_at": "2026-10-06T05:51:19.568854+00:00",
+              "writer": "host"
+            }
+          },
+          "unverified": {}
+        },
+        "updated_at": "2026-10-06T05:51:19.568864+00:00"
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "state",
+        "migrate",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json",
+        "--write"
+      ],
+      "exit": 2,
+      "seconds": 0.068849,
+      "stdout_json": {
+        "blockers": [
+          {
+            "allowed": "exact preset/shared grant counts; no independent aggregate limit",
+            "detail": "authorization.worker_pool_cap is not allowed. Allowed: exact preset/shared grant counts; no independent aggregate limit. Owner: resolve this legacy limit against the original grants. Use the existing revision-bound authorization update to remove it with null after explicit owner revocation or confirmed unchanged grant authority; otherwise retain the original evidence through the current decision/watch route. Do not infer counts, copy this limit to prose or another field, or stop active work. Then repeat migration.",
+            "path": "authorization.worker_pool_cap",
+            "recovery": "Owner: resolve this legacy limit against the original grants. Use the existing revision-bound authorization update to remove it with null after explicit owner revocation or confirmed unchanged grant authority; otherwise retain the original evidence through the current decision/watch route. Do not infer counts, copy this limit to prose or another field, or stop active work. Then repeat migration."
+          }
+        ],
+        "detail": "unresolved original authorization; active work stays current",
+        "result": "blocked",
+        "writes": false
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json": "efbe8ead149ecc5806d1db477edb896a9ff6b77da5dcce59ba1a6d1ab6cf0608"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json": "efbe8ead149ecc5806d1db477edb896a9ff6b77da5dcce59ba1a6d1ab6cf0608"
+      },
+      "stored_json": {
+        "body": "{\"as_of\":\"2026-10-06T05:51:19.568864+00:00\",\"attention\":[{\"id\":\"pending\",\"kind\":\"maintenance\",\"next\":\"use the bound node or recover from original receipts\",\"why\":\"bounded reconciliation owed\"}],\"authorization\":{\"grants\":[{\"count\":1,\"id\":\"codex/default\",\"state\":\"granted\"}]},\"capability\":{\"catalog_source\":[\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/codex-kaola-project-runner/scripts/platform.yaml\",\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/droid-kaola-project-runner/scripts/platform.yaml\"],\"presets\":[\"codex/default\",\"codex/luna\"],\"shared_seats\":[],\"text\":\"availability unknown: codex/default, codex/luna\",\"withheld\":[]},\"catalog\":{\"classes\":{\"Elite\":\"Main execution workforce: primary implementation and demanding execution.\",\"Expert\":\"Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat.\",\"Worker\":\"Cheaper and generally weaker; simpler, bounded work supporting parallel throughput.\"},\"sha256\":\"729a978d85443cd5f353e760f7107bbfc8f559889355ef40c60b4a31780fc628\",\"source\":\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/references/worker-profiles.md\"},\"detail\":\"heartbeat-prompt.json state; `state view --role sideagent` for evidence and dispatch rows\",\"host_revision\":2,\"project\":{\"code\":\"KT\",\"goal\":\"close the selected issues\",\"repo\":\"/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer\"},\"revision\":2,\"sideagent\":null,\"sideagent_maintenance\":\"no binding; that is not evidence maintenance ran\",\"tasks\":[{\"goal\":\"pending original task\",\"id\":\"active-work\",\"next\":\"read original result\",\"stage\":\"doing\"}],\"view\":\"host\"}",
+        "created_from": "turn-1",
+        "host_revision": 2,
+        "revision": 2,
+        "schema": "kaola-heartbeat-prompt/2",
+        "state": {
+          "alerts": {},
+          "authorization": {
+            "worker_pool_cap": 1,
+            "grants": []
+          },
+          "decisions": {},
+          "holds": {},
+          "maintenance": {},
+          "project": {
+            "code": "KT",
+            "goal": "close the selected issues",
+            "repo": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer"
+          },
+          "recovery": {},
+          "retired": [],
+          "section_sources": {
+            "authorization": {
+              "at": "2026-10-06T05:51:19.469782+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            },
+            "project": {
+              "at": "2026-10-06T05:51:19.469640+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            }
+          },
+          "sideagent": null,
+          "tasks": {
+            "active-work": {
+              "created_at": "2026-10-06T05:51:19.568685+00:00",
+              "goal": "pending original task",
+              "holder_instance_id": "original",
+              "host_revision": 2,
+              "next": "read original result",
+              "rev": 1,
+              "source": "original-source",
+              "stage": "doing",
+              "updated_at": "2026-10-06T05:51:19.568854+00:00",
+              "writer": "host"
+            }
+          },
+          "unverified": {}
+        },
+        "updated_at": "2026-10-06T05:51:19.568864+00:00"
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "state",
+        "migrate",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json",
+        "--write"
+      ],
+      "exit": 2,
+      "seconds": 0.069154,
+      "stdout_json": {
+        "blockers": [
+          {
+            "allowed": "one consistent shared count/state/switch/lifetime",
+            "detail": "authorization.grants.droid is not allowed. Allowed: one consistent shared count/state/switch/lifetime. Host: resolve competing group authority from original grants; active work stays",
+            "path": "authorization.grants.droid",
+            "recovery": "Host: resolve competing group authority from original grants; active work stays"
+          }
+        ],
+        "detail": "unresolved original authorization; active work stays current",
+        "result": "blocked",
+        "writes": false
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json": "c82596a8f69ef35df7b379c2c0928d5018f9de5ef9e3f864640d33e91a61f30b"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json": "c82596a8f69ef35df7b379c2c0928d5018f9de5ef9e3f864640d33e91a61f30b"
+      },
+      "stored_json": {
+        "body": "{\"as_of\":\"2026-10-06T05:51:19.568864+00:00\",\"attention\":[{\"id\":\"pending\",\"kind\":\"maintenance\",\"next\":\"use the bound node or recover from original receipts\",\"why\":\"bounded reconciliation owed\"}],\"authorization\":{\"grants\":[{\"count\":1,\"id\":\"codex/default\",\"state\":\"granted\"}]},\"capability\":{\"catalog_source\":[\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/codex-kaola-project-runner/scripts/platform.yaml\",\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/droid-kaola-project-runner/scripts/platform.yaml\"],\"presets\":[\"codex/default\",\"codex/luna\"],\"shared_seats\":[],\"text\":\"availability unknown: codex/default, codex/luna\",\"withheld\":[]},\"catalog\":{\"classes\":{\"Elite\":\"Main execution workforce: primary implementation and demanding execution.\",\"Expert\":\"Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat.\",\"Worker\":\"Cheaper and generally weaker; simpler, bounded work supporting parallel throughput.\"},\"sha256\":\"729a978d85443cd5f353e760f7107bbfc8f559889355ef40c60b4a31780fc628\",\"source\":\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/references/worker-profiles.md\"},\"detail\":\"heartbeat-prompt.json state; `state view --role sideagent` for evidence and dispatch rows\",\"host_revision\":2,\"project\":{\"code\":\"KT\",\"goal\":\"close the selected issues\",\"repo\":\"/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer\"},\"revision\":2,\"sideagent\":null,\"sideagent_maintenance\":\"no binding; that is not evidence maintenance ran\",\"tasks\":[{\"goal\":\"pending original task\",\"id\":\"active-work\",\"next\":\"read original result\",\"stage\":\"doing\"}],\"view\":\"host\"}",
+        "created_from": "turn-1",
+        "host_revision": 2,
+        "revision": 2,
+        "schema": "kaola-heartbeat-prompt/2",
+        "state": {
+          "alerts": {},
+          "authorization": {
+            "grants": [
+              {
+                "id": "droid/default",
+                "count": 1,
+                "shared_seat": "droid",
+                "state": "granted"
+              },
+              {
+                "id": "droid/opus",
+                "count": 2,
+                "shared_seat": "droid",
+                "state": "granted"
+              }
+            ]
+          },
+          "decisions": {},
+          "holds": {},
+          "maintenance": {},
+          "project": {
+            "code": "KT",
+            "goal": "close the selected issues",
+            "repo": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer"
+          },
+          "recovery": {},
+          "retired": [],
+          "section_sources": {
+            "authorization": {
+              "at": "2026-10-06T05:51:19.469782+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            },
+            "project": {
+              "at": "2026-10-06T05:51:19.469640+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            }
+          },
+          "sideagent": null,
+          "tasks": {
+            "active-work": {
+              "created_at": "2026-10-06T05:51:19.568685+00:00",
+              "goal": "pending original task",
+              "holder_instance_id": "original",
+              "host_revision": 2,
+              "next": "read original result",
+              "rev": 1,
+              "source": "original-source",
+              "stage": "doing",
+              "updated_at": "2026-10-06T05:51:19.568854+00:00",
+              "writer": "host"
+            }
+          },
+          "unverified": {}
+        },
+        "updated_at": "2026-10-06T05:51:19.568864+00:00"
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "state",
+        "migrate",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json",
+        "--write"
+      ],
+      "exit": 2,
+      "seconds": 0.064523,
+      "stdout_json": {
+        "blockers": [
+          {
+            "allowed": "one authoritative grouped row",
+            "detail": "authorization.grants.droid is not allowed. Allowed: one authoritative grouped row. Host: reconcile original overlapping choice/restriction rows before migration; do not infer or discard per-choice authority",
+            "path": "authorization.grants.droid",
+            "recovery": "Host: reconcile original overlapping choice/restriction rows before migration; do not infer or discard per-choice authority"
+          }
+        ],
+        "detail": "unresolved original authorization; active work stays current",
+        "result": "blocked",
+        "writes": false
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json": "4631507cb44c9a64b564ee37b56f53913f9198713415b7da7d473c816063dc0a"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json": "4631507cb44c9a64b564ee37b56f53913f9198713415b7da7d473c816063dc0a"
+      },
+      "stored_json": {
+        "body": "{\"as_of\":\"2026-10-06T05:51:19.568864+00:00\",\"attention\":[{\"id\":\"pending\",\"kind\":\"maintenance\",\"next\":\"use the bound node or recover from original receipts\",\"why\":\"bounded reconciliation owed\"}],\"authorization\":{\"grants\":[{\"count\":1,\"id\":\"codex/default\",\"state\":\"granted\"}]},\"capability\":{\"catalog_source\":[\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/codex-kaola-project-runner/scripts/platform.yaml\",\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/droid-kaola-project-runner/scripts/platform.yaml\"],\"presets\":[\"codex/default\",\"codex/luna\"],\"shared_seats\":[],\"text\":\"availability unknown: codex/default, codex/luna\",\"withheld\":[]},\"catalog\":{\"classes\":{\"Elite\":\"Main execution workforce: primary implementation and demanding execution.\",\"Expert\":\"Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat.\",\"Worker\":\"Cheaper and generally weaker; simpler, bounded work supporting parallel throughput.\"},\"sha256\":\"729a978d85443cd5f353e760f7107bbfc8f559889355ef40c60b4a31780fc628\",\"source\":\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/references/worker-profiles.md\"},\"detail\":\"heartbeat-prompt.json state; `state view --role sideagent` for evidence and dispatch rows\",\"host_revision\":2,\"project\":{\"code\":\"KT\",\"goal\":\"close the selected issues\",\"repo\":\"/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer\"},\"revision\":2,\"sideagent\":null,\"sideagent_maintenance\":\"no binding; that is not evidence maintenance ran\",\"tasks\":[{\"goal\":\"pending original task\",\"id\":\"active-work\",\"next\":\"read original result\",\"stage\":\"doing\"}],\"view\":\"host\"}",
+        "created_from": "turn-1",
+        "host_revision": 2,
+        "revision": 2,
+        "schema": "kaola-heartbeat-prompt/2",
+        "state": {
+          "alerts": {},
+          "authorization": {
+            "grants": [
+              {
+                "preset_ids": [
+                  "droid/default",
+                  "droid/opus"
+                ],
+                "count": 2,
+                "shared_seat": "droid",
+                "state": "granted"
+              },
+              {
+                "preset_ids": [
+                  "droid/core"
+                ],
+                "count": 2,
+                "shared_seat": "droid",
+                "state": "granted",
+                "special_requirements": {
+                  "droid/core": {
+                    "task_scope": "original narrow scope"
+                  }
+                }
+              }
+            ]
+          },
+          "decisions": {},
+          "holds": {},
+          "maintenance": {},
+          "project": {
+            "code": "KT",
+            "goal": "close the selected issues",
+            "repo": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer"
+          },
+          "recovery": {},
+          "retired": [],
+          "section_sources": {
+            "authorization": {
+              "at": "2026-10-06T05:51:19.469782+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            },
+            "project": {
+              "at": "2026-10-06T05:51:19.469640+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            }
+          },
+          "sideagent": null,
+          "tasks": {
+            "active-work": {
+              "created_at": "2026-10-06T05:51:19.568685+00:00",
+              "goal": "pending original task",
+              "holder_instance_id": "original",
+              "host_revision": 2,
+              "next": "read original result",
+              "rev": 1,
+              "source": "original-source",
+              "stage": "doing",
+              "updated_at": "2026-10-06T05:51:19.568854+00:00",
+              "writer": "host"
+            }
+          },
+          "unverified": {}
+        },
+        "updated_at": "2026-10-06T05:51:19.568864+00:00"
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "state",
+        "migrate",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json",
+        "--write"
+      ],
+      "exit": 2,
+      "seconds": 0.075119,
+      "stdout_json": {
+        "blockers": [
+          {
+            "allowed": "consistent grant/group switch permission",
+            "detail": "authorization.model_switches is not allowed. Allowed: consistent grant/group switch permission. Host: resolve conflicting owner switch intent from original evidence",
+            "path": "authorization.model_switches",
+            "recovery": "Host: resolve conflicting owner switch intent from original evidence"
+          }
+        ],
+        "detail": "unresolved original authorization; active work stays current",
+        "result": "blocked",
+        "writes": false
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json": "770ac54da8daa7a075674a9250d2113487625857278fd2837f56066833d9a035"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json": "770ac54da8daa7a075674a9250d2113487625857278fd2837f56066833d9a035"
+      },
+      "stored_json": {
+        "body": "{\"as_of\":\"2026-10-06T05:51:19.568864+00:00\",\"attention\":[{\"id\":\"pending\",\"kind\":\"maintenance\",\"next\":\"use the bound node or recover from original receipts\",\"why\":\"bounded reconciliation owed\"}],\"authorization\":{\"grants\":[{\"count\":1,\"id\":\"codex/default\",\"state\":\"granted\"}]},\"capability\":{\"catalog_source\":[\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/codex-kaola-project-runner/scripts/platform.yaml\",\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/droid-kaola-project-runner/scripts/platform.yaml\"],\"presets\":[\"codex/default\",\"codex/luna\"],\"shared_seats\":[],\"text\":\"availability unknown: codex/default, codex/luna\",\"withheld\":[]},\"catalog\":{\"classes\":{\"Elite\":\"Main execution workforce: primary implementation and demanding execution.\",\"Expert\":\"Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat.\",\"Worker\":\"Cheaper and generally weaker; simpler, bounded work supporting parallel throughput.\"},\"sha256\":\"729a978d85443cd5f353e760f7107bbfc8f559889355ef40c60b4a31780fc628\",\"source\":\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/references/worker-profiles.md\"},\"detail\":\"heartbeat-prompt.json state; `state view --role sideagent` for evidence and dispatch rows\",\"host_revision\":2,\"project\":{\"code\":\"KT\",\"goal\":\"close the selected issues\",\"repo\":\"/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer\"},\"revision\":2,\"sideagent\":null,\"sideagent_maintenance\":\"no binding; that is not evidence maintenance ran\",\"tasks\":[{\"goal\":\"pending original task\",\"id\":\"active-work\",\"next\":\"read original result\",\"stage\":\"doing\"}],\"view\":\"host\"}",
+        "created_from": "turn-1",
+        "host_revision": 2,
+        "revision": 2,
+        "schema": "kaola-heartbeat-prompt/2",
+        "state": {
+          "alerts": {},
+          "authorization": {
+            "grants": [
+              {
+                "id": "codex/default",
+                "count": 1,
+                "state": "granted",
+                "model_switch": false
+              }
+            ],
+            "model_switches": [
+              "codex/default"
+            ]
+          },
+          "decisions": {},
+          "holds": {},
+          "maintenance": {},
+          "project": {
+            "code": "KT",
+            "goal": "close the selected issues",
+            "repo": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer"
+          },
+          "recovery": {},
+          "retired": [],
+          "section_sources": {
+            "authorization": {
+              "at": "2026-10-06T05:51:19.469782+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            },
+            "project": {
+              "at": "2026-10-06T05:51:19.469640+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            }
+          },
+          "sideagent": null,
+          "tasks": {
+            "active-work": {
+              "created_at": "2026-10-06T05:51:19.568685+00:00",
+              "goal": "pending original task",
+              "holder_instance_id": "original",
+              "host_revision": 2,
+              "next": "read original result",
+              "rev": 1,
+              "source": "original-source",
+              "stage": "doing",
+              "updated_at": "2026-10-06T05:51:19.568854+00:00",
+              "writer": "host"
+            }
+          },
+          "unverified": {}
+        },
+        "updated_at": "2026-10-06T05:51:19.568864+00:00"
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "state",
+        "migrate",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json"
+      ],
+      "exit": 0,
+      "seconds": 0.078594,
+      "stdout_json": {
+        "cleanup": true,
+        "report": {
+          "backups": {
+            "backups": [],
+            "deleted": false,
+            "procedure": "Do not delete heartbeat-prompt.vN-<hash>.json files from this command. A backup is not authority. Read it only to see whether it names a pending grant, hold, task, or relay that the current file and the project's Git, Runner, and forge records do not. Leave that file in place until the installation's own authorized migration rehomes that evidence. Cleanup of one live installation is that migration, not a bulk delete."
+          },
+          "carrier": {
+            "capability": null,
+            "why": "no live rows supplied"
+          },
+          "overwrite_detection": {
+            "alert": "state-overwritten",
+            "detail": "Migration does not write heartbeat-prompt.vN-<hash>.json or recovery.migration.raw. state-overwritten is not raised from those copies. An older writer that replaces the current file is no longer detected that way. Recover from project, Runner, and forge records.",
+            "raised": false
+          },
+          "removed": [
+            "authorization.elite_cap",
+            "authorization.classes derived from catalog/grants",
+            "authorization.capability_summary derived from catalog/grants",
+            "authorization.grants.droid repeated rows -> one group",
+            "authorization.model_switches -> grant/group"
+          ],
+          "result": "current",
+          "revision": 2
+        },
+        "result": "planned",
+        "writes": false
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json": "3725fe68cb11d5c65091bcbe82cc8d973f00d8608fb82353dc67d7bf275e6af0"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json": "3725fe68cb11d5c65091bcbe82cc8d973f00d8608fb82353dc67d7bf275e6af0"
+      },
+      "stored_json": {
+        "body": "{\"as_of\":\"2026-10-06T05:51:19.568864+00:00\",\"attention\":[{\"id\":\"pending\",\"kind\":\"maintenance\",\"next\":\"use the bound node or recover from original receipts\",\"why\":\"bounded reconciliation owed\"}],\"authorization\":{\"grants\":[{\"count\":1,\"id\":\"codex/default\",\"state\":\"granted\"}]},\"capability\":{\"catalog_source\":[\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/codex-kaola-project-runner/scripts/platform.yaml\",\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/droid-kaola-project-runner/scripts/platform.yaml\"],\"presets\":[\"codex/default\",\"codex/luna\"],\"shared_seats\":[],\"text\":\"availability unknown: codex/default, codex/luna\",\"withheld\":[]},\"catalog\":{\"classes\":{\"Elite\":\"Main execution workforce: primary implementation and demanding execution.\",\"Expert\":\"Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat.\",\"Worker\":\"Cheaper and generally weaker; simpler, bounded work supporting parallel throughput.\"},\"sha256\":\"729a978d85443cd5f353e760f7107bbfc8f559889355ef40c60b4a31780fc628\",\"source\":\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/references/worker-profiles.md\"},\"detail\":\"heartbeat-prompt.json state; `state view --role sideagent` for evidence and dispatch rows\",\"host_revision\":2,\"project\":{\"code\":\"KT\",\"goal\":\"close the selected issues\",\"repo\":\"/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer\"},\"revision\":2,\"sideagent\":null,\"sideagent_maintenance\":\"no binding; that is not evidence maintenance ran\",\"tasks\":[{\"goal\":\"pending original task\",\"id\":\"active-work\",\"next\":\"read original result\",\"stage\":\"doing\"}],\"view\":\"host\"}",
+        "created_from": "turn-1",
+        "host_revision": 2,
+        "revision": 2,
+        "schema": "kaola-heartbeat-prompt/2",
+        "state": {
+          "alerts": {},
+          "authorization": {
+            "elite_cap": 2,
+            "classes": {
+              "Expert": "Expert is the stored grant sentence for this project.",
+              "Elite": "Elite is the stored grant sentence for this project.",
+              "Worker": "Worker is the stored grant sentence for this project."
+            },
+            "capability_summary": {
+              "presets": [
+                "codex/default",
+                "grok/default"
+              ]
+            },
+            "model_switches": [
+              "droid/default",
+              "droid/opus"
+            ],
+            "grants": [
+              {
+                "id": "droid/default",
+                "count": 2,
+                "shared_seat": "droid",
+                "state": "granted"
+              },
+              {
+                "id": "droid/opus",
+                "count": 2,
+                "shared_seat": "droid",
+                "state": "granted"
+              }
+            ]
+          },
+          "decisions": {},
+          "holds": {},
+          "maintenance": {},
+          "project": {
+            "code": "KT",
+            "goal": "close the selected issues",
+            "repo": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer"
+          },
+          "recovery": {},
+          "retired": [],
+          "section_sources": {
+            "authorization": {
+              "at": "2026-10-06T05:51:19.469782+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            },
+            "project": {
+              "at": "2026-10-06T05:51:19.469640+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            }
+          },
+          "sideagent": null,
+          "tasks": {
+            "active-work": {
+              "created_at": "2026-10-06T05:51:19.568685+00:00",
+              "goal": "pending original task",
+              "holder_instance_id": "original",
+              "host_revision": 2,
+              "next": "read original result",
+              "rev": 1,
+              "source": "original-source",
+              "stage": "doing",
+              "updated_at": "2026-10-06T05:51:19.568854+00:00",
+              "writer": "host"
+            }
+          },
+          "unverified": {}
+        },
+        "updated_at": "2026-10-06T05:51:19.568864+00:00"
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "state",
+        "migrate",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json",
+        "--write"
+      ],
+      "exit": 0,
+      "seconds": 0.079606,
+      "stdout_json": {
+        "backups": {
+          "backups": [],
+          "deleted": false,
+          "procedure": "Do not delete heartbeat-prompt.vN-<hash>.json files from this command. A backup is not authority. Read it only to see whether it names a pending grant, hold, task, or relay that the current file and the project's Git, Runner, and forge records do not. Leave that file in place until the installation's own authorized migration rehomes that evidence. Cleanup of one live installation is that migration, not a bulk delete."
+        },
+        "body_bytes": 2023,
+        "carrier": {
+          "capability": null,
+          "why": "no live rows supplied"
+        },
+        "cleanup": true,
+        "file_bytes": 3575,
+        "file_limit": 1048576,
+        "overwrite_detection": {
+          "alert": "state-overwritten",
+          "detail": "Migration does not write heartbeat-prompt.vN-<hash>.json or recovery.migration.raw. state-overwritten is not raised from those copies. An older writer that replaces the current file is no longer detected that way. Recover from project, Runner, and forge records.",
+          "raised": false
+        },
+        "removed": [
+          "authorization.elite_cap",
+          "authorization.classes derived from catalog/grants",
+          "authorization.capability_summary derived from catalog/grants",
+          "authorization.grants.droid repeated rows -> one group",
+          "authorization.model_switches -> grant/group"
+        ],
+        "result": "migrated",
+        "revision": 2
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json": "3725fe68cb11d5c65091bcbe82cc8d973f00d8608fb82353dc67d7bf275e6af0"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json": "5145a5c1edfabd84cd0d465af295af0eacc2dd78425fd102524dcf03e9446a45"
+      },
+      "stored_json": {
+        "body": "{\"as_of\":\"2026-10-06T05:51:20.179861+00:00\",\"attention\":[{\"id\":\"pending\",\"kind\":\"maintenance\",\"next\":\"use the bound node or recover from original receipts\",\"why\":\"bounded reconciliation owed\"}],\"authorization\":{\"grants\":[{\"count\":2,\"id\":\"droid/default\",\"model_switch\":true,\"shared_seat\":\"droid\",\"state\":\"granted\"},{\"count\":2,\"id\":\"droid/opus\",\"model_switch\":true,\"shared_seat\":\"droid\",\"state\":\"granted\"}]},\"capability\":{\"catalog_source\":[\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/codex-kaola-project-runner/scripts/platform.yaml\",\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/droid-kaola-project-runner/scripts/platform.yaml\"],\"presets\":[\"codex/luna\",\"droid/default\",\"droid/opus\"],\"shared_seats\":[{\"count\":2,\"seat\":\"droid\"}],\"text\":\"availability unknown: codex/luna, droid/default, droid/opus\",\"withheld\":[]},\"catalog\":{\"classes\":{\"Elite\":\"Main execution workforce: primary implementation and demanding execution.\",\"Expert\":\"Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat.\",\"Worker\":\"Cheaper and generally weaker; simpler, bounded work supporting parallel throughput.\"},\"sha256\":\"729a978d85443cd5f353e760f7107bbfc8f559889355ef40c60b4a31780fc628\",\"source\":\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/references/worker-profiles.md\"},\"detail\":\"heartbeat-prompt.json state; `state view --role sideagent` for evidence and dispatch rows\",\"host_revision\":2,\"project\":{\"code\":\"KT\",\"goal\":\"close the selected issues\",\"repo\":\"/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer\"},\"revision\":3,\"sideagent\":null,\"sideagent_maintenance\":\"no binding; that is not evidence maintenance ran\",\"tasks\":[{\"goal\":\"pending original task\",\"id\":\"active-work\",\"next\":\"read original result\",\"stage\":\"doing\"}],\"view\":\"host\"}",
+        "created_from": "turn-1",
+        "host_revision": 2,
+        "revision": 3,
+        "schema": "kaola-heartbeat-prompt/2",
+        "state": {
+          "alerts": {},
+          "authorization": {
+            "grants": [
+              {
+                "count": 2,
+                "model_switch": true,
+                "preset_ids": [
+                  "droid/default",
+                  "droid/opus"
+                ],
+                "shared_seat": "droid",
+                "state": "granted"
+              }
+            ]
+          },
+          "decisions": {},
+          "holds": {},
+          "maintenance": {},
+          "project": {
+            "code": "KT",
+            "goal": "close the selected issues",
+            "repo": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer"
+          },
+          "recovery": {},
+          "section_sources": {
+            "authorization": {
+              "at": "2026-10-06T05:51:19.469782+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            },
+            "project": {
+              "at": "2026-10-06T05:51:19.469640+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            }
+          },
+          "sideagent": null,
+          "tasks": {
+            "active-work": {
+              "created_at": "2026-10-06T05:51:19.568685+00:00",
+              "goal": "pending original task",
+              "holder_instance_id": "original",
+              "host_revision": 2,
+              "next": "read original result",
+              "rev": 1,
+              "source": "original-source",
+              "stage": "doing",
+              "updated_at": "2026-10-06T05:51:19.568854+00:00",
+              "writer": "host"
+            }
+          },
+          "unverified": {}
+        },
+        "updated_at": "2026-10-06T05:51:20.179861+00:00"
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "state",
+        "migrate",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json",
+        "--write"
+      ],
+      "exit": 0,
+      "seconds": 0.070663,
+      "stdout_json": {
+        "backups": {
+          "backups": [],
+          "deleted": false,
+          "procedure": "Do not delete heartbeat-prompt.vN-<hash>.json files from this command. A backup is not authority. Read it only to see whether it names a pending grant, hold, task, or relay that the current file and the project's Git, Runner, and forge records do not. Leave that file in place until the installation's own authorized migration rehomes that evidence. Cleanup of one live installation is that migration, not a bulk delete."
+        },
+        "carrier": {
+          "capability": null,
+          "why": "no live rows supplied"
+        },
+        "overwrite_detection": {
+          "alert": "state-overwritten",
+          "detail": "Migration does not write heartbeat-prompt.vN-<hash>.json or recovery.migration.raw. state-overwritten is not raised from those copies. An older writer that replaces the current file is no longer detected that way. Recover from project, Runner, and forge records.",
+          "raised": false
+        },
+        "removed": [],
+        "result": "current",
+        "revision": 3
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json": "5145a5c1edfabd84cd0d465af295af0eacc2dd78425fd102524dcf03e9446a45"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer/.kaola/heartbeat-prompt.json": "5145a5c1edfabd84cd0d465af295af0eacc2dd78425fd102524dcf03e9446a45"
+      },
+      "stored_json": {
+        "body": "{\"as_of\":\"2026-10-06T05:51:20.179861+00:00\",\"attention\":[{\"id\":\"pending\",\"kind\":\"maintenance\",\"next\":\"use the bound node or recover from original receipts\",\"why\":\"bounded reconciliation owed\"}],\"authorization\":{\"grants\":[{\"count\":2,\"id\":\"droid/default\",\"model_switch\":true,\"shared_seat\":\"droid\",\"state\":\"granted\"},{\"count\":2,\"id\":\"droid/opus\",\"model_switch\":true,\"shared_seat\":\"droid\",\"state\":\"granted\"}]},\"capability\":{\"catalog_source\":[\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/codex-kaola-project-runner/scripts/platform.yaml\",\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/droid-kaola-project-runner/scripts/platform.yaml\"],\"presets\":[\"codex/luna\",\"droid/default\",\"droid/opus\"],\"shared_seats\":[{\"count\":2,\"seat\":\"droid\"}],\"text\":\"availability unknown: codex/luna, droid/default, droid/opus\",\"withheld\":[]},\"catalog\":{\"classes\":{\"Elite\":\"Main execution workforce: primary implementation and demanding execution.\",\"Expert\":\"Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat.\",\"Worker\":\"Cheaper and generally weaker; simpler, bounded work supporting parallel throughput.\"},\"sha256\":\"729a978d85443cd5f353e760f7107bbfc8f559889355ef40c60b4a31780fc628\",\"source\":\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/references/worker-profiles.md\"},\"detail\":\"heartbeat-prompt.json state; `state view --role sideagent` for evidence and dispatch rows\",\"host_revision\":2,\"project\":{\"code\":\"KT\",\"goal\":\"close the selected issues\",\"repo\":\"/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer\"},\"revision\":3,\"sideagent\":null,\"sideagent_maintenance\":\"no binding; that is not evidence maintenance ran\",\"tasks\":[{\"goal\":\"pending original task\",\"id\":\"active-work\",\"next\":\"read original result\",\"stage\":\"doing\"}],\"view\":\"host\"}",
+        "created_from": "turn-1",
+        "host_revision": 2,
+        "revision": 3,
+        "schema": "kaola-heartbeat-prompt/2",
+        "state": {
+          "alerts": {},
+          "authorization": {
+            "grants": [
+              {
+                "count": 2,
+                "model_switch": true,
+                "preset_ids": [
+                  "droid/default",
+                  "droid/opus"
+                ],
+                "shared_seat": "droid",
+                "state": "granted"
+              }
+            ]
+          },
+          "decisions": {},
+          "holds": {},
+          "maintenance": {},
+          "project": {
+            "code": "KT",
+            "goal": "close the selected issues",
+            "repo": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-revc05ky/consumer"
+          },
+          "recovery": {},
+          "section_sources": {
+            "authorization": {
+              "at": "2026-10-06T05:51:19.469782+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            },
+            "project": {
+              "at": "2026-10-06T05:51:19.469640+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            }
+          },
+          "sideagent": null,
+          "tasks": {
+            "active-work": {
+              "created_at": "2026-10-06T05:51:19.568685+00:00",
+              "goal": "pending original task",
+              "holder_instance_id": "original",
+              "host_revision": 2,
+              "next": "read original result",
+              "rev": 1,
+              "source": "original-source",
+              "stage": "doing",
+              "updated_at": "2026-10-06T05:51:19.568854+00:00",
+              "writer": "host"
+            }
+          },
+          "unverified": {}
+        },
+        "updated_at": "2026-10-06T05:51:20.179861+00:00"
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "state",
+        "init",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/heartbeat-prompt.json",
+        "--writer",
+        "host",
+        "--source",
+        "turn-1",
+        "--project",
+        "{\"code\": \"KT\", \"goal\": \"close the selected issues\", \"repo\": \"/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer\"}",
+        "--authorization",
+        "{\"grants\": [{\"preset_ids\": [\"droid/default\", \"droid/opus\"], \"count\": 2, \"state\": \"granted\"}]}"
+      ],
+      "exit": 0,
+      "seconds": 0.072731,
+      "stdout_json": {
+        "body_bytes": 1943,
+        "file_bytes": 3075,
+        "file_limit": 65536,
+        "result": "written",
+        "revision": 1
+      },
+      "before": {},
+      "after": {},
+      "stored_json": {
+        "body": "{\"as_of\":\"2026-10-06T05:51:20.328710+00:00\",\"attention\":[{\"id\":\"pending\",\"kind\":\"maintenance\",\"next\":\"use the bound node or recover from original receipts\",\"why\":\"bounded reconciliation owed\"}],\"authorization\":{\"grants\":[{\"count\":2,\"id\":\"droid/default\",\"shared_seat\":\"droid/default,droid/opus\",\"state\":\"granted\"},{\"count\":2,\"id\":\"droid/opus\",\"shared_seat\":\"droid/default,droid/opus\",\"state\":\"granted\"}]},\"capability\":{\"catalog_source\":[\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/codex-kaola-project-runner/scripts/platform.yaml\",\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/droid-kaola-project-runner/scripts/platform.yaml\"],\"presets\":[\"codex/luna\",\"droid/default\",\"droid/opus\"],\"shared_seats\":[{\"count\":2,\"seat\":\"droid/default,droid/opus\"}],\"text\":\"availability unknown: codex/luna, droid/default, droid/opus\",\"withheld\":[]},\"catalog\":{\"classes\":{\"Elite\":\"Main execution workforce: primary implementation and demanding execution.\",\"Expert\":\"Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat.\",\"Worker\":\"Cheaper and generally weaker; simpler, bounded work supporting parallel throughput.\"},\"sha256\":\"729a978d85443cd5f353e760f7107bbfc8f559889355ef40c60b4a31780fc628\",\"source\":\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/references/worker-profiles.md\"},\"detail\":\"heartbeat-prompt.json state; `state view --role sideagent` for evidence and dispatch rows\",\"host_revision\":1,\"project\":{\"code\":\"KT\",\"goal\":\"close the selected issues\",\"repo\":\"/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer\"},\"revision\":1,\"sideagent\":null,\"sideagent_maintenance\":\"no binding; that is not evidence maintenance ran\",\"tasks\":[],\"view\":\"host\"}",
+        "created_from": "turn-1",
+        "host_revision": 1,
+        "revision": 1,
+        "schema": "kaola-heartbeat-prompt/2",
+        "state": {
+          "alerts": {},
+          "authorization": {
+            "grants": [
+              {
+                "count": 2,
+                "preset_ids": [
+                  "droid/default",
+                  "droid/opus"
+                ],
+                "state": "granted"
+              }
+            ]
+          },
+          "decisions": {},
+          "holds": {},
+          "maintenance": {},
+          "project": {
+            "code": "KT",
+            "goal": "close the selected issues",
+            "repo": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer"
+          },
+          "recovery": {},
+          "retired": [],
+          "section_sources": {
+            "authorization": {
+              "at": "2026-10-06T05:51:20.328706+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            },
+            "project": {
+              "at": "2026-10-06T05:51:20.328597+00:00",
+              "host_revision": 1,
+              "source": "turn-1",
+              "writer": "host"
+            }
+          },
+          "sideagent": null,
+          "tasks": {},
+          "unverified": {}
+        },
+        "updated_at": "2026-10-06T05:51:20.328710+00:00"
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "delegator",
+        "migrate",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json"
+      ],
+      "exit": 0,
+      "seconds": 0.063626,
+      "stdout_json": {
+        "dropped": [
+          "authorization.expert_task_grants ended grant"
+        ],
+        "result": "planned",
+        "state": {
+          "authorization": {
+            "elite_grants": [
+              {
+                "count": 2,
+                "preset_ids": [
+                  "droid/default",
+                  "droid/opus"
+                ],
+                "special_requirements": {
+                  "droid/opus": {
+                    "task_scope": "authorized review"
+                  }
+                },
+                "state": "paused",
+                "switch_authorization": false
+              }
+            ],
+            "exclusions": [
+              "zcode/default"
+            ],
+            "expert_task_grants": [],
+            "worker_pool": [
+              "zcode/default"
+            ]
+          },
+          "project": {
+            "goal": "current objective",
+            "user_language": "zh-TW"
+          },
+          "revision": 0,
+          "schema": "kaola-delegator-heartbeat/1",
+          "watch": {
+            "relay": {
+              "kind": "relay",
+              "next": "confirm adoption",
+              "source": "owner-change",
+              "status": "pending"
+            },
+            "reopen": {
+              "detail": "service hold",
+              "kind": "decision",
+              "next": "owner confirms reopening",
+              "source": "original-owner",
+              "status": "pending"
+            },
+            "stop": {
+              "kind": "recovery",
+              "locator": "original-holder",
+              "next": "exact-stop original holder",
+              "source": "original-expiry",
+              "status": "open"
+            }
+          }
+        },
+        "writes": false
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json": "fdb62a9f07e114f60cacb7bcab6678260a239dc1f3bd2c968b2547d3e7b582f4"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json": "fdb62a9f07e114f60cacb7bcab6678260a239dc1f3bd2c968b2547d3e7b582f4"
+      },
+      "stored_json": {
+        "schema": "kaola-delegator-heartbeat/1",
+        "revision": 0,
+        "project": {
+          "goal": "current objective",
+          "user_language": "zh-TW"
+        },
+        "authorization": {
+          "worker_pool": [
+            "zcode/default"
+          ],
+          "exclusions": [
+            "zcode/default"
+          ],
+          "elite_grants": [
+            {
+              "preset_ids": [
+                "droid/default",
+                "droid/opus"
+              ],
+              "count": 2,
+              "state": "paused",
+              "switch_authorization": false,
+              "special_requirements": {
+                "droid/opus": {
+                  "task_scope": "authorized review"
+                }
+              }
+            }
+          ],
+          "expert_task_grants": [
+            {
+              "preset_id": "codex/astra",
+              "count": 1,
+              "lifetime": "standing",
+              "expires": "2000-01-01T00:00:00Z"
+            }
+          ]
+        },
+        "watch": {
+          "stop": {
+            "kind": "recovery",
+            "status": "open",
+            "source": "original-expiry",
+            "next": "exact-stop original holder",
+            "locator": "original-holder"
+          },
+          "reopen": {
+            "kind": "decision",
+            "status": "pending",
+            "detail": "service hold",
+            "source": "original-owner",
+            "next": "owner confirms reopening"
+          },
+          "relay": {
+            "kind": "relay",
+            "status": "pending",
+            "source": "owner-change",
+            "next": "confirm adoption"
+          }
+        }
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "delegator",
+        "migrate",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json",
+        "--write"
+      ],
+      "exit": 0,
+      "seconds": 0.065776,
+      "stdout_json": {
+        "dropped": [
+          "authorization.expert_task_grants ended grant"
+        ],
+        "result": "migrated",
+        "revision": 0,
+        "writes": true
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json": "fdb62a9f07e114f60cacb7bcab6678260a239dc1f3bd2c968b2547d3e7b582f4"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json": "81aafcd41bc2cdbaebc143463d0c8ed29fc7eea1270056c6e4c99f72275c59be"
+      },
+      "stored_json": {
+        "authorization": {
+          "elite_grants": [
+            {
+              "count": 2,
+              "preset_ids": [
+                "droid/default",
+                "droid/opus"
+              ],
+              "special_requirements": {
+                "droid/opus": {
+                  "task_scope": "authorized review"
+                }
+              },
+              "state": "paused",
+              "switch_authorization": false
+            }
+          ],
+          "exclusions": [
+            "zcode/default"
+          ],
+          "expert_task_grants": [],
+          "worker_pool": [
+            "zcode/default"
+          ]
+        },
+        "project": {
+          "goal": "current objective",
+          "user_language": "zh-TW"
+        },
+        "revision": 0,
+        "schema": "kaola-delegator-heartbeat/1",
+        "watch": {
+          "relay": {
+            "kind": "relay",
+            "next": "confirm adoption",
+            "source": "owner-change",
+            "status": "pending"
+          },
+          "reopen": {
+            "detail": "service hold",
+            "kind": "decision",
+            "next": "owner confirms reopening",
+            "source": "original-owner",
+            "status": "pending"
+          },
+          "stop": {
+            "kind": "recovery",
+            "locator": "original-holder",
+            "next": "exact-stop original holder",
+            "source": "original-expiry",
+            "status": "open"
+          }
+        }
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "delegator",
+        "migrate",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json",
+        "--write"
+      ],
+      "exit": 0,
+      "seconds": 0.06706,
+      "stdout_json": {
+        "dropped": [],
+        "result": "migrated",
+        "revision": 0,
+        "writes": true
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json": "81aafcd41bc2cdbaebc143463d0c8ed29fc7eea1270056c6e4c99f72275c59be"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json": "81aafcd41bc2cdbaebc143463d0c8ed29fc7eea1270056c6e4c99f72275c59be"
+      },
+      "stored_json": {
+        "authorization": {
+          "elite_grants": [
+            {
+              "count": 2,
+              "preset_ids": [
+                "droid/default",
+                "droid/opus"
+              ],
+              "special_requirements": {
+                "droid/opus": {
+                  "task_scope": "authorized review"
+                }
+              },
+              "state": "paused",
+              "switch_authorization": false
+            }
+          ],
+          "exclusions": [
+            "zcode/default"
+          ],
+          "expert_task_grants": [],
+          "worker_pool": [
+            "zcode/default"
+          ]
+        },
+        "project": {
+          "goal": "current objective",
+          "user_language": "zh-TW"
+        },
+        "revision": 0,
+        "schema": "kaola-delegator-heartbeat/1",
+        "watch": {
+          "relay": {
+            "kind": "relay",
+            "next": "confirm adoption",
+            "source": "owner-change",
+            "status": "pending"
+          },
+          "reopen": {
+            "detail": "service hold",
+            "kind": "decision",
+            "next": "owner confirms reopening",
+            "source": "original-owner",
+            "status": "pending"
+          },
+          "stop": {
+            "kind": "recovery",
+            "locator": "original-holder",
+            "next": "exact-stop original holder",
+            "source": "original-expiry",
+            "status": "open"
+          }
+        }
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "delegator",
+        "view",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json",
+        "--repo",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer",
+        "--platforms",
+        "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/platforms",
+        "--live",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/live.json",
+        "--index",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/index.json",
+        "--availability",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/availability.json"
+      ],
+      "exit": 0,
+      "seconds": 0.065382,
+      "stdout_json": {
+        "authorization": {
+          "elite_grants": [
+            {
+              "count": 2,
+              "preset_ids": [
+                "droid/default",
+                "droid/opus"
+              ],
+              "special_requirements": {
+                "droid/opus": {
+                  "task_scope": "authorized review"
+                }
+              },
+              "state": "paused",
+              "switch_authorization": false
+            }
+          ],
+          "exclusions": [
+            "zcode/default"
+          ],
+          "expert_task_grants": [],
+          "worker_pool": [
+            "zcode/default"
+          ]
+        },
+        "day_end": null,
+        "day_start": null,
+        "final_stop": null,
+        "host": {},
+        "project": {
+          "goal": "current objective",
+          "user_language": "zh-TW"
+        },
+        "revision": 0,
+        "schema": "kaola-delegator-heartbeat/1",
+        "seats": {
+          "authorized_total": 2,
+          "expert_authorization": "none",
+          "groups": [
+            {
+              "authorized_count": 2,
+              "availability_unknown": false,
+              "group": "grant:droid/default,droid/opus",
+              "idle_available": 0,
+              "occupancy_unknown": false,
+              "occupied": [],
+              "presets": [
+                {
+                  "class": "Elite",
+                  "count": 2,
+                  "default_effort": "",
+                  "default_model": "auto",
+                  "id": "droid/default"
+                },
+                {
+                  "class": "Elite",
+                  "count": 2,
+                  "default_effort": "high",
+                  "default_model": "claude-opus-5-5",
+                  "id": "droid/opus",
+                  "owner_overrides": {
+                    "task_scope": "authorized review"
+                  }
+                }
+              ],
+              "unavailable": [
+                {
+                  "id": "droid/default",
+                  "reason": "paused"
+                },
+                {
+                  "id": "droid/opus",
+                  "reason": "paused"
+                }
+              ]
+            }
+          ],
+          "idle_available_total": 0,
+          "occupied": [],
+          "occupied_elite_expert": 0,
+          "resource_limits": {},
+          "scope": "current project; external target/account capacity requires its original resource receipt",
+          "source": {
+            "as_of": "2026-10-06T05:51:20.596730+00:00",
+            "authorization": "/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/heartbeat-prompt.json",
+            "index": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/index.json",
+            "live": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/live.json"
+          },
+          "unknown_reasons": []
+        },
+        "unknown": [],
+        "view": "delegator-file",
+        "watch": [
+          {
+            "id": "relay",
+            "kind": "relay",
+            "next": "confirm adoption",
+            "source": "owner-change",
+            "status": "pending"
+          },
+          {
+            "detail": "service hold",
+            "id": "reopen",
+            "kind": "decision",
+            "next": "owner confirms reopening",
+            "source": "original-owner",
+            "status": "pending"
+          },
+          {
+            "id": "stop",
+            "kind": "recovery",
+            "locator": "original-holder",
+            "next": "exact-stop original holder",
+            "source": "original-expiry",
+            "status": "open"
+          }
+        ]
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json": "81aafcd41bc2cdbaebc143463d0c8ed29fc7eea1270056c6e4c99f72275c59be",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/live.json": "1633902c6cbba5e7770dbed172df754a25078bb76efe1f23474edc87f1a47655",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/index.json": "552fb15f3cb3eb56bba76490a52147998c282f912975c92123b33b3d4f4c3e52",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/availability.json": "8d0d1dd8478c3ee966a4fe7a2c00322d2f4eed94fb984512f6ecc3782f2d5ceb"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json": "81aafcd41bc2cdbaebc143463d0c8ed29fc7eea1270056c6e4c99f72275c59be",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/live.json": "1633902c6cbba5e7770dbed172df754a25078bb76efe1f23474edc87f1a47655",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/index.json": "552fb15f3cb3eb56bba76490a52147998c282f912975c92123b33b3d4f4c3e52",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/availability.json": "8d0d1dd8478c3ee966a4fe7a2c00322d2f4eed94fb984512f6ecc3782f2d5ceb"
+      },
+      "stored_json": {
+        "authorization": {
+          "elite_grants": [
+            {
+              "count": 2,
+              "preset_ids": [
+                "droid/default",
+                "droid/opus"
+              ],
+              "special_requirements": {
+                "droid/opus": {
+                  "task_scope": "authorized review"
+                }
+              },
+              "state": "paused",
+              "switch_authorization": false
+            }
+          ],
+          "exclusions": [
+            "zcode/default"
+          ],
+          "expert_task_grants": [],
+          "worker_pool": [
+            "zcode/default"
+          ]
+        },
+        "project": {
+          "goal": "current objective",
+          "user_language": "zh-TW"
+        },
+        "revision": 0,
+        "schema": "kaola-delegator-heartbeat/1",
+        "watch": {
+          "relay": {
+            "kind": "relay",
+            "next": "confirm adoption",
+            "source": "owner-change",
+            "status": "pending"
+          },
+          "reopen": {
+            "detail": "service hold",
+            "kind": "decision",
+            "next": "owner confirms reopening",
+            "source": "original-owner",
+            "status": "pending"
+          },
+          "stop": {
+            "kind": "recovery",
+            "locator": "original-holder",
+            "next": "exact-stop original holder",
+            "source": "original-expiry",
+            "status": "open"
+          }
+        }
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "delegator",
+        "update",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json",
+        "--writer",
+        "delegator",
+        "--source",
+        "owner-reopening-and-adoption",
+        "--expect-revision",
+        "0",
+        "--set",
+        "{\"authorization\": {\"elite_grants\": [{\"count\": 2, \"preset_ids\": [\"droid/default\", \"droid/opus\"], \"special_requirements\": {\"droid/opus\": {\"task_scope\": \"authorized review\"}}, \"state\": \"granted\", \"switch_authorization\": false}]}, \"watch\": {\"relay\": {\"status\": \"adopted\", \"evidence\": \"original-host-adoption\"}}}"
+      ],
+      "exit": 0,
+      "seconds": 0.065934,
+      "stdout_json": {
+        "result": "written",
+        "revision": 1
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json": "81aafcd41bc2cdbaebc143463d0c8ed29fc7eea1270056c6e4c99f72275c59be"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json": "6d5e494016403f0eeddb6488966cc088afc688aa2de5615f10b0ec4d86b72037"
+      },
+      "stored_json": {
+        "authorization": {
+          "elite_grants": [
+            {
+              "count": 2,
+              "preset_ids": [
+                "droid/default",
+                "droid/opus"
+              ],
+              "special_requirements": {
+                "droid/opus": {
+                  "task_scope": "authorized review"
+                }
+              },
+              "state": "granted",
+              "switch_authorization": false
+            }
+          ],
+          "exclusions": [
+            "zcode/default"
+          ],
+          "expert_task_grants": [],
+          "worker_pool": [
+            "zcode/default"
+          ]
+        },
+        "project": {
+          "goal": "current objective",
+          "user_language": "zh-TW"
+        },
+        "revision": 1,
+        "schema": "kaola-delegator-heartbeat/1",
+        "updated_at": "2026-10-06T05:51:20.662949+00:00",
+        "watch": {
+          "reopen": {
+            "detail": "service hold",
+            "kind": "decision",
+            "next": "owner confirms reopening",
+            "source": "original-owner",
+            "status": "pending"
+          },
+          "stop": {
+            "kind": "recovery",
+            "locator": "original-holder",
+            "next": "exact-stop original holder",
+            "source": "original-expiry",
+            "status": "open"
+          }
+        }
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "delegator",
+        "view",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json",
+        "--repo",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer",
+        "--platforms",
+        "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/platforms",
+        "--live",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/live.json",
+        "--index",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/index.json",
+        "--availability",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/availability.json"
+      ],
+      "exit": 0,
+      "seconds": 0.072168,
+      "stdout_json": {
+        "authorization": {
+          "elite_grants": [
+            {
+              "count": 2,
+              "preset_ids": [
+                "droid/default",
+                "droid/opus"
+              ],
+              "special_requirements": {
+                "droid/opus": {
+                  "task_scope": "authorized review"
+                }
+              },
+              "state": "granted",
+              "switch_authorization": false
+            }
+          ],
+          "exclusions": [
+            "zcode/default"
+          ],
+          "expert_task_grants": [],
+          "worker_pool": [
+            "zcode/default"
+          ]
+        },
+        "day_end": null,
+        "day_start": null,
+        "final_stop": null,
+        "host": {},
+        "project": {
+          "goal": "current objective",
+          "user_language": "zh-TW"
+        },
+        "revision": 1,
+        "schema": "kaola-delegator-heartbeat/1",
+        "seats": {
+          "authorized_total": 2,
+          "expert_authorization": "none",
+          "groups": [
+            {
+              "authorized_count": 2,
+              "availability_unknown": false,
+              "group": "grant:droid/default,droid/opus",
+              "idle_available": 2,
+              "occupancy_unknown": false,
+              "occupied": [],
+              "presets": [
+                {
+                  "class": "Elite",
+                  "count": 2,
+                  "default_effort": "",
+                  "default_model": "auto",
+                  "id": "droid/default"
+                },
+                {
+                  "class": "Elite",
+                  "count": 2,
+                  "default_effort": "high",
+                  "default_model": "claude-opus-5-5",
+                  "id": "droid/opus",
+                  "owner_overrides": {
+                    "task_scope": "authorized review"
+                  }
+                }
+              ],
+              "unavailable": []
+            }
+          ],
+          "idle_available_total": 2,
+          "occupied": [],
+          "occupied_elite_expert": 0,
+          "resource_limits": {},
+          "scope": "current project; external target/account capacity requires its original resource receipt",
+          "source": {
+            "as_of": "2026-10-06T05:51:20.737236+00:00",
+            "authorization": "/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/heartbeat-prompt.json",
+            "index": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/index.json",
+            "live": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/live.json"
+          },
+          "unknown_reasons": []
+        },
+        "unknown": [],
+        "view": "delegator-file",
+        "watch": [
+          {
+            "detail": "service hold",
+            "id": "reopen",
+            "kind": "decision",
+            "next": "owner confirms reopening",
+            "source": "original-owner",
+            "status": "pending"
+          },
+          {
+            "id": "stop",
+            "kind": "recovery",
+            "locator": "original-holder",
+            "next": "exact-stop original holder",
+            "source": "original-expiry",
+            "status": "open"
+          }
+        ]
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json": "6d5e494016403f0eeddb6488966cc088afc688aa2de5615f10b0ec4d86b72037",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/live.json": "1633902c6cbba5e7770dbed172df754a25078bb76efe1f23474edc87f1a47655",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/index.json": "552fb15f3cb3eb56bba76490a52147998c282f912975c92123b33b3d4f4c3e52",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/availability.json": "8d0d1dd8478c3ee966a4fe7a2c00322d2f4eed94fb984512f6ecc3782f2d5ceb"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json": "6d5e494016403f0eeddb6488966cc088afc688aa2de5615f10b0ec4d86b72037",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/live.json": "1633902c6cbba5e7770dbed172df754a25078bb76efe1f23474edc87f1a47655",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/index.json": "552fb15f3cb3eb56bba76490a52147998c282f912975c92123b33b3d4f4c3e52",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/availability.json": "8d0d1dd8478c3ee966a4fe7a2c00322d2f4eed94fb984512f6ecc3782f2d5ceb"
+      },
+      "stored_json": {
+        "authorization": {
+          "elite_grants": [
+            {
+              "count": 2,
+              "preset_ids": [
+                "droid/default",
+                "droid/opus"
+              ],
+              "special_requirements": {
+                "droid/opus": {
+                  "task_scope": "authorized review"
+                }
+              },
+              "state": "granted",
+              "switch_authorization": false
+            }
+          ],
+          "exclusions": [
+            "zcode/default"
+          ],
+          "expert_task_grants": [],
+          "worker_pool": [
+            "zcode/default"
+          ]
+        },
+        "project": {
+          "goal": "current objective",
+          "user_language": "zh-TW"
+        },
+        "revision": 1,
+        "schema": "kaola-delegator-heartbeat/1",
+        "updated_at": "2026-10-06T05:51:20.662949+00:00",
+        "watch": {
+          "reopen": {
+            "detail": "service hold",
+            "kind": "decision",
+            "next": "owner confirms reopening",
+            "source": "original-owner",
+            "status": "pending"
+          },
+          "stop": {
+            "kind": "recovery",
+            "locator": "original-holder",
+            "next": "exact-stop original holder",
+            "source": "original-expiry",
+            "status": "open"
+          }
+        }
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "delegator",
+        "update",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json",
+        "--writer",
+        "delegator",
+        "--source",
+        "duplicate-switch",
+        "--expect-revision",
+        "1",
+        "--set",
+        "{\"authorization\": {\"model_switches\": [\"droid/default\"]}}"
+      ],
+      "exit": 2,
+      "seconds": 0.067064,
+      "stdout_json": {
+        "allowed": "account_token_quotas, dispatch_enabled, elite_grants, exclusions, expert_task_grants, known_resource_limits, priority, run_state, sideagent, worker_pool",
+        "blockers": [
+          {
+            "allowed": "account_token_quotas, dispatch_enabled, elite_grants, exclusions, expert_task_grants, known_resource_limits, priority, run_state, sideagent, worker_pool",
+            "detail": "authorization.model_switches is not allowed. Allowed: account_token_quotas, dispatch_enabled, elite_grants, exclusions, expert_task_grants, known_resource_limits, priority, run_state, sideagent, worker_pool. Do not create duplicate authority or move it to prose. Use the original owner source and existing grant/watch recovery route; null removes a legacy key.",
+            "path": "authorization.model_switches",
+            "recovery": "Do not create duplicate authority or move it to prose. Use the original owner source and existing grant/watch recovery route; null removes a legacy key."
+          }
+        ],
+        "detail": "authorization.model_switches is not allowed. Allowed: account_token_quotas, dispatch_enabled, elite_grants, exclusions, expert_task_grants, known_resource_limits, priority, run_state, sideagent, worker_pool. Do not create duplicate authority or move it to prose. Use the original owner source and existing grant/watch recovery route; null removes a legacy key.",
+        "path": "authorization.model_switches",
+        "reason": "invalid-input",
+        "recovery": "Do not create duplicate authority or move it to prose. Use the original owner source and existing grant/watch recovery route; null removes a legacy key.",
+        "result": "refused"
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json": "6d5e494016403f0eeddb6488966cc088afc688aa2de5615f10b0ec4d86b72037"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-b1khnxqe/consumer/.kaola/delegator-heartbeat.json": "6d5e494016403f0eeddb6488966cc088afc688aa2de5615f10b0ec4d86b72037"
+      },
+      "stored_json": {
+        "authorization": {
+          "elite_grants": [
+            {
+              "count": 2,
+              "preset_ids": [
+                "droid/default",
+                "droid/opus"
+              ],
+              "special_requirements": {
+                "droid/opus": {
+                  "task_scope": "authorized review"
+                }
+              },
+              "state": "granted",
+              "switch_authorization": false
+            }
+          ],
+          "exclusions": [
+            "zcode/default"
+          ],
+          "expert_task_grants": [],
+          "worker_pool": [
+            "zcode/default"
+          ]
+        },
+        "project": {
+          "goal": "current objective",
+          "user_language": "zh-TW"
+        },
+        "revision": 1,
+        "schema": "kaola-delegator-heartbeat/1",
+        "updated_at": "2026-10-06T05:51:20.662949+00:00",
+        "watch": {
+          "reopen": {
+            "detail": "service hold",
+            "kind": "decision",
+            "next": "owner confirms reopening",
+            "source": "original-owner",
+            "status": "pending"
+          },
+          "stop": {
+            "kind": "recovery",
+            "locator": "original-holder",
+            "next": "exact-stop original holder",
+            "source": "original-expiry",
+            "status": "open"
+          }
+        }
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "state",
+        "migrate",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/.kaola/heartbeat-prompt.json",
+        "--write"
+      ],
+      "exit": 2,
+      "seconds": 0.065454,
+      "stdout_json": {
+        "detail": "unresolved critical mapping; the file was not written",
+        "report": {
+          "authorization_kept": true,
+          "backups": {
+            "backups": [],
+            "deleted": false,
+            "procedure": "Do not delete heartbeat-prompt.vN-<hash>.json files from this command. A backup is not authority. Read it only to see whether it names a pending grant, hold, task, or relay that the current file and the project's Git, Runner, and forge records do not. Leave that file in place until the installation's own authorized migration rehomes that evidence. Cleanup of one live installation is that migration, not a bulk delete."
+          },
+          "blockers": [
+            {
+              "allowed": "code, goal, issue, repo, requirements_source, status, stop",
+              "detail": "project.rules is not allowed. Allowed: code, goal, issue, repo, requirements_source, status, stop. Host: keep one current objective and original source pointers. Project owner requirements belong in the AGENTS user section. Resolve original unresolved intent before removing this legacy key with the revision-bound project update; do not copy settled text to another routine field. The file was not written",
+              "path": "project.rules",
+              "recovery": "Host: keep one current objective and original source pointers. Project owner requirements belong in the AGENTS user section. Resolve original unresolved intent before removing this legacy key with the revision-bound project update; do not copy settled text to another routine field. The file was not written"
+            }
+          ],
+          "carrier": {
+            "capability": null,
+            "file_limit": 65536,
+            "why": "no live rows supplied"
+          },
+          "dropped": [
+            "recovery.old_repo",
+            "cadence_note"
+          ],
+          "overwrite_detection": {
+            "alert": "state-overwritten",
+            "detail": "Migration does not write heartbeat-prompt.vN-<hash>.json or recovery.migration.raw. state-overwritten is not raised from those copies. An older writer that replaces the current file is no longer detected that way. Recover from project, Runner, and forge records.",
+            "raised": false
+          },
+          "sideagent": null,
+          "tasks": [
+            "#12",
+            "duty-1",
+            "duty-2"
+          ],
+          "unverified": [
+            "duty-1-stage",
+            "duty-2-stage",
+            "legacy-cadence_note",
+            "recovery-fields"
+          ]
+        },
+        "result": "blocked",
+        "unchecked": [
+          "index",
+          "live"
+        ],
+        "writes": false
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/.kaola/heartbeat-prompt.json": "cad3905ef7e0861ffe00d84eaa52b672606bc161bb9f4eddd06fa6b84642d9b7"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/.kaola/heartbeat-prompt.json": "cad3905ef7e0861ffe00d84eaa52b672606bc161bb9f4eddd06fa6b84642d9b7"
+      },
+      "stored_json": {
+        "schema": "kaola-heartbeat-prompt/1",
+        "body": "{\"project\": {\"repo\": \"/abs/kt\", \"code\": \"KT\", \"goal\": \"close issues\", \"stop\": \"backlog empty\", \"requirements_source\": \"AGENTS.md\", \"rules\": [\"no Friday release\"]}, \"authorization\": {\"grants\": [{\"id\": \"codex/default\", \"state\": \"granted\", \"count\": 1}, {\"id\": \"zcode/default\", \"state\": \"granted\", \"count\": 1}]}, \"active\": [{\"ref\": \"#12\", \"session\": \"claude-code-KT-i12-fix\", \"next\": \"accept\", \"evidence\": \"wt-12\"}, {\"ref\": \"#12\", \"session\": \"codex-KT-i12-qa\", \"next\": \"qa\"}], \"pending\": [{\"duty\": \"integration QA\", \"scope\": \"#12\", \"owner\": \"Host\", \"evidence\": \"not run\"}, {\"duty\": \"accept #13\", \"scope\": \"#13\", \"owner\": \"Host\"}], \"recovery\": {\"old_repo\": \"/abs/old\"}, \"cadence_note\": \"every two hours\"}"
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "state",
+        "migrate",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/.kaola/heartbeat-prompt.json",
+        "--index",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/index.json",
+        "--live",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/live.json"
+      ],
+      "exit": 0,
+      "seconds": 0.068403,
+      "stdout_json": {
+        "report": {
+          "authorization_kept": true,
+          "backups": {
+            "backups": [],
+            "deleted": false,
+            "procedure": "Do not delete heartbeat-prompt.vN-<hash>.json files from this command. A backup is not authority. Read it only to see whether it names a pending grant, hold, task, or relay that the current file and the project's Git, Runner, and forge records do not. Leave that file in place until the installation's own authorized migration rehomes that evidence. Cleanup of one live installation is that migration, not a bulk delete."
+          },
+          "blockers": [],
+          "body_bytes": 2683,
+          "carrier": {
+            "capability": "heartbeat-state/2",
+            "holder_instance_id": "host-1",
+            "observed_at": "2026-10-06T05:51:20.943314+00:00",
+            "platform": null,
+            "session": "zcode-KT-orchestrator-main"
+          },
+          "dropped": [
+            "recovery.old_repo",
+            "cadence_note"
+          ],
+          "file_bytes": 6221,
+          "file_limit": 1048576,
+          "overwrite_detection": {
+            "alert": "state-overwritten",
+            "detail": "Migration does not write heartbeat-prompt.vN-<hash>.json or recovery.migration.raw. state-overwritten is not raised from those copies. An older writer that replaces the current file is no longer detected that way. Recover from project, Runner, and forge records.",
+            "raised": false
+          },
+          "sideagent": null,
+          "tasks": [
+            "#12",
+            "duty-1",
+            "duty-2"
+          ],
+          "unverified": [
+            "duty-1-stage",
+            "duty-2-stage",
+            "index-lost",
+            "legacy-cadence_note",
+            "recovery-fields",
+            "sideagent-candidate"
+          ]
+        },
+        "result": "planned",
+        "state": {
+          "alerts": {},
+          "authorization": {
+            "grants": [
+              {
+                "count": 1,
+                "id": "codex/default",
+                "state": "granted"
+              },
+              {
+                "count": 1,
+                "id": "zcode/default",
+                "state": "granted"
+              }
+            ]
+          },
+          "decisions": {},
+          "holds": {},
+          "maintenance": {},
+          "project": {
+            "code": "KT",
+            "goal": "close issues",
+            "repo": "/abs/kt",
+            "requirements_source": "AGENTS.md",
+            "stop": "backlog empty"
+          },
+          "recovery": {},
+          "sideagent": null,
+          "tasks": {
+            "#12": {
+              "assignments": [
+                {
+                  "evidence": "wt-12",
+                  "locator": "active[0]",
+                  "next": "accept",
+                  "ref": "#12",
+                  "session": "claude-code-KT-i12-fix"
+                },
+                {
+                  "locator": "active[1]",
+                  "next": "qa",
+                  "ref": "#12",
+                  "session": "codex-KT-i12-qa"
+                }
+              ],
+              "created_at": "2026-10-06T05:51:20.943065+00:00",
+              "dispatch": [
+                "qa"
+              ],
+              "evidence": [
+                "wt-12"
+              ],
+              "goal": "#12",
+              "next": [
+                "accept",
+                "qa"
+              ],
+              "rev": 1,
+              "sessions": [
+                "claude-code-KT-i12-fix",
+                "codex-KT-i12-qa"
+              ],
+              "source": "migrated:active",
+              "stage": "doing",
+              "updated_at": "2026-10-06T05:51:20.943065+00:00",
+              "writer": "migration"
+            },
+            "duty-1": {
+              "created_at": "2026-10-06T05:51:20.943215+00:00",
+              "duty": "integration QA",
+              "evidence": "not run",
+              "goal": "integration QA",
+              "owner": "Host",
+              "rev": 1,
+              "scope": "#12",
+              "source": "migrated:pending[0]",
+              "stage": "todo",
+              "updated_at": "2026-10-06T05:51:20.943215+00:00",
+              "writer": "migration"
+            },
+            "duty-2": {
+              "created_at": "2026-10-06T05:51:20.943217+00:00",
+              "duty": "accept #13",
+              "goal": "accept #13",
+              "owner": "Host",
+              "rev": 1,
+              "scope": "#13",
+              "source": "migrated:pending[1]",
+              "stage": "todo",
+              "updated_at": "2026-10-06T05:51:20.943217+00:00",
+              "writer": "migration"
+            }
+          },
+          "unverified": {
+            "duty-1-stage": {
+              "locator": "pending[0]",
+              "summary": "legacy pending duty duty-1 states no stage; it is kept open as todo, the Host sets its stage"
+            },
+            "duty-2-stage": {
+              "locator": "pending[1]",
+              "summary": "legacy pending duty duty-2 states no stage; it is kept open as todo, the Host sets its stage"
+            },
+            "index-lost": {
+              "session": "droid-KT-i99-x",
+              "summary": "index item lost (unknown) matches no current task; associate it or retire it with evidence"
+            },
+            "legacy-cadence_note": {
+              "locator": "cadence_note",
+              "summary": "unmapped body field cadence_note"
+            },
+            "recovery-fields": {
+              "locator": [
+                "recovery.old_repo"
+              ],
+              "summary": "unmapped recovery field names: old_repo"
+            },
+            "sideagent-candidate": {
+              "live": [
+                {
+                  "holder_instance_id": "side-1",
+                  "platform": "zcode",
+                  "session": "zcode-KT-sideagent"
+                }
+              ],
+              "summary": "no authorized v1 binding is proven by a live holder; the Host binds the maintenance Sideagent (a live Sideagent-role row alone is only a candidate)"
+            }
+          }
+        },
+        "unchecked": [],
+        "writes": false
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/.kaola/heartbeat-prompt.json": "f33f5078aaf2cd02bb7981d9edc331b9914ffc160402d9bbe3f1f5b26ccb6454",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/index.json": "4c8608184651043434382adeffd0fe8568bd21e29d43bd31c2f75959cb28b4d9",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/live.json": "238fe6120dc0114063b255ec3ef0781b47c0aa462e7da22585b77eda64587268"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/.kaola/heartbeat-prompt.json": "f33f5078aaf2cd02bb7981d9edc331b9914ffc160402d9bbe3f1f5b26ccb6454",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/index.json": "4c8608184651043434382adeffd0fe8568bd21e29d43bd31c2f75959cb28b4d9",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/live.json": "238fe6120dc0114063b255ec3ef0781b47c0aa462e7da22585b77eda64587268"
+      },
+      "stored_json": {
+        "schema": "kaola-heartbeat-prompt/1",
+        "body": "{\"project\": {\"repo\": \"/abs/kt\", \"code\": \"KT\", \"goal\": \"close issues\", \"stop\": \"backlog empty\", \"requirements_source\": \"AGENTS.md\"}, \"authorization\": {\"grants\": [{\"id\": \"codex/default\", \"state\": \"granted\", \"count\": 1}, {\"id\": \"zcode/default\", \"state\": \"granted\", \"count\": 1}]}, \"active\": [{\"ref\": \"#12\", \"session\": \"claude-code-KT-i12-fix\", \"next\": \"accept\", \"evidence\": \"wt-12\"}, {\"ref\": \"#12\", \"session\": \"codex-KT-i12-qa\", \"next\": \"qa\"}], \"pending\": [{\"duty\": \"integration QA\", \"scope\": \"#12\", \"owner\": \"Host\", \"evidence\": \"not run\"}, {\"duty\": \"accept #13\", \"scope\": \"#13\", \"owner\": \"Host\"}], \"recovery\": {\"old_repo\": \"/abs/old\"}, \"cadence_note\": \"every two hours\"}"
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "state",
+        "migrate",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/.kaola/heartbeat-prompt.json",
+        "--index",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/index.json",
+        "--live",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/live.json",
+        "--write"
+      ],
+      "exit": 0,
+      "seconds": 0.067002,
+      "stdout_json": {
+        "body_bytes": 2713,
+        "file_bytes": 6304,
+        "file_limit": 1048576,
+        "report": {
+          "authorization_kept": true,
+          "backups": {
+            "backups": [],
+            "deleted": false,
+            "procedure": "Do not delete heartbeat-prompt.vN-<hash>.json files from this command. A backup is not authority. Read it only to see whether it names a pending grant, hold, task, or relay that the current file and the project's Git, Runner, and forge records do not. Leave that file in place until the installation's own authorized migration rehomes that evidence. Cleanup of one live installation is that migration, not a bulk delete."
+          },
+          "blockers": [],
+          "body_bytes": 2683,
+          "carrier": {
+            "capability": "heartbeat-state/2",
+            "holder_instance_id": "host-1",
+            "observed_at": "2026-10-06T05:51:21.010670+00:00",
+            "platform": null,
+            "session": "zcode-KT-orchestrator-main"
+          },
+          "dropped": [
+            "recovery.old_repo",
+            "cadence_note"
+          ],
+          "file_bytes": 6221,
+          "file_limit": 1048576,
+          "overwrite_detection": {
+            "alert": "state-overwritten",
+            "detail": "Migration does not write heartbeat-prompt.vN-<hash>.json or recovery.migration.raw. state-overwritten is not raised from those copies. An older writer that replaces the current file is no longer detected that way. Recover from project, Runner, and forge records.",
+            "raised": false
+          },
+          "sideagent": null,
+          "tasks": [
+            "#12",
+            "duty-1",
+            "duty-2"
+          ],
+          "unverified": [
+            "duty-1-stage",
+            "duty-2-stage",
+            "index-lost",
+            "legacy-cadence_note",
+            "recovery-fields",
+            "sideagent-candidate"
+          ]
+        },
+        "result": "migrated",
+        "revision": 1,
+        "unchecked": []
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/.kaola/heartbeat-prompt.json": "f33f5078aaf2cd02bb7981d9edc331b9914ffc160402d9bbe3f1f5b26ccb6454",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/index.json": "4c8608184651043434382adeffd0fe8568bd21e29d43bd31c2f75959cb28b4d9",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/live.json": "238fe6120dc0114063b255ec3ef0781b47c0aa462e7da22585b77eda64587268"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/.kaola/heartbeat-prompt.json": "fe7348bbe27120cbeaad75a9d3f4cb717d9ab9a7522858ffa91257122376a63b",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/index.json": "4c8608184651043434382adeffd0fe8568bd21e29d43bd31c2f75959cb28b4d9",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/live.json": "238fe6120dc0114063b255ec3ef0781b47c0aa462e7da22585b77eda64587268"
+      },
+      "stored_json": {
+        "body": "{\"as_of\":\"2026-10-06T05:51:21.012023+00:00\",\"attention\":[],\"authorization\":{\"grants\":[{\"count\":1,\"id\":\"codex/default\",\"state\":\"granted\"},{\"count\":1,\"id\":\"zcode/default\",\"state\":\"granted\"}]},\"capability\":{\"catalog_source\":[\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/codex-kaola-project-runner/scripts/platform.yaml\",\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/droid-kaola-project-runner/scripts/platform.yaml\"],\"presets\":[\"codex/default\",\"codex/luna\"],\"shared_seats\":[],\"text\":\"availability unknown: codex/default, codex/luna\",\"withheld\":[{\"id\":\"zcode/default\",\"reason\":\"preset-unresolved\"}]},\"catalog\":{\"classes\":{\"Elite\":\"Main execution workforce: primary implementation and demanding execution.\",\"Expert\":\"Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat.\",\"Worker\":\"Cheaper and generally weaker; simpler, bounded work supporting parallel throughput.\"},\"sha256\":\"729a978d85443cd5f353e760f7107bbfc8f559889355ef40c60b4a31780fc628\",\"source\":\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/references/worker-profiles.md\"},\"detail\":\"heartbeat-prompt.json state; `state view --role sideagent` for evidence and dispatch rows\",\"host_revision\":null,\"project\":{\"code\":\"KT\",\"goal\":\"close issues\",\"repo\":\"/abs/kt\",\"requirements_source\":\"AGENTS.md\",\"stop\":\"backlog empty\"},\"revision\":1,\"sideagent\":null,\"sideagent_maintenance\":\"no binding; that is not evidence maintenance ran\",\"tasks\":[{\"dispatch_count\":1,\"goal\":\"#12\",\"id\":\"#12\",\"next\":[\"accept\",\"qa\"],\"stage\":\"doing\"},{\"goal\":\"integration QA\",\"id\":\"duty-1\",\"stage\":\"todo\"},{\"goal\":\"accept #13\",\"id\":\"duty-2\",\"stage\":\"todo\"}],\"unverified\":[{\"id\":\"duty-1-stage\",\"locator\":\"pending[0]\",\"summary\":\"legacy pending duty duty-1 states no stage; it is kept open as todo, the Host sets its stage\"},{\"id\":\"duty-2-stage\",\"locator\":\"pending[1]\",\"summary\":\"legacy pending duty duty-2 states no stage; it is kept open as todo, the Host sets its stage\"},{\"id\":\"index-lost\",\"summary\":\"index item lost (unknown) matches no current task; associate it or retire it with evidence\"},{\"id\":\"legacy-cadence_note\",\"locator\":\"cadence_note\",\"summary\":\"unmapped body field cadence_note\"},{\"id\":\"recovery-fields\",\"locator\":[\"recovery.old_repo\"],\"summary\":\"unmapped recovery field names: old_repo\"},{\"id\":\"sideagent-candidate\",\"summary\":\"no authorized v1 binding is proven by a live holder; the Host binds the maintenance Sideagent (a live Sideagent-role row alone is only a candidate)\"}],\"view\":\"host\"}",
+        "carrier": {
+          "capability": "heartbeat-state/2",
+          "holder_instance_id": "host-1",
+          "observed_at": "2026-10-06T05:51:21.010670+00:00",
+          "platform": null,
+          "session": "zcode-KT-orchestrator-main"
+        },
+        "revision": 1,
+        "schema": "kaola-heartbeat-prompt/2",
+        "state": {
+          "alerts": {},
+          "authorization": {
+            "grants": [
+              {
+                "count": 1,
+                "id": "codex/default",
+                "state": "granted"
+              },
+              {
+                "count": 1,
+                "id": "zcode/default",
+                "state": "granted"
+              }
+            ]
+          },
+          "decisions": {},
+          "holds": {},
+          "maintenance": {},
+          "project": {
+            "code": "KT",
+            "goal": "close issues",
+            "repo": "/abs/kt",
+            "requirements_source": "AGENTS.md",
+            "stop": "backlog empty"
+          },
+          "recovery": {},
+          "sideagent": null,
+          "tasks": {
+            "#12": {
+              "assignments": [
+                {
+                  "evidence": "wt-12",
+                  "locator": "active[0]",
+                  "next": "accept",
+                  "ref": "#12",
+                  "session": "claude-code-KT-i12-fix"
+                },
+                {
+                  "locator": "active[1]",
+                  "next": "qa",
+                  "ref": "#12",
+                  "session": "codex-KT-i12-qa"
+                }
+              ],
+              "created_at": "2026-10-06T05:51:21.010389+00:00",
+              "dispatch": [
+                "qa"
+              ],
+              "evidence": [
+                "wt-12"
+              ],
+              "goal": "#12",
+              "next": [
+                "accept",
+                "qa"
+              ],
+              "rev": 1,
+              "sessions": [
+                "claude-code-KT-i12-fix",
+                "codex-KT-i12-qa"
+              ],
+              "source": "migrated:active",
+              "stage": "doing",
+              "updated_at": "2026-10-06T05:51:21.010389+00:00",
+              "writer": "migration"
+            },
+            "duty-1": {
+              "created_at": "2026-10-06T05:51:21.010557+00:00",
+              "duty": "integration QA",
+              "evidence": "not run",
+              "goal": "integration QA",
+              "owner": "Host",
+              "rev": 1,
+              "scope": "#12",
+              "source": "migrated:pending[0]",
+              "stage": "todo",
+              "updated_at": "2026-10-06T05:51:21.010557+00:00",
+              "writer": "migration"
+            },
+            "duty-2": {
+              "created_at": "2026-10-06T05:51:21.010559+00:00",
+              "duty": "accept #13",
+              "goal": "accept #13",
+              "owner": "Host",
+              "rev": 1,
+              "scope": "#13",
+              "source": "migrated:pending[1]",
+              "stage": "todo",
+              "updated_at": "2026-10-06T05:51:21.010559+00:00",
+              "writer": "migration"
+            }
+          },
+          "unverified": {
+            "duty-1-stage": {
+              "locator": "pending[0]",
+              "summary": "legacy pending duty duty-1 states no stage; it is kept open as todo, the Host sets its stage"
+            },
+            "duty-2-stage": {
+              "locator": "pending[1]",
+              "summary": "legacy pending duty duty-2 states no stage; it is kept open as todo, the Host sets its stage"
+            },
+            "index-lost": {
+              "session": "droid-KT-i99-x",
+              "summary": "index item lost (unknown) matches no current task; associate it or retire it with evidence"
+            },
+            "legacy-cadence_note": {
+              "locator": "cadence_note",
+              "summary": "unmapped body field cadence_note"
+            },
+            "recovery-fields": {
+              "locator": [
+                "recovery.old_repo"
+              ],
+              "summary": "unmapped recovery field names: old_repo"
+            },
+            "sideagent-candidate": {
+              "live": [
+                {
+                  "holder_instance_id": "side-1",
+                  "platform": "zcode",
+                  "session": "zcode-KT-sideagent"
+                }
+              ],
+              "summary": "no authorized v1 binding is proven by a live holder; the Host binds the maintenance Sideagent (a live Sideagent-role row alone is only a candidate)"
+            }
+          }
+        },
+        "updated_at": "2026-10-06T05:51:21.012023+00:00"
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "state",
+        "migrate",
+        "--file",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/.kaola/heartbeat-prompt.json",
+        "--index",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/index.json",
+        "--live",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/live.json",
+        "--write"
+      ],
+      "exit": 0,
+      "seconds": 0.06352,
+      "stdout_json": {
+        "backups": {
+          "backups": [],
+          "deleted": false,
+          "procedure": "Do not delete heartbeat-prompt.vN-<hash>.json files from this command. A backup is not authority. Read it only to see whether it names a pending grant, hold, task, or relay that the current file and the project's Git, Runner, and forge records do not. Leave that file in place until the installation's own authorized migration rehomes that evidence. Cleanup of one live installation is that migration, not a bulk delete."
+        },
+        "carrier": {
+          "capability": "heartbeat-state/2",
+          "holder_instance_id": "host-1",
+          "observed_at": "2026-10-06T05:51:21.010670+00:00",
+          "platform": null,
+          "session": "zcode-KT-orchestrator-main"
+        },
+        "overwrite_detection": {
+          "alert": "state-overwritten",
+          "detail": "Migration does not write heartbeat-prompt.vN-<hash>.json or recovery.migration.raw. state-overwritten is not raised from those copies. An older writer that replaces the current file is no longer detected that way. Recover from project, Runner, and forge records.",
+          "raised": false
+        },
+        "removed": [],
+        "result": "current",
+        "revision": 1
+      },
+      "before": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/.kaola/heartbeat-prompt.json": "fe7348bbe27120cbeaad75a9d3f4cb717d9ab9a7522858ffa91257122376a63b",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/index.json": "4c8608184651043434382adeffd0fe8568bd21e29d43bd31c2f75959cb28b4d9",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/live.json": "238fe6120dc0114063b255ec3ef0781b47c0aa462e7da22585b77eda64587268"
+      },
+      "after": {
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/.kaola/heartbeat-prompt.json": "fe7348bbe27120cbeaad75a9d3f4cb717d9ab9a7522858ffa91257122376a63b",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/index.json": "4c8608184651043434382adeffd0fe8568bd21e29d43bd31c2f75959cb28b4d9",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i255-j5e735tf/consumer/live.json": "238fe6120dc0114063b255ec3ef0781b47c0aa462e7da22585b77eda64587268"
+      },
+      "stored_json": {
+        "body": "{\"as_of\":\"2026-10-06T05:51:21.012023+00:00\",\"attention\":[],\"authorization\":{\"grants\":[{\"count\":1,\"id\":\"codex/default\",\"state\":\"granted\"},{\"count\":1,\"id\":\"zcode/default\",\"state\":\"granted\"}]},\"capability\":{\"catalog_source\":[\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/codex-kaola-project-runner/scripts/platform.yaml\",\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/droid-kaola-project-runner/scripts/platform.yaml\"],\"presets\":[\"codex/default\",\"codex/luna\"],\"shared_seats\":[],\"text\":\"availability unknown: codex/default, codex/luna\",\"withheld\":[{\"id\":\"zcode/default\",\"reason\":\"preset-unresolved\"}]},\"catalog\":{\"classes\":{\"Elite\":\"Main execution workforce: primary implementation and demanding execution.\",\"Expert\":\"Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat.\",\"Worker\":\"Cheaper and generally weaker; simpler, bounded work supporting parallel throughput.\"},\"sha256\":\"729a978d85443cd5f353e760f7107bbfc8f559889355ef40c60b4a31780fc628\",\"source\":\"/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/references/worker-profiles.md\"},\"detail\":\"heartbeat-prompt.json state; `state view --role sideagent` for evidence and dispatch rows\",\"host_revision\":null,\"project\":{\"code\":\"KT\",\"goal\":\"close issues\",\"repo\":\"/abs/kt\",\"requirements_source\":\"AGENTS.md\",\"stop\":\"backlog empty\"},\"revision\":1,\"sideagent\":null,\"sideagent_maintenance\":\"no binding; that is not evidence maintenance ran\",\"tasks\":[{\"dispatch_count\":1,\"goal\":\"#12\",\"id\":\"#12\",\"next\":[\"accept\",\"qa\"],\"stage\":\"doing\"},{\"goal\":\"integration QA\",\"id\":\"duty-1\",\"stage\":\"todo\"},{\"goal\":\"accept #13\",\"id\":\"duty-2\",\"stage\":\"todo\"}],\"unverified\":[{\"id\":\"duty-1-stage\",\"locator\":\"pending[0]\",\"summary\":\"legacy pending duty duty-1 states no stage; it is kept open as todo, the Host sets its stage\"},{\"id\":\"duty-2-stage\",\"locator\":\"pending[1]\",\"summary\":\"legacy pending duty duty-2 states no stage; it is kept open as todo, the Host sets its stage\"},{\"id\":\"index-lost\",\"summary\":\"index item lost (unknown) matches no current task; associate it or retire it with evidence\"},{\"id\":\"legacy-cadence_note\",\"locator\":\"cadence_note\",\"summary\":\"unmapped body field cadence_note\"},{\"id\":\"recovery-fields\",\"locator\":[\"recovery.old_repo\"],\"summary\":\"unmapped recovery field names: old_repo\"},{\"id\":\"sideagent-candidate\",\"summary\":\"no authorized v1 binding is proven by a live holder; the Host binds the maintenance Sideagent (a live Sideagent-role row alone is only a candidate)\"}],\"view\":\"host\"}",
+        "carrier": {
+          "capability": "heartbeat-state/2",
+          "holder_instance_id": "host-1",
+          "observed_at": "2026-10-06T05:51:21.010670+00:00",
+          "platform": null,
+          "session": "zcode-KT-orchestrator-main"
+        },
+        "revision": 1,
+        "schema": "kaola-heartbeat-prompt/2",
+        "state": {
+          "alerts": {},
+          "authorization": {
+            "grants": [
+              {
+                "count": 1,
+                "id": "codex/default",
+                "state": "granted"
+              },
+              {
+                "count": 1,
+                "id": "zcode/default",
+                "state": "granted"
+              }
+            ]
+          },
+          "decisions": {},
+          "holds": {},
+          "maintenance": {},
+          "project": {
+            "code": "KT",
+            "goal": "close issues",
+            "repo": "/abs/kt",
+            "requirements_source": "AGENTS.md",
+            "stop": "backlog empty"
+          },
+          "recovery": {},
+          "sideagent": null,
+          "tasks": {
+            "#12": {
+              "assignments": [
+                {
+                  "evidence": "wt-12",
+                  "locator": "active[0]",
+                  "next": "accept",
+                  "ref": "#12",
+                  "session": "claude-code-KT-i12-fix"
+                },
+                {
+                  "locator": "active[1]",
+                  "next": "qa",
+                  "ref": "#12",
+                  "session": "codex-KT-i12-qa"
+                }
+              ],
+              "created_at": "2026-10-06T05:51:21.010389+00:00",
+              "dispatch": [
+                "qa"
+              ],
+              "evidence": [
+                "wt-12"
+              ],
+              "goal": "#12",
+              "next": [
+                "accept",
+                "qa"
+              ],
+              "rev": 1,
+              "sessions": [
+                "claude-code-KT-i12-fix",
+                "codex-KT-i12-qa"
+              ],
+              "source": "migrated:active",
+              "stage": "doing",
+              "updated_at": "2026-10-06T05:51:21.010389+00:00",
+              "writer": "migration"
+            },
+            "duty-1": {
+              "created_at": "2026-10-06T05:51:21.010557+00:00",
+              "duty": "integration QA",
+              "evidence": "not run",
+              "goal": "integration QA",
+              "owner": "Host",
+              "rev": 1,
+              "scope": "#12",
+              "source": "migrated:pending[0]",
+              "stage": "todo",
+              "updated_at": "2026-10-06T05:51:21.010557+00:00",
+              "writer": "migration"
+            },
+            "duty-2": {
+              "created_at": "2026-10-06T05:51:21.010559+00:00",
+              "duty": "accept #13",
+              "goal": "accept #13",
+              "owner": "Host",
+              "rev": 1,
+              "scope": "#13",
+              "source": "migrated:pending[1]",
+              "stage": "todo",
+              "updated_at": "2026-10-06T05:51:21.010559+00:00",
+              "writer": "migration"
+            }
+          },
+          "unverified": {
+            "duty-1-stage": {
+              "locator": "pending[0]",
+              "summary": "legacy pending duty duty-1 states no stage; it is kept open as todo, the Host sets its stage"
+            },
+            "duty-2-stage": {
+              "locator": "pending[1]",
+              "summary": "legacy pending duty duty-2 states no stage; it is kept open as todo, the Host sets its stage"
+            },
+            "index-lost": {
+              "session": "droid-KT-i99-x",
+              "summary": "index item lost (unknown) matches no current task; associate it or retire it with evidence"
+            },
+            "legacy-cadence_note": {
+              "locator": "cadence_note",
+              "summary": "unmapped body field cadence_note"
+            },
+            "recovery-fields": {
+              "locator": [
+                "recovery.old_repo"
+              ],
+              "summary": "unmapped recovery field names: old_repo"
+            },
+            "sideagent-candidate": {
+              "live": [
+                {
+                  "holder_instance_id": "side-1",
+                  "platform": "zcode",
+                  "session": "zcode-KT-sideagent"
+                }
+              ],
+              "summary": "no authorized v1 binding is proven by a live holder; the Host binds the maintenance Sideagent (a live Sideagent-role row alone is only a candidate)"
+            }
+          }
+        },
+        "updated_at": "2026-10-06T05:51:21.012023+00:00"
+      }
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "state",
+        "timer",
+        "--repo",
+        "/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/timer-consumer",
+        "--target",
+        "local",
+        "--entry",
+        "/kaola-delegator",
+        "--body",
+        "/kaola-delegator\nKaola-Delegator inquiry: read /private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/timer-consumer/.kaola/delegator-heartbeat.json on target local and run the loaded Skill's standard inquiry."
+      ],
+      "exit": 0,
+      "seconds": 0.062332,
+      "stdout_json": {
+        "expected": "/kaola-delegator\nKaola-Delegator inquiry: read /private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/timer-consumer/.kaola/delegator-heartbeat.json on target local and run the loaded Skill's standard inquiry.",
+        "result": "match"
+      },
+      "before": {},
+      "after": {}
+    },
+    {
+      "argv": [
+        "/Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/skills/kaola-project-runner/scripts/kaola-dispatch.py",
+        "state",
+        "timer",
+        "--repo",
+        "/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o/timer-consumer",
+        "--target",
+        "local",
+        "--entry",
+        "/kaola-delegator"
+      ],
+      "exit": 0,
+      "seconds": 0.060185,
+      "stdout_json": {
+        "detail": "no native timer body was read. This is not a mismatch. It does not block an urgent stop.",
+        "result": "unavailable"
+      },
+      "before": {},
+      "after": {}
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "upgrade-final",
+  "argv": [
+    "python3",
+    "tests/contract/test-issue-162-upgrade-safety.py",
+    "UpgradeSafetyTests.test_drain_restart_replaces_the_process_and_adopts_the_new_host"
+  ],
+  "exit": 1,
+  "seconds": 65.32153458299581,
+  "output_sha256": "42923f424f4823ab8598491b1f20dbbca49ede757b10aece97778a49f8a7de38",
+  "log": "/tmp/kpr-i259-982-upgrade-final.log"
+}

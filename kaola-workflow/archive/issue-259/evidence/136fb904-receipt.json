@@ -1,0 +1,31 @@
+{
+  "candidate": "13f0720c9b6fc9b748abbc4f1ee07b0052c24b57",
+  "parent": "cefcda13980b888c731a31e4069429412b3a6fba",
+  "scope": "actual constructed prompt from candidate Holder method; model-free inspection, no native node/use claim",
+  "source": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-acp-holder.py",
+  "source_sha256": "d8cc9dc147f69db50dc5be5c7cf1f7efced677c19813155792a191aedb72f280",
+  "command": [
+    "python3",
+    "/tmp/kpr-i259-945-prompt-inspection.py"
+  ],
+  "changed_holder_function_ast": [
+    "_node_prompt"
+  ],
+  "all_other_holder_function_asts_unchanged": true,
+  "checkpoint_engine_unchanged": true,
+  "reference_semantics": "templates/orchestrator/references/sideagent-node.md lines82-89; reference unchanged",
+  "prompts": [
+    {
+      "path": "/tmp/kpr-i259-945-constructed-prompts-20261006/standard.txt",
+      "sha256": "86d64a77289d3b52a23319827bbbb0b53d4a73265d74744cdeb75f02fa7464b6",
+      "bytes": 2612
+    },
+    {
+      "path": "/tmp/kpr-i259-945-constructed-prompts-20261006/recovery.txt",
+      "sha256": "28f37c0896889a8163362e8c811effc10ae04668e64d6b225981dc8d4835166b",
+      "bytes": 3727
+    }
+  ],
+  "native_models_started": [],
+  "disposable_prompt_path_removed_after_inspection": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-945-prompt-36p3idwj"
+}

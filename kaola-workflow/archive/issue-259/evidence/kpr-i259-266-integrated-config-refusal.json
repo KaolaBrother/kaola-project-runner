@@ -1,0 +1,240 @@
+{
+  "checks": 3,
+  "evidence": [
+    {
+      "check": "the real opencode entry refuses an unverified explicit selection",
+      "ok": true,
+      "receipt": {
+        "acp_session_id": "mock-session-1",
+        "action": "start",
+        "actual_parameters": null,
+        "actual_runtime_model_id": null,
+        "agent_pid": 82696,
+        "baseline_exempt": true,
+        "bridge": {
+          "layout": "skill",
+          "path": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-opencode-acp.py",
+          "present": true,
+          "relative": "kaola-opencode-acp.py",
+          "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67",
+          "upstream_pin": null,
+          "verified_versions": "cli=2.0.22;protocol=1"
+        },
+        "config_application": {
+          "effort": {
+            "advertised": false,
+            "applied": false,
+            "candidates": [
+              "effort"
+            ],
+            "config_id": "effort",
+            "error": {
+              "code": "config-option-failed",
+              "config_id": "effort",
+              "detail": {
+                "code": -32602,
+                "message": "unsupported config option effort=xhigh"
+              }
+            },
+            "value": "xhigh"
+          },
+          "fast": {
+            "applied": false,
+            "reason": "no-advertised-config-option"
+          },
+          "model": {
+            "applied": true,
+            "config_id": "model",
+            "value": "gpt-6.1-sol"
+          }
+        },
+        "configured_options": [
+          {
+            "config_id": "model",
+            "configured": true,
+            "option_description": "Model Codex uses for the session",
+            "option_name": "Model",
+            "value": "gpt-6.1-sol",
+            "value_description": "Default Runner model (Issues #142, #145).",
+            "value_name": "6.1 Sol"
+          }
+        ],
+        "detail": "the opencode agent did not report the explicit selection: model None is not the requested 'gpt-6.1-sol'; effort None is not the requested 'xhigh'; the session was stopped before this start returned, and no other model was substituted.",
+        "dispatcher": null,
+        "effective_selection": {
+          "effective_effort": null,
+          "effective_model": null,
+          "effort_config_id": "effort"
+        },
+        "fast": {
+          "applied": false,
+          "applied_via": "none",
+          "detail": "no native Fast mechanism; nothing to enable",
+          "effective": "off",
+          "requested": "off",
+          "support": "none"
+        },
+        "git": {
+          "branch": null,
+          "dirty": false
+        },
+        "heartbeat_host": null,
+        "heartbeat_host_known": true,
+        "heartbeat_host_requested": null,
+        "heartbeat_host_source": "none",
+        "holder_alive": true,
+        "holder_identity": {
+          "holder_pid": 82695
+        },
+        "holder_instance_id": "b9bd9407e28ac9edfa9ee7b7596ecc86",
+        "holder_pid": 82695,
+        "holder_reclaimed": false,
+        "host_session_stopped": true,
+        "model_display": {
+          "components": null,
+          "name": null,
+          "preset_effort": null,
+          "preset_id": null
+        },
+        "model_evidence_provenance": {
+          "catalog_probe": {
+            "available_model_count": 0,
+            "candidate_present": false,
+            "probes": [
+              {
+                "command": [
+                  "opencode",
+                  "models"
+                ],
+                "output_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "returncode": 0
+              },
+              {
+                "command": [
+                  "opencode",
+                  "--help"
+                ],
+                "output_digest": "sha256:30140ff36f16e4366f53e56f3f7829a807152ee4751ffe75cce24cce9ce4b4ac",
+                "returncode": 0
+              }
+            ],
+            "state": "unknown"
+          },
+          "fast": {
+            "detail": "no native Fast mechanism; nothing to enable",
+            "mechanism": "none",
+            "requested": "off",
+            "support": "none"
+          },
+          "requested": {
+            "name": "gpt-6.1-sol",
+            "source": "user"
+          },
+          "resolution": {
+            "candidate_id": "gpt-6.1-sol",
+            "display_name": "gpt-6.1-sol",
+            "resolved_id": "gpt-6.1-sol",
+            "state": "catalog-unknown-declared-candidate",
+            "supported_options": []
+          },
+          "selection": {
+            "source": "user",
+            "tier": "default"
+          }
+        },
+        "model_mismatch_reason": "actual-model-evidence-not-yet-read",
+        "model_selection": {
+          "preserved": false,
+          "requested_name": "gpt-6.1-sol",
+          "resolved_effort": "xhigh",
+          "resolved_model": "gpt-6.1-sol",
+          "source": "user",
+          "tier": "default"
+        },
+        "model_verified": "unknown",
+        "mutation_performed": null,
+        "mutation_status": "unknown",
+        "native_permission_policy": {
+          "agent": "build",
+          "path": "/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/k266comp.rgj0yods/records/opencode/opencode-K266-71188a/1dda9ed4a126a904/opencode-build-default.json",
+          "policy": {
+            "agents": {
+              "build": {
+                "permissions": [
+                  {
+                    "action": "*",
+                    "effect": "allow",
+                    "resource": "*"
+                  }
+                ]
+              }
+            }
+          },
+          "reason": "managed-build-default",
+          "selected": true,
+          "via": "OPENCODE_CONFIG"
+        },
+        "platform": "opencode",
+        "reason": "explicit-selection-unverified",
+        "repo": "/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/k266comp.rgj0yods/repo",
+        "requested_effort": "xhigh",
+        "requested_fast": "off",
+        "requested_model_name": "gpt-6.1-sol",
+        "requested_model_source": "user",
+        "requested_tier": "default",
+        "residual_pids": [],
+        "resolved_fast": "off",
+        "resolved_parameters": {
+          "effort": "xhigh"
+        },
+        "resolved_runtime_model_display": "gpt-6.1-sol",
+        "resolved_runtime_model_id": "gpt-6.1-sol",
+        "result": "refused",
+        "runtime_binary": {
+          "absolute": true,
+          "env": "OPENCODE_BIN",
+          "passed_as": "OPENCODE_BIN",
+          "path": "/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/k266comp.rgj0yods/bin/opencode",
+          "present": true
+        },
+        "schema_version": 3,
+        "session": "opencode-K266-71188a",
+        "session_role": null,
+        "state": "ready",
+        "transport": {
+          "agent_info": {
+            "name": "mock-acp-agent",
+            "version": "0.0.1"
+          },
+          "capabilities": {
+            "loadSession": false,
+            "promptCapabilities": {
+              "embeddedContext": true
+            },
+            "sessionCapabilities": {
+              "close": false,
+              "list": false,
+              "resume": false
+            }
+          },
+          "cli_version": null,
+          "protocol_version": 1,
+          "selected": "acp"
+        }
+      }
+    },
+    {
+      "check": "the refusal reports truthful mutation state",
+      "mutation": "unknown",
+      "ok": true
+    },
+    {
+      "check": "the recorded exact holder and agent identities are gone after the refusal",
+      "ok": true
+    }
+  ],
+  "failures": [],
+  "only": "config_refusal",
+  "result": "pass",
+  "root": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259"
+}

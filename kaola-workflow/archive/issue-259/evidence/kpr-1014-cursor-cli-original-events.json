@@ -1,0 +1,179 @@
+[
+  {
+    "cursor": 9,
+    "kind": "session_update",
+    "sessionId": "ae2ac65f-ed1a-4e21-887c-aafb9d917665",
+    "ts": 1791274330.675,
+    "update": {
+      "content": {
+        "text": "K",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 10,
+    "kind": "session_update",
+    "sessionId": "ae2ac65f-ed1a-4e21-887c-aafb9d917665",
+    "ts": 1791274330.676,
+    "update": {
+      "content": {
+        "text": "PR",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 11,
+    "kind": "session_update",
+    "sessionId": "ae2ac65f-ed1a-4e21-887c-aafb9d917665",
+    "ts": 1791274330.677,
+    "update": {
+      "content": {
+        "text": "_",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 12,
+    "kind": "session_update",
+    "sessionId": "ae2ac65f-ed1a-4e21-887c-aafb9d917665",
+    "ts": 1791274330.678,
+    "update": {
+      "content": {
+        "text": "DEFAULT",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 13,
+    "kind": "session_update",
+    "sessionId": "ae2ac65f-ed1a-4e21-887c-aafb9d917665",
+    "ts": 1791274330.679,
+    "update": {
+      "content": {
+        "text": "_",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 14,
+    "kind": "session_update",
+    "sessionId": "ae2ac65f-ed1a-4e21-887c-aafb9d917665",
+    "ts": 1791274330.679,
+    "update": {
+      "content": {
+        "text": "LAUNCH",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 15,
+    "kind": "session_update",
+    "sessionId": "ae2ac65f-ed1a-4e21-887c-aafb9d917665",
+    "ts": 1791274330.68,
+    "update": {
+      "content": {
+        "text": "_",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 16,
+    "kind": "session_update",
+    "sessionId": "ae2ac65f-ed1a-4e21-887c-aafb9d917665",
+    "ts": 1791274330.681,
+    "update": {
+      "content": {
+        "text": "CURSOR",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 17,
+    "kind": "session_update",
+    "sessionId": "ae2ac65f-ed1a-4e21-887c-aafb9d917665",
+    "ts": 1791274330.682,
+    "update": {
+      "content": {
+        "text": "_",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 18,
+    "kind": "session_update",
+    "sessionId": "ae2ac65f-ed1a-4e21-887c-aafb9d917665",
+    "ts": 1791274330.682,
+    "update": {
+      "content": {
+        "text": "100",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 19,
+    "kind": "session_update",
+    "sessionId": "ae2ac65f-ed1a-4e21-887c-aafb9d917665",
+    "ts": 1791274330.683,
+    "update": {
+      "content": {
+        "text": "8",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 20,
+    "kind": "session_update",
+    "sessionId": "ae2ac65f-ed1a-4e21-887c-aafb9d917665",
+    "ts": 1791274330.684,
+    "update": {
+      "content": {
+        "text": "_",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 21,
+    "kind": "session_update",
+    "sessionId": "ae2ac65f-ed1a-4e21-887c-aafb9d917665",
+    "ts": 1791274330.684,
+    "update": {
+      "content": {
+        "text": "OK",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 22,
+    "kind": "turn_ended",
+    "outcome": "turn_completed",
+    "prompt_fingerprint": "sha256:43adf6a3307e60a536aba883ad21644065af3ea9d481c49e858b6e7a04fd414b",
+    "stop_reason": "end_turn",
+    "ts": 1791274332.768
+  }
+]

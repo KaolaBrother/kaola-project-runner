@@ -1,0 +1,22 @@
+{
+  "candidate": "2989c8cfe61db1f98902fa7759d2fbb55e382fcc",
+  "effective_expanded_grants_unchanged": true,
+  "stored_group_counts": {
+    "grok/default": 1,
+    "cursor-cli/default": 1,
+    "codex/default": 1,
+    "droid": 2,
+    "claude-code": 1
+  },
+  "derived_seats": 6,
+  "task_facts_preserved_except_note_to_why_alias": true,
+  "maintenance_unchanged": true,
+  "protected_paths_unchanged": true,
+  "catalog_classes_visible": [
+    "Elite",
+    "Expert",
+    "Worker"
+  ],
+  "repeat_plan_current": true,
+  "source_migration_only_no_install": true
+}

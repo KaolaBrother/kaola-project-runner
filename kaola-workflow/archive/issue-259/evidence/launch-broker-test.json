@@ -1,0 +1,311 @@
+{
+  "checks": 35,
+  "evidence": [
+    {
+      "check": "submit refuses a shell-first argv",
+      "ok": true,
+      "receipt": {
+        "detail": "the holder argv must not start a shell (/bin/zsh)",
+        "holder_may_exist": false,
+        "reason": "argv-shell",
+        "result": "refused",
+        "schema": "kaola-launch-broker/3"
+      }
+    },
+    {
+      "check": "submit refuses an argv that is not the holder structure",
+      "ok": true,
+      "receipt": {
+        "detail": "the holder argv must name kaola-acp-holder.py as its second element",
+        "holder_may_exist": false,
+        "reason": "argv-not-holder",
+        "result": "refused",
+        "schema": "kaola-launch-broker/3"
+      }
+    },
+    {
+      "check": "internal-run refuses a missing private spec",
+      "ok": true
+    },
+    {
+      "check": "internal-run refuses a permissive spec",
+      "ok": true
+    },
+    {
+      "check": "verified_holder rejects a foreign PID with no holder/ACP identity",
+      "fake_pid": 34962,
+      "ok": true,
+      "record": {
+        "holder_pid": 34962,
+        "platform": "codex",
+        "repo": "/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/k266fore.vjktdpxt/repo",
+        "session": "codex-K266-864c2683",
+        "state": "ready"
+      }
+    },
+    {
+      "check": "submit launches a real holder over a foreign record",
+      "ok": true,
+      "receipt": {
+        "acp_session_id": "mock-session-1",
+        "agent_pid": 34973,
+        "backend": "launchd",
+        "holder_instance_id": "2a0813288da9a44ceb355abb5f5ae80b",
+        "holder_pid": 34971,
+        "label": "com.kaolabrother.kaola-runner.launch.62454d906f81a8ea",
+        "platform": "codex",
+        "reconciled": false,
+        "repo": "/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/k266fore.vjktdpxt/repo",
+        "result": "ready",
+        "schema": "kaola-launch-broker/3",
+        "session": "codex-K266-864c2683",
+        "state": "ready"
+      }
+    },
+    {
+      "check": "the new holder is not the foreign PID",
+      "ok": true
+    },
+    {
+      "check": "the foreign PID was not signalled or killed",
+      "ok": true
+    },
+    {
+      "check": "first submit is ready",
+      "ok": true
+    },
+    {
+      "check": "a repeated submit reconciles the verified holder",
+      "ok": true
+    },
+    {
+      "check": "the reconciled holder is the same instance",
+      "ok": true
+    },
+    {
+      "check": "submit refuses rather than killing a concurrent running job",
+      "ok": true,
+      "receipt": {
+        "detail": "a job for this exact session is already running; reconcile it",
+        "holder_may_exist": true,
+        "label": "com.kaolabrother.kaola-runner.launch.309f5b711096cf24",
+        "reason": "launch-in-progress",
+        "result": "refused",
+        "schema": "kaola-launch-broker/3"
+      }
+    },
+    {
+      "check": "the concurrent job is still loaded and alive",
+      "ok": true
+    },
+    {
+      "check": "broker reports ready from the verified holder",
+      "ok": true
+    },
+    {
+      "check": "holder is re-parented to the service manager (ppid 1)",
+      "holder_pid": 36320,
+      "ok": true
+    },
+    {
+      "check": "the one-shot job is unloaded after readiness",
+      "ok": true
+    },
+    {
+      "check": "the outside holder is recorded in the outer child record",
+      "child_record": [
+        {
+          "pgid": 36320,
+          "pid": 36320,
+          "spawned_at": 1791261974922
+        }
+      ],
+      "ok": true
+    },
+    {
+      "check": "holder survives a later job unload",
+      "ok": true
+    },
+    {
+      "check": "status resolves the same holder instance",
+      "ok": true,
+      "status_instance": "c46f2e264f6087ba59ac20fc457b539c"
+    },
+    {
+      "check": "send is accepted by the detached holder",
+      "ok": true,
+      "send": "in_progress"
+    },
+    {
+      "check": "the detached holder delivered the prompt to the agent (agent-side receipt)",
+      "ok": true
+    },
+    {
+      "capture_error": null,
+      "check": "capture returns a valid session receipt",
+      "ok": true
+    },
+    {
+      "check": "the steer call is not an error receipt",
+      "ok": true,
+      "steer": {
+        "git": {
+          "branch": null,
+          "dirty": false
+        },
+        "mutation_performed": true,
+        "mutation_status": "accepted",
+        "native_steering": "supported",
+        "outcome": "steer_injected",
+        "platform": "codex",
+        "repo": "/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/k266surv.eo3fyiyc/repo",
+        "schema_version": 3,
+        "session": "codex-K266-a19aa9d5",
+        "steer_confirmation": "agent-confirmed",
+        "steer_consumed": true,
+        "steer_fingerprint": "sha256:21dc32f29f87023110e218ce46d389c365e53528e3087e7844dd48b28907eb49",
+        "steer_method": "_session/steering",
+        "steer_mode": "native",
+        "steer_native_outcome": "injected",
+        "steer_native_reason": null,
+        "steer_outcome": "injected",
+        "steer_request_id": 4,
+        "steer_response": {
+          "id": 4,
+          "jsonrpc": "2.0",
+          "result": {
+            "outcome": "injected"
+          }
+        },
+        "steer_text_chars": 9,
+        "transport": {
+          "selected": "acp"
+        },
+        "turn_active": true,
+        "turn_prompt_fingerprint": "sha256:a9864ad3dce9cb86bc2586574f7dc98e77e65d6960477cec3729f13e0d2eaf17",
+        "turn_request_id": 3,
+        "turn_request_id_after": 3,
+        "turn_request_id_preserved": true
+      }
+    },
+    {
+      "check": "exact stop proves no residual pids",
+      "ok": true,
+      "stop": {
+        "residual_pids": [],
+        "stopped": true
+      }
+    },
+    {
+      "check": "a failed start is refused",
+      "ok": true,
+      "receipt": {
+        "detail": "the internal startup wrote no outcome inside the window",
+        "holder_may_exist": true,
+        "label": "com.kaolabrother.kaola-runner.launch.65088ba5b49ad2b5",
+        "os_state": "running",
+        "reason": "holder-not-ready",
+        "result": "refused",
+        "schema": "kaola-launch-broker/3"
+      }
+    },
+    {
+      "check": "no stale job remains after a failed start",
+      "ok": true
+    },
+    {
+      "check": "failed start leaves no orphan holder or agent",
+      "ok": true
+    },
+    {
+      "check": "the readiness receipt is consumed, not left behind",
+      "ok": true
+    },
+    {
+      "check": "no stale spec or plist remains",
+      "ok": true,
+      "stale": []
+    },
+    {
+      "check": "the record path under test contains a space",
+      "ok": true,
+      "record_dir": "/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/k266spac.fzkvkd2y/re cords/codex/codex-K266-cd16dae8/5e2d79131ee2fdd4"
+    },
+    {
+      "check": "a record path with a space still reaches a verified ready holder",
+      "ok": true,
+      "receipt": {
+        "acp_session_id": "mock-session-1",
+        "agent_pid": 38340,
+        "backend": "launchd",
+        "holder_instance_id": "40c43db4f6cefed71e2a8152d2eb2ce1",
+        "holder_pid": 38339,
+        "label": "com.kaolabrother.kaola-runner.launch.f28e169afc18bbae",
+        "platform": "codex",
+        "reconciled": false,
+        "repo": "/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/k266spac.fzkvkd2y/repo",
+        "result": "ready",
+        "schema": "kaola-launch-broker/3",
+        "session": "codex-K266-cd16dae8",
+        "state": "ready"
+      }
+    },
+    {
+      "check": "the holder with a spaced record path is alive",
+      "ok": true
+    },
+    {
+      "check": "a forced systemd-user backend on macOS refuses cleanly, with no OS call",
+      "ok": true,
+      "receipt": {
+        "backend": "the user systemd manager is not available here",
+        "detail": "no supported outside-caller launch backend here (the user systemd manager is not available here). Start the Host from an independent terminal on this target, or pass the direct backend explicitly.",
+        "holder_may_exist": false,
+        "reason": "launch-backend-unsupported",
+        "result": "refused",
+        "schema": "kaola-launch-broker/3"
+      }
+    },
+    {
+      "check": "the refusal reports no holder may exist",
+      "ok": true
+    },
+    {
+      "check": "the refused backend leaves no run-dir artifact",
+      "ok": true,
+      "stale": []
+    }
+  ],
+  "failures": [],
+  "result": "pass",
+  "tests": [
+    {
+      "result": "pass",
+      "test": "literal_argv_structure"
+    },
+    {
+      "result": "pass",
+      "test": "foreign_identity_rejected"
+    },
+    {
+      "result": "pass",
+      "test": "reconcile_and_running_job"
+    },
+    {
+      "result": "pass",
+      "test": "survival_control_and_child_record"
+    },
+    {
+      "result": "pass",
+      "test": "failed_start_cleanup"
+    },
+    {
+      "result": "pass",
+      "test": "spaces_in_record_path"
+    },
+    {
+      "result": "pass",
+      "test": "systemd_user_refusal"
+    }
+  ]
+}

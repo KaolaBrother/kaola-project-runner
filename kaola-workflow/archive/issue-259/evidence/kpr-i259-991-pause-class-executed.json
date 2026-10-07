@@ -1,0 +1,19 @@
+{
+  "name": "991-pause-class-executed",
+  "argv": [
+    "python3",
+    "tests/contract/test-issue-259-record-contract.py",
+    "RecordContract.test_delegator_group_pause_expiry_and_resolved_relay_preserve_current_duties"
+  ],
+  "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+  "env": {
+    "TMPDIR": "/tmp",
+    "KAOLA_LAUNCH_BACKEND": "direct"
+  },
+  "execution_base": "b7f5bc265c3fb447c0e519984b002f5517dcc3f4 plus relocated test block",
+  "exit": 1,
+  "seconds": 0.7128322500502691,
+  "output_sha256": "3ac1177a65103c631877c5af4298b507b0c07d2e2a83a948920afaa71f8debaa",
+  "log": "/tmp/kpr-i259-991-pause-class-executed.log",
+  "source_sha256": "c3c0e1f1e80874db42bf52f10e9a502660850db55bacc99f5e0720be7f176ac1"
+}

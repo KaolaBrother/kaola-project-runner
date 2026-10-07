@@ -1,0 +1,194 @@
+{
+  "correlation_only": true,
+  "coverage": {
+    "failed": [],
+    "in-flight": [],
+    "not-run": [],
+    "returned": [
+      "harness-paper-opus-reconsideration"
+    ],
+    "unknown": []
+  },
+  "dispatcher": {
+    "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+    "platform": "codex",
+    "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+    "session": "codex-KPR-orchestrator-main"
+  },
+  "effective_cap": 4,
+  "index_path": "/tmp/kpr-1000-retirement-correlation/14.json",
+  "items": [
+    {
+      "acceptance": "pending",
+      "capture_since": 13,
+      "dispatch_event_cursor": 13,
+      "dispatcher": {
+        "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "evidence": {
+        "capture": {
+          "acp_session_id": null,
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "collect_status": {
+          "acp_session_id": "26426824bc7b8ae3b5f67b4467641d14",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "05e3728dc501102ede997af592d6739e",
+          "mutation_status": "completed",
+          "outcome": null,
+          "prompt_fingerprint": "sha256:9783b2fd3ee4118810bcd1359c10f2b0bce8bae45166ba3cdc3dc1a5518e2708",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "send": {
+          "acp_session_id": "26426824bc7b8ae3b5f67b4467641d14",
+          "dispatch_event_cursor": 13,
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": "in_progress",
+          "outcome": "in_progress",
+          "prompt_fingerprint": "sha256:9783b2fd3ee4118810bcd1359c10f2b0bce8bae45166ba3cdc3dc1a5518e2708",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "start": {
+          "acp_session_id": "26426824bc7b8ae3b5f67b4467641d14",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "05e3728dc501102ede997af592d6739e",
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "status": {
+          "acp_session_id": null,
+          "dispatch_event_cursor": null,
+          "error_code": "no-session",
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        }
+      },
+      "holder_instance_id": "05e3728dc501102ede997af592d6739e",
+      "item_id": "harness-paper-opus-reconsideration",
+      "notify_target": {
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "output": "/tmp/kpr-harness-paper-opus-reconsideration-20261005.md",
+      "platform": "claude-code",
+      "preset": "claude-code/opus-xhigh",
+      "prompt_fingerprint": "sha256:9783b2fd3ee4118810bcd1359c10f2b0bce8bae45166ba3cdc3dc1a5518e2708",
+      "prompt_sha256": "sha256:9783b2fd3ee4118810bcd1359c10f2b0bce8bae45166ba3cdc3dc1a5518e2708",
+      "prompt_source": {
+        "kind": "full",
+        "prompt_sha256": "sha256:9783b2fd3ee4118810bcd1359c10f2b0bce8bae45166ba3cdc3dc1a5518e2708"
+      },
+      "reason": "collected",
+      "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+      "result": {
+        "cursor": 13,
+        "excerpt": "One last check on how `keep_open` behaves in the candidate tests, then I write the addendum.Trimming the addendum to the requested length, then I stop.The addendum is written at `/tmp/kpr-harness-paper-opus-reconsideration-20261005.md` (sha256 `a6647047…c387ef`). It is about 1100 words by `wc -w`, so it is over the 700-word target; source pointers account for part of that.\n\nI changed nothing else: the candidate worktree is clean at `83d64f73`, and I ran no test, probe, Workfl",
+        "excerpt_truncated": true,
+        "gaps": [],
+        "locator": {
+          "argv": [
+            "capture",
+            "--repo",
+            "/Users/ylmacstudio/Workspace/kaola-project-runner",
+            "--session",
+            "claude-code-KPR-harness-paper-reconsideration",
+            "--full",
+            "--inline"
+          ],
+          "event_log_path": null,
+          "platform": "claude-code",
+          "session": "claude-code-KPR-harness-paper-reconsideration",
+          "since": 13
+        },
+        "output": {
+          "checked": true,
+          "declared": "/tmp/kpr-harness-paper-opus-reconsideration-20261005.md",
+          "kind": "file",
+          "path": "/tmp/kpr-harness-paper-opus-reconsideration-20261005.md",
+          "present": true
+        },
+        "reply_chars": 3491,
+        "stop_reason": "end_turn",
+        "turn": {
+          "holder_instance_id": "05e3728dc501102ede997af592d6739e",
+          "prompt_fingerprint": "sha256:9783b2fd3ee4118810bcd1359c10f2b0bce8bae45166ba3cdc3dc1a5518e2708"
+        }
+      },
+      "selection": {
+        "advertised": {
+          "effort": "xhigh",
+          "model_id": "opus"
+        },
+        "advertised_source": "effective_selection",
+        "applied": {
+          "effort": "xhigh",
+          "model_id": "opus"
+        },
+        "applied_state": {
+          "effort": "applied",
+          "model_id": "applied"
+        },
+        "comparison": "match",
+        "fields": {
+          "effort": {
+            "advertised": "match",
+            "applied": "match"
+          },
+          "model_id": {
+            "advertised": "match",
+            "applied": "match"
+          }
+        },
+        "requested": {
+          "effort": "xhigh",
+          "model_id": "opus",
+          "preset": "claude-code/opus-xhigh",
+          "tier": "opus-xhigh"
+        },
+        "source": "config_application"
+      },
+      "session": "claude-code-KPR-harness-paper-reconsideration",
+      "status": "returned",
+      "stop_reason": "end_turn",
+      "task_id": "harness-paper-design",
+      "task_scope": "thinking and review only",
+      "turn_active": false,
+      "turn_outcome": "turn_completed"
+    }
+  ],
+  "occupancy": "known",
+  "phase": "collection",
+  "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+  "schema": "kaola-dispatch-index/1",
+  "scope": "qa",
+  "task_links": {
+    "index": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/dispatch-index.json",
+    "linked": {
+      "harness-paper-design": [
+        "harness-paper-opus-reconsideration"
+      ]
+    }
+  }
+}

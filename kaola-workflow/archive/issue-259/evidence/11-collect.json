@@ -1,0 +1,144 @@
+{
+  "correlation_only": true,
+  "coverage": {
+    "failed": [],
+    "in-flight": [],
+    "not-run": [],
+    "returned": [],
+    "unknown": [
+      "grok-compact-proof"
+    ]
+  },
+  "dispatcher": {
+    "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+    "platform": "codex",
+    "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+    "session": "codex-KPR-orchestrator-main"
+  },
+  "effective_cap": 4,
+  "index_path": "/tmp/kpr-1000-retirement-correlation/11.json",
+  "items": [
+    {
+      "acceptance": "pending",
+      "dispatch_event_cursor": 32,
+      "dispatcher": {
+        "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "evidence": {
+        "collect_status": {
+          "acp_session_id": "01a10b8d-8820-7b43-a7bc-101e8aa32951",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "b606d6157594813602cf8221de6ec5d0",
+          "mutation_status": "completed",
+          "outcome": "stopped",
+          "prompt_fingerprint": "sha256:bc541431b632bd41d00bc574c9444dc6ebf81dd951258c4107043c8d97b3dbc0",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "send": {
+          "acp_session_id": "01a10b8d-8820-7b43-a7bc-101e8aa32951",
+          "dispatch_event_cursor": 32,
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": "in_progress",
+          "outcome": "in_progress",
+          "prompt_fingerprint": "sha256:46f06c18e5bca2494bf51e67bc188d1f1d8cd58dab544d89c61ee090440b09a6",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "start": {
+          "acp_session_id": "01a10b8d-8820-7b43-a7bc-101e8aa32951",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "b606d6157594813602cf8221de6ec5d0",
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "status": {
+          "acp_session_id": null,
+          "dispatch_event_cursor": null,
+          "error_code": "no-session",
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        }
+      },
+      "holder_instance_id": "b606d6157594813602cf8221de6ec5d0",
+      "item_id": "grok-compact-proof",
+      "notify_target": {
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "output": "/tmp/kpr-grok-compact-proof-20261005.md",
+      "platform": "grok",
+      "preset": "grok/default",
+      "prompt_fingerprint": "sha256:bc541431b632bd41d00bc574c9444dc6ebf81dd951258c4107043c8d97b3dbc0",
+      "prompt_sha256": "sha256:46f06c18e5bca2494bf51e67bc188d1f1d8cd58dab544d89c61ee090440b09a6",
+      "prompt_source": {
+        "kind": "full",
+        "prompt_sha256": "sha256:46f06c18e5bca2494bf51e67bc188d1f1d8cd58dab544d89c61ee090440b09a6"
+      },
+      "reason": "fingerprint-differs",
+      "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+      "selection": {
+        "advertised": {
+          "effort": "xhigh",
+          "model_id": "grok-4.7"
+        },
+        "advertised_source": "effective_selection",
+        "applied": {
+          "effort": "xhigh",
+          "model_id": "grok-4.7"
+        },
+        "applied_state": {
+          "effort": "applied",
+          "model_id": "applied"
+        },
+        "comparison": "match",
+        "fields": {
+          "effort": {
+            "advertised": "match",
+            "applied": "match"
+          },
+          "model_id": {
+            "advertised": "match",
+            "applied": "match"
+          }
+        },
+        "requested": {
+          "effort": "xhigh",
+          "model_id": "grok-4.7",
+          "preset": "grok/default",
+          "tier": "default"
+        },
+        "source": "config_application"
+      },
+      "session": "grok-KPR-compact-proof",
+      "status": "unknown",
+      "task_id": "acp-matrix-pool"
+    }
+  ],
+  "occupancy": "known",
+  "phase": "collection",
+  "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+  "schema": "kaola-dispatch-index/1",
+  "scope": "research",
+  "task_links": {
+    "index": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/dispatch-index.json",
+    "linked": {
+      "acp-matrix-pool": [
+        "grok-compact-proof"
+      ]
+    }
+  }
+}

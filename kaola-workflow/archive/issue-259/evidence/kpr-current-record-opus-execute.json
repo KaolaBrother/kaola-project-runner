@@ -1,0 +1,134 @@
+{
+  "correlation_only": true,
+  "coverage": {
+    "failed": [],
+    "in-flight": [
+      "harness-paper-current-record-design"
+    ],
+    "not-run": [],
+    "returned": [],
+    "unknown": []
+  },
+  "dispatcher": {
+    "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+    "platform": "codex",
+    "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+    "session": "codex-KPR-orchestrator-main"
+  },
+  "effective_cap": 4,
+  "index_path": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/dispatch-index.json",
+  "items": [
+    {
+      "acceptance": "pending",
+      "dispatch_event_cursor": 13,
+      "dispatcher": {
+        "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "evidence": {
+        "send": {
+          "acp_session_id": "45f081cc93f787e88da58314fe69eba6",
+          "dispatch_event_cursor": 13,
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": "in_progress",
+          "outcome": "in_progress",
+          "prompt_fingerprint": "sha256:256fba1b59d638d0add50c55c8606313f653c1b02682be93bc9c6a0f272577ed",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "start": {
+          "acp_session_id": "45f081cc93f787e88da58314fe69eba6",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "54fbd46e5d33dc1fb1d8bcc13d2b292c",
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "status": {
+          "acp_session_id": null,
+          "dispatch_event_cursor": null,
+          "error_code": "no-session",
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        }
+      },
+      "holder_instance_id": "54fbd46e5d33dc1fb1d8bcc13d2b292c",
+      "item_id": "harness-paper-current-record-design",
+      "notify_target": {
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "output": "/tmp/kpr-current-record-opus-design-20261005.md",
+      "platform": "claude-code",
+      "preset": "claude-code/opus-xhigh",
+      "prompt_fingerprint": "sha256:256fba1b59d638d0add50c55c8606313f653c1b02682be93bc9c6a0f272577ed",
+      "prompt_sha256": "sha256:256fba1b59d638d0add50c55c8606313f653c1b02682be93bc9c6a0f272577ed",
+      "prompt_source": {
+        "kind": "full",
+        "prompt_sha256": "sha256:256fba1b59d638d0add50c55c8606313f653c1b02682be93bc9c6a0f272577ed"
+      },
+      "reason": "admitted",
+      "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+      "selection": {
+        "advertised": {
+          "effort": "xhigh",
+          "model_id": "opus"
+        },
+        "advertised_source": "effective_selection",
+        "applied": {
+          "effort": "xhigh",
+          "model_id": "opus"
+        },
+        "applied_state": {
+          "effort": "applied",
+          "model_id": "applied"
+        },
+        "comparison": "match",
+        "fields": {
+          "effort": {
+            "advertised": "match",
+            "applied": "match"
+          },
+          "model_id": {
+            "advertised": "match",
+            "applied": "match"
+          }
+        },
+        "requested": {
+          "effort": "xhigh",
+          "model_id": "opus",
+          "preset": "claude-code/opus-xhigh",
+          "tier": "opus-xhigh"
+        },
+        "source": "config_application"
+      },
+      "session": "claude-code-KPR-current-record-design",
+      "status": "in-flight",
+      "task_id": "harness-paper-design",
+      "task_scope": "thinking and review only"
+    }
+  ],
+  "occupancy": "known",
+  "phase": "admission",
+  "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+  "schema": "kaola-dispatch-index/1",
+  "scope": "qa",
+  "task_links": {
+    "index": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/dispatch-index.json",
+    "linked": {
+      "harness-paper-design": [
+        "harness-paper-current-record-design"
+      ]
+    }
+  }
+}

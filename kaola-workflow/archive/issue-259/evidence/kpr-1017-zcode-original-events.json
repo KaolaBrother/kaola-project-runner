@@ -1,0 +1,36 @@
+[
+  {
+    "cursor": 29,
+    "kind": "session_update",
+    "sessionId": "zcode-1",
+    "ts": 1791274728.15,
+    "update": {
+      "content": {
+        "text": "K",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 30,
+    "kind": "session_update",
+    "sessionId": "zcode-1",
+    "ts": 1791274728.357,
+    "update": {
+      "content": {
+        "text": "PR_DEFAULT_LAUNCH_ZCODE_1014_OK",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 34,
+    "kind": "turn_ended",
+    "outcome": "turn_completed",
+    "prompt_fingerprint": "sha256:837a3987f42ca6071a3a31ca9fd56ea97b34fe3b2096dff8ce8d7c930725ec9a",
+    "stop_reason": "end_turn",
+    "ts": 1791274728.387
+  }
+]

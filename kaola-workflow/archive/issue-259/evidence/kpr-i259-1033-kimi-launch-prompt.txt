@@ -1,0 +1,1 @@
+Workflow OFF. This is one owner-authorized ACP transport diagnostic only, with no project work or documentation impact. Do not invoke skills, tools, shell commands, read or write files, make claims, change configuration, install anything, log in, or control sessions. Reply with exactly KPR_DEFAULT_LAUNCH_KIMI_1033_OK and end your turn.

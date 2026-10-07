@@ -1,0 +1,51 @@
+{
+  "old_archive_diff": "",
+  "protected_owner_agents_sha256": "770aec796db0089bb044d4860631fa6bbb37f3aeed0f51e3f6d6d4a771f4628f",
+  "active259_head": "864f07f072ab4629a823fd1396b4e106cdb4101d",
+  "active259_status": "",
+  "kaola-workflow/archive/issue-262/mission-ledger.jsonl": {
+    "count": 3,
+    "statuses": [
+      "done",
+      "done",
+      "done"
+    ]
+  },
+  "kaola-workflow/archive/issue-262.archived-2026-10-05T12-04-15-787Z/mission-ledger.jsonl": {
+    "count": 3,
+    "statuses": [
+      "done",
+      "done",
+      "done"
+    ]
+  },
+  "kaola-workflow/.ledger/issue-259.jsonl": {
+    "count": 3,
+    "statuses": [
+      "done",
+      "done",
+      "done"
+    ]
+  },
+  "local262_branch": "",
+  "protected_docs": {
+    "harness-acp-codex-160-live-2026-10-03.md": "ef123fe3b15cf5f48622b5061c0b6251b4af3ce16c86c2695d9c349444fd74a8",
+    "harness-acp-compat-2026-10-01.md": "13cc2f51258cb97b3b22dd4e495934c8d7340ae2cda701672ebc57ba2e9f4ae9",
+    "harness-acp-compat-2026-10-03.md": "c5360157e7d6310af0119ad238769e92ece5191137560b28ec626cd7d1413555",
+    "harness-acp-reverify-2026-10-01.md": "a73e83faaa4c176b84462e2a9091235311c6751ff9c5ddae7bcef7c4d055f35a"
+  },
+  "protected252_present": true,
+  "previous_protected_reference": "/tmp/kpr-i261-protected-baseline.json",
+  "protected_checked": 53,
+  "protected_differences": [
+    "/Users/ylmacstudio/Workspace/kaola-project-runner/AGENTS.md"
+  ],
+  "forge": "CLOSED262 2026-10-05T12:13:12Z labels[]",
+  "remote_main": "dad228e4898e8f440e6227077917161c2d7e9fdb",
+  "remote262_branch_absent": true,
+  "delegator_source_equals_accepted1531": true,
+  "published_non_run_tree_equals_integrated5e3c2a2f": true,
+  "sink_original": "/tmp/kpr-i262-close-sink2.json resultok status sinked publicationpublished archive_dest suffixed remote_closed_after_publish verified",
+  "owner_stop": "/tmp/kpr-i262-language-owner-exact-stop.json stoppedtrue exit0 residual[]",
+  "protected_comparison_note": "52 baseline protected files unchanged. Baseline AGENTS differs because it predates the already-authorized owner six-requirement edit; current770aec796db0089bb044d4860631fa6bbb37f3aeed0f51e3f6d6d4a771f4628f equals prior independent261 closeout owner hash and remains preserved."
+}

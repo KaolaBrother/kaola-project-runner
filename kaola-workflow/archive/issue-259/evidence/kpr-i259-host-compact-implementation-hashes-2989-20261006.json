@@ -1,0 +1,1091 @@
+{
+  "candidate": "2989c8cfe61db1f98902fa7759d2fbb55e382fcc",
+  "parent": "7810c60061d19bec492d3115af1e8bd3d46369bb",
+  "base": "77d57fc0bae03cbcb70aa0b0b618c76ea7499a33",
+  "branch": "workflow/issue-259",
+  "clean": true,
+  "commits": [
+    "2989c8cfe61db1f98902fa7759d2fbb55e382fcc 7810c60061d19bec492d3115af1e8bd3d46369bb fix: make legacy migration current on its first write",
+    "7810c60061d19bec492d3115af1e8bd3d46369bb 2d7dbb1536af5dd0ab1c33fae62d3e51df425823 fix: refuse ambiguous overlapping grouped legacy grants",
+    "2d7dbb1536af5dd0ab1c33fae62d3e51df425823 ea1ee07fe8821904e2694173f751d882227973b9 test: keep checkpoint fixtures on current grant authority",
+    "ea1ee07fe8821904e2694173f751d882227973b9 be04bd0987db623aaf6f93320bcaae0980cadf3d test: use current grant counts in affected dispatch fixtures",
+    "be04bd0987db623aaf6f93320bcaae0980cadf3d 13f0720c9b6fc9b748abbc4f1ee07b0052c24b57 fix: consolidate current grant authority and integrate launch custody"
+  ],
+  "claim": {
+    "digest": "5ea624f9b9c061bd8c53dc4e20b20ac5a7c35ce95f4d1f244b17fd164f9a29d5",
+    "state_sha256": "610d647040b2ad4c948e36ee9480f14d92e96ade95aa3449210808fd7ef9cb75",
+    "ledger_sha256": "2efb63f6fb7c9da77f74d12abb4754d3e1b4de558599057bd9a2b59a133ab53b",
+    "statuses": [
+      "done",
+      "done",
+      "done",
+      "done"
+    ]
+  },
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "kind": "authored",
+      "base_sha256": "75d7de8e46d1c2d6f5ed808896bc767d64677b236b7ad8fc753a5d5fac448083",
+      "candidate_sha256": "60ef7582a4910c785e81cababce33f166028636360599bbd00666d8b6b41b9ac"
+    },
+    {
+      "path": "docs/api.md",
+      "kind": "authored",
+      "base_sha256": "4b115a5c319fd9e4b0b8307cc8f1b8b3d75d0c1a9a9aa956209d6c2f75ce2a10",
+      "candidate_sha256": "59dde74150f3f73461e56a721348a781061997d75c95ee7034db21f4c2fc8849"
+    },
+    {
+      "path": "docs/dispatch-collect.md",
+      "kind": "authored",
+      "base_sha256": "03e1855f30f5182b4b3b7350b29cb847900996f55b94990745f501344fc5ec9a",
+      "candidate_sha256": "268e9612da6f007f16e172227d9e956c65202937fca09136072d2c7440669b36"
+    },
+    {
+      "path": "platforms/codex.yaml",
+      "kind": "authored",
+      "base_sha256": "6d109c2bf06ad77eca1bc8f575dde2ded80ef5469594952ec6c4301cbbfd538b",
+      "candidate_sha256": "feccec4c41f9c57a4d2a912b6062a6f54de990c46f9e3a0f63a77c2c544a0d09"
+    },
+    {
+      "path": "platforms/dsh.yaml",
+      "kind": "authored",
+      "base_sha256": "1e3d4be84c6273a6feab509a2d4ebc68410e08ebbf6e7d1804c45c6a19793925",
+      "candidate_sha256": "c7769d9ae67903d5fcbf1e22f085bb4ed89f781b90998310a8c4b8a106b45092"
+    },
+    {
+      "path": "scripts/kaola-acp-holder.py",
+      "kind": "authored",
+      "base_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "d8cc9dc147f69db50dc5be5c7cf1f7efced677c19813155792a191aedb72f280"
+    },
+    {
+      "path": "scripts/kaola-acp.py",
+      "kind": "authored",
+      "base_sha256": "385bc3f9cabac7cd6361f975828ca27a8b2957082a955bfe2c536e4ff6af5476",
+      "candidate_sha256": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+    },
+    {
+      "path": "scripts/kaola-dispatch.py",
+      "kind": "authored",
+      "base_sha256": "0868fe1617fa24d1ba89f8ccc98d40f75ea66eacc42872a375107cfeae8e54d6",
+      "candidate_sha256": "2db85d7597f42d93b1d47a0f0f95216eef650b0b961ec07d866af14f633d7ae7"
+    },
+    {
+      "path": "scripts/kaola-dsh-acp.py",
+      "kind": "authored",
+      "base_sha256": "033e52eb720f4fdaaf21d40bf770f563c517f81b56864d21a7e57b1ac162e674",
+      "candidate_sha256": "b1879fca1791845608ce00fa162c122f0729cdb105516d0d4f27dbe69c506e6a"
+    },
+    {
+      "path": "scripts/kaola-dsh-steer.mjs",
+      "kind": "authored",
+      "base_sha256": "c3d91a21c575847149ee88f839a61637121861d0609cb5db064265aa0f80d1d5",
+      "candidate_sha256": "f19a3beea03899dfae883ef84de5ede36e0503ed7be9df8b2f5d9de4f9b82da2"
+    },
+    {
+      "path": "scripts/kaola-launchd-broker.py",
+      "kind": "authored",
+      "base_sha256": null,
+      "candidate_sha256": "63cc4efb2e03eac2766c4c06a69e073ffb6c836e22b3a91ca0e235bc2e73b6d4"
+    },
+    {
+      "path": "scripts/kaola-record-contract.py",
+      "kind": "authored",
+      "base_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "ba2ce83f1aaadf028b4ed15efe66e8f5381726c4d1a59171bb78d594871bc9e8"
+    },
+    {
+      "path": "scripts/kaola-tmux.sh",
+      "kind": "authored",
+      "base_sha256": "3054aa41f1e6a279da304cdca4f44d909c997c3df49ae5a5083c413119b9aa1d",
+      "candidate_sha256": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b"
+    },
+    {
+      "path": "scripts/render-skills.py",
+      "kind": "authored",
+      "base_sha256": "e148aa09c1175e9d0d0420381b3ac1685a36a831a820dacfe1f54a994e7eec23",
+      "candidate_sha256": "f97f9783de3437975cd5a62c48692d8332fcd63c4caaac684a283eaa35d2e7e8"
+    },
+    {
+      "path": "scripts/validate.sh",
+      "kind": "authored",
+      "base_sha256": "4cc650b9e68c0210a5770e36b24582e6bf258945df5feb9be076820464b6763b",
+      "candidate_sha256": "d94b4dc8463771547eb9f2b053acf2d9f9c5229aac3af03e271ffef9cfb32c09"
+    },
+    {
+      "path": "skills/claude-code-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "kind": "generated",
+      "base_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "d8cc9dc147f69db50dc5be5c7cf1f7efced677c19813155792a191aedb72f280"
+    },
+    {
+      "path": "skills/claude-code-kaola-project-runner/scripts/kaola-acp.py",
+      "kind": "generated",
+      "base_sha256": "385bc3f9cabac7cd6361f975828ca27a8b2957082a955bfe2c536e4ff6af5476",
+      "candidate_sha256": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+    },
+    {
+      "path": "skills/claude-code-kaola-project-runner/scripts/kaola-launchd-broker.py",
+      "kind": "generated",
+      "base_sha256": null,
+      "candidate_sha256": "63cc4efb2e03eac2766c4c06a69e073ffb6c836e22b3a91ca0e235bc2e73b6d4"
+    },
+    {
+      "path": "skills/claude-code-kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "base_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "ba2ce83f1aaadf028b4ed15efe66e8f5381726c4d1a59171bb78d594871bc9e8"
+    },
+    {
+      "path": "skills/claude-code-kaola-project-runner/scripts/kaola-tmux.sh",
+      "kind": "generated",
+      "base_sha256": "3054aa41f1e6a279da304cdca4f44d909c997c3df49ae5a5083c413119b9aa1d",
+      "candidate_sha256": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b"
+    },
+    {
+      "path": "skills/claude-code-kaola-project-runner/scripts/main-skill-build.json",
+      "kind": "generated",
+      "base_sha256": "209a2f61aef012304643aa82153af553e51830abe168ea8547753de3c54ab415",
+      "candidate_sha256": "86bfdf0b543dd73750472334859431f3d55d1ea3a675c9c0ba30f3233cf8826a"
+    },
+    {
+      "path": "skills/codex-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "kind": "generated",
+      "base_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "d8cc9dc147f69db50dc5be5c7cf1f7efced677c19813155792a191aedb72f280"
+    },
+    {
+      "path": "skills/codex-kaola-project-runner/scripts/kaola-acp.py",
+      "kind": "generated",
+      "base_sha256": "385bc3f9cabac7cd6361f975828ca27a8b2957082a955bfe2c536e4ff6af5476",
+      "candidate_sha256": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+    },
+    {
+      "path": "skills/codex-kaola-project-runner/scripts/kaola-launchd-broker.py",
+      "kind": "generated",
+      "base_sha256": null,
+      "candidate_sha256": "63cc4efb2e03eac2766c4c06a69e073ffb6c836e22b3a91ca0e235bc2e73b6d4"
+    },
+    {
+      "path": "skills/codex-kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "base_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "ba2ce83f1aaadf028b4ed15efe66e8f5381726c4d1a59171bb78d594871bc9e8"
+    },
+    {
+      "path": "skills/codex-kaola-project-runner/scripts/kaola-tmux.sh",
+      "kind": "generated",
+      "base_sha256": "3054aa41f1e6a279da304cdca4f44d909c997c3df49ae5a5083c413119b9aa1d",
+      "candidate_sha256": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b"
+    },
+    {
+      "path": "skills/codex-kaola-project-runner/scripts/main-skill-build.json",
+      "kind": "generated",
+      "base_sha256": "209a2f61aef012304643aa82153af553e51830abe168ea8547753de3c54ab415",
+      "candidate_sha256": "86bfdf0b543dd73750472334859431f3d55d1ea3a675c9c0ba30f3233cf8826a"
+    },
+    {
+      "path": "skills/codex-kaola-project-runner/scripts/platform.yaml",
+      "kind": "generated",
+      "base_sha256": "6d109c2bf06ad77eca1bc8f575dde2ded80ef5469594952ec6c4301cbbfd538b",
+      "candidate_sha256": "feccec4c41f9c57a4d2a912b6062a6f54de990c46f9e3a0f63a77c2c544a0d09"
+    },
+    {
+      "path": "skills/cursor-cli-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "kind": "generated",
+      "base_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "d8cc9dc147f69db50dc5be5c7cf1f7efced677c19813155792a191aedb72f280"
+    },
+    {
+      "path": "skills/cursor-cli-kaola-project-runner/scripts/kaola-acp.py",
+      "kind": "generated",
+      "base_sha256": "385bc3f9cabac7cd6361f975828ca27a8b2957082a955bfe2c536e4ff6af5476",
+      "candidate_sha256": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+    },
+    {
+      "path": "skills/cursor-cli-kaola-project-runner/scripts/kaola-launchd-broker.py",
+      "kind": "generated",
+      "base_sha256": null,
+      "candidate_sha256": "63cc4efb2e03eac2766c4c06a69e073ffb6c836e22b3a91ca0e235bc2e73b6d4"
+    },
+    {
+      "path": "skills/cursor-cli-kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "base_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "ba2ce83f1aaadf028b4ed15efe66e8f5381726c4d1a59171bb78d594871bc9e8"
+    },
+    {
+      "path": "skills/cursor-cli-kaola-project-runner/scripts/kaola-tmux.sh",
+      "kind": "generated",
+      "base_sha256": "3054aa41f1e6a279da304cdca4f44d909c997c3df49ae5a5083c413119b9aa1d",
+      "candidate_sha256": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b"
+    },
+    {
+      "path": "skills/cursor-cli-kaola-project-runner/scripts/main-skill-build.json",
+      "kind": "generated",
+      "base_sha256": "209a2f61aef012304643aa82153af553e51830abe168ea8547753de3c54ab415",
+      "candidate_sha256": "86bfdf0b543dd73750472334859431f3d55d1ea3a675c9c0ba30f3233cf8826a"
+    },
+    {
+      "path": "skills/devin-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "kind": "generated",
+      "base_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "d8cc9dc147f69db50dc5be5c7cf1f7efced677c19813155792a191aedb72f280"
+    },
+    {
+      "path": "skills/devin-kaola-project-runner/scripts/kaola-acp.py",
+      "kind": "generated",
+      "base_sha256": "385bc3f9cabac7cd6361f975828ca27a8b2957082a955bfe2c536e4ff6af5476",
+      "candidate_sha256": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+    },
+    {
+      "path": "skills/devin-kaola-project-runner/scripts/kaola-launchd-broker.py",
+      "kind": "generated",
+      "base_sha256": null,
+      "candidate_sha256": "63cc4efb2e03eac2766c4c06a69e073ffb6c836e22b3a91ca0e235bc2e73b6d4"
+    },
+    {
+      "path": "skills/devin-kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "base_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "ba2ce83f1aaadf028b4ed15efe66e8f5381726c4d1a59171bb78d594871bc9e8"
+    },
+    {
+      "path": "skills/devin-kaola-project-runner/scripts/kaola-tmux.sh",
+      "kind": "generated",
+      "base_sha256": "3054aa41f1e6a279da304cdca4f44d909c997c3df49ae5a5083c413119b9aa1d",
+      "candidate_sha256": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b"
+    },
+    {
+      "path": "skills/devin-kaola-project-runner/scripts/main-skill-build.json",
+      "kind": "generated",
+      "base_sha256": "209a2f61aef012304643aa82153af553e51830abe168ea8547753de3c54ab415",
+      "candidate_sha256": "86bfdf0b543dd73750472334859431f3d55d1ea3a675c9c0ba30f3233cf8826a"
+    },
+    {
+      "path": "skills/droid-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "kind": "generated",
+      "base_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "d8cc9dc147f69db50dc5be5c7cf1f7efced677c19813155792a191aedb72f280"
+    },
+    {
+      "path": "skills/droid-kaola-project-runner/scripts/kaola-acp.py",
+      "kind": "generated",
+      "base_sha256": "385bc3f9cabac7cd6361f975828ca27a8b2957082a955bfe2c536e4ff6af5476",
+      "candidate_sha256": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+    },
+    {
+      "path": "skills/droid-kaola-project-runner/scripts/kaola-launchd-broker.py",
+      "kind": "generated",
+      "base_sha256": null,
+      "candidate_sha256": "63cc4efb2e03eac2766c4c06a69e073ffb6c836e22b3a91ca0e235bc2e73b6d4"
+    },
+    {
+      "path": "skills/droid-kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "base_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "ba2ce83f1aaadf028b4ed15efe66e8f5381726c4d1a59171bb78d594871bc9e8"
+    },
+    {
+      "path": "skills/droid-kaola-project-runner/scripts/kaola-tmux.sh",
+      "kind": "generated",
+      "base_sha256": "3054aa41f1e6a279da304cdca4f44d909c997c3df49ae5a5083c413119b9aa1d",
+      "candidate_sha256": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b"
+    },
+    {
+      "path": "skills/droid-kaola-project-runner/scripts/main-skill-build.json",
+      "kind": "generated",
+      "base_sha256": "209a2f61aef012304643aa82153af553e51830abe168ea8547753de3c54ab415",
+      "candidate_sha256": "86bfdf0b543dd73750472334859431f3d55d1ea3a675c9c0ba30f3233cf8826a"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/references/acp.md",
+      "kind": "generated",
+      "base_sha256": "49bb20f1b0187e4ba6765950e96ebed161fc5696f7eff52fb5d5b4ae50e92489",
+      "candidate_sha256": "30ff40c8999524fe20e2f8b951beabd6a970982e53183ea1266d9ae59bb3f1db"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "kind": "generated",
+      "base_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "d8cc9dc147f69db50dc5be5c7cf1f7efced677c19813155792a191aedb72f280"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/scripts/kaola-acp.py",
+      "kind": "generated",
+      "base_sha256": "385bc3f9cabac7cd6361f975828ca27a8b2957082a955bfe2c536e4ff6af5476",
+      "candidate_sha256": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/scripts/kaola-dsh-acp.py",
+      "kind": "generated",
+      "base_sha256": "033e52eb720f4fdaaf21d40bf770f563c517f81b56864d21a7e57b1ac162e674",
+      "candidate_sha256": "b1879fca1791845608ce00fa162c122f0729cdb105516d0d4f27dbe69c506e6a"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/scripts/kaola-dsh-steer.mjs",
+      "kind": "generated",
+      "base_sha256": "c3d91a21c575847149ee88f839a61637121861d0609cb5db064265aa0f80d1d5",
+      "candidate_sha256": "f19a3beea03899dfae883ef84de5ede36e0503ed7be9df8b2f5d9de4f9b82da2"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/scripts/kaola-launchd-broker.py",
+      "kind": "generated",
+      "base_sha256": null,
+      "candidate_sha256": "63cc4efb2e03eac2766c4c06a69e073ffb6c836e22b3a91ca0e235bc2e73b6d4"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "base_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "ba2ce83f1aaadf028b4ed15efe66e8f5381726c4d1a59171bb78d594871bc9e8"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/scripts/kaola-tmux.sh",
+      "kind": "generated",
+      "base_sha256": "3054aa41f1e6a279da304cdca4f44d909c997c3df49ae5a5083c413119b9aa1d",
+      "candidate_sha256": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/scripts/main-skill-build.json",
+      "kind": "generated",
+      "base_sha256": "209a2f61aef012304643aa82153af553e51830abe168ea8547753de3c54ab415",
+      "candidate_sha256": "86bfdf0b543dd73750472334859431f3d55d1ea3a675c9c0ba30f3233cf8826a"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/scripts/platform.yaml",
+      "kind": "generated",
+      "base_sha256": "1e3d4be84c6273a6feab509a2d4ebc68410e08ebbf6e7d1804c45c6a19793925",
+      "candidate_sha256": "c7769d9ae67903d5fcbf1e22f085bb4ed89f781b90998310a8c4b8a106b45092"
+    },
+    {
+      "path": "skills/grok-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "kind": "generated",
+      "base_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "d8cc9dc147f69db50dc5be5c7cf1f7efced677c19813155792a191aedb72f280"
+    },
+    {
+      "path": "skills/grok-kaola-project-runner/scripts/kaola-acp.py",
+      "kind": "generated",
+      "base_sha256": "385bc3f9cabac7cd6361f975828ca27a8b2957082a955bfe2c536e4ff6af5476",
+      "candidate_sha256": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+    },
+    {
+      "path": "skills/grok-kaola-project-runner/scripts/kaola-launchd-broker.py",
+      "kind": "generated",
+      "base_sha256": null,
+      "candidate_sha256": "63cc4efb2e03eac2766c4c06a69e073ffb6c836e22b3a91ca0e235bc2e73b6d4"
+    },
+    {
+      "path": "skills/grok-kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "base_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "ba2ce83f1aaadf028b4ed15efe66e8f5381726c4d1a59171bb78d594871bc9e8"
+    },
+    {
+      "path": "skills/grok-kaola-project-runner/scripts/kaola-tmux.sh",
+      "kind": "generated",
+      "base_sha256": "3054aa41f1e6a279da304cdca4f44d909c997c3df49ae5a5083c413119b9aa1d",
+      "candidate_sha256": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b"
+    },
+    {
+      "path": "skills/grok-kaola-project-runner/scripts/main-skill-build.json",
+      "kind": "generated",
+      "base_sha256": "209a2f61aef012304643aa82153af553e51830abe168ea8547753de3c54ab415",
+      "candidate_sha256": "86bfdf0b543dd73750472334859431f3d55d1ea3a675c9c0ba30f3233cf8826a"
+    },
+    {
+      "path": "skills/kaola-delegator/references/handoff.md",
+      "kind": "generated",
+      "base_sha256": "2eadec683e5ff82fa9407ef4ec1429adf784db9a00ab9ed19bd2a0324f923265",
+      "candidate_sha256": "9c6aa58ebab9c939370ddb30ea78c5b1914d159308d33f091fc84ccaf50fe247"
+    },
+    {
+      "path": "skills/kaola-delegator/references/host-platforms.md",
+      "kind": "generated",
+      "base_sha256": "7daa1d8229e9764a12e1dd6bff68343b229f99fa9171f3db517cc88c45f6f1dc",
+      "candidate_sha256": "03a8034fd30a8470a22f4725d9ab01d72310104e5db25deb33b6ce3b905eaf10"
+    },
+    {
+      "path": "skills/kaola-delegator/references/inquiry-report.md",
+      "kind": "generated",
+      "base_sha256": "54ce7d1031561b6f79c2cf8cc3ec7fadbd885b0f92166a757d5874b941444abc",
+      "candidate_sha256": "6b3e697ec5bdfd238e16120bd06e1ae2f921b14f67c89c0bd5121f9235df90e0"
+    },
+    {
+      "path": "skills/kaola-delegator/references/snapshot.md",
+      "kind": "generated",
+      "base_sha256": "d24ea7a7b3c6ad46ed1f9c4fb7195cd65f6596ab57f07a70a18ca04f40342817",
+      "candidate_sha256": "efdbc531a7999cd6928495c3597329434dec0a9fd71db6a7bbffa22c141480f6"
+    },
+    {
+      "path": "skills/kaola-project-runner/references/dispatch-collect.md",
+      "kind": "generated",
+      "base_sha256": "d73c0fb57bd3f0d27ab84020697c5976f59c934305cc6b2b3aad6a3b8b02882d",
+      "candidate_sha256": "1539a4e09539692768944d64fdb4d4124a52f865de33a8c5a8167ebe421ddb03"
+    },
+    {
+      "path": "skills/kaola-project-runner/references/duty-reconcile.md",
+      "kind": "generated",
+      "base_sha256": "0c9257570e7ddb072aaabf03449dcfe29cb1b19d80303c4553cda614284df178",
+      "candidate_sha256": "ab59435d13dcf29f462eeb7813a8d3248265aa48f2364c10acd3090d1c834c4d"
+    },
+    {
+      "path": "skills/kaola-project-runner/references/heartbeat-skeleton.md",
+      "kind": "generated",
+      "base_sha256": "095a0f37279530279e25961729d901b25084c768b6c4160fa55c7d5e0ab78d2e",
+      "candidate_sha256": "fe20a5c7eea60351f0109ff08773a87a9d8890d9de71548cc5e9e91f1a1080aa"
+    },
+    {
+      "path": "skills/kaola-project-runner/references/lifecycle-state.md",
+      "kind": "generated",
+      "base_sha256": "5cfff66ffb1b14830b7384571b04be6e50f1e1ddd2ab3d2914f72ad21c3d0275",
+      "candidate_sha256": "a9c2243b491cd5efe4772d0bb90a0a5065185bddb43ae6ae3261d42fa8eb90b9"
+    },
+    {
+      "path": "skills/kaola-project-runner/references/quota-packages.md",
+      "kind": "generated",
+      "base_sha256": "34ccde184f59fc6f9adb8d008fbb3fb2f8037d8d70480f7738cdab1b2417dbdd",
+      "candidate_sha256": "596201b74baabfd43984d8890750dd70bcef33f11ab5e6ecf95c0a644d4541b7"
+    },
+    {
+      "path": "skills/kaola-project-runner/references/sideagent-node.md",
+      "kind": "generated",
+      "base_sha256": "fc3e335e2e40f794ef452095cc1b253db6ab6d6ac82d1002b86523fab148d6db",
+      "candidate_sha256": "884fc413fdc01c5f094692b00109fb7ba824efe8236d760fb2a89b820a3f3eae"
+    },
+    {
+      "path": "skills/kaola-project-runner/references/worker-profiles.md",
+      "kind": "generated",
+      "base_sha256": "71024a8821e61d762dbe9ace6d5cc75b247d91346d997c5f2f970f83eb57bb67",
+      "candidate_sha256": "729a978d85443cd5f353e760f7107bbfc8f559889355ef40c60b4a31780fc628"
+    },
+    {
+      "path": "skills/kaola-project-runner/scripts/kaola-dispatch.py",
+      "kind": "generated",
+      "base_sha256": "0868fe1617fa24d1ba89f8ccc98d40f75ea66eacc42872a375107cfeae8e54d6",
+      "candidate_sha256": "2db85d7597f42d93b1d47a0f0f95216eef650b0b961ec07d866af14f633d7ae7"
+    },
+    {
+      "path": "skills/kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "base_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "ba2ce83f1aaadf028b4ed15efe66e8f5381726c4d1a59171bb78d594871bc9e8"
+    },
+    {
+      "path": "skills/kimi-cli-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "kind": "generated",
+      "base_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "d8cc9dc147f69db50dc5be5c7cf1f7efced677c19813155792a191aedb72f280"
+    },
+    {
+      "path": "skills/kimi-cli-kaola-project-runner/scripts/kaola-acp.py",
+      "kind": "generated",
+      "base_sha256": "385bc3f9cabac7cd6361f975828ca27a8b2957082a955bfe2c536e4ff6af5476",
+      "candidate_sha256": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+    },
+    {
+      "path": "skills/kimi-cli-kaola-project-runner/scripts/kaola-launchd-broker.py",
+      "kind": "generated",
+      "base_sha256": null,
+      "candidate_sha256": "63cc4efb2e03eac2766c4c06a69e073ffb6c836e22b3a91ca0e235bc2e73b6d4"
+    },
+    {
+      "path": "skills/kimi-cli-kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "base_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "ba2ce83f1aaadf028b4ed15efe66e8f5381726c4d1a59171bb78d594871bc9e8"
+    },
+    {
+      "path": "skills/kimi-cli-kaola-project-runner/scripts/kaola-tmux.sh",
+      "kind": "generated",
+      "base_sha256": "3054aa41f1e6a279da304cdca4f44d909c997c3df49ae5a5083c413119b9aa1d",
+      "candidate_sha256": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b"
+    },
+    {
+      "path": "skills/kimi-cli-kaola-project-runner/scripts/main-skill-build.json",
+      "kind": "generated",
+      "base_sha256": "209a2f61aef012304643aa82153af553e51830abe168ea8547753de3c54ab415",
+      "candidate_sha256": "86bfdf0b543dd73750472334859431f3d55d1ea3a675c9c0ba30f3233cf8826a"
+    },
+    {
+      "path": "skills/opencode-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "kind": "generated",
+      "base_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "d8cc9dc147f69db50dc5be5c7cf1f7efced677c19813155792a191aedb72f280"
+    },
+    {
+      "path": "skills/opencode-kaola-project-runner/scripts/kaola-acp.py",
+      "kind": "generated",
+      "base_sha256": "385bc3f9cabac7cd6361f975828ca27a8b2957082a955bfe2c536e4ff6af5476",
+      "candidate_sha256": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+    },
+    {
+      "path": "skills/opencode-kaola-project-runner/scripts/kaola-launchd-broker.py",
+      "kind": "generated",
+      "base_sha256": null,
+      "candidate_sha256": "63cc4efb2e03eac2766c4c06a69e073ffb6c836e22b3a91ca0e235bc2e73b6d4"
+    },
+    {
+      "path": "skills/opencode-kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "base_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "ba2ce83f1aaadf028b4ed15efe66e8f5381726c4d1a59171bb78d594871bc9e8"
+    },
+    {
+      "path": "skills/opencode-kaola-project-runner/scripts/kaola-tmux.sh",
+      "kind": "generated",
+      "base_sha256": "3054aa41f1e6a279da304cdca4f44d909c997c3df49ae5a5083c413119b9aa1d",
+      "candidate_sha256": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b"
+    },
+    {
+      "path": "skills/opencode-kaola-project-runner/scripts/main-skill-build.json",
+      "kind": "generated",
+      "base_sha256": "209a2f61aef012304643aa82153af553e51830abe168ea8547753de3c54ab415",
+      "candidate_sha256": "86bfdf0b543dd73750472334859431f3d55d1ea3a675c9c0ba30f3233cf8826a"
+    },
+    {
+      "path": "skills/zcode-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "kind": "generated",
+      "base_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "d8cc9dc147f69db50dc5be5c7cf1f7efced677c19813155792a191aedb72f280"
+    },
+    {
+      "path": "skills/zcode-kaola-project-runner/scripts/kaola-acp.py",
+      "kind": "generated",
+      "base_sha256": "385bc3f9cabac7cd6361f975828ca27a8b2957082a955bfe2c536e4ff6af5476",
+      "candidate_sha256": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+    },
+    {
+      "path": "skills/zcode-kaola-project-runner/scripts/kaola-launchd-broker.py",
+      "kind": "generated",
+      "base_sha256": null,
+      "candidate_sha256": "63cc4efb2e03eac2766c4c06a69e073ffb6c836e22b3a91ca0e235bc2e73b6d4"
+    },
+    {
+      "path": "skills/zcode-kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "base_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "ba2ce83f1aaadf028b4ed15efe66e8f5381726c4d1a59171bb78d594871bc9e8"
+    },
+    {
+      "path": "skills/zcode-kaola-project-runner/scripts/kaola-tmux.sh",
+      "kind": "generated",
+      "base_sha256": "3054aa41f1e6a279da304cdca4f44d909c997c3df49ae5a5083c413119b9aa1d",
+      "candidate_sha256": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b"
+    },
+    {
+      "path": "skills/zcode-kaola-project-runner/scripts/main-skill-build.json",
+      "kind": "generated",
+      "base_sha256": "209a2f61aef012304643aa82153af553e51830abe168ea8547753de3c54ab415",
+      "candidate_sha256": "86bfdf0b543dd73750472334859431f3d55d1ea3a675c9c0ba30f3233cf8826a"
+    },
+    {
+      "path": "templates/kaola-delegator/references/handoff.md.tmpl",
+      "kind": "authored",
+      "base_sha256": "ca5dbc92ace613145dacc6f6017f94fdf1cfd14064fd1f30353241a0446fdf60",
+      "candidate_sha256": "3bdd7293bbbe80ad9ec29edb8106e4234fd0ba9cdb32dbac0ffe1bc8dac6b0f6"
+    },
+    {
+      "path": "templates/kaola-delegator/references/host-platforms.md.tmpl",
+      "kind": "authored",
+      "base_sha256": "84d4fa05c639520918d5be56e04d4beebe0b009ed72e854b0be469dffe2b1e49",
+      "candidate_sha256": "dd00f20042aac63410534ee93cedd3ff0f92b61dc4a2d4b488108b605f0e8f87"
+    },
+    {
+      "path": "templates/kaola-delegator/references/inquiry-report.md",
+      "kind": "authored",
+      "base_sha256": "54ce7d1031561b6f79c2cf8cc3ec7fadbd885b0f92166a757d5874b941444abc",
+      "candidate_sha256": "6b3e697ec5bdfd238e16120bd06e1ae2f921b14f67c89c0bd5121f9235df90e0"
+    },
+    {
+      "path": "templates/kaola-delegator/references/snapshot.md",
+      "kind": "authored",
+      "base_sha256": "d24ea7a7b3c6ad46ed1f9c4fb7195cd65f6596ab57f07a70a18ca04f40342817",
+      "candidate_sha256": "efdbc531a7999cd6928495c3597329434dec0a9fd71db6a7bbffa22c141480f6"
+    },
+    {
+      "path": "templates/orchestrator/references/dispatch-collect.md",
+      "kind": "authored",
+      "base_sha256": "d73c0fb57bd3f0d27ab84020697c5976f59c934305cc6b2b3aad6a3b8b02882d",
+      "candidate_sha256": "1539a4e09539692768944d64fdb4d4124a52f865de33a8c5a8167ebe421ddb03"
+    },
+    {
+      "path": "templates/orchestrator/references/duty-reconcile.md",
+      "kind": "authored",
+      "base_sha256": "0c9257570e7ddb072aaabf03449dcfe29cb1b19d80303c4553cda614284df178",
+      "candidate_sha256": "ab59435d13dcf29f462eeb7813a8d3248265aa48f2364c10acd3090d1c834c4d"
+    },
+    {
+      "path": "templates/orchestrator/references/heartbeat-skeleton.txt",
+      "kind": "authored",
+      "base_sha256": "d01d9a432a1b99cd699d3f7215069e8317728fef3347a2cfca36e2cfb729c2fd",
+      "candidate_sha256": "2a6551bac4ffd53cf67e6a7ff858e98dad80d77ffaa4110acb79c34a07aa4612"
+    },
+    {
+      "path": "templates/orchestrator/references/lifecycle-state.md",
+      "kind": "authored",
+      "base_sha256": "5cfff66ffb1b14830b7384571b04be6e50f1e1ddd2ab3d2914f72ad21c3d0275",
+      "candidate_sha256": "a9c2243b491cd5efe4772d0bb90a0a5065185bddb43ae6ae3261d42fa8eb90b9"
+    },
+    {
+      "path": "templates/orchestrator/references/quota-packages.md",
+      "kind": "authored",
+      "base_sha256": "34ccde184f59fc6f9adb8d008fbb3fb2f8037d8d70480f7738cdab1b2417dbdd",
+      "candidate_sha256": "596201b74baabfd43984d8890750dd70bcef33f11ab5e6ecf95c0a644d4541b7"
+    },
+    {
+      "path": "templates/orchestrator/references/sideagent-node.md",
+      "kind": "authored",
+      "base_sha256": "fc3e335e2e40f794ef452095cc1b253db6ab6d6ac82d1002b86523fab148d6db",
+      "candidate_sha256": "884fc413fdc01c5f094692b00109fb7ba824efe8236d760fb2a89b820a3f3eae"
+    },
+    {
+      "path": "templates/orchestrator/references/worker-profiles.md.tmpl",
+      "kind": "authored",
+      "base_sha256": "8956a5245ad9a47fbe069bed59fa5a23d2c67c22cd20a9dfe9d8ab69f9353cf5",
+      "candidate_sha256": "516f94cbae33f676e2866b62d156361ace0940c40b9c29797aa7a91407f942d0"
+    },
+    {
+      "path": "tests/contract/test-acp-contract.py",
+      "kind": "authored",
+      "base_sha256": "d42ab9f6e9b73b097c6ca43526dfffd648215b84bd28059af4abd0f288b96f3b",
+      "candidate_sha256": "fd292ecf8cb9d51bbfd3511b8515cf5d0d27efa7d48fba05aa840e0da6cf6128"
+    },
+    {
+      "path": "tests/contract/test-issue-244-dispatch.py",
+      "kind": "authored",
+      "base_sha256": "b0eabd0a27fcc058eb99ff692407481a85b0e3952a31de4e5114530a22150cd5",
+      "candidate_sha256": "2cfaa6e407e401748e6206b6b2df045504ece47099d6ab6875505593ca85a61c"
+    },
+    {
+      "path": "tests/contract/test-issue-255-lifecycle-state.py",
+      "kind": "authored",
+      "base_sha256": "6bf8d7e558462c7e74c0ca28a62a0f95f13581c566d47eba5295a47e8f06d109",
+      "candidate_sha256": "a638c97f0ec99aa797e8df7bae4729a6d42f61d8850b55dd089a3b2bac106594"
+    },
+    {
+      "path": "tests/contract/test-issue-259-record-contract.py",
+      "kind": "authored",
+      "base_sha256": "1a85b372b4f4a344528871985a65efeb14f7c1e77ec5bbc535b999c673401393",
+      "candidate_sha256": "fe62d0a651040800fb18a344351aee119b9b160bc772c479442c6aaf452a49c7"
+    },
+    {
+      "path": "tests/contract/test-issue-264-compact-recovery.py",
+      "kind": "authored",
+      "base_sha256": "e9346da8652c8709c4eb4d0f117906ab57b133aa99352266189dc621884fab2e",
+      "candidate_sha256": "d2b6e6917a77921f621cbdfdcd50b3b3568c4018659ec5d8840eef1bea8a879a"
+    },
+    {
+      "path": "tests/contract/test-issue-266-launch-broker-composed.py",
+      "kind": "authored",
+      "base_sha256": null,
+      "candidate_sha256": "7044000052f47581cdf6aea52de52a948dfbbf890be4c7bb5006e6d2bbded249"
+    },
+    {
+      "path": "tests/contract/test-issue-266-launch-broker.py",
+      "kind": "authored",
+      "base_sha256": null,
+      "candidate_sha256": "5c3b55150e2aebbb0abd8e3ee5741dd3e11567272d936669d31a9f7c15dbc3cc"
+    },
+    {
+      "path": "tests/contract/test-progressive-disclosure.py",
+      "kind": "authored",
+      "base_sha256": "cb68c379167f12fa9bcd57000cec9654ef21d4df2766b75c5923802d80725576",
+      "candidate_sha256": "2baab07545542f8203938edd8b4f997a5303c00ca28d076d751e24c716778e41"
+    },
+    {
+      "path": "tests/contract/test-project-compact-notice.py",
+      "kind": "authored",
+      "base_sha256": "0a4820e7dc4c375a4f4d5b9116ca0a9f4e8337f431625fe0816129edeed43b07",
+      "candidate_sha256": "9f64dad5d7f6f7e8111970e3e7b8f426b83b92b4fbdb38de45f92e1e4e0bdc42"
+    }
+  ],
+  "authored_count": 35,
+  "generated_count": 78,
+  "patch": {
+    "path": "/tmp/kpr-i259-host-compact-implementation.patch",
+    "sha256": "2646ff5e748d798a01e26a165760ab0d3f28b1041cdece89291d1975f8834392",
+    "bytes": 2126755
+  },
+  "authored_patch": {
+    "path": "/tmp/kpr-i259-host-compact-implementation-authored.patch",
+    "sha256": "55d4b393c3553b532cd2052ae18402cf9e0045f4237422f6ce02ddf0ac005f84"
+  },
+  "checks": [
+    {
+      "candidate": "2d7dbb1536af5dd0ab1c33fae62d3e51df425823",
+      "scope": "named source/tool/fixture check; no native model proof",
+      "argv": [
+        "python3",
+        "tests/contract/test-issue-244-dispatch.py",
+        "DispatchEntry.test_shared_droid_pool_admits_two_items_and_refuses_a_third",
+        "DispatchEntry.test_one_live_droid_uses_one_slot_of_the_shared_pool",
+        "DispatchEntry.test_a_held_seat_still_meets_the_global_cap_and_shared_seat",
+        "DispatchEntry.test_skeleton_example_sets_effective_cap",
+        "DispatchEntry.test_write_overlap_is_a_conflict_and_pool_ignores_the_seat_cap"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "seconds": 2.442144,
+      "output": "/tmp/kpr-i259-963-admission.txt",
+      "output_sha256": "6274f1ab673cc574756ea98e02f7a0d81c375999cc246a2ff677896834e2bca6",
+      "clean": true,
+      "receipt": "/tmp/kpr-i259-963-admission.json",
+      "receipt_sha256": "6fe2d181fe3133218e28755f0d0c6ce15a08d372f9688e0daffdb4bdf4543fda"
+    },
+    {
+      "candidate": "2d7dbb1536af5dd0ab1c33fae62d3e51df425823",
+      "scope": "named source/tool/fixture check; no native model proof",
+      "argv": [
+        "python3",
+        "tests/contract/test-issue-255-lifecycle-state.py",
+        "MaintenanceCheckpoint.test_two_consecutive_nodes_account_for_their_fixed_inputs",
+        "MaintenanceCheckpoint.test_a_checkpoint_needs_the_nodes_own_identity_and_a_valid_range",
+        "MaintenanceCheckpoint.test_recovery_checkpoint_binds_sent_input_batch_and_holder_keeps_newer"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "seconds": 1.44308,
+      "output": "/tmp/kpr-i259-963-checkpoint.txt",
+      "output_sha256": "28d19413a8f1a0120a02ee21a7e775b589cd4d20b4949a33931f59ba4b9a22c1",
+      "clean": true,
+      "receipt": "/tmp/kpr-i259-963-checkpoint.json",
+      "receipt_sha256": "97e01810bf88c6a07e90d1bd1055cb89a79c7673e6a5b7efe0e3e80ef800442c"
+    },
+    {
+      "candidate": "2989c8cfe61db1f98902fa7759d2fbb55e382fcc",
+      "argv": [
+        "/Users/ylmacstudio/.local/share/bash-5.3.20/bin/bash",
+        "./scripts/validate.sh",
+        "--suite",
+        "test-generated-skills.py"
+      ],
+      "exit": 0,
+      "seconds": 2.998449,
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "output_sha256": "4a22ca617f1baf0a78f7cbdbd4faf9413dcd34e710128a8d3819f3a2bf650cb6",
+      "clean": true,
+      "receipt": "/tmp/kpr-i259-963-final-generated.json",
+      "receipt_sha256": "7d8cca56a91c198a56e7be5a5cb10516321b4c60809bae67e5116b3076e4c62a"
+    },
+    {
+      "candidate": "2d7dbb1536af5dd0ab1c33fae62d3e51df425823",
+      "scope": "named source/tool/fixture check; no native model proof",
+      "argv": [
+        "python3",
+        "tests/contract/test-progressive-disclosure.py",
+        "BoundedAcpObserveAndStatus.test_observe_and_status_over_budget_summarise_structures_by_size_and_sha256"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "seconds": 2.87002,
+      "output": "/tmp/kpr-i259-963-receipt-boundary.txt",
+      "output_sha256": "14fbf2bbe6c248534fe94688c99992fc0372399d6725be2377253eb5a458abd1",
+      "clean": true,
+      "receipt": "/tmp/kpr-i259-963-receipt-boundary.json",
+      "receipt_sha256": "feb92cebba8d0cd976e9db9ef3642bbe88ff0dd8057be7e1f7fded4042171fea"
+    },
+    {
+      "candidate": "2d7dbb1536af5dd0ab1c33fae62d3e51df425823",
+      "scope": "named source/tool/fixture check; no native model proof",
+      "argv": [
+        "python3",
+        "tests/contract/test-issue-259-record-contract.py",
+        "RecordContract.test_grant_counts_admit_six_without_aggregate_and_refuse_each_excess",
+        "RecordContract.test_group_authority_propagates_switch_exclusions_catalog_and_current_duties",
+        "RecordContract.test_legacy_capacity_and_group_conflicts_stay_actionable_migration_repeats",
+        "RecordContract.test_delegator_group_pause_expiry_and_resolved_relay_preserve_current_duties",
+        "RecordContract.test_current_exception_resolution_repeated_cli_views_and_newer_recovery",
+        "RecordContract.test_refusal_names_current_clear_and_absent_terminal_is_not_created",
+        "RecordContract.test_terminal_migration_repeats_preserve_pending_adoption_and_grants",
+        "RecordContract.test_ended_eligibility_leaves_grants_without_restoring_pool_or_losing_work",
+        "RecordContract.test_delegator_seat_summary_groups_live_task_states_cap_and_no_host_cycle",
+        "RecordContract.test_delegator_missing_expert_and_unknown_sources_do_not_imply_free_seats",
+        "RecordContract.test_catalog_class_definitions_are_derived_without_stored_copies",
+        "RecordContract.test_shared_seat_group_keeps_grant_count_two",
+        "RecordContract.test_delegator_ceiling_narrows_new_dispatch_and_keeps_a_live_row",
+        "RecordContract.test_ceiling_respects_live_pool_group_count_and_owner_limits",
+        "RecordContract.test_delegator_authorization_shapes_agree_and_refuse_without_writes",
+        "RecordContract.test_bad_grant_keeps_inflight_duty_and_unrelated_dispatch",
+        "RecordContract.test_capability_summary_closure_refuses_writes_and_keeps_legacy_duties",
+        "RecordContract.test_capability_keeps_worker_pool_presets_from_catalog_and_grants",
+        "RecordContract.test_v090_execute_reads_the_new_file_both_ways",
+        "RecordContract.test_shared_skeleton_uses_owner_count_without_a_project_grant"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "seconds": 11.307936,
+      "output": "/tmp/kpr-i259-963-records.txt",
+      "output_sha256": "49f7427aae7e632b5fa1006a9154c5745600c73ddb6edbae52a260be7a45cea6",
+      "clean": true,
+      "receipt": "/tmp/kpr-i259-963-records.json",
+      "receipt_sha256": "3f20e9a6109c737a99e69f161b680045928504ec91e2c0944822ed72c3d90660"
+    }
+  ],
+  "preserved_from_13f": {
+    "scripts/kaola-acp-holder.py": {
+      "sha256": "d8cc9dc147f69db50dc5be5c7cf1f7efced677c19813155792a191aedb72f280",
+      "equal_13f": true
+    },
+    "scripts/kaola-dsh-acp.py": {
+      "sha256": "b1879fca1791845608ce00fa162c122f0729cdb105516d0d4f27dbe69c506e6a",
+      "equal_13f": true
+    },
+    "scripts/kaola-dsh-steer.mjs": {
+      "sha256": "f19a3beea03899dfae883ef84de5ede36e0503ed7be9df8b2f5d9de4f9b82da2",
+      "equal_13f": true
+    },
+    "scripts/kaola-compact-recovery.py": {
+      "sha256": "c45662a4297047bd860a46157e950b4aac460b3e9df1a889abe99ca687e90f27",
+      "equal_13f": true
+    },
+    "scripts/kaola-codex-compact-hook.py": {
+      "sha256": "c21e463e5b2bc69609347b220124197c4719b3607525e5a518b3e13318462682",
+      "equal_13f": true
+    },
+    "templates/budgets.json": {
+      "sha256": "47faf099081f0740b6ae9ec27740331ae111180c5ec6d96758cc351168aeec11",
+      "equal_13f": true
+    },
+    "templates/orchestrator/SKILL.md.tmpl": {
+      "sha256": "9db1b2e344de3e38ac955704441d270ffa9ca2ac31fc32d325394c902971bcef",
+      "equal_13f": true
+    },
+    "templates/orchestrator/references/qa-evidence.md": {
+      "sha256": "6793efce6a91c9348188c277c801fdabb068c0c9189fe586b0543a6e45dd9c0b",
+      "equal_13f": true
+    },
+    "templates/kaola-delegator/references/snapshot.md": {
+      "sha256": "efdbc531a7999cd6928495c3597329434dec0a9fd71db6a7bbffa22c141480f6",
+      "equal_13f": true
+    }
+  },
+  "frozen_golden_unchanged": true,
+  "other_five_owner_requirements_unchanged": true,
+  "validate_change": "only two266 named suite inventory entries; subset selection/prerequisite repair unchanged",
+  "266_exact_handoff_files": {
+    "scripts/kaola-launchd-broker.py": {
+      "sha256": "63cc4efb2e03eac2766c4c06a69e073ffb6c836e22b3a91ca0e235bc2e73b6d4",
+      "equal_handoff": true
+    },
+    "tests/contract/test-issue-266-launch-broker.py": {
+      "sha256": "5c3b55150e2aebbb0abd8e3ee5741dd3e11567272d936669d31a9f7c15dbc3cc",
+      "equal_handoff": true
+    },
+    "tests/contract/test-issue-266-launch-broker-composed.py": {
+      "sha256": "7044000052f47581cdf6aea52de52a948dfbbf890be4c7bb5006e6d2bbded249",
+      "equal_handoff": true
+    }
+  },
+  "reference_bindings": [
+    {
+      "path": "/tmp/kpr-i259-955-owner-minimal-current-section.md",
+      "sha256": "d0b54031976166b5ca11dd346defe32402fee0fb96936954a68e2ddb02e7b1ff"
+    },
+    {
+      "path": "/tmp/kpr-i259-955-owner-minimal-current-issue.json",
+      "sha256": "1c10bb2dd50f0fc4b4d043d00c264a06abc62ef536ec647bcd324f2e7c7f4b75"
+    },
+    {
+      "path": "/tmp/kpr-951-owner-elite-cap-adoption.md",
+      "sha256": "c72258db8b8b25ed9310fb3cd1de6e4f81059dbc048226ec5a4c9ad5ae01cff0"
+    },
+    {
+      "path": "/tmp/kpr-i259-951-owner-seat-count-section.md",
+      "sha256": "cdd6a64ffa9e61f57f4f7dd642aad2bba6faf1b025c4589c678826a3dfda8e34"
+    },
+    {
+      "path": "/tmp/kpr-i266-963-host-review.md",
+      "sha256": "12eaa82f11e6c259e94f4805b1fac470f7d5261361d1ea8565d0b8e7afb8c30d"
+    },
+    {
+      "path": "/tmp/kpr-i266-963-source-verification.json",
+      "sha256": "897cfd638ad6c7e45ec22377a0471d74370b2899f3b8403ad1d0f4d81f589947"
+    },
+    {
+      "path": "/tmp/kpr-i266-grok-bot-entry-delivery-20261006.md",
+      "sha256": "ca1fb372870c9b7d561cce7f2f4b1fa538a08af0f28b494b7347d6389e892570"
+    },
+    {
+      "path": "/tmp/kpr-i266-963-original-final.txt",
+      "sha256": "74ef6fae14acdadf9aa6b5d9149cfb6e2d48b25d554f084079a900c4c305a6c7"
+    },
+    {
+      "path": "/tmp/kpr-i264-929-host-review.md",
+      "sha256": "91e1992ea0d16543dd490be83c21660895f0c2b5d150a39a3d9571d71b425700"
+    },
+    {
+      "path": "/tmp/kpr-i264-native-boundary-limitations-20261006.md",
+      "sha256": "b1ad26fcce1ab4819917a052273a1d2fdf62b121ac23a4d5bf02afa83ec1c272"
+    },
+    {
+      "path": "/tmp/kpr-i264-929-host-proof-verification.json",
+      "sha256": "9e753ea0d7680d9b81809ff3753dd69b6cdca1323adc504eb901cd9f7d8d4c31"
+    },
+    {
+      "path": "/tmp/kpr-i259-945-host-review.md",
+      "sha256": "f5e95efc3122d09bffe7131c30503273c691910298e3e285bf178cb981d3d61d"
+    },
+    {
+      "path": "/tmp/kpr-i259-945-source-seat-correlation.json",
+      "sha256": "03de66fbacdfd1164426c7f21d88dde3971fd682b4cda271680c7075e7610ad9"
+    },
+    {
+      "path": "/tmp/kpr-i259-963-final-disposable-upgrade/receipt.json",
+      "sha256": "f51953b2ae5a87cc6a47a74ca8498b8d6442584c809eed1ba5a425cc74b80bf6"
+    },
+    {
+      "path": "/tmp/kpr-i259-963-final-disposable-upgrade/trace.json",
+      "sha256": "a2f3f1d1807601815479dcbaaac82179eda2616dc4d80420c941e607d0115d01"
+    },
+    {
+      "path": "/tmp/kpr-i259-266-integrated-child-record.json",
+      "sha256": "560b3f5b312a4c58cbb61abd17bd307704ae51d77582ae5bf7dbe6e0dc95065a"
+    },
+    {
+      "path": "/tmp/kpr-i259-266-integrated-config-refusal.json",
+      "sha256": "f9506a26fa03ba0688ac086f1048aef67d2477090a28f50173d54e2f3ae7c81f"
+    },
+    {
+      "path": "/tmp/kpr-i259-963-intermediate-findings.md",
+      "sha256": "5f327351da561cf8307e4306d951498989ddf47d0b29c6737d2e3ad28653e33b"
+    },
+    {
+      "path": "/tmp/kpr-i259-963-final-checks.py",
+      "sha256": "5dc4a4deba2b62e466b087414b8b1c786c8b8351fe61425e75dbdd0f8e09b6dc"
+    },
+    {
+      "path": "/tmp/kpr-i259-963-disposable-upgrade.py",
+      "sha256": "2d3ab1a30f6ea67705cfd7e8a1e3b879fcf52539cc49ce4dce06f0d0fffe8c5d"
+    },
+    {
+      "path": "/tmp/kpr-i259-963-disposable-upgrade-finish.py",
+      "sha256": "3dbb74c1046b9ae4b56f8653b80eacd668748f7162cbe243935e46cb46919a4b"
+    },
+    {
+      "path": "/tmp/kpr-i259-963-final-disposable-upgrade.py",
+      "sha256": "cada54b1817f9448c5db0de16d9e8cd2dd3e0906faeb9b9baf70e803ffa70566"
+    },
+    {
+      "path": "/tmp/kpr-i259-963-current-source-correlation.json",
+      "sha256": "86504816d3cf409d6f28338b5a34a5146c55db04596cbe1af6af91451669d05e"
+    },
+    {
+      "path": "/tmp/kpr-i259-963-legacy-fixture-after.txt",
+      "sha256": "58aba001879c0f5f31c7a779524e21e033cc3a004e5c3d27b02b6cf171710e00"
+    },
+    {
+      "path": "/tmp/kpr-i259-963-owner-source-migration.txt",
+      "sha256": "802a4fdee95af2adbc684d7f10d916ea325d9b8fedf7d219f43c62c849075d92"
+    },
+    {
+      "path": "/tmp/kpr-i266-entry/launch-broker-custody-probes.json",
+      "sha256": "40eb9951a90165104462879414e42f574202468dbc26a2112d66831c0826fc86"
+    },
+    {
+      "path": "/tmp/kpr-i266-entry/launch-broker-custody-composed.json",
+      "sha256": "928cd6e8a90ee7bce87b6045d88ebd718f26967e73b42f6da2ce8b78fa11f4cb"
+    },
+    {
+      "path": "/tmp/kpr-i259-963-write-current-pack.py",
+      "sha256": "86e5b9d27e76f84ef6b920a1c50e120f7f74bc5e65cab2a413f4f9b56729cd45"
+    },
+    {
+      "path": "/tmp/kpr-i259-963-final-fixture-repair.json",
+      "sha256": "2bfbd4ca668bffc31e3ef0c03a26a455b6bd6355b92277e15463937d97e5315d"
+    },
+    {
+      "path": "/tmp/kpr-i259-945-constructed-prompts-20261006/receipt.json",
+      "sha256": "98d3a3703eb43e8997fde886bd7e3e0e09933b8e870534d4e047464deb43efd0"
+    },
+    {
+      "path": "/tmp/kpr-i259-963-prepared-live-step.md",
+      "sha256": "f047f268c839a43b125304ea550ab2db73887e41c54204966c9554438d781e85"
+    },
+    {
+      "path": "/tmp/kpr-i259-862-compact-implementation-admission.json",
+      "sha256": "a4cdc4c9fd1373d8a089329ab124e9d16876a9de50c129e7bc8a6bd15a43838b"
+    },
+    {
+      "path": "/tmp/kpr-i259-929-status.json",
+      "sha256": "7dc0854f67d035d54fac490ba71ffb5190ae5fe925bf395634b742152ed375dc"
+    }
+  ],
+  "changed_tests": {
+    "tests/contract/test-issue-244-dispatch.py": {
+      "changed_or_removed": [
+        "test_shared_droid_pool_admits_two_items_and_refuses_a_third",
+        "test_one_live_droid_uses_one_slot_of_the_shared_pool",
+        "test_write_overlap_is_a_conflict_and_pool_ignores_the_seat_cap",
+        "test_grant_state_cap_and_owner_precedence",
+        "test_host_class_row_is_not_a_worker_seat",
+        "test_a_held_seat_still_meets_the_global_cap_and_shared_seat",
+        "test_skeleton_example_sets_effective_cap",
+        "test_heartbeat_envelope_feeds_project_and_execute",
+        "test_live_rows_use_status_selection_not_platform_class",
+        "test_admitted_assignment_keeps_its_index_at_an_occupied_cap",
+        "test_blocked_row_keeps_prior_binding",
+        "test_worker_fan_out_ignores_a_full_elite_cap_and_expert_count_still_binds",
+        "test_first_publish_does_not_stamp_missing_before_the_executor"
+      ],
+      "added": []
+    },
+    "tests/contract/test-issue-255-lifecycle-state.py": {
+      "changed_or_removed": [
+        "test_section_sources_and_resolved_unknowns_are_kept",
+        "test_sections_need_revision_and_host_ownership",
+        "test_plan_then_write_preserves_duties_and_lists_unknowns"
+      ],
+      "added": []
+    },
+    "tests/contract/test-issue-259-record-contract.py": {
+      "changed_or_removed": [
+        "test_ended_eligibility_leaves_grants_without_restoring_pool_or_losing_work",
+        "test_delegator_seat_summary_groups_live_task_states_cap_and_no_host_cycle",
+        "test_stored_class_sentences_stay_and_capability_is_separate",
+        "test_shared_seat_group_keeps_grant_count_two",
+        "test_stage_warning_clears_only_on_a_sourced_stage",
+        "test_v090_execute_reads_the_new_file_both_ways",
+        "test_delegator_ceiling_narrows_new_dispatch_and_keeps_a_live_row",
+        "test_ceiling_respects_live_pool_group_count_and_owner_limits",
+        "test_delegator_authorization_shapes_agree_and_refuse_without_writes",
+        "test_bad_grant_keeps_inflight_duty_and_unrelated_dispatch",
+        "test_watch_alias_text_stays_blocked_when_status_is_added",
+        "test_capability_summary_closure_refuses_writes_and_keeps_legacy_duties",
+        "test_shared_skeleton_uses_owner_count_without_a_project_grant",
+        "test_capability_keeps_worker_pool_presets_and_stored_classes",
+        "test_an_oversized_migrated_record_still_accepts_an_owner_stop",
+        "test_start_send_observe_stop_injects_the_projected_view"
+      ],
+      "added": [
+        "test_grant_counts_admit_six_without_aggregate_and_refuse_each_excess",
+        "test_group_authority_propagates_switch_exclusions_catalog_and_current_duties",
+        "test_legacy_capacity_and_group_conflicts_stay_actionable_migration_repeats",
+        "test_delegator_group_pause_expiry_and_resolved_relay_preserve_current_duties",
+        "test_catalog_class_definitions_are_derived_without_stored_copies",
+        "test_capability_keeps_worker_pool_presets_from_catalog_and_grants"
+      ]
+    },
+    "tests/contract/test-progressive-disclosure.py": {
+      "changed_or_removed": [],
+      "added": []
+    }
+  },
+  "rendered_reference_sizes": {
+    "skills/kaola-delegator/references/inquiry-report.md": 7302,
+    "skills/kaola-delegator/references/host-platforms.md": 8141,
+    "skills/kaola-delegator/references/handoff.md": 8176,
+    "skills/kaola-project-runner/references/dispatch-collect.md": 8185,
+    "skills/kaola-project-runner/references/worker-profiles.md": 8172
+  },
+  "native_boundary": "No new native model proof. Exact unchanged055/DSH native receipts remain scoped to their actual candidates. Seven current composed266 checks are model-free real entry/manager evidence, not all-runtime native proof.",
+  "final_acceptance": "Host-owned affected Opus+outer verdict and lifecycle pending",
+  "reuse_at_final": "Four source groups at2d7 remain valid on unchanged routes. 781 adds overlapping-group refusal, covered by the current copied legacy negative. Final2989 adds first-write removal of an empty legacy retirement collection and updates four affected fixtures. The copied-tool25-call migration/view trace, four named fixture outcomes and generated lane cover changed bytes. No whole-suite/native repeat.",
+  "current_six_answers": {
+    "path": "/tmp/kpr-i259-six-requirement-answers-20261006.md",
+    "sha256": "54c030dd7bb0c40b53d2a2252ed671003ff01e0623f8f8002e5ec0b04ba0501a",
+    "body_sha256": "faa92487631443fd95e9c99d4691b8808d07793012a4ceea27ca64aed51e2dff"
+  }
+}

@@ -1,0 +1,257 @@
+{
+  "correlation_only": true,
+  "coverage": {
+    "failed": [],
+    "in-flight": [],
+    "not-run": [],
+    "returned": [],
+    "unknown": [
+      "i260-transport",
+      "i261-shared-capacity"
+    ]
+  },
+  "dispatcher": {
+    "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+    "platform": "codex",
+    "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+    "session": "codex-KPR-orchestrator-main"
+  },
+  "effective_cap": 4,
+  "index_path": "/tmp/kpr-1000-retirement-correlation/6.json",
+  "items": [
+    {
+      "acceptance": "pending",
+      "dispatch_event_cursor": 6,
+      "dispatcher": {
+        "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "evidence": {
+        "collect_status": {
+          "acp_session_id": "01a10b4c-479e-7ca3-a411-52766b4ef1b2",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "45e1a4d999dac61bde40cb6dac1bb06e",
+          "mutation_status": "completed",
+          "outcome": "stopped",
+          "prompt_fingerprint": "sha256:66d50299f7beb4fbdbffbf7bfbf17114ab235e59a1907aacadb8d89005149ba0",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "send": {
+          "acp_session_id": "01a10b4c-479e-7ca3-a411-52766b4ef1b2",
+          "dispatch_event_cursor": 6,
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": "in_progress",
+          "outcome": "in_progress",
+          "prompt_fingerprint": "sha256:7964137013cfe99903743986f13e8f4187928db94bdbf9e2802d476beecd565a",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "start": {
+          "acp_session_id": "01a10b4c-479e-7ca3-a411-52766b4ef1b2",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "45e1a4d999dac61bde40cb6dac1bb06e",
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "status": {
+          "acp_session_id": null,
+          "dispatch_event_cursor": null,
+          "error_code": "no-session",
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        }
+      },
+      "holder_instance_id": "45e1a4d999dac61bde40cb6dac1bb06e",
+      "item_id": "i260-transport",
+      "notify_target": {
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "output": "/tmp/kpr-i260-transport-delivery.md",
+      "platform": "codex",
+      "preset": "codex/default",
+      "prompt_fingerprint": "sha256:66d50299f7beb4fbdbffbf7bfbf17114ab235e59a1907aacadb8d89005149ba0",
+      "prompt_sha256": "sha256:7964137013cfe99903743986f13e8f4187928db94bdbf9e2802d476beecd565a",
+      "prompt_source": {
+        "kind": "full",
+        "prompt_sha256": "sha256:7964137013cfe99903743986f13e8f4187928db94bdbf9e2802d476beecd565a"
+      },
+      "reason": "fingerprint-differs",
+      "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+      "selection": {
+        "advertised": {
+          "effort": "high",
+          "model_id": "gpt-6.1-sol"
+        },
+        "advertised_source": "effective_selection",
+        "applied": {
+          "effort": "high",
+          "model_id": "gpt-6.1-sol"
+        },
+        "applied_state": {
+          "effort": "applied",
+          "model_id": "applied"
+        },
+        "comparison": "match",
+        "fields": {
+          "effort": {
+            "advertised": "match",
+            "applied": "match"
+          },
+          "model_id": {
+            "advertised": "match",
+            "applied": "match"
+          }
+        },
+        "requested": {
+          "effort": "high",
+          "model_id": "gpt-6.1-sol",
+          "preset": "codex/default",
+          "tier": "default"
+        },
+        "source": "config_application"
+      },
+      "session": "codex-KPR-i260-transport",
+      "status": "unknown",
+      "task_id": "i260-local"
+    },
+    {
+      "acceptance": "pending",
+      "dispatch_event_cursor": 6,
+      "dispatcher": {
+        "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "evidence": {
+        "collect_status": {
+          "acp_session_id": "01a10b4c-4893-79f0-bd7b-79f1373f143d",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "b29296cf47053469f8115f2e1a4deee1",
+          "mutation_status": "completed",
+          "outcome": "stopped",
+          "prompt_fingerprint": "sha256:081b9dffa75d9705c83175dc4b7618d7377dbf53d7e18a92cf9ebdf7ebcb1bc2",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "send": {
+          "acp_session_id": "01a10b4c-4893-79f0-bd7b-79f1373f143d",
+          "dispatch_event_cursor": 6,
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": "in_progress",
+          "outcome": "in_progress",
+          "prompt_fingerprint": "sha256:cbbb1144da8b72e77a4074f337d861d1244e3b7e75614131cd518eae07a788f9",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "start": {
+          "acp_session_id": "01a10b4c-4893-79f0-bd7b-79f1373f143d",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "b29296cf47053469f8115f2e1a4deee1",
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "status": {
+          "acp_session_id": null,
+          "dispatch_event_cursor": null,
+          "error_code": "no-session",
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        }
+      },
+      "holder_instance_id": "b29296cf47053469f8115f2e1a4deee1",
+      "item_id": "i261-shared-capacity",
+      "notify_target": {
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "output": "/tmp/kpr-i261-shared-delivery.md",
+      "platform": "codex",
+      "preset": "codex/luna",
+      "prompt_fingerprint": "sha256:081b9dffa75d9705c83175dc4b7618d7377dbf53d7e18a92cf9ebdf7ebcb1bc2",
+      "prompt_sha256": "sha256:cbbb1144da8b72e77a4074f337d861d1244e3b7e75614131cd518eae07a788f9",
+      "prompt_source": {
+        "kind": "full",
+        "prompt_sha256": "sha256:cbbb1144da8b72e77a4074f337d861d1244e3b7e75614131cd518eae07a788f9"
+      },
+      "reason": "fingerprint-differs",
+      "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+      "selection": {
+        "advertised": {
+          "effort": "max",
+          "model_id": "gpt-6-luna"
+        },
+        "advertised_source": "effective_selection",
+        "applied": {
+          "effort": "max",
+          "model_id": "gpt-6-luna"
+        },
+        "applied_state": {
+          "effort": "applied",
+          "model_id": "applied"
+        },
+        "comparison": "match",
+        "fields": {
+          "effort": {
+            "advertised": "match",
+            "applied": "match"
+          },
+          "model_id": {
+            "advertised": "match",
+            "applied": "match"
+          }
+        },
+        "requested": {
+          "effort": "max",
+          "model_id": "gpt-6-luna",
+          "preset": "codex/luna",
+          "tier": "luna"
+        },
+        "source": "config_application"
+      },
+      "session": "codex-KPR-i261-shared-capacity",
+      "status": "unknown",
+      "task_id": "i261-shared-capacity"
+    }
+  ],
+  "occupancy": "known",
+  "phase": "collection",
+  "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+  "schema": "kaola-dispatch-index/1",
+  "scope": "implementation",
+  "task_links": {
+    "index": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/dispatch-index.json",
+    "linked": {
+      "i260-local": [
+        "i260-transport"
+      ],
+      "i261-shared-capacity": [
+        "i261-shared-capacity"
+      ]
+    }
+  }
+}

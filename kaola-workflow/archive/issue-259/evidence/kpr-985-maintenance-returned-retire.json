@@ -1,0 +1,17 @@
+{
+  "body_bytes": 29897,
+  "file_bytes": 83588,
+  "file_limit": 1048576,
+  "host_revision": 736,
+  "previous_revision": 984,
+  "result": "written",
+  "revision": 985,
+  "value": {
+    "at": "2026-10-06T06:32:06.645562+00:00",
+    "host_revision": 736,
+    "id": "maintenance-returned",
+    "kind": "alerts",
+    "outcome": "resolved",
+    "writer_holder": "e4d8aaf7b644cdf422605c04bb297b1c"
+  }
+}

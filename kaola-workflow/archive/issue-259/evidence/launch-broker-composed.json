@@ -1,0 +1,414 @@
+{
+  "checks": 22,
+  "evidence": [
+    {
+      "check": "the composed source exposes stop_started_holder",
+      "ok": true
+    },
+    {
+      "check": "stop_started_holder(proc=None) returns honest facts without an exception",
+      "ok": true,
+      "result": {
+        "holder_alive": false,
+        "holder_identity": {
+          "holder_pid": 4242
+        },
+        "holder_instance_matches": null,
+        "host_session_stopped": true,
+        "residual_pids": []
+      }
+    },
+    {
+      "check": "the normal Host entry starts ready through the outside launcher",
+      "ok": true,
+      "receipt": {
+        "holder_instance_id": "bb09237d13b309dc4990ebc52a8f8363",
+        "holder_pid": 38492,
+        "state": "ready"
+      }
+    },
+    {
+      "check": "the Host holder is re-parented to the service manager",
+      "host_pid": 38492,
+      "ok": true
+    },
+    {
+      "check": "the Host session records the Host role",
+      "ok": true,
+      "role": "host"
+    },
+    {
+      "check": "the normal Host entry records the outside backend",
+      "ok": true,
+      "selection": {
+        "effort": null,
+        "fast": "off",
+        "launch_backend": "auto",
+        "mode": "bypassPermissions",
+        "model": null,
+        "session_role": "host",
+        "tier": null
+      }
+    },
+    {
+      "check": "the Host holder exports KAOLA_LAUNCH_BACKEND for its seats",
+      "ok": true
+    },
+    {
+      "check": "the dispatched Worker starts ready outside the caller",
+      "ok": true,
+      "receipt": {
+        "holder_instance_id": "f7b92fe130e4025f3aa44cff9957e2e8",
+        "holder_pid": 38537,
+        "state": "ready"
+      }
+    },
+    {
+      "check": "the Worker uses the shared normal path and is re-parented",
+      "ok": true,
+      "worker_pid": 38537
+    },
+    {
+      "check": "the Worker records the outside backend with no flag",
+      "ok": true,
+      "selection": {
+        "effort": null,
+        "fast": "off",
+        "launch_backend": "auto",
+        "mode": "bypassPermissions",
+        "model": null,
+        "session_role": "elite",
+        "tier": null
+      }
+    },
+    {
+      "check": "the Worker is recorded in the Host's child record (dispatcher ownership)",
+      "child_record": [
+        {
+          "pgid": 38537,
+          "pid": 38537,
+          "spawned_at": 1791261983957
+        }
+      ],
+      "ok": true
+    },
+    {
+      "check": "the Worker survives a job unload",
+      "ok": true
+    },
+    {
+      "check": "the Host stop leaves no residual",
+      "ok": true,
+      "stop": {
+        "residual_pids": [],
+        "stopped": true
+      }
+    },
+    {
+      "check": "the preserved Worker still runs after the Host stop",
+      "ok": true
+    },
+    {
+      "check": "the later exact Worker stop leaves no residual",
+      "ok": true,
+      "stop": {
+        "residual_pids": [],
+        "stopped": true
+      }
+    },
+    {
+      "check": "a required child-record write failure refuses through the real entry",
+      "ok": true,
+      "receipt": {
+        "bridge": {
+          "layout": "checkout",
+          "path": "/private/tmp/kpr-i266-composed/vendor/claude-code-acp/dist/index.js",
+          "present": true,
+          "relative": "vendor/claude-code-acp/dist/index.js",
+          "sha256": "2135ad71793902a3a5e91118ddf6d7c8ef46477e3db051fc834de1be0d9efd51",
+          "upstream_pin": "6c20f2802e390c80b0542247c6b9738e11efdc11",
+          "verified_versions": "cli=2.1.280;bridge=6c20f28;protocol=1"
+        },
+        "dispatcher": null,
+        "error": {
+          "code": "child-record-failed",
+          "message": "[Errno 21] Is a directory: '/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/k266comp.hb0mnrdy/child-dir'"
+        },
+        "git": {
+          "branch": null,
+          "dirty": false
+        },
+        "heartbeat_host_requested": null,
+        "heartbeat_host_source": "none",
+        "mutation_performed": false,
+        "mutation_status": "not_started",
+        "platform": "claude-code",
+        "repo": "/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/k266comp.hb0mnrdy/repo",
+        "runtime_binary": {
+          "absolute": true,
+          "env": "CLAUDE_BIN",
+          "passed_as": "CLAUDE_ACP_CLAUDE_BIN",
+          "path": "/private/tmp/kpr-i266-composed/tests/contract/fake-claude.py",
+          "present": true
+        },
+        "schema_version": 3,
+        "session": "claude-code-K266cust-960134",
+        "session_role": "elite",
+        "transport": {
+          "selected": "acp"
+        }
+      }
+    },
+    {
+      "check": "the custody failure reports truthful mutation state",
+      "mutation": "not_started",
+      "ok": true
+    },
+    {
+      "check": "no residual holder or native agent remains after the custody rollback",
+      "ok": true
+    },
+    {
+      "check": "the custody rollback leaves no ready session",
+      "ok": true,
+      "status": {
+        "error": null,
+        "state": "stopped"
+      }
+    },
+    {
+      "check": "the real opencode entry refuses an unverified explicit selection",
+      "ok": true,
+      "receipt": {
+        "acp_session_id": "mock-session-1",
+        "action": "start",
+        "actual_parameters": null,
+        "actual_runtime_model_id": null,
+        "agent_pid": 38995,
+        "baseline_exempt": true,
+        "bridge": {
+          "layout": "skill",
+          "path": "/private/tmp/kpr-i266-composed/scripts/kaola-opencode-acp.py",
+          "present": true,
+          "relative": "kaola-opencode-acp.py",
+          "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67",
+          "upstream_pin": null,
+          "verified_versions": "cli=2.0.22;protocol=1"
+        },
+        "config_application": {
+          "effort": {
+            "advertised": false,
+            "applied": false,
+            "candidates": [
+              "effort"
+            ],
+            "config_id": "effort",
+            "error": {
+              "code": "config-option-failed",
+              "config_id": "effort",
+              "detail": {
+                "code": -32602,
+                "message": "unsupported config option effort=xhigh"
+              }
+            },
+            "value": "xhigh"
+          },
+          "fast": {
+            "applied": false,
+            "reason": "no-advertised-config-option"
+          },
+          "model": {
+            "applied": true,
+            "config_id": "model",
+            "value": "gpt-6.1-sol"
+          }
+        },
+        "configured_options": [
+          {
+            "config_id": "model",
+            "configured": true,
+            "option_description": "Model Codex uses for the session",
+            "option_name": "Model",
+            "value": "gpt-6.1-sol",
+            "value_description": "Default Runner model (Issues #142, #145).",
+            "value_name": "6.1 Sol"
+          }
+        ],
+        "detail": "the opencode agent did not report the explicit selection: model None is not the requested 'gpt-6.1-sol'; effort None is not the requested 'xhigh'; the session was stopped before this start returned, and no other model was substituted.",
+        "dispatcher": null,
+        "effective_selection": {
+          "effective_effort": null,
+          "effective_model": null,
+          "effort_config_id": "effort"
+        },
+        "fast": {
+          "applied": false,
+          "applied_via": "none",
+          "detail": "no native Fast mechanism; nothing to enable",
+          "effective": "off",
+          "requested": "off",
+          "support": "none"
+        },
+        "git": {
+          "branch": null,
+          "dirty": false
+        },
+        "heartbeat_host": null,
+        "heartbeat_host_known": true,
+        "heartbeat_host_requested": null,
+        "heartbeat_host_source": "none",
+        "holder_alive": true,
+        "holder_identity": {
+          "holder_pid": 38994
+        },
+        "holder_instance_id": "549dbd5992332c4da8aa67ea46581eaf",
+        "holder_instance_matches": false,
+        "holder_pid": 38994,
+        "host_session_stopped": true,
+        "model_display": {
+          "components": null,
+          "name": null,
+          "preset_effort": null,
+          "preset_id": null
+        },
+        "model_evidence_provenance": {
+          "catalog_probe": {
+            "available_model_count": 0,
+            "candidate_present": false,
+            "probes": [
+              {
+                "command": [
+                  "opencode",
+                  "models"
+                ],
+                "output_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "returncode": 0
+              },
+              {
+                "command": [
+                  "opencode",
+                  "--help"
+                ],
+                "output_digest": "sha256:30140ff36f16e4366f53e56f3f7829a807152ee4751ffe75cce24cce9ce4b4ac",
+                "returncode": 0
+              }
+            ],
+            "state": "unknown"
+          },
+          "fast": {
+            "detail": "no native Fast mechanism; nothing to enable",
+            "mechanism": "none",
+            "requested": "off",
+            "support": "none"
+          },
+          "requested": {
+            "name": "gpt-6.1-sol",
+            "source": "user"
+          },
+          "resolution": {
+            "candidate_id": "gpt-6.1-sol",
+            "display_name": "gpt-6.1-sol",
+            "resolved_id": "gpt-6.1-sol",
+            "state": "catalog-unknown-declared-candidate",
+            "supported_options": []
+          },
+          "selection": {
+            "source": "user",
+            "tier": "default"
+          }
+        },
+        "model_mismatch_reason": "actual-model-evidence-not-yet-read",
+        "model_selection": {
+          "preserved": false,
+          "requested_name": "gpt-6.1-sol",
+          "resolved_effort": "xhigh",
+          "resolved_model": "gpt-6.1-sol",
+          "source": "user",
+          "tier": "default"
+        },
+        "model_verified": "unknown",
+        "mutation_performed": null,
+        "mutation_status": "unknown",
+        "native_permission_policy": {
+          "agent": "build",
+          "path": "/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/k266comp.82v8gsep/records/opencode/opencode-K266-a4a0a8/12aa4bce058c1605/opencode-build-default.json",
+          "policy": {
+            "agents": {
+              "build": {
+                "permissions": [
+                  {
+                    "action": "*",
+                    "effect": "allow",
+                    "resource": "*"
+                  }
+                ]
+              }
+            }
+          },
+          "reason": "managed-build-default",
+          "selected": true,
+          "via": "OPENCODE_CONFIG"
+        },
+        "platform": "opencode",
+        "reason": "explicit-selection-unverified",
+        "repo": "/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/k266comp.82v8gsep/repo",
+        "requested_effort": "xhigh",
+        "requested_fast": "off",
+        "requested_model_name": "gpt-6.1-sol",
+        "requested_model_source": "user",
+        "requested_tier": "default",
+        "residual_pids": [],
+        "resolved_fast": "off",
+        "resolved_parameters": {
+          "effort": "xhigh"
+        },
+        "resolved_runtime_model_display": "gpt-6.1-sol",
+        "resolved_runtime_model_id": "gpt-6.1-sol",
+        "result": "refused",
+        "runtime_binary": {
+          "absolute": true,
+          "env": "OPENCODE_BIN",
+          "passed_as": "OPENCODE_BIN",
+          "path": "/private/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/k266comp.82v8gsep/bin/opencode",
+          "present": true
+        },
+        "schema_version": 3,
+        "session": "opencode-K266-a4a0a8",
+        "session_role": null,
+        "state": "ready",
+        "transport": {
+          "agent_info": {
+            "name": "mock-acp-agent",
+            "version": "0.0.1"
+          },
+          "capabilities": {
+            "loadSession": false,
+            "promptCapabilities": {
+              "embeddedContext": true
+            },
+            "sessionCapabilities": {
+              "close": false,
+              "list": false,
+              "resume": false
+            }
+          },
+          "cli_version": null,
+          "protocol_version": 1,
+          "selected": "acp"
+        }
+      }
+    },
+    {
+      "check": "the refusal reports truthful mutation state",
+      "mutation": "unknown",
+      "ok": true
+    },
+    {
+      "check": "no residual holder or native agent remains after the refusal",
+      "ok": true
+    }
+  ],
+  "failures": [],
+  "result": "pass",
+  "root": "/private/tmp/kpr-i266-composed"
+}

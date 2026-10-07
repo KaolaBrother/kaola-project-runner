@@ -1,0 +1,18 @@
+{
+  "body_bytes": 29324,
+  "file_bytes": 86320,
+  "file_limit": 1048576,
+  "host_revision": 727,
+  "previous_revision": 969,
+  "result": "written",
+  "revision": 970,
+  "value": {
+    "code": "KPR",
+    "goal": "Complete authorized #259/#263/#264/#265/#266 integration, affected QA, six AGENTS requirements, final Opus and outer acceptance, normal lifecycle and the conditional next unused stable PATCH.",
+    "issue": "https://github.com/KaolaBrother/kaola-project-runner/issues/259",
+    "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+    "requirements_source": "AGENTS.md; https://github.com/KaolaBrother/kaola-project-runner/issues/259",
+    "status": "Original #259 sole writer is consolidating current fields and integrating accepted #266 source. Final affected QA, six-answer report, Opus/outer verdict and original lifecycle remain pending.",
+    "stop": "Finish all current authorized tasks, meaningful affected QA and final integrated Opus/outer acceptance. Complete #259/#263/#264/#265/#266 merge/archive/cleanup and exact worker stops before publishing and verifying the next unused stable PATCH. Keep Host available for outer audit fixes; outer owns eventual Host stop and hourly inquiry pause. No installation, consumer operation, minor/major release or new timer; no night cutoff."
+  }
+}

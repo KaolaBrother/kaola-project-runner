@@ -1,0 +1,68 @@
+{
+  "candidate": "cefcda13980b888c731a31e4069429412b3a6fba",
+  "parent": "1acf4b1263e1345d4df83ef9f63e5371f82c4d06",
+  "clean": true,
+  "new_source_changes": false,
+  "source_acceptance": "Host939 scoped",
+  "reused_named_behavior_cases": 33,
+  "new_disposable_tool_calls": 17,
+  "new_subprocess_seconds": 1.662225,
+  "six_answer_bodies_equal": true,
+  "scratch_removed": true,
+  "claim": {
+    "identity": "5ea624f9b9c061bd8c53dc4e20b20ac5a7c35ce95f4d1f244b17fd164f9a29d5",
+    "state_sha256": "610d647040b2ad4c948e36ee9480f14d92e96ade95aa3449210808fd7ef9cb75",
+    "ledger_sha256": "2efb63f6fb7c9da77f74d12abb4754d3e1b4de558599057bd9a2b59a133ab53b",
+    "mission_statuses": [
+      "done",
+      "done",
+      "done",
+      "done"
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "/tmp/kpr-i259-host-compact-implementation-delivery-20261006.md",
+      "bytes": 38521,
+      "sha256": "53303ed0d3c928fad7ac3a73a304dd1d9d62ef281594f08974aca7cec3cd7935"
+    },
+    {
+      "path": "/tmp/kpr-i259-host-compact-implementation.patch",
+      "bytes": 801783,
+      "sha256": "a8ba10f1b48e9c444ce4ad4633d8abea821e8fa3bfec6808af1e5f5a03f941a0"
+    },
+    {
+      "path": "/tmp/kpr-i259-host-compact-implementation-authored.patch",
+      "bytes": 222702,
+      "sha256": "5fbe44c2346c11230b46db0759b3bfc6a634d18da5f83995d467f2990c85d7ad"
+    },
+    {
+      "path": "/tmp/kpr-i259-host-compact-implementation-hashes-20261006.json",
+      "bytes": 146531,
+      "sha256": "86014c33845d41b60487e80a910bb2ed8e1576a78015ff126e5ff920ded99398"
+    },
+    {
+      "path": "/tmp/kpr-i259-six-requirement-answers-20261006.md",
+      "bytes": 5778,
+      "sha256": "f6e136691b3fff0ae685653f45458d5f392db935044e3ed9d8674f9b5062bdda"
+    },
+    {
+      "path": "/tmp/kpr-i259-939-report-upgrade-continuity-20261006.md",
+      "bytes": 17004,
+      "sha256": "311578856450ae5347f9e5aeea914282b6dfd44ec0befc71c2344dc66159e8f9"
+    },
+    {
+      "path": "/tmp/kpr-i259-939-disposable-upgrade-20261006/result.json",
+      "bytes": 7071,
+      "sha256": "8daacf6e6327a94c46827f8cc299936ee5da3308c52e9c88dbaf02287c65c160"
+    },
+    {
+      "path": "/tmp/kpr-i259-939-disposable-upgrade-20261006/trace.json",
+      "bytes": 219409,
+      "sha256": "e5488be5582907e75fc2e1512c4cfb8824f592a5e4e009b18b29b7237d445678"
+    }
+  ],
+  "native": "Accepted independent055/DSH evidence reused; no new native model or reviewer run",
+  "pending": "Final affected Opus/outer, corrected Codex negotiation/real outer inquiry, installed activation and original lifecycle;266 unaccepted repair not integrated",
+  "custody": "Original259/f888 remains sole overlapping source writer; Host owns acceptance and exact stop"
+}

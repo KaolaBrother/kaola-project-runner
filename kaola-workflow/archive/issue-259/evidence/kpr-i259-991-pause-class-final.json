@@ -1,0 +1,21 @@
+{
+  "name": "991-pause-class-final",
+  "argv": [
+    "python3",
+    "tests/contract/test-issue-259-record-contract.py",
+    "RecordContract.test_delegator_group_pause_expiry_and_resolved_relay_preserve_current_duties"
+  ],
+  "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+  "env": {
+    "TMPDIR": "/tmp",
+    "KAOLA_LAUNCH_BACKEND": "direct"
+  },
+  "execution_base": "b7f5bc265c3fb447c0e519984b002f5517dcc3f4 plus relocated test block and correct dropped receipt field",
+  "exit": 0,
+  "seconds": 0.8020184580236673,
+  "output_sha256": "2db06cad452c8c2de3d0861d9b47b19b905adf8c905b1d4656f70109a30c8704",
+  "log": "/tmp/kpr-i259-991-pause-class-final.log",
+  "source_sha256": "3730a42a51ed29d0751e106f888efae6e2d2a59ecd99e91357e51aeb6f08248d",
+  "method_sha256": "1f583aa6390ea20d47ac1356e80a97aa63fd8d79e594502e2aa223dba97538ac",
+  "ast_location": "worker_pause block is in the executable test, not in update helper"
+}

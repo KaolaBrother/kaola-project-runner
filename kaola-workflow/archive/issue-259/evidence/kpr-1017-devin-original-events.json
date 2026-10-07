@@ -1,0 +1,153 @@
+[
+  {
+    "cursor": 19,
+    "kind": "session_update",
+    "sessionId": "ablaze-hiss",
+    "ts": 1791274729.793,
+    "update": {
+      "content": {
+        "text": "K",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 21,
+    "kind": "session_update",
+    "sessionId": "ablaze-hiss",
+    "ts": 1791274729.794,
+    "update": {
+      "content": {
+        "text": "PR",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 22,
+    "kind": "session_update",
+    "sessionId": "ablaze-hiss",
+    "ts": 1791274729.795,
+    "update": {
+      "content": {
+        "text": "_DEFAULT",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 23,
+    "kind": "session_update",
+    "sessionId": "ablaze-hiss",
+    "ts": 1791274729.796,
+    "update": {
+      "content": {
+        "text": "_LA",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 24,
+    "kind": "session_update",
+    "sessionId": "ablaze-hiss",
+    "ts": 1791274729.796,
+    "update": {
+      "content": {
+        "text": "UNCH",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 25,
+    "kind": "session_update",
+    "sessionId": "ablaze-hiss",
+    "ts": 1791274729.797,
+    "update": {
+      "content": {
+        "text": "_DEV",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 26,
+    "kind": "session_update",
+    "sessionId": "ablaze-hiss",
+    "ts": 1791274729.798,
+    "update": {
+      "content": {
+        "text": "IN",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 27,
+    "kind": "session_update",
+    "sessionId": "ablaze-hiss",
+    "ts": 1791274729.798,
+    "update": {
+      "content": {
+        "text": "_",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 28,
+    "kind": "session_update",
+    "sessionId": "ablaze-hiss",
+    "ts": 1791274729.799,
+    "update": {
+      "content": {
+        "text": "101",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 29,
+    "kind": "session_update",
+    "sessionId": "ablaze-hiss",
+    "ts": 1791274729.8,
+    "update": {
+      "content": {
+        "text": "4",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 30,
+    "kind": "session_update",
+    "sessionId": "ablaze-hiss",
+    "ts": 1791274729.801,
+    "update": {
+      "content": {
+        "text": "_OK",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "cursor": 35,
+    "kind": "turn_ended",
+    "outcome": "turn_completed",
+    "prompt_fingerprint": "sha256:c71626380e5cba741a1c40fc9b825e6991c1b5f6082fe6c4e116aaf3e9056d29",
+    "stop_reason": "end_turn",
+    "ts": 1791274729.819
+  }
+]

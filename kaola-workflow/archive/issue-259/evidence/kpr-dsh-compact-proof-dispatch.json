@@ -1,0 +1,133 @@
+{
+  "correlation_only": true,
+  "coverage": {
+    "failed": [],
+    "in-flight": [
+      "dsh-compact-proof"
+    ],
+    "not-run": [],
+    "returned": [],
+    "unknown": []
+  },
+  "dispatcher": {
+    "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+    "platform": "codex",
+    "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+    "session": "codex-KPR-orchestrator-main"
+  },
+  "effective_cap": 4,
+  "index_path": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/dispatch-index.json",
+  "items": [
+    {
+      "acceptance": "pending",
+      "dispatch_event_cursor": 1,
+      "dispatcher": {
+        "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "evidence": {
+        "send": {
+          "acp_session_id": "e4bf9f8c-2524-43e3-b23f-1f0aa812ddc1",
+          "dispatch_event_cursor": 1,
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": "in_progress",
+          "outcome": "in_progress",
+          "prompt_fingerprint": "sha256:52c3b02e5dc6f8907da3a174b7c610e8ed93f63afdce4299baa0ee7b41986d1d",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "start": {
+          "acp_session_id": "e4bf9f8c-2524-43e3-b23f-1f0aa812ddc1",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "720a2cea624ec94c5452705b1c710390",
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "status": {
+          "acp_session_id": null,
+          "dispatch_event_cursor": null,
+          "error_code": "no-session",
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        }
+      },
+      "holder_instance_id": "720a2cea624ec94c5452705b1c710390",
+      "item_id": "dsh-compact-proof",
+      "notify_target": {
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "output": "/tmp/kpr-dsh-compact-proof-20261005.md",
+      "platform": "dsh",
+      "preset": "dsh/default",
+      "prompt_fingerprint": "sha256:52c3b02e5dc6f8907da3a174b7c610e8ed93f63afdce4299baa0ee7b41986d1d",
+      "prompt_sha256": "sha256:52c3b02e5dc6f8907da3a174b7c610e8ed93f63afdce4299baa0ee7b41986d1d",
+      "prompt_source": {
+        "kind": "full",
+        "prompt_sha256": "sha256:52c3b02e5dc6f8907da3a174b7c610e8ed93f63afdce4299baa0ee7b41986d1d"
+      },
+      "reason": "admitted",
+      "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+      "selection": {
+        "advertised": {
+          "effort": "",
+          "model_id": "[\"opencode-go\",\"deepseek-v4.1-flash\"]"
+        },
+        "advertised_source": "effective_selection",
+        "applied": {
+          "effort": null,
+          "model_id": "opencode-go/deepseek-v4.1-flash"
+        },
+        "applied_state": {
+          "effort": "unapplied",
+          "model_id": "applied"
+        },
+        "comparison": "match",
+        "fields": {
+          "effort": {
+            "advertised": "not-requested",
+            "applied": "not-requested"
+          },
+          "model_id": {
+            "advertised": "unknown",
+            "applied": "match"
+          }
+        },
+        "requested": {
+          "effort": null,
+          "model_id": "opencode-go/deepseek-v4.1-flash",
+          "preset": "dsh/default",
+          "tier": "default"
+        },
+        "source": "config_application"
+      },
+      "session": "dsh-KPR-compact-proof",
+      "status": "in-flight",
+      "task_id": "acp-matrix-pool"
+    }
+  ],
+  "occupancy": "known",
+  "phase": "admission",
+  "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+  "schema": "kaola-dispatch-index/1",
+  "scope": "research",
+  "task_links": {
+    "index": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/dispatch-index.json",
+    "linked": {
+      "acp-matrix-pool": [
+        "dsh-compact-proof"
+      ]
+    }
+  }
+}

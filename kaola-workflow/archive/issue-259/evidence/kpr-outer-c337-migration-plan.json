@@ -1,0 +1,302 @@
+{
+  "blockers": [
+    {
+      "allowed": "object of strings or numbers",
+      "detail": "authorization.known_resource_limits is not allowed. Allowed: object of strings or numbers. rehome this fact from its source; the file was not written",
+      "path": "authorization.known_resource_limits",
+      "recovery": "rehome this fact from its source; the file was not written"
+    },
+    {
+      "allowed": "boolean",
+      "detail": "authorization.elite_grants[2].switch_authorization is not allowed. Allowed: boolean. retain the owner's switch condition in watch.detail with source and next action. Map true or false only when original authority supports it; the file was not written",
+      "path": "authorization.elite_grants[2].switch_authorization",
+      "recovery": "retain the owner's switch condition in watch.detail with source and next action. Map true or false only when original authority supports it; the file was not written"
+    },
+    {
+      "allowed": "boolean",
+      "detail": "authorization.elite_grants[3].switch_authorization is not allowed. Allowed: boolean. retain the owner's switch condition in watch.detail with source and next action. Map true or false only when original authority supports it; the file was not written",
+      "path": "authorization.elite_grants[3].switch_authorization",
+      "recovery": "retain the owner's switch condition in watch.detail with source and next action. Map true or false only when original authority supports it; the file was not written"
+    },
+    {
+      "allowed": "acp_session_id, holder_instance_id, native_session_id, platform, preset_id, session, state",
+      "detail": "host.evidence is not allowed. Allowed: acp_session_id, holder_instance_id, native_session_id, platform, preset_id, session, state. remove this key; the file was not written",
+      "path": "host.evidence",
+      "recovery": "remove this key; the file was not written"
+    },
+    {
+      "allowed": "code, goal, issue, repo, status, stop, user_language",
+      "detail": "project.root is not allowed. Allowed: code, goal, issue, repo, status, stop, user_language. do not copy Host task tables here; the file was not written",
+      "path": "project.root",
+      "recovery": "do not copy Host task tables here; the file was not written"
+    },
+    {
+      "allowed": "code, goal, issue, repo, status, stop, user_language",
+      "detail": "project.forge is not allowed. Allowed: code, goal, issue, repo, status, stop, user_language. do not copy Host task tables here; the file was not written",
+      "path": "project.forge",
+      "recovery": "do not copy Host task tables here; the file was not written"
+    },
+    {
+      "allowed": "code, goal, issue, repo, status, stop, user_language",
+      "detail": "project.scope is not allowed. Allowed: code, goal, issue, repo, status, stop, user_language. do not copy Host task tables here; the file was not written",
+      "path": "project.scope",
+      "recovery": "do not copy Host task tables here; the file was not written"
+    },
+    {
+      "allowed": "code, goal, issue, repo, status, stop, user_language",
+      "detail": "project.release_install is not allowed. Allowed: code, goal, issue, repo, status, stop, user_language. do not copy Host task tables here; the file was not written",
+      "path": "project.release_install",
+      "recovery": "do not copy Host task tables here; the file was not written"
+    },
+    {
+      "allowed": "end_local, interval_minutes, start_local, timezone",
+      "detail": "cadence.mode is not allowed. Allowed: end_local, interval_minutes, start_local, timezone. remove this key; the file was not written",
+      "path": "cadence.mode",
+      "recovery": "remove this key; the file was not written"
+    },
+    {
+      "allowed": "boundary, evidence, state",
+      "detail": "stop.no_login is not allowed. Allowed: boundary, evidence, state. rehome current text into an allowed field; the file was not written",
+      "path": "stop.no_login",
+      "recovery": "rehome current text into an allowed field; the file was not written"
+    },
+    {
+      "allowed": "pending, sent, adopted, open, settled, or blocked",
+      "detail": "watch.live_run_observation.state is not allowed. Allowed: pending, sent, adopted, open, settled, or blocked. retain the original evidence and use the current decision/reconciliation route; then set the status field to one token or remove the alias. The file was not written",
+      "path": "watch.live_run_observation.state",
+      "recovery": "watch/live_run_observation exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"live_run_observation\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "applicable unresolved typed duty",
+      "detail": "watch.live_run_observation.report is not allowed. Allowed: applicable unresolved typed duty. retain the original evidence and use the current decision/reconciliation route until the proper type is established. Do not move handled text to another field. Do not infer adoption or discard it; the file was not written",
+      "path": "watch.live_run_observation.report",
+      "recovery": "watch/live_run_observation exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"live_run_observation\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "string that names the Host record or path",
+      "detail": "watch.record_contract_design.evidence is not allowed. Allowed: string that names the Host record or path. adopted or settled removes the row and needs original effect evidence; sent stays pending. The file was not written",
+      "path": "watch.record_contract_design.evidence",
+      "recovery": "watch/record_contract_design exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"record_contract_design\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "at, detail, evidence, issue, kind, locator, next, pool, preset, presets, scope, source, status, summary",
+      "detail": "watch.consumer_observation.projects is not allowed. Allowed: at, detail, evidence, issue, kind, locator, next, pool, preset, presets, scope, source, status, summary. retain original evidence through the current decision/reconciliation route until the proper type is established; do not move handled text to another field. The file was not written",
+      "path": "watch.consumer_observation.projects",
+      "recovery": "watch/consumer_observation exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"consumer_observation\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "applicable unresolved typed duty",
+      "detail": "watch.consumer_observation.latest is not allowed. Allowed: applicable unresolved typed duty. retain the original evidence and use the current decision/reconciliation route until the proper type is established. Do not move handled text to another field. Do not infer adoption or discard it; the file was not written",
+      "path": "watch.consumer_observation.latest",
+      "recovery": "watch/consumer_observation exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"consumer_observation\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "pending, sent, adopted, open, settled, or blocked",
+      "detail": "watch.external_report_260.relay is not allowed. Allowed: pending, sent, adopted, open, settled, or blocked. retain the original evidence and use the current decision/reconciliation route; then set the status field to one token or remove the alias. The file was not written",
+      "path": "watch.external_report_260.relay",
+      "recovery": "watch/external_report_260 exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"external_report_260\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "pending, sent, adopted, open, settled, or blocked",
+      "detail": "watch.transient_failure_policy.state is not allowed. Allowed: pending, sent, adopted, open, settled, or blocked. retain the original evidence and use the current decision/reconciliation route; then set the status field to one token or remove the alias. The file was not written",
+      "path": "watch.transient_failure_policy.state",
+      "recovery": "watch/transient_failure_policy exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"transient_failure_policy\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "pending, sent, adopted, open, settled, or blocked",
+      "detail": "watch.grok_paseo_research.relay_status is not allowed. Allowed: pending, sent, adopted, open, settled, or blocked. retain the original evidence and use the current decision/reconciliation route; then set the status field to one token or remove the alias. The file was not written",
+      "path": "watch.grok_paseo_research.relay_status",
+      "recovery": "watch/grok_paseo_research exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"grok_paseo_research\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "pending, sent, adopted, open, settled, or blocked",
+      "detail": "watch.grok_paseo_research.state is not allowed. Allowed: pending, sent, adopted, open, settled, or blocked. retain the original evidence and use the current decision/reconciliation route; then set the status field to one token or remove the alias. The file was not written",
+      "path": "watch.grok_paseo_research.state",
+      "recovery": "watch/grok_paseo_research exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"grok_paseo_research\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "applicable unresolved typed duty",
+      "detail": "watch.grok_paseo_research.latest_owner_change is not allowed. Allowed: applicable unresolved typed duty. retain the original evidence and use the current decision/reconciliation route until the proper type is established. Do not move handled text to another field. Do not infer adoption or discard it; the file was not written",
+      "path": "watch.grok_paseo_research.latest_owner_change",
+      "recovery": "watch/grok_paseo_research exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"grok_paseo_research\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "pending, sent, adopted, open, settled, or blocked",
+      "detail": "watch.writing_standard.state is not allowed. Allowed: pending, sent, adopted, open, settled, or blocked. retain the original evidence and use the current decision/reconciliation route; then set the status field to one token or remove the alias. The file was not written",
+      "path": "watch.writing_standard.state",
+      "recovery": "watch/writing_standard exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"writing_standard\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "decision, observation, recovery, relay",
+      "detail": "watch.writing_standard.kind is not allowed. Allowed: decision, observation, recovery, relay. set kind to one of those tokens; the file was not written",
+      "path": "watch.writing_standard.kind",
+      "recovery": "watch/writing_standard exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"writing_standard\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "at, detail, evidence, issue, kind, locator, next, pool, preset, presets, scope, source, status, summary",
+      "detail": "watch.writing_standard.language is not allowed. Allowed: at, detail, evidence, issue, kind, locator, next, pool, preset, presets, scope, source, status, summary. retain original evidence through the current decision/reconciliation route until the proper type is established; do not move handled text to another field. The file was not written",
+      "path": "watch.writing_standard.language",
+      "recovery": "watch/writing_standard exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"writing_standard\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "pending, sent, adopted, open, settled, or blocked",
+      "detail": "watch.harness_paper_design.state is not allowed. Allowed: pending, sent, adopted, open, settled, or blocked. retain the original evidence and use the current decision/reconciliation route; then set the status field to one token or remove the alias. The file was not written",
+      "path": "watch.harness_paper_design.state",
+      "recovery": "watch/harness_paper_design exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"harness_paper_design\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "decision, observation, recovery, relay",
+      "detail": "watch.harness_paper_design.kind is not allowed. Allowed: decision, observation, recovery, relay. set kind to one of those tokens; the file was not written",
+      "path": "watch.harness_paper_design.kind",
+      "recovery": "watch/harness_paper_design exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"harness_paper_design\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "pending, sent, adopted, open, settled, or blocked",
+      "detail": "watch.compact_recovery_design.state is not allowed. Allowed: pending, sent, adopted, open, settled, or blocked. retain the original evidence and use the current decision/reconciliation route; then set the status field to one token or remove the alias. The file was not written",
+      "path": "watch.compact_recovery_design.state",
+      "recovery": "watch/compact_recovery_design exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"compact_recovery_design\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "decision, observation, recovery, relay",
+      "detail": "watch.compact_recovery_design.kind is not allowed. Allowed: decision, observation, recovery, relay. set kind to one of those tokens; the file was not written",
+      "path": "watch.compact_recovery_design.kind",
+      "recovery": "watch/compact_recovery_design exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"compact_recovery_design\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "at, detail, evidence, issue, kind, locator, next, pool, preset, presets, scope, source, status, summary",
+      "detail": "watch.compact_recovery_design.acceptance is not allowed. Allowed: at, detail, evidence, issue, kind, locator, next, pool, preset, presets, scope, source, status, summary. retain original evidence through the current decision/reconciliation route until the proper type is established; do not move handled text to another field. The file was not written",
+      "path": "watch.compact_recovery_design.acceptance",
+      "recovery": "watch/compact_recovery_design exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"compact_recovery_design\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "at, detail, evidence, issue, kind, locator, next, pool, preset, presets, scope, source, status, summary",
+      "detail": "watch.compact_recovery_design.native_preservation is not allowed. Allowed: at, detail, evidence, issue, kind, locator, next, pool, preset, presets, scope, source, status, summary. retain original evidence through the current decision/reconciliation route until the proper type is established; do not move handled text to another field. The file was not written",
+      "path": "watch.compact_recovery_design.native_preservation",
+      "recovery": "watch/compact_recovery_design exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"compact_recovery_design\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "pending, sent, adopted, open, settled, or blocked",
+      "detail": "watch.overnight_completion.state is not allowed. Allowed: pending, sent, adopted, open, settled, or blocked. retain the original evidence and use the current decision/reconciliation route; then set the status field to one token or remove the alias. The file was not written",
+      "path": "watch.overnight_completion.state",
+      "recovery": "watch/overnight_completion exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"overnight_completion\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "decision, observation, recovery, relay",
+      "detail": "watch.overnight_completion.kind is not allowed. Allowed: decision, observation, recovery, relay. set kind to one of those tokens; the file was not written",
+      "path": "watch.overnight_completion.kind",
+      "recovery": "watch/overnight_completion exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"overnight_completion\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "pending, sent, adopted, open, settled, or blocked",
+      "detail": "watch.release.state is not allowed. Allowed: pending, sent, adopted, open, settled, or blocked. retain the original evidence and use the current decision/reconciliation route; then set the status field to one token or remove the alias. The file was not written",
+      "path": "watch.release.state",
+      "recovery": "watch/release exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"release\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "applicable unresolved typed duty",
+      "detail": "watch.release is not allowed. Allowed: applicable unresolved typed duty. retain the original evidence and use the current decision/reconciliation route until the proper type is established. Do not move handled text to another field. Do not infer adoption or discard it; the file was not written",
+      "path": "watch.release",
+      "recovery": "watch/release exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"release\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "pending, sent, adopted, open, settled, or blocked",
+      "detail": "watch.qa_test_proportionality.relay_status is not allowed. Allowed: pending, sent, adopted, open, settled, or blocked. retain the original evidence and use the current decision/reconciliation route; then set the status field to one token or remove the alias. The file was not written",
+      "path": "watch.qa_test_proportionality.relay_status",
+      "recovery": "watch/qa_test_proportionality exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"qa_test_proportionality\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "pending, sent, adopted, open, settled, or blocked",
+      "detail": "watch.qa_test_proportionality.state is not allowed. Allowed: pending, sent, adopted, open, settled, or blocked. retain the original evidence and use the current decision/reconciliation route; then set the status field to one token or remove the alias. The file was not written",
+      "path": "watch.qa_test_proportionality.state",
+      "recovery": "watch/qa_test_proportionality exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"qa_test_proportionality\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "decision, observation, recovery, relay",
+      "detail": "watch.qa_test_proportionality.kind is not allowed. Allowed: decision, observation, recovery, relay. set kind to one of those tokens; the file was not written",
+      "path": "watch.qa_test_proportionality.kind",
+      "recovery": "watch/qa_test_proportionality exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"qa_test_proportionality\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "applicable unresolved typed duty",
+      "detail": "watch.qa_test_proportionality.latest_owner_change is not allowed. Allowed: applicable unresolved typed duty. retain the original evidence and use the current decision/reconciliation route until the proper type is established. Do not move handled text to another field. Do not infer adoption or discard it; the file was not written",
+      "path": "watch.qa_test_proportionality.latest_owner_change",
+      "recovery": "watch/qa_test_proportionality exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"qa_test_proportionality\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "at, detail, evidence, issue, kind, locator, next, pool, preset, presets, scope, source, status, summary",
+      "detail": "watch.qa_test_proportionality.priority_cases is not allowed. Allowed: at, detail, evidence, issue, kind, locator, next, pool, preset, presets, scope, source, status, summary. retain original evidence through the current decision/reconciliation route until the proper type is established; do not move handled text to another field. The file was not written",
+      "path": "watch.qa_test_proportionality.priority_cases",
+      "recovery": "watch/qa_test_proportionality exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"qa_test_proportionality\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "at, detail, evidence, issue, kind, locator, next, pool, preset, presets, scope, source, status, summary",
+      "detail": "watch.qa_test_proportionality.improvement_basis is not allowed. Allowed: at, detail, evidence, issue, kind, locator, next, pool, preset, presets, scope, source, status, summary. retain original evidence through the current decision/reconciliation route until the proper type is established; do not move handled text to another field. The file was not written",
+      "path": "watch.qa_test_proportionality.improvement_basis",
+      "recovery": "watch/qa_test_proportionality exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"qa_test_proportionality\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "at, detail, evidence, issue, kind, locator, next, pool, preset, presets, scope, source, status, summary",
+      "detail": "watch.qa_test_proportionality.method_design is not allowed. Allowed: at, detail, evidence, issue, kind, locator, next, pool, preset, presets, scope, source, status, summary. retain original evidence through the current decision/reconciliation route until the proper type is established; do not move handled text to another field. The file was not written",
+      "path": "watch.qa_test_proportionality.method_design",
+      "recovery": "watch/qa_test_proportionality exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"qa_test_proportionality\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "pending, sent, adopted, open, settled, or blocked",
+      "detail": "watch.recent_harness_research.relay is not allowed. Allowed: pending, sent, adopted, open, settled, or blocked. retain the original evidence and use the current decision/reconciliation route; then set the status field to one token or remove the alias. The file was not written",
+      "path": "watch.recent_harness_research.relay",
+      "recovery": "watch/recent_harness_research exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"recent_harness_research\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "pending, sent, adopted, open, settled, or blocked",
+      "detail": "watch.recent_harness_research.state is not allowed. Allowed: pending, sent, adopted, open, settled, or blocked. retain the original evidence and use the current decision/reconciliation route; then set the status field to one token or remove the alias. The file was not written",
+      "path": "watch.recent_harness_research.state",
+      "recovery": "watch/recent_harness_research exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"recent_harness_research\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "at, detail, evidence, issue, kind, locator, next, pool, preset, presets, scope, source, status, summary",
+      "detail": "watch.recent_harness_research.interpretation is not allowed. Allowed: at, detail, evidence, issue, kind, locator, next, pool, preset, presets, scope, source, status, summary. retain original evidence through the current decision/reconciliation route until the proper type is established; do not move handled text to another field. The file was not written",
+      "path": "watch.recent_harness_research.interpretation",
+      "recovery": "watch/recent_harness_research exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"recent_harness_research\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "at, detail, evidence, issue, kind, locator, next, pool, preset, presets, scope, source, status, summary",
+      "detail": "watch.recent_harness_research.repository_selection is not allowed. Allowed: at, detail, evidence, issue, kind, locator, next, pool, preset, presets, scope, source, status, summary. retain original evidence through the current decision/reconciliation route until the proper type is established; do not move handled text to another field. The file was not written",
+      "path": "watch.recent_harness_research.repository_selection",
+      "recovery": "watch/recent_harness_research exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"recent_harness_research\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "pending, sent, adopted, open, settled, or blocked",
+      "detail": "watch.continuous_improvement_implementation.state is not allowed. Allowed: pending, sent, adopted, open, settled, or blocked. retain the original evidence and use the current decision/reconciliation route; then set the status field to one token or remove the alias. The file was not written",
+      "path": "watch.continuous_improvement_implementation.state",
+      "recovery": "watch/continuous_improvement_implementation exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"continuous_improvement_implementation\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "decision, observation, recovery, relay",
+      "detail": "watch.continuous_improvement_implementation.kind is not allowed. Allowed: decision, observation, recovery, relay. set kind to one of those tokens; the file was not written",
+      "path": "watch.continuous_improvement_implementation.kind",
+      "recovery": "watch/continuous_improvement_implementation exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"continuous_improvement_implementation\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "pending, sent, adopted, open, settled, or blocked",
+      "detail": "watch.sideagent_independent_duty.state is not allowed. Allowed: pending, sent, adopted, open, settled, or blocked. retain the original evidence and use the current decision/reconciliation route; then set the status field to one token or remove the alias. The file was not written",
+      "path": "watch.sideagent_independent_duty.state",
+      "recovery": "watch/sideagent_independent_duty exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"sideagent_independent_duty\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    },
+    {
+      "allowed": "pending, sent, adopted, open, settled, or blocked",
+      "detail": "watch.compact_runtime_verification.state is not allowed. Allowed: pending, sent, adopted, open, settled, or blocked. retain the original evidence and use the current decision/reconciliation route; then set the status field to one token or remove the alias. The file was not written",
+      "path": "watch.compact_runtime_verification.state",
+      "recovery": "watch/compact_runtime_verification exists at revision 0. If handled, clear it with: /Users/ylmacstudio/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259/scripts/kaola-dispatch.py delegator update --file /Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/delegator-heartbeat.json --writer delegator --source ORIGINAL_HANDLED_EVIDENCE --expect-revision 0 --set '{\"watch\":{\"compact_runtime_verification\":null}}'. Source must name the original effect evidence. Do not move handled text to another field. If unresolved, retain original evidence through the current decision/reconciliation route until its proper type is established. Unknown is not resolved."
+    }
+  ],
+  "detail": "unresolved critical mapping; the file was not written",
+  "dropped": [
+    "authorization.elite_grants[0].class derived from catalog",
+    "authorization.elite_grants[1].class derived from catalog",
+    "authorization.elite_grants[2].class derived from catalog",
+    "authorization.elite_grants[3].class derived from catalog",
+    "authorization.elite_grants[4].class derived from catalog"
+  ],
+  "result": "blocked",
+  "writes": false
+}

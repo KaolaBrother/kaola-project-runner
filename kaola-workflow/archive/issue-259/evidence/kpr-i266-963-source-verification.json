@@ -1,0 +1,45 @@
+{
+  "candidate": "cfa491dda33a1130746743ff15e10bdbbf11a324",
+  "changed_hashes": {
+    "scripts/kaola-launchd-broker.py": "63cc4efb2e03eac2766c4c06a69e073ffb6c836e22b3a91ca0e235bc2e73b6d4",
+    "tests/contract/test-issue-266-launch-broker.py": "5c3b55150e2aebbb0abd8e3ee5741dd3e11567272d936669d31a9f7c15dbc3cc",
+    "tests/contract/test-issue-266-launch-broker-composed.py": "7044000052f47581cdf6aea52de52a948dfbbf890be4c7bb5006e6d2bbded249",
+    "/tmp/kpr-i266-entry/proposed/integration/validate.sh.patch": "a32d8b27139fbd4bc469de2d0a414283abd05889a3776bab809c3751631078f2",
+    "/tmp/kpr-i266-entry/proposed/integration/kaola-tmux.sh.patch": "9e44bfc79ff06e3a7212028487c8a684f11911dd8acc2e4b0376d4d8f7bea135",
+    "/tmp/kpr-i266-entry/proposed/integration/render-skills.py.patch": "7d52525aee238f635a842ee33dd3b35d06ad3745e5b5f505f729a29308c00a46",
+    "/tmp/kpr-i266-entry/proposed/integration/kaola-acp.py.patch": "61413906a7c0100dd717343fefddad48c8bba16013e2abb571bab432409524d3",
+    "/tmp/kpr-i266-entry/proposed/issue-266-guidance.patch": "8bb29e16e4226e31940c30430ca508782c6a7134d580a7558599792372edad15"
+  },
+  "affected_artifacts": {
+    "/tmp/kpr-i266-entry/launch-broker-custody-probes.json": {
+      "sha256": "40eb9951a90165104462879414e42f574202468dbc26a2112d66831c0826fc86",
+      "result": "pass",
+      "checks": 10,
+      "failures": []
+    },
+    "/tmp/kpr-i266-entry/launch-broker-custody-composed.json": {
+      "sha256": "928cd6e8a90ee7bce87b6045d88ebd718f26967e73b42f6da2ce8b78fa11f4cb",
+      "result": "pass",
+      "checks": 7,
+      "failures": []
+    }
+  },
+  "worktree_clean": true,
+  "mission_statuses": [
+    "done",
+    "done",
+    "done",
+    "done",
+    "done",
+    "done",
+    "done",
+    "done",
+    "done",
+    "done"
+  ],
+  "claim": "4e92b8bf83d2e712070be4eb8c1e8f1c9e73c29ce384f7c49818ec3fe94f4386",
+  "current_revision": 962,
+  "current_alerts": [],
+  "old_node_accounting_decision_present": false,
+  "scope": "Read source diff, original returned turn, hashes and existing affected output. No rerun, native allocation, cleanup or service operation."
+}

@@ -1,0 +1,1326 @@
+{
+  "purpose": "Original substantive acceptance/QA evidence in normal issue259 archive; not routine state",
+  "source_candidate": "291b33b5247d57fc0c8428b1601bcd8ab21a262c",
+  "entries": [
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-20261006-accepted-0553.md",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-20261006-accepted-0553.md",
+      "sha256": "cfb9b80b0c30fc815ff205d0a44aa04145519c738e7f5e550040580cca859f3b",
+      "bytes": 32026
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-20261006-before-host1033.md",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-20261006-before-host1033.md",
+      "sha256": "5bd97c47c56e7df97a573d3f4ac2afb318cc7b456c915f4580239ea4d86c0382",
+      "bytes": 55577
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-hashes-20261006-historical-13f0720c-source-return.json",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-hashes-20261006-historical-13f0720c-source-return.json",
+      "sha256": "650aff51c50fb8e34701d9a94ec9db149867f88e27b493abe5917b7627c805fc",
+      "bytes": 165458
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-binding-b7f5-20261006.json",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-binding-b7f5-20261006.json",
+      "sha256": "8db59bca6170c9352311beee483ffaf333b5c110718d5cf705f2e50b4c3b7361",
+      "bytes": 7168
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-hashes-20261006-accepted-cefcda13-host945.json",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-hashes-20261006-accepted-cefcda13-host945.json",
+      "sha256": "86014c33845d41b60487e80a910bb2ed8e1576a78015ff126e5ff920ded99398",
+      "bytes": 146531
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-binding-20261006-before-host1033.json",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-binding-20261006-before-host1033.json",
+      "sha256": "f4b194f11cafc129cb9fcb0d4063999ee03285bf0887f27edb4dc840cd8cbd04",
+      "bytes": 27143
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-20261006-5079.md",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-20261006-5079.md",
+      "sha256": "90c1d7c4726d0eae48ebf1be35ed778d86369b68341e7af0e4640e8373b086ac",
+      "bytes": 31205
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-20261006-historical-13f0720c-source-return.md",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-20261006-historical-13f0720c-source-return.md",
+      "sha256": "8604bfc5e921fe981c95518c40b4c515e9b92eeda38624b5eb383452e8e83233",
+      "bytes": 45942
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-20261006.md",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-20261006.md",
+      "sha256": "42859f76170147669c712b05103428ca98f334250a9c8e0ebdc9a896656bc76e",
+      "bytes": 61314
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-hashes-20261006-accepted-badca11e.json",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-hashes-20261006-accepted-badca11e.json",
+      "sha256": "7da4050fa6f9e1260b5c874619724acab1d304e66bea4f7eaacf8f76f81d81fa",
+      "bytes": 81343
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-hashes-20261006-before-host1033.json",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-hashes-20261006-before-host1033.json",
+      "sha256": "246b754eea29422ce02b0188d1c7bd833a7f8b2fea023a147ca2ab1e0f7e7b19",
+      "bytes": 362674
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-hashes-20261006-accepted-cefcda13-host939.json",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-hashes-20261006-accepted-cefcda13-host939.json",
+      "sha256": "b42674fcd4d5b9c41bf1f1309ae28beed8b8465829e5087b4b0f70aa9541af69",
+      "bytes": 129018
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-binding-20261006-5079.json",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-binding-20261006-5079.json",
+      "sha256": "cc0b8903decd1de7af908d269be134cc91c98ed75df6cd6d6490734816c6a06f",
+      "bytes": 8103
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-hashes-2989-20261006.json",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-hashes-2989-20261006.json",
+      "sha256": "572ac212af7441fc353f5745a0a175e55f64c6622ea0ea43eb05e9027e0e1755",
+      "bytes": 52202
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-20261006-accepted-cefcda13-host945.md",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-20261006-accepted-cefcda13-host945.md",
+      "sha256": "53303ed0d3c928fad7ac3a73a304dd1d9d62ef281594f08974aca7cec3cd7935",
+      "bytes": 38521
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-20261006-accepted-badca11e.md",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-20261006-accepted-badca11e.md",
+      "sha256": "557f2dda69507d408501c37d0423bc24a305e03ab8e18785a71038021ac1e83e",
+      "bytes": 51126
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-20261006-469.md",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-20261006-469.md",
+      "sha256": "ad5bb118bf7739bed68c8eb67c683bedbc0cf082cf40bf407602a58d5099534b",
+      "bytes": 40684
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-binding-20261006.json",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-binding-20261006.json",
+      "sha256": "90cfeed17f66cbecf7fb4e52970062948038219cfee354d4227207480971c320",
+      "bytes": 28371
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-03e0-20261006.md",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-03e0-20261006.md",
+      "sha256": "3cdabbbbf2a966e49c6c428822baff5b930318deaf6ab6cd4a57eff0bdced5a4",
+      "bytes": 34357
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-2989-20261006.md",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-2989-20261006.md",
+      "sha256": "d6b6575311bc718beab1f64063e47d7d444942a404e20cca72905ea13cffe83a",
+      "bytes": 26850
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-binding-20261006-469.json",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-binding-20261006-469.json",
+      "sha256": "96ab5c07a24932d7e7181c6ca872fd4d59619c88682d28443a3125e4e16f3566",
+      "bytes": 12853
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-binding-20261006-accepted-cefcda13-host939.json",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-binding-20261006-accepted-cefcda13-host939.json",
+      "sha256": "61d6781ed06f4d017bdfe8078c23c9be81ef42c1ff2afcbf7265962f699b16c9",
+      "bytes": 1793
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-hashes-20261006.json",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-hashes-20261006.json",
+      "sha256": "4a5982c4e46d112e0ed6a660540726612e1f57ac7eec00e52a26e5b320fb060d",
+      "bytes": 363870
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-b7f5-20261006.md",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-b7f5-20261006.md",
+      "sha256": "7d9f1233a4e0522e6cc67e79e8176f7ab753b0776a584517f2c800e70cd2f251",
+      "bytes": 28907
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-hashes-20261006-accepted-0553.json",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-hashes-20261006-accepted-0553.json",
+      "sha256": "e3daf684dfdb3278cca3d70e413e655281a7fec5d9a8a92e116a8b6d5628af04",
+      "bytes": 60255
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-hashes-b7f5-20261006.json",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-hashes-b7f5-20261006.json",
+      "sha256": "2ceee536669b3db0926100ba428112c0dcf48e30583eb820f87de37bbe2fe9c8",
+      "bytes": 113031
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-binding-20261006-accepted-cefcda13-host945.json",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-binding-20261006-accepted-cefcda13-host945.json",
+      "sha256": "262ed97d0d2fde5b5badd2f0ece7adb38532d82b08fe70d9392d573d755d5b81",
+      "bytes": 2677
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-hashes-20261006-469.json",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-hashes-20261006-469.json",
+      "sha256": "3848e62c22687f5ed76dee2627414e5d4028d17662924f1574e34aa94534c79f",
+      "bytes": 309734
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-hashes-20261006-5079.json",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-hashes-20261006-5079.json",
+      "sha256": "2c8950af05453c6974a77bdff26444238be0e980e22b81522b676ec97f9f7f83",
+      "bytes": 118390
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-binding-2989-20261006.json",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-binding-2989-20261006.json",
+      "sha256": "6e07902493c01a652a0d997c32f13f2bb5875f73c1f123c7994b0414e76b2116",
+      "bytes": 3493
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-binding-20261006-historical-13f0720c-source-return.json",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-binding-20261006-historical-13f0720c-source-return.json",
+      "sha256": "71ac4359600d1a5db42e30ce79fe9934d7a9085e1bd7baf14c9a5651df116d6e",
+      "bytes": 5979
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-delivery-20261006-accepted-cefcda13-host939.md",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-delivery-20261006-accepted-cefcda13-host939.md",
+      "sha256": "46d6afc88e5a47cf16de247b9aec0a827224ada5d631e58c3741496d65db0bcf",
+      "bytes": 36652
+    },
+    {
+      "source": "/tmp/kpr-i259-six-requirement-answers-20261006.md",
+      "archive_file": "evidence/kpr-i259-six-requirement-answers-20261006.md",
+      "sha256": "b6759ecee1d86dee9f36394f7bdd7172e724463ac1d9d72d1c090bdffeaf1bda",
+      "bytes": 11172
+    },
+    {
+      "source": "/tmp/kpr-i259-six-requirement-answers-20261006-before-host1033.md",
+      "archive_file": "evidence/kpr-i259-six-requirement-answers-20261006-before-host1033.md",
+      "sha256": "ba72e6725e3444527a775943c0059438facc51345f791d4868ee28f64f6d3b59",
+      "bytes": 9220
+    },
+    {
+      "source": "/tmp/kpr-i259-six-requirement-answers-20261006-historical-bbf.md",
+      "archive_file": "evidence/kpr-i259-six-requirement-answers-20261006-historical-bbf.md",
+      "sha256": "616d0b47afcc0f4803a0ebca3fa6391c6b3a4c6b205b84396b5732f6f9f7f07e",
+      "bytes": 16179
+    },
+    {
+      "source": "/tmp/kpr-i259-six-requirement-answers-20261006-accepted-cefcda13-host945.md",
+      "archive_file": "evidence/kpr-i259-six-requirement-answers-20261006-accepted-cefcda13-host945.md",
+      "sha256": "f6e136691b3fff0ae685653f45458d5f392db935044e3ed9d8674f9b5062bdda",
+      "bytes": 5778
+    },
+    {
+      "source": "/tmp/kpr-i259-six-requirement-answers-20261006-historical-13f0720c-source-return.md",
+      "archive_file": "evidence/kpr-i259-six-requirement-answers-20261006-historical-13f0720c-source-return.md",
+      "sha256": "b2cd6b8686360596542ad62c87125e4bcb563cecd7fc2722ab274f3c31cda073",
+      "bytes": 7116
+    },
+    {
+      "source": "/tmp/kpr-i259-six-requirement-answers-20261006-469.md",
+      "archive_file": "evidence/kpr-i259-six-requirement-answers-20261006-469.md",
+      "sha256": "40af09fbe323ae6a8e6ab64b78fb6e7bccb7ed8bc1e6e42c6316a58ad1dca060",
+      "bytes": 7546
+    },
+    {
+      "source": "/tmp/kpr-i259-six-requirement-answers-20261006-5079.md",
+      "archive_file": "evidence/kpr-i259-six-requirement-answers-20261006-5079.md",
+      "sha256": "7eaed72839ea78bd9c56637c43eb39ceaa7fd2ec118455eb1c2e9702938d498e",
+      "bytes": 6778
+    },
+    {
+      "source": "/tmp/kpr-outer-personal-audit-c337-20261006.md",
+      "archive_file": "evidence/kpr-outer-personal-audit-c337-20261006.md",
+      "sha256": "c0debb285ddd11bf51156a5b4ed09e16cbf7cc3dfa3512bf1da49ffb9cb3999a",
+      "bytes": 12173
+    },
+    {
+      "source": "/tmp/kpr-outer-c337-owner-mapping.json",
+      "archive_file": "evidence/kpr-outer-c337-owner-mapping.json",
+      "sha256": "2ec4686af1bd19720d41d49176a4adfcd8de59ef0d14587150dd3fb3d9fb52de",
+      "bytes": 3284
+    },
+    {
+      "source": "/tmp/kpr-outer-c337-migration-plan.json",
+      "archive_file": "evidence/kpr-outer-c337-migration-plan.json",
+      "sha256": "4a05238a526d843d23585096da4950f9c783c2060bd8feb2ec39b839260441b1",
+      "bytes": 50707
+    },
+    {
+      "source": "/tmp/kpr-outer-c337-audit-prose-relay.json",
+      "archive_file": "evidence/kpr-outer-c337-audit-prose-relay.json",
+      "sha256": "32076324208ff4314e7c29e6d672032df8ed2f64a600dca6929770de345930a6",
+      "bytes": 1005
+    },
+    {
+      "source": "/tmp/kpr-i259-1017-opus-c337-review.md",
+      "archive_file": "evidence/kpr-i259-1017-opus-c337-review.md",
+      "sha256": "04959f9fe4b2900cae1c13dbc10dd6b65458cb0d4278656e05634a1190bd7c99",
+      "bytes": 27600
+    },
+    {
+      "source": "/tmp/kpr-1033-host-review.md",
+      "archive_file": "evidence/kpr-1033-host-review.md",
+      "sha256": "6bd7e2dc4777d87e943bfffde38105697ec4ccfaf983762b66f36ed6c4ed4564",
+      "bytes": 2616
+    },
+    {
+      "source": "/tmp/kpr-1033-record-design-original-lineage.json",
+      "archive_file": "evidence/kpr-1033-record-design-original-lineage.json",
+      "sha256": "e47d1eabbfbb15f392dca61d6c2e755a95ac82230daa8a40bbb9bc47961860ec",
+      "bytes": 2738
+    },
+    {
+      "source": "/tmp/kpr-1035-main-AGENTS-before-sink.md",
+      "archive_file": "evidence/kpr-1035-main-AGENTS-before-sink.md",
+      "sha256": "cc71ec52e36091574a212973ecc2e61f80a8c36a4d3af77e3329b2a6ee0b9c21",
+      "bytes": 19575
+    },
+    {
+      "source": "/tmp/kpr-i259-1033-owner-prose-authored.diff",
+      "archive_file": "evidence/kpr-i259-1033-owner-prose-authored.diff",
+      "sha256": "73ea2349c5f57c73facef089fd938dd090083c7e0a6803d2e858d617b4b6ee8f",
+      "bytes": 2401
+    },
+    {
+      "source": "/tmp/kpr-1008-host-review.md",
+      "archive_file": "evidence/kpr-1008-host-review.md",
+      "sha256": "32d3d8ea9c80007a73e4ce384e88ddd32ee8cac3f130e754dbcc8b297d58762a",
+      "bytes": 7161
+    },
+    {
+      "source": "/tmp/kpr-1014-host-review.md",
+      "archive_file": "evidence/kpr-1014-host-review.md",
+      "sha256": "1122e7bd0623bcb7628da6fab71cadede58e33caad0e072cdae3ecf35965c8a4",
+      "bytes": 2554
+    },
+    {
+      "source": "/tmp/kpr-1017-host-review.md",
+      "archive_file": "evidence/kpr-1017-host-review.md",
+      "sha256": "c8b2eea5b71611bd060a1ae9abd6ef888f445532a972e40b9d3f494bdbd5d909",
+      "bytes": 4331
+    },
+    {
+      "source": "/tmp/kpr-1030-maintenance-disposition.md",
+      "archive_file": "evidence/kpr-1030-maintenance-disposition.md",
+      "sha256": "4da21690e2f417e29c3c3ae45a19826c0b5223af3746f7bfb98caf3d9011075a",
+      "bytes": 2345
+    },
+    {
+      "source": "/tmp/kpr-1008-candidate-verification.json",
+      "archive_file": "evidence/kpr-1008-candidate-verification.json",
+      "sha256": "498ab32438969020f8eab01b6f26b07b864fefb036e07c1c2c5354b623279548",
+      "bytes": 1178
+    },
+    {
+      "source": "/tmp/kpr-i264-929-host-review.md",
+      "archive_file": "evidence/kpr-i264-929-host-review.md",
+      "sha256": "91e1992ea0d16543dd490be83c21660895f0c2b5d150a39a3d9571d71b425700",
+      "bytes": 3344
+    },
+    {
+      "source": "/tmp/kpr-i264-native-boundary-limitations-20261006.md",
+      "archive_file": "evidence/kpr-i264-native-boundary-limitations-20261006.md",
+      "sha256": "b1ad26fcce1ab4819917a052273a1d2fdf62b121ac23a4d5bf02afa83ec1c272",
+      "bytes": 32713
+    },
+    {
+      "source": "/tmp/kpr-consumer-record-findings-20261005.md",
+      "archive_file": "evidence/kpr-consumer-record-findings-20261005.md",
+      "sha256": "72f9ccc4d7df7b744e5d3ae199bd4a8d787dc2df0629b2e166b7801342f5bff7",
+      "bytes": 6201
+    },
+    {
+      "source": "/tmp/kpr-i263-all-runtime-steer-delivery-20261005.md",
+      "archive_file": "evidence/kpr-i263-all-runtime-steer-delivery-20261005.md",
+      "sha256": "0e7d07227969ef9bcd548620a4b1ae02c576dfb2d3e507f59527e2d34983fc33",
+      "bytes": 21094
+    },
+    {
+      "source": "/tmp/kpr-i259-1033-opus-exact-stop.json",
+      "archive_file": "evidence/kpr-i259-1033-opus-exact-stop.json",
+      "sha256": "83ec77778a09ca446ce54b784d3e0ec2e9dc1784eaa042cd75d5c283fc68e0d2",
+      "bytes": 383
+    },
+    {
+      "source": "/tmp/kpr-1033-opus-original-events.json",
+      "archive_file": "evidence/kpr-1033-opus-original-events.json",
+      "sha256": "ffde153219ca65ea7f41022a9aae6bb2ad45d9e70247330946e47b682b9b3dff",
+      "bytes": 4025
+    },
+    {
+      "source": "/tmp/kpr-1033-opus-original-final.txt",
+      "archive_file": "evidence/kpr-1033-opus-original-final.txt",
+      "sha256": "22a8ec3f37e30e5f73ab5b05998ad8fbcdb49b2bfa7f51213d92f17f6e8d7ed8",
+      "bytes": 2931
+    },
+    {
+      "source": "/tmp/kpr-1035-kimi-original-events.json",
+      "archive_file": "evidence/kpr-1035-kimi-original-events.json",
+      "sha256": "a70351ec5a4f31f028af4c9d1ccd08b6ae2bb1753fa0f45ad8c6cd603449a290",
+      "bytes": 37586
+    },
+    {
+      "source": "/tmp/kpr-1035-kimi-capture.json",
+      "archive_file": "evidence/kpr-1035-kimi-capture.json",
+      "sha256": "23aa99f1c5250bc87c7e77f7e140ec1f344102e3091fc8ae136a6b8cb3e858ce",
+      "bytes": 435
+    },
+    {
+      "source": "/tmp/kpr-1035-kimi-original-final.txt",
+      "archive_file": "evidence/kpr-1035-kimi-original-final.txt",
+      "sha256": "405dc7e8c6d1e6afa2533452143b06d00b43660ef084fa14a3d2b07f18ecdc41",
+      "bytes": 32
+    },
+    {
+      "source": "/tmp/kpr-1035-kimi-status.json",
+      "archive_file": "evidence/kpr-1035-kimi-status.json",
+      "sha256": "5340b2d2dc75171e47eb6d69c40692130c9e7f9911d763fc8b88bd53aa0f2fd9",
+      "bytes": 24551
+    },
+    {
+      "source": "/tmp/kpr-i259-1033-kimi-launch-prompt.txt",
+      "archive_file": "evidence/kpr-i259-1033-kimi-launch-prompt.txt",
+      "sha256": "4316d0ab57c9c8273f9098ed60d027e50c5c2ce9b06f7e076876e5c0b39f3ec6",
+      "bytes": 338
+    },
+    {
+      "source": "/tmp/kpr-i259-1033-kimi-launch-send.json",
+      "archive_file": "evidence/kpr-i259-1033-kimi-launch-send.json",
+      "sha256": "84e86f8202126fefc03ea55ec0d706e568c78630d18343cb6c1a9294baf5471d",
+      "bytes": 642
+    },
+    {
+      "source": "/tmp/kpr-i259-1033-kimi-launch-preflight.json",
+      "archive_file": "evidence/kpr-i259-1033-kimi-launch-preflight.json",
+      "sha256": "91c33128af5e9925747e9cbae573bebdfa4cebe13db9588dd98d365646d7c006",
+      "bytes": 3916
+    },
+    {
+      "source": "/tmp/kpr-i259-1033-kimi-launch-start.json",
+      "archive_file": "evidence/kpr-i259-1033-kimi-launch-start.json",
+      "sha256": "cf6bde9f9d7ea50e8881193dbf34aa1ad14a259e98e1669f08196af0bd09734f",
+      "bytes": 4702
+    },
+    {
+      "source": "/tmp/kpr-i259-1033-kimi-launch-observe.json",
+      "archive_file": "evidence/kpr-i259-1033-kimi-launch-observe.json",
+      "sha256": "3a4a5cc0e98081b5d7c4486905e6097c1b7480808207777e51a84dd0bc8b2a6a",
+      "bytes": 24116
+    },
+    {
+      "source": "/tmp/kpr-i259-1033-kimi-owner-scope.md",
+      "archive_file": "evidence/kpr-i259-1033-kimi-owner-scope.md",
+      "sha256": "c37f9a092f90d77e24ec2a714bef1e445d6ffa9aa9dd11fa094a3d17714900c2",
+      "bytes": 428
+    },
+    {
+      "source": "/tmp/kpr-i259-1035-kimi-exact-stop.json",
+      "archive_file": "evidence/kpr-i259-1035-kimi-exact-stop.json",
+      "sha256": "34dcc7be315c46465d0042065a46b600e56bebc491cf55c9a13fa2dcafa92940",
+      "bytes": 380
+    },
+    {
+      "source": "/tmp/kpr-i259-1002-claude-launch-stop.json",
+      "archive_file": "evidence/kpr-i259-1002-claude-launch-stop.json",
+      "sha256": "188edd490ab5c490be5476811327725cb5ab0414c0fb0b94977a7be889dfd675",
+      "bytes": 386
+    },
+    {
+      "source": "/tmp/kpr-i259-1005-dsh-launch-stop.json",
+      "archive_file": "evidence/kpr-i259-1005-dsh-launch-stop.json",
+      "sha256": "7c1cd3daf8c3bcec2031d23cf008493746ee5b49c0b9a806f50fc3c8878b6af8",
+      "bytes": 370
+    },
+    {
+      "source": "/tmp/kpr-i259-1005-droid-launch-stop.json",
+      "archive_file": "evidence/kpr-i259-1005-droid-launch-stop.json",
+      "sha256": "8fff2633886705b3ce769371b005a7f61fa2f307e0af2214bb9db2c38b5c1e13",
+      "bytes": 374
+    },
+    {
+      "source": "/tmp/kpr-i259-1008-opencode-launch-stop.json",
+      "archive_file": "evidence/kpr-i259-1008-opencode-launch-stop.json",
+      "sha256": "30a4c2662267d47e92b1eff3948bb58b24e4b0dfe6c7b4301160e6b6b5042161",
+      "bytes": 380
+    },
+    {
+      "source": "/tmp/kpr-i259-1008-grok-launch-stop.json",
+      "archive_file": "evidence/kpr-i259-1008-grok-launch-stop.json",
+      "sha256": "bce5e81a09fadceded2b1a10eb249c52d69744e5f9227f9a267a76551851272e",
+      "bytes": 372
+    },
+    {
+      "source": "/tmp/kpr-i259-1014-cursor-cli-launch-stop.json",
+      "archive_file": "evidence/kpr-i259-1014-cursor-cli-launch-stop.json",
+      "sha256": "bd8d92991f1e1a132dee44e94e2932c8595b81c35e86558fceb8271f7d365ec7",
+      "bytes": 384
+    },
+    {
+      "source": "/tmp/kpr-i259-1014-codex-launch-stop.json",
+      "archive_file": "evidence/kpr-i259-1014-codex-launch-stop.json",
+      "sha256": "28aabc83f3bf014ab5c8bd358aec7cf578a0dff4316cacb8a60b291fd2356a63",
+      "bytes": 374
+    },
+    {
+      "source": "/tmp/kpr-i259-1017-devin-launch-stop.json",
+      "archive_file": "evidence/kpr-i259-1017-devin-launch-stop.json",
+      "sha256": "abe82d7914c3151f54f11f83a75b85ae10496e42c53ed3e3834834c33331fc44",
+      "bytes": 374
+    },
+    {
+      "source": "/tmp/kpr-i259-1017-zcode-launch-stop.json",
+      "archive_file": "evidence/kpr-i259-1017-zcode-launch-stop.json",
+      "sha256": "d68886817be71f4179bb645af1ce95f6013d2f1e787a2ecdbfc1df26c26f7b0b",
+      "bytes": 374
+    },
+    {
+      "source": "/tmp/kpr-1014-cursor-cli-original-events.json",
+      "archive_file": "evidence/kpr-1014-cursor-cli-original-events.json",
+      "sha256": "e2318492bbda993bef566f1fe2074fe613138aac6a7eafc5e0d11b4d583aa0cf",
+      "bytes": 3890
+    },
+    {
+      "source": "/tmp/kpr-1014-codex-original-events.json",
+      "archive_file": "evidence/kpr-1014-codex-original-events.json",
+      "sha256": "12580c7c64ea7cd157c8411a6a23a9dc33b683454d2885cabf7b67fd976fc627",
+      "bytes": 4534
+    },
+    {
+      "source": "/tmp/kpr-1017-zcode-original-events.json",
+      "archive_file": "evidence/kpr-1017-zcode-original-events.json",
+      "sha256": "e4f9a2ccd9279aa1000d72842542edbda07b95b637a9dd91f0a813297f9e565a",
+      "bytes": 774
+    },
+    {
+      "source": "/tmp/kpr-1017-devin-original-events.json",
+      "archive_file": "evidence/kpr-1017-devin-original-events.json",
+      "sha256": "26aa414c0ce9dc18527b3b473aa296ab9edd162e18d17bc04744a0703c68c862",
+      "bytes": 3058
+    },
+    {
+      "source": "/tmp/kpr-i259-978-owner-scoped-section.md",
+      "archive_file": "evidence/kpr-i259-978-owner-scoped-section.md",
+      "sha256": "4452246896c1f78ed52965da443d660296479bf32158501b7cf16a184c606ae7",
+      "bytes": 3056
+    },
+    {
+      "source": "/tmp/kpr-i259-970-opus-final-review.md",
+      "archive_file": "evidence/kpr-i259-970-opus-final-review.md",
+      "sha256": "e76e6221df986ee5168f477d2948ac9294a87ab8a1244873dcf4c84d5af29382",
+      "bytes": 21279
+    },
+    {
+      "source": "/tmp/kpr-i259-982-host-opus-disposition.md",
+      "archive_file": "evidence/kpr-i259-982-host-opus-disposition.md",
+      "sha256": "7805ba5e17989e32ee1eda4471a68c257dc67c2844e74b2498abaab8786a8e50",
+      "bytes": 2876
+    },
+    {
+      "source": "/tmp/kpr-970-host-review.md",
+      "archive_file": "evidence/kpr-970-host-review.md",
+      "sha256": "e210e6efa05079398b9f657568bff9018f7cf5c204e99eb3e3abde0ab3d940c3",
+      "bytes": 2978
+    },
+    {
+      "source": "/tmp/kpr-970-project-legacy-clear-receipt.json",
+      "archive_file": "evidence/kpr-970-project-legacy-clear-receipt.json",
+      "sha256": "4a80549898ddbe4ed3ba97fee3ca49d15c0232a2ca06011fb56bad28782f5401",
+      "bytes": 1317
+    },
+    {
+      "source": "/tmp/kpr-970-host-migration-write.json",
+      "archive_file": "evidence/kpr-970-host-migration-write.json",
+      "sha256": "f7eec7bf80a1a046f450af8d9a1290cdab6d38cd4e5c54a7abffc59e29706fe6",
+      "bytes": 3351
+    },
+    {
+      "source": "/tmp/kpr-970-host-repeat-plan.json",
+      "archive_file": "evidence/kpr-970-host-repeat-plan.json",
+      "sha256": "b10753dad4039e2c1cb5d320d9eb25ac02894353bdec50ee900a4f05528d8fc1",
+      "bytes": 1356
+    },
+    {
+      "source": "/tmp/kpr-970-live-authority-adoption-verification.json",
+      "archive_file": "evidence/kpr-970-live-authority-adoption-verification.json",
+      "sha256": "125bf69e424919dc65684cdb868735bad8dbed516abcd8746f1d8450ca210f2a",
+      "bytes": 554
+    },
+    {
+      "source": "/tmp/kpr-i259-970-opus-final-execute.json",
+      "archive_file": "evidence/kpr-i259-970-opus-final-execute.json",
+      "sha256": "e27216a6a42c518522d3da7ef66fc01ae617af021ac304793d6808a7f6295b1e",
+      "bytes": 15646
+    },
+    {
+      "source": "/tmp/kpr-977-maintenance-returned-disposition.md",
+      "archive_file": "evidence/kpr-977-maintenance-returned-disposition.md",
+      "sha256": "522b8dcb42ff3f7d704aa00a86f235504b8e6584a8d1f9804aaee1959329e8ea",
+      "bytes": 1547
+    },
+    {
+      "source": "/tmp/kpr-988-maintenance-compatibility-disposition.md",
+      "archive_file": "evidence/kpr-988-maintenance-compatibility-disposition.md",
+      "sha256": "0f87961575a782c80efbf8239ac975a257a14316fb5ddb141b04821d2ed671ea",
+      "bytes": 2806
+    },
+    {
+      "source": "/tmp/kpr-988-node-original-final.txt",
+      "archive_file": "evidence/kpr-988-node-original-final.txt",
+      "sha256": "53e7ed417e9d197dcb24b21d5b783e900a34d931d7808bea4f58c4be7d8fc99d",
+      "bytes": 7730
+    },
+    {
+      "source": "/tmp/kpr-985-maintenance-returned-disposition.md",
+      "archive_file": "evidence/kpr-985-maintenance-returned-disposition.md",
+      "sha256": "e07df72143410fddac74c5404246eeac222f7d6be47fb581bedd7100989aec2a",
+      "bytes": 1821
+    },
+    {
+      "source": "/tmp/kpr-985-maintenance-returned-retire.json",
+      "archive_file": "evidence/kpr-985-maintenance-returned-retire.json",
+      "sha256": "d2d6637d1ceb89e1e2635af3bfba05dfa0668f07fda640dd9430c5bffdc4327a",
+      "bytes": 397
+    },
+    {
+      "source": "/tmp/kpr-985-frozen-tool-invocation.json",
+      "archive_file": "evidence/kpr-985-frozen-tool-invocation.json",
+      "sha256": "490b9a2f6a22ef611b83c1f940749de0c73470d8314f6af73e88b5bb05599a87",
+      "bytes": 852
+    },
+    {
+      "source": "/tmp/kpr-i259-963-intermediate-findings.md",
+      "archive_file": "evidence/kpr-i259-963-intermediate-findings.md",
+      "sha256": "47a2ac533e959d83e6386265adae21a39fcae8f99d5c596fb5c4c969dd7d520e",
+      "bytes": 8057
+    },
+    {
+      "source": "/tmp/kpr-i259-982-mock-generated-before.json",
+      "archive_file": "evidence/kpr-i259-982-mock-generated-before.json",
+      "sha256": "9a275877a12678e0cfc042177f6a6b2283691b9d0c7776b9b5efc4b5f9af4795",
+      "bytes": 520
+    },
+    {
+      "source": "/tmp/kpr-i259-982-role-repair.json",
+      "archive_file": "evidence/kpr-i259-982-role-repair.json",
+      "sha256": "547c633141dbd1159d8f49cae80b1c7e5b6627910e50ca1b0e743faa043c3244",
+      "bytes": 403
+    },
+    {
+      "source": "/tmp/kpr-i259-982-upgrade-interface.json",
+      "archive_file": "evidence/kpr-i259-982-upgrade-interface.json",
+      "sha256": "35f6665821decf64d894d9518ce23e6f9305f2cc758168dcce12faa4ad9bd9ca",
+      "bytes": 432
+    },
+    {
+      "source": "/tmp/kpr-i259-982-upgrade-final.json",
+      "archive_file": "evidence/kpr-i259-982-upgrade-final.json",
+      "sha256": "6f84d99361f6e3fde7e2db34d879b98efc7b0a09bac7c81bdb9c8e557f215c9e",
+      "bytes": 386
+    },
+    {
+      "source": "/tmp/kpr-i259-982-recovery-final.json",
+      "archive_file": "evidence/kpr-i259-982-recovery-final.json",
+      "sha256": "b2f4cf2af59f83ceea68894f68b60f0044c857508a2d2e34878368248d5f710f",
+      "bytes": 472
+    },
+    {
+      "source": "/tmp/kpr-i259-955-owner-minimal-current-section.md",
+      "archive_file": "evidence/kpr-i259-955-owner-minimal-current-section.md",
+      "sha256": "d0b54031976166b5ca11dd346defe32402fee0fb96936954a68e2ddb02e7b1ff",
+      "bytes": 4797
+    },
+    {
+      "source": "/tmp/kpr-i259-955-owner-minimal-current-issue.json",
+      "archive_file": "evidence/kpr-i259-955-owner-minimal-current-issue.json",
+      "sha256": "1c10bb2dd50f0fc4b4d043d00c264a06abc62ef536ec647bcd324f2e7c7f4b75",
+      "bytes": 40736
+    },
+    {
+      "source": "/tmp/kpr-951-owner-elite-cap-adoption.md",
+      "archive_file": "evidence/kpr-951-owner-elite-cap-adoption.md",
+      "sha256": "c72258db8b8b25ed9310fb3cd1de6e4f81059dbc048226ec5a4c9ad5ae01cff0",
+      "bytes": 1644
+    },
+    {
+      "source": "/tmp/kpr-i259-951-owner-seat-count-section.md",
+      "archive_file": "evidence/kpr-i259-951-owner-seat-count-section.md",
+      "sha256": "cdd6a64ffa9e61f57f4f7dd642aad2bba6faf1b025c4589c678826a3dfda8e34",
+      "bytes": 1590
+    },
+    {
+      "source": "/tmp/kpr-i266-963-host-review.md",
+      "archive_file": "evidence/kpr-i266-963-host-review.md",
+      "sha256": "12eaa82f11e6c259e94f4805b1fac470f7d5261361d1ea8565d0b8e7afb8c30d",
+      "bytes": 3439
+    },
+    {
+      "source": "/tmp/kpr-i266-963-source-verification.json",
+      "archive_file": "evidence/kpr-i266-963-source-verification.json",
+      "sha256": "897cfd638ad6c7e45ec22377a0471d74370b2899f3b8403ad1d0f4d81f589947",
+      "bytes": 2095
+    },
+    {
+      "source": "/tmp/kpr-i266-grok-bot-entry-delivery-20261006.md",
+      "archive_file": "evidence/kpr-i266-grok-bot-entry-delivery-20261006.md",
+      "sha256": "ca1fb372870c9b7d561cce7f2f4b1fa538a08af0f28b494b7347d6389e892570",
+      "bytes": 26600
+    },
+    {
+      "source": "/tmp/kpr-i266-963-original-final.txt",
+      "archive_file": "evidence/kpr-i266-963-original-final.txt",
+      "sha256": "74ef6fae14acdadf9aa6b5d9149cfb6e2d48b25d554f084079a900c4c305a6c7",
+      "bytes": 3554
+    },
+    {
+      "source": "/tmp/kpr-i264-929-host-proof-verification.json",
+      "archive_file": "evidence/kpr-i264-929-host-proof-verification.json",
+      "sha256": "9e753ea0d7680d9b81809ff3753dd69b6cdca1323adc504eb901cd9f7d8d4c31",
+      "bytes": 6639
+    },
+    {
+      "source": "/tmp/kpr-i259-945-host-review.md",
+      "archive_file": "evidence/kpr-i259-945-host-review.md",
+      "sha256": "f5e95efc3122d09bffe7131c30503273c691910298e3e285bf178cb981d3d61d",
+      "bytes": 2154
+    },
+    {
+      "source": "/tmp/kpr-i259-945-source-seat-correlation.json",
+      "archive_file": "evidence/kpr-i259-945-source-seat-correlation.json",
+      "sha256": "03de66fbacdfd1164426c7f21d88dde3971fd682b4cda271680c7075e7610ad9",
+      "bytes": 2124
+    },
+    {
+      "source": "/tmp/kpr-i259-963-final-disposable-upgrade/receipt.json",
+      "archive_file": "evidence/receipt.json",
+      "sha256": "f51953b2ae5a87cc6a47a74ca8498b8d6442584c809eed1ba5a425cc74b80bf6",
+      "bytes": 143003
+    },
+    {
+      "source": "/tmp/kpr-i259-963-final-disposable-upgrade/trace.json",
+      "archive_file": "evidence/trace.json",
+      "sha256": "a2f3f1d1807601815479dcbaaac82179eda2616dc4d80420c941e607d0115d01",
+      "bytes": 134196
+    },
+    {
+      "source": "/tmp/kpr-i259-266-integrated-child-record.json",
+      "archive_file": "evidence/kpr-i259-266-integrated-child-record.json",
+      "sha256": "560b3f5b312a4c58cbb61abd17bd307704ae51d77582ae5bf7dbe6e0dc95065a",
+      "bytes": 2361
+    },
+    {
+      "source": "/tmp/kpr-i259-266-integrated-config-refusal.json",
+      "archive_file": "evidence/kpr-i259-266-integrated-config-refusal.json",
+      "sha256": "f9506a26fa03ba0688ac086f1048aef67d2477090a28f50173d54e2f3ae7c81f",
+      "bytes": 7875
+    },
+    {
+      "source": "/tmp/kpr-i259-963-final-checks.py",
+      "archive_file": "evidence/kpr-i259-963-final-checks.py",
+      "sha256": "5dc4a4deba2b62e466b087414b8b1c786c8b8351fe61425e75dbdd0f8e09b6dc",
+      "bytes": 3955
+    },
+    {
+      "source": "/tmp/kpr-i259-963-disposable-upgrade.py",
+      "archive_file": "evidence/kpr-i259-963-disposable-upgrade.py",
+      "sha256": "2d3ab1a30f6ea67705cfd7e8a1e3b879fcf52539cc49ce4dce06f0d0fffe8c5d",
+      "bytes": 4197
+    },
+    {
+      "source": "/tmp/kpr-i259-963-disposable-upgrade-finish.py",
+      "archive_file": "evidence/kpr-i259-963-disposable-upgrade-finish.py",
+      "sha256": "3dbb74c1046b9ae4b56f8653b80eacd668748f7162cbe243935e46cb46919a4b",
+      "bytes": 4275
+    },
+    {
+      "source": "/tmp/kpr-i259-963-final-disposable-upgrade.py",
+      "archive_file": "evidence/kpr-i259-963-final-disposable-upgrade.py",
+      "sha256": "cada54b1817f9448c5db0de16d9e8cd2dd3e0906faeb9b9baf70e803ffa70566",
+      "bytes": 4482
+    },
+    {
+      "source": "/tmp/kpr-i259-963-current-source-correlation.json",
+      "archive_file": "evidence/kpr-i259-963-current-source-correlation.json",
+      "sha256": "86504816d3cf409d6f28338b5a34a5146c55db04596cbe1af6af91451669d05e",
+      "bytes": 8911
+    },
+    {
+      "source": "/tmp/kpr-i259-963-legacy-fixture-after.txt",
+      "archive_file": "evidence/kpr-i259-963-legacy-fixture-after.txt",
+      "sha256": "58aba001879c0f5f31c7a779524e21e033cc3a004e5c3d27b02b6cf171710e00",
+      "bytes": 488
+    },
+    {
+      "source": "/tmp/kpr-i259-963-owner-source-migration.txt",
+      "archive_file": "evidence/kpr-i259-963-owner-source-migration.txt",
+      "sha256": "802a4fdee95af2adbc684d7f10d916ea325d9b8fedf7d219f43c62c849075d92",
+      "bytes": 239
+    },
+    {
+      "source": "/tmp/kpr-i266-entry/launch-broker-custody-probes.json",
+      "archive_file": "evidence/launch-broker-custody-probes.json",
+      "sha256": "40eb9951a90165104462879414e42f574202468dbc26a2112d66831c0826fc86",
+      "bytes": 1750
+    },
+    {
+      "source": "/tmp/kpr-i266-entry/launch-broker-custody-composed.json",
+      "archive_file": "evidence/launch-broker-custody-composed.json",
+      "sha256": "928cd6e8a90ee7bce87b6045d88ebd718f26967e73b42f6da2ce8b78fa11f4cb",
+      "bytes": 9875
+    },
+    {
+      "source": "/tmp/kpr-i259-963-write-current-pack.py",
+      "archive_file": "evidence/kpr-i259-963-write-current-pack.py",
+      "sha256": "86e5b9d27e76f84ef6b920a1c50e120f7f74bc5e65cab2a413f4f9b56729cd45",
+      "bytes": 27609
+    },
+    {
+      "source": "/tmp/kpr-i259-963-final-fixture-repair.json",
+      "archive_file": "evidence/kpr-i259-963-final-fixture-repair.json",
+      "sha256": "2bfbd4ca668bffc31e3ef0c03a26a455b6bd6355b92277e15463937d97e5315d",
+      "bytes": 1669
+    },
+    {
+      "source": "/tmp/kpr-i259-945-constructed-prompts-20261006/receipt.json",
+      "archive_file": "evidence/136fb904-receipt.json",
+      "sha256": "98d3a3703eb43e8997fde886bd7e3e0e09933b8e870534d4e047464deb43efd0",
+      "bytes": 1354
+    },
+    {
+      "source": "/tmp/kpr-i259-963-prepared-live-step.md",
+      "archive_file": "evidence/kpr-i259-963-prepared-live-step.md",
+      "sha256": "f047f268c839a43b125304ea550ab2db73887e41c54204966c9554438d781e85",
+      "bytes": 6017
+    },
+    {
+      "source": "/tmp/kpr-i259-862-compact-implementation-admission.json",
+      "archive_file": "evidence/kpr-i259-862-compact-implementation-admission.json",
+      "sha256": "a4cdc4c9fd1373d8a089329ab124e9d16876a9de50c129e7bc8a6bd15a43838b",
+      "bytes": 4314
+    },
+    {
+      "source": "/tmp/kpr-i259-929-status.json",
+      "archive_file": "evidence/kpr-i259-929-status.json",
+      "sha256": "7dc0854f67d035d54fac490ba71ffb5190ae5fe925bf395634b742152ed375dc",
+      "bytes": 39708
+    },
+    {
+      "source": "/tmp/kpr-991-host-review.md",
+      "archive_file": "evidence/kpr-991-host-review.md",
+      "sha256": "86c0e760075a57004ce8cae7ad070001500a9a21170aa9c303ea915a40e5a82e",
+      "bytes": 1215
+    },
+    {
+      "source": "/tmp/kpr-i259-991-pause-class-executed.json",
+      "archive_file": "evidence/kpr-i259-991-pause-class-executed.json",
+      "sha256": "ad27697b951e5c2b2f37dccfea7496b47a69e814b914636867e3a551c5ca1448",
+      "bytes": 753
+    },
+    {
+      "source": "/tmp/kpr-i259-991-pause-class-executed.log",
+      "archive_file": "evidence/kpr-i259-991-pause-class-executed.log",
+      "sha256": "3ac1177a65103c631877c5af4298b507b0c07d2e2a83a948920afaa71f8debaa",
+      "bytes": 1107
+    },
+    {
+      "source": "/tmp/kpr-i259-991-pause-class-final.json",
+      "archive_file": "evidence/kpr-i259-991-pause-class-final.json",
+      "sha256": "a0a70d680c149617acd401397c0931e19e459269c26be11d35546bad7205721d",
+      "bytes": 956
+    },
+    {
+      "source": "/tmp/kpr-i259-991-pause-class-final.log",
+      "archive_file": "evidence/kpr-i259-991-pause-class-final.log",
+      "sha256": "2db06cad452c8c2de3d0861d9b47b19b905adf8c905b1d4656f70109a30c8704",
+      "bytes": 284
+    },
+    {
+      "source": "/tmp/kpr-i259-993-opus-final-review.md",
+      "archive_file": "evidence/kpr-i259-993-opus-final-review.md",
+      "sha256": "5d30356933c4fbf52f0814186f4dfaafff4560e6303a1a4de9d707f18e219a2e",
+      "bytes": 24374
+    },
+    {
+      "source": "/tmp/kpr-i259-997-host-opus-disposition.md",
+      "archive_file": "evidence/kpr-i259-997-host-opus-disposition.md",
+      "sha256": "22c65499477eb489f25d2a6713ac9f3944264a72cf56d313c6a3ee2a94b4e334",
+      "bytes": 2531
+    },
+    {
+      "source": "/tmp/kpr-i259-997-shared-copy-shape.py",
+      "archive_file": "evidence/kpr-i259-997-shared-copy-shape.py",
+      "sha256": "1a36e45dfabeddde6bfd7c5d23cfb4b1f9bc25b8067a05a5083b5a32f6c2b105",
+      "bytes": 921
+    },
+    {
+      "source": "/tmp/kpr-i259-997-source-check.py",
+      "archive_file": "evidence/kpr-i259-997-source-check.py",
+      "sha256": "78636b9c7e0935472c2a63ca4d568bcf81307d9743ec5f4925e515825bce153c",
+      "bytes": 1644
+    },
+    {
+      "source": "/tmp/kpr-i259-997-run.py",
+      "archive_file": "evidence/kpr-i259-997-run.py",
+      "sha256": "3209b7ed75fb63b240cfada0b55f9bd5145d796cce639c8053be353e320e639d",
+      "bytes": 2143
+    },
+    {
+      "source": "/tmp/kpr-i259-997-evidence-binding.json",
+      "archive_file": "evidence/kpr-i259-997-evidence-binding.json",
+      "sha256": "75a3c975b22bcfefd7207dc8ebc7088335634fc07df1e823d445321eae42e4b9",
+      "bytes": 8363
+    },
+    {
+      "source": "/tmp/kpr-i259-997-module244-executed-source.py",
+      "archive_file": "evidence/kpr-i259-997-module244-executed-source.py",
+      "sha256": "30c04e9c411a96c6896a483c54ff374ee6411c751d5cc26a29b25cb0edd61b96",
+      "bytes": 198922
+    },
+    {
+      "source": "/tmp/kpr-i259-1000-owner-final-duties.txt",
+      "archive_file": "evidence/kpr-i259-1000-owner-final-duties.txt",
+      "sha256": "94dd3d6bce54bddd75f2e9d1d499f224059b57f9d288e28c7e4eac34dbf36cf7",
+      "bytes": 2133
+    },
+    {
+      "source": "/tmp/kpr-i259-1000-current-retirement-gap.txt",
+      "archive_file": "evidence/kpr-i259-1000-current-retirement-gap.txt",
+      "sha256": "a07c13022b1dc22dd83a0aff3e55cfc4f58e8e6ebd6838da384912bc8c9ede14",
+      "bytes": 2238
+    },
+    {
+      "source": "/tmp/kpr-1000-host-review.md",
+      "archive_file": "evidence/kpr-1000-host-review.md",
+      "sha256": "677377029e01cb7c22c872e5951a7d1ab52c660ee1b19c86e4a332f799b76d6d",
+      "bytes": 2913
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-gap-refusal.json",
+      "archive_file": "evidence/kpr-1000-retirement-gap-refusal.json",
+      "sha256": "589a8e2418b62e5194f8968bab2643eb4679972bef9fbbc31067f11fe89f3152",
+      "bytes": 4035
+    },
+    {
+      "source": "/tmp/kpr-1000-compact-gap-retire.json",
+      "archive_file": "evidence/kpr-1000-compact-gap-retire.json",
+      "sha256": "fac61410749c0091ca493a89a803def28ac21cd8e43ec592ef52db7fdf15ad6b",
+      "bytes": 943
+    },
+    {
+      "source": "/tmp/kpr-1000-sweep-list.json",
+      "archive_file": "evidence/kpr-1000-sweep-list.json",
+      "sha256": "ca974973412ca9ed31f495272d29691f2b94f8ff779520daf035aa53d4426574",
+      "bytes": 230447
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/sources.json",
+      "archive_file": "evidence/sources.json",
+      "sha256": "e8f0c9f4368b171230949e8541736e20c73c546f22271d37ad441a35995eedaa",
+      "bytes": 856
+    },
+    {
+      "source": "/tmp/kpr-i259-1000-retirement-proof.py",
+      "archive_file": "evidence/kpr-i259-1000-retirement-proof.py",
+      "sha256": "7fa1dfd22c37fad60534934d9e9d7e1732721e6ea0c7d70b8e83bed06dd583ad",
+      "bytes": 1430
+    },
+    {
+      "source": "/tmp/kpr-i259-1000-source-check.py",
+      "archive_file": "evidence/kpr-i259-1000-source-check.py",
+      "sha256": "ff30cc0499b62947ff4c71fa7c316ee30e672b06d82520df7c5f806581c0a894",
+      "bytes": 1689
+    },
+    {
+      "source": "/tmp/kpr-i259-continuation-run.py",
+      "archive_file": "evidence/kpr-i259-continuation-run.py",
+      "sha256": "8715506d5f560196a6b7e9c4af23e0522adfa49660c634232ef021a0b65cc068",
+      "bytes": 2218
+    },
+    {
+      "source": "/tmp/kpr-i262-host-closeout-verification.json",
+      "archive_file": "evidence/kpr-i262-host-closeout-verification.json",
+      "sha256": "8b40f4a01b4a67a5f51c6caa35e81a974887dc0560d0c65f703c83287ae68497",
+      "bytes": 2226
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/0.json",
+      "archive_file": "evidence/0.json",
+      "sha256": "42be1c5d645a184a0cc97ec0748b11be7d31cc43644d9d5ace433f81b301935b",
+      "bytes": 20007
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/0-collect.json",
+      "archive_file": "evidence/0-collect.json",
+      "sha256": "656011425c64593426bf22d26803da7ad8cf51e4d6736b6bb7afbd9c8e12ba4a",
+      "bytes": 20542
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/1.json",
+      "archive_file": "evidence/1.json",
+      "sha256": "78e74e6313e64c118cbbe56e00d814c9b68464482678d03a6290e3e57280f8e3",
+      "bytes": 14378
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/1-collect.json",
+      "archive_file": "evidence/1-collect.json",
+      "sha256": "310720da7485b4286de4f8863ebc578eb27bb5132fb3f3fc3eb8202a913c466f",
+      "bytes": 14441
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/2.json",
+      "archive_file": "evidence/2.json",
+      "sha256": "cc510051532e691671e610e164a75e6929ed421f578b9d01d02c16f7dbf01ca7",
+      "bytes": 6560
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/2-collect.json",
+      "archive_file": "evidence/2-collect.json",
+      "sha256": "0e7c7738c28f70fff229c4573f24254a9c9d22fcdc1401aeac3bfe11c96f58bc",
+      "bytes": 6623
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/3.json",
+      "archive_file": "evidence/3.json",
+      "sha256": "de3503a6215437d10e09ec85105b429964e97fc3cdf3968d3cf54d72645a652f",
+      "bytes": 4313
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/3-collect.json",
+      "archive_file": "evidence/3-collect.json",
+      "sha256": "e0eac7b23ae9300e910db17e09035acfa4d7a32f6a6dcef86621c4c8804fd680",
+      "bytes": 4280
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/4.json",
+      "archive_file": "evidence/4.json",
+      "sha256": "96cf88ed23cdb4732550b0bd22e6574ddaf597832f77f4bce85606877113b3e7",
+      "bytes": 4832
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/4-collect.json",
+      "archive_file": "evidence/4-collect.json",
+      "sha256": "9c57fc46913aabd08abaed1dedc55b93bc9b0b79fc423abcf103c9e1d4f10cbe",
+      "bytes": 4799
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/5.json",
+      "archive_file": "evidence/5.json",
+      "sha256": "d2f200e82689c2c4be4aeef838f0f83dfe1df489fc7d2f8a4862dfb55eaac8f3",
+      "bytes": 11620
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/5-collect.json",
+      "archive_file": "evidence/5-collect.json",
+      "sha256": "ddb98754615a4b25d91f2502bad1ecb27ee74829edcdafe58c7d92e4280b68ec",
+      "bytes": 11625
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/6.json",
+      "archive_file": "evidence/6.json",
+      "sha256": "23cd93bb24893897fcf161ff987b4f4680dd0594874b1fc919206c1464d79119",
+      "bytes": 8715
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/6-collect.json",
+      "archive_file": "evidence/6-collect.json",
+      "sha256": "b7d22668aa6f3dc9a49c48603ddd2b716c41f1b84638119649722caa098b5d88",
+      "bytes": 8682
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/7.json",
+      "archive_file": "evidence/7.json",
+      "sha256": "437be0922dd0c35504d837fa21718dc2cc8327cf905dbe3d5fc2e43d24f30357",
+      "bytes": 14355
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/7-collect.json",
+      "archive_file": "evidence/7-collect.json",
+      "sha256": "6b53686be95fa4beeee50fc5533ea1b77d57435cdcb7e5079aa0fd6627a8de59",
+      "bytes": 14418
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/8.json",
+      "archive_file": "evidence/8.json",
+      "sha256": "0b47e7b85955c50d9fcbded46fdde4e02a4b1b073cca9008408ceb6d41c49dc2",
+      "bytes": 12600
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/8-collect.json",
+      "archive_file": "evidence/8-collect.json",
+      "sha256": "f5e31a7418398caa06158cad430bb580895440811a50be2e6906adcdd17eb434",
+      "bytes": 12195
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/9.json",
+      "archive_file": "evidence/9.json",
+      "sha256": "5c1cf1b254b4229c51aa599d25dcf1e69f86fcc7680ad4a483822b790870885b",
+      "bytes": 20218
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/9-collect.json",
+      "archive_file": "evidence/9-collect.json",
+      "sha256": "bd0851e7780a772d79556e7c5939e62f4a275f79de4a30de3ffab3557bc2ca11",
+      "bytes": 20281
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/10.json",
+      "archive_file": "evidence/10.json",
+      "sha256": "314f9244241c9a55c12bce913724c8795049a76c6ba684a9748e76045aaf5b8d",
+      "bytes": 4845
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/10-collect.json",
+      "archive_file": "evidence/10-collect.json",
+      "sha256": "9c0f5648df808f7819e81b043ef3aff95811544492387288cdb75d9b1262a947",
+      "bytes": 4813
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/11.json",
+      "archive_file": "evidence/11.json",
+      "sha256": "ea258da6a5173cc352c55724868aa79a6d1debf0f483758ba5db8cd7cc96cc10",
+      "bytes": 4767
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/11-collect.json",
+      "archive_file": "evidence/11-collect.json",
+      "sha256": "7265decf31e5642887bc5943f1fd2323c9671d476663e3492b7af39620c9d1b5",
+      "bytes": 4735
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/12.json",
+      "archive_file": "evidence/12.json",
+      "sha256": "73326a8e58ab3bb6d8944eb467aedab7702e8761451fbb71f7bf5ac4c9bff255",
+      "bytes": 4899
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/12-collect.json",
+      "archive_file": "evidence/12-collect.json",
+      "sha256": "efe39ebd75a897f62e1ef31fe08736759146ad114f0a00b20077554b8655181c",
+      "bytes": 4867
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/13.json",
+      "archive_file": "evidence/13.json",
+      "sha256": "1d75acf88284701dfa19cbd40ef5f72846cf8c3d3ddf7ac08226e236136aa5eb",
+      "bytes": 6671
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/13-collect.json",
+      "archive_file": "evidence/13-collect.json",
+      "sha256": "04abfd0c64a6d906e3905ba833269c98748f065f069777315a48abbf56e7092f",
+      "bytes": 6639
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/14.json",
+      "archive_file": "evidence/14.json",
+      "sha256": "a9f43ad62280bfa2794bb5ea494e7ee8accac6919ff715e0bfa1ca1bf21e5e0a",
+      "bytes": 7007
+    },
+    {
+      "source": "/tmp/kpr-1000-retirement-correlation/14-collect.json",
+      "archive_file": "evidence/14-collect.json",
+      "sha256": "3f31581c43de80025b0e24554ae10ec814d79a408766e25c758cb773e3862ea1",
+      "bytes": 6975
+    },
+    {
+      "source": "/tmp/kpr-i266-entry/launch-broker-test.json",
+      "archive_file": "evidence/launch-broker-test.json",
+      "sha256": "911b52be01da5f20632ae2fb5ca4aee2661f9def94ac6aa20ce463a48eb7c137",
+      "bytes": 8950
+    },
+    {
+      "source": "/tmp/kpr-i266-entry/launch-broker-composed.json",
+      "archive_file": "evidence/launch-broker-composed.json",
+      "sha256": "c456c1ac76a3933eb7343b0d4a671ef98aac86a083c2555cf28e9965c42b6528",
+      "bytes": 12688
+    },
+    {
+      "source": "/tmp/kpr-test-efficiency-public-research-execute-20261005.json",
+      "archive_file": "evidence/kpr-test-efficiency-public-research-execute-20261005.json",
+      "sha256": "b68a5149611b5a51bb090d578f9b8cd1016894f283793b2bf8a77944d01d0e1c",
+      "bytes": 14398
+    },
+    {
+      "source": "/tmp/kpr-recent-harness-research-execute-20261006.json",
+      "archive_file": "evidence/kpr-recent-harness-research-execute-20261006.json",
+      "sha256": "e0571b00acd753220975cd048a156e757212cc37ebdfd8749f5e207a6a280495",
+      "bytes": 10994
+    },
+    {
+      "source": "/tmp/kpr-continuous-improvement-opus-execute-20261006.json",
+      "archive_file": "evidence/kpr-continuous-improvement-opus-execute-20261006.json",
+      "sha256": "e59dbacf0668ca1170376947567168aaba3ff90923bb451011a0746eede4269c",
+      "bytes": 4213
+    },
+    {
+      "source": "/tmp/kpr-i262-language-dispatch.json",
+      "archive_file": "evidence/kpr-i262-language-dispatch.json",
+      "sha256": "0abc57ec032b583a6b136f0e6b5e82e64c0470d56677b8a8bb768abe59077a6d",
+      "bytes": 3784
+    },
+    {
+      "source": "/tmp/kpr-i262-writing-dispatch.json",
+      "archive_file": "evidence/kpr-i262-writing-dispatch.json",
+      "sha256": "985e99a09b90c39ec0f629679a01fe90a928f5658eb3dd3077c58ff12342c104",
+      "bytes": 4303
+    },
+    {
+      "source": "/tmp/kpr-i261-live-pair-execute.json",
+      "archive_file": "evidence/kpr-i261-live-pair-execute.json",
+      "sha256": "3d760157aec6c3c769adec6c5545e743a1ac02fd587ce774b0421e3a758a85cc",
+      "bytes": 7468
+    },
+    {
+      "source": "/tmp/kpr-replacement-frontier-dispatch.json",
+      "archive_file": "evidence/kpr-replacement-frontier-dispatch.json",
+      "sha256": "7bd6c42c8731a0a89c39db02d3c622577b202228f67510dd2cad5298df7a49a2",
+      "bytes": 7658
+    },
+    {
+      "source": "/tmp/kpr-i263-i264-parallel-execute-20261005.json",
+      "archive_file": "evidence/kpr-i263-i264-parallel-execute-20261005.json",
+      "sha256": "a26beae296908a97b49156a4a1757d3987eb1523408eeeefbab836dc4d906359",
+      "bytes": 11081
+    },
+    {
+      "source": "/tmp/kpr-i264-behavior-gap-parallel-execute-20261005.json",
+      "archive_file": "evidence/kpr-i264-behavior-gap-parallel-execute-20261005.json",
+      "sha256": "048c0e449cebef4fd86c88a3bcae50513dafb23a90263dd3d65ab17db11d6863",
+      "bytes": 7575
+    },
+    {
+      "source": "/tmp/kpr-steer-gap-parallel-execute-20261005.json",
+      "archive_file": "evidence/kpr-steer-gap-parallel-execute-20261005.json",
+      "sha256": "c4634224be21f078175e0a4142fc775b474727a91703bc439dd730710e2aae28",
+      "bytes": 14577
+    },
+    {
+      "source": "/tmp/kpr-dsh-compact-proof-dispatch.json",
+      "archive_file": "evidence/kpr-dsh-compact-proof-dispatch.json",
+      "sha256": "d40fd4a8ee948937a3540d13103019eb2699e571c8e7b1117dbeccf85c614c45",
+      "bytes": 4316
+    },
+    {
+      "source": "/tmp/kpr-grok-compact-proof-dispatch.json",
+      "archive_file": "evidence/kpr-grok-compact-proof-dispatch.json",
+      "sha256": "46575ac9e4a3bf9f5ecf0cc629f575e7b86be69c7101cff69d6c1223a39d28fd",
+      "bytes": 4238
+    },
+    {
+      "source": "/tmp/kpr-current-record-opus-execute.json",
+      "archive_file": "evidence/kpr-current-record-opus-execute.json",
+      "sha256": "7201fedc01cb62c9289dcbdb11b41946cfae7304400254135a951de7fc7b8022",
+      "bytes": 4374
+    },
+    {
+      "source": "/tmp/kpr-harness-paper-opus-dispatch.json",
+      "archive_file": "evidence/kpr-harness-paper-opus-dispatch.json",
+      "sha256": "c584e87a805902faedf6f747fe27c177a3003061c2c1b8bf4f5c58314653f78a",
+      "bytes": 4348
+    },
+    {
+      "source": "/tmp/kpr-opus-reconsideration-collect.json",
+      "archive_file": "evidence/kpr-opus-reconsideration-collect.json",
+      "sha256": "a9f43ad62280bfa2794bb5ea494e7ee8accac6919ff715e0bfa1ca1bf21e5e0a",
+      "bytes": 7007
+    },
+    {
+      "source": "/tmp/kpr-i259-1000-update-delivery.py",
+      "archive_file": "evidence/kpr-i259-1000-update-delivery.py",
+      "sha256": "ea4899a2b96414d58095d7e72b983bf937a502667ad1ca8c4ddeff98430d2454",
+      "bytes": 29282
+    },
+    {
+      "source": "/tmp/kpr-i259-1000-final-bindings.py",
+      "archive_file": "evidence/kpr-i259-1000-final-bindings.py",
+      "sha256": "f782a32f3c1e4b0c2ad5103a6a1a2f89c5ecba728564e96abe9b69c045a1219d",
+      "bytes": 6948
+    },
+    {
+      "source": "/tmp/kpr-i259-six-requirement-answers-2989-20261006.md",
+      "archive_file": "evidence/kpr-i259-six-requirement-answers-2989-20261006.md",
+      "sha256": "54c030dd7bb0c40b53d2a2252ed671003ff01e0623f8f8002e5ec0b04ba0501a",
+      "bytes": 7073
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-2989.patch",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-2989.patch",
+      "sha256": "2646ff5e748d798a01e26a165760ab0d3f28b1041cdece89291d1975f8834392",
+      "bytes": 2126755
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-authored-2989.patch",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-authored-2989.patch",
+      "sha256": "55d4b393c3553b532cd2052ae18402cf9e0045f4237422f6ce02ddf0ac005f84",
+      "bytes": 499655
+    },
+    {
+      "source": "/tmp/kpr-i259-six-requirement-answers-b7f5-20261006.md",
+      "archive_file": "evidence/kpr-i259-six-requirement-answers-b7f5-20261006.md",
+      "sha256": "67f544ddbfa60fe3ab48a02ef220efd6383e33a0da33b924e05946d687f86775",
+      "bytes": 6347
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-b7f5.patch",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-b7f5.patch",
+      "sha256": "e93daa2795e6c9cf118fd4c1349436c4cbe3bf8f0fdaf6526c40a0222234519c",
+      "bytes": 2291976
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-authored-b7f5.patch",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-authored-b7f5.patch",
+      "sha256": "c7441e48e5c7be6cbc20ef3ae1b662c9c8c65af74fbe00081f32460992d773d9",
+      "bytes": 589857
+    },
+    {
+      "source": "/tmp/kpr-i259-982-consolidated-refinement-b7f5.patch",
+      "archive_file": "evidence/kpr-i259-982-consolidated-refinement-b7f5.patch",
+      "sha256": "bc332bd13c8ec3151fc5ad508dc6cd01d5e9bbe9d377cb2baa49507d1a34ffa1",
+      "bytes": 308044
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-5079.patch",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-5079.patch",
+      "sha256": "4afa84f5209b22803c6e45adf8a0ffca25e177c95c1ae739da6fcc90790aa294",
+      "bytes": 2291976
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-authored-5079.patch",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-authored-5079.patch",
+      "sha256": "8aa26df900e3fa398d49c80444a51943287f223883d987f9cd97bec6f9aa3020",
+      "bytes": 589857
+    },
+    {
+      "source": "/tmp/kpr-i259-982-consolidated-refinement-5079.patch",
+      "archive_file": "evidence/kpr-i259-982-consolidated-refinement-5079.patch",
+      "sha256": "977f92ab9f5735b4a69d57da1a9c211597b5fef4654bc742ee2384c3ccc7e5f1",
+      "bytes": 308279
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-469.patch",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-469.patch",
+      "sha256": "c04479d032da82c91e022f363f59b84a77b203fb91a68516cb6e6f68ad36d968",
+      "bytes": 2306895
+    },
+    {
+      "source": "/tmp/kpr-i259-host-compact-implementation-authored-469.patch",
+      "archive_file": "evidence/kpr-i259-host-compact-implementation-authored-469.patch",
+      "sha256": "6370877a3dfeda7979226599ce3ec67531a144b3dd3186f62bb90d52b95ac9f4",
+      "bytes": 604604
+    },
+    {
+      "source": "/tmp/kpr-i259-982-consolidated-refinement-469.patch",
+      "archive_file": "evidence/kpr-i259-982-consolidated-refinement-469.patch",
+      "sha256": "aa8dd183cadc085ebf3527ed5edfe6cced02dd2d221b35d00feff8e0e4622978",
+      "bytes": 323200
+    }
+  ]
+}

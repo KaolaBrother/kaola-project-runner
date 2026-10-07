@@ -1,0 +1,66 @@
+{
+  "checks": 10,
+  "evidence": [
+    {
+      "check": "an absent stop reply keeps native/worker custody unknown",
+      "ok": true,
+      "result": {
+        "holder_alive": false,
+        "holder_may_exist": true,
+        "host_session_stopped": false,
+        "residual_pids": null
+      }
+    },
+    {
+      "check": "cleanup leaves an unknown manager state untouched",
+      "ok": true,
+      "reason": "job-state-unknown"
+    },
+    {
+      "check": "cleanup keeps attempt evidence on an unknown state",
+      "ok": true
+    },
+    {
+      "check": "cleanup does not unload a nonowned exited job",
+      "ok": true,
+      "reason": "job-not-owned"
+    },
+    {
+      "check": "cleanup keeps a failed attempt whose native agent is alive",
+      "ok": true,
+      "reason": "attempt-unresolved"
+    },
+    {
+      "check": "cleanup keeps the unresolved attempt artifact",
+      "ok": true
+    },
+    {
+      "check": "cleanup removes the attempt after the exact identities are gone",
+      "cleaned": {
+        "attempts_removed": 1,
+        "label": "com.kaolabrother.kaola-runner.launch.a7614473900cb486",
+        "result": "cleaned",
+        "schema": "kaola-launch-broker/3",
+        "unresolved_effect": false
+      },
+      "ok": true
+    },
+    {
+      "check": "a live recorded native agent keeps the own effect unresolved",
+      "ok": true
+    },
+    {
+      "check": "reconcile keeps the attempt unresolved when the native agent is alive",
+      "ok": true,
+      "state": "absent",
+      "unresolved": true
+    },
+    {
+      "check": "both recorded identities dead resolves the own effect",
+      "ok": true
+    }
+  ],
+  "failures": [],
+  "label": "helper affected probes (native custody + cleanup disposition)",
+  "result": "pass"
+}

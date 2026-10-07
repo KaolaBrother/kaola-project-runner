@@ -1,0 +1,536 @@
+{
+  "candidate": "c33724048418fa75ff0ed2e7c356d50183fb702b",
+  "parent": "469015649b72a6ef846ed608648f1e8f4ebf5d9d",
+  "refinement_base": "2989c8cfe61db1f98902fa7759d2fbb55e382fcc",
+  "base": "77d57fc0bae03cbcb70aa0b0b618c76ea7499a33",
+  "branch": "workflow/issue-259",
+  "clean": true,
+  "delivery": {
+    "path": "/tmp/kpr-i259-host-compact-implementation-delivery-20261006-before-host1033.md",
+    "sha256": "5bd97c47c56e7df97a573d3f4ac2afb318cc7b456c915f4580239ea4d86c0382"
+  },
+  "six_answers": {
+    "path": "/tmp/kpr-i259-six-requirement-answers-20261006-before-host1033.md",
+    "sha256": "ba72e6725e3444527a775943c0059438facc51345f791d4868ee28f64f6d3b59",
+    "body_sha256": "cf13139360584e2b8f2c422a8574ef278631a95e4c83db82182d430c2b4602f2"
+  },
+  "six_body_matches_delivery": true,
+  "manifest": {
+    "path": "/tmp/kpr-i259-host-compact-implementation-hashes-20261006-before-host1033.json",
+    "sha256": "246b754eea29422ce02b0188d1c7bd833a7f8b2fea023a147ca2ab1e0f7e7b19"
+  },
+  "patch": {
+    "path": "/tmp/kpr-i259-host-compact-implementation.patch",
+    "sha256": "cb97268a3f4a25b00c1b088e9c8873037a3a0c5fa3627c8378bd4b60b3e27ddf",
+    "bytes": 2322660
+  },
+  "authored_patch": {
+    "path": "/tmp/kpr-i259-host-compact-implementation-authored.patch",
+    "sha256": "8625c16cf028a866106da2b668f3224c22ad6d050208225e1838733585b1ddaf",
+    "bytes": 615585
+  },
+  "refinement_patch": {
+    "path": "/tmp/kpr-i259-982-consolidated-refinement.patch",
+    "sha256": "4a7d26e76ff4d56e3ae21289a20494397833cd46e16acb26f1bbe0badf10c497",
+    "bytes": 340069
+  },
+  "all_changed_candidate_hashes_match": true,
+  "all_changed_committed_hashes_match": true,
+  "changed_path_count": 137,
+  "refinement_path_count": 60,
+  "repair_path_count": 57,
+  "claim": {
+    "digest": "5ea624f9b9c061bd8c53dc4e20b20ac5a7c35ce95f4d1f244b17fd164f9a29d5",
+    "state_sha256": "610d647040b2ad4c948e36ee9480f14d92e96ade95aa3449210808fd7ef9cb75",
+    "ledger_sha256": "2efb63f6fb7c9da77f74d12abb4754d3e1b4de558599057bd9a2b59a133ab53b",
+    "statuses": [
+      "done",
+      "done",
+      "done",
+      "done"
+    ]
+  },
+  "native_proof": "No native launch/control by this writer. Original266 OS-manager receipts use mock agents, not native auto smoke. Original925/926/929 direct/finite native boundaries retain their limits; required changed-default live smoke remains UNVERIFIED.",
+  "copied_report_history": {
+    "candidate": "2989c8cfe61db1f98902fa7759d2fbb55e382fcc",
+    "calls": 25,
+    "seconds": 1.825492,
+    "cleanup": {
+      "scratch": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o",
+      "exists_after": false
+    },
+    "receipt_sha256": "f51953b2ae5a87cc6a47a74ca8498b8d6442584c809eed1ba5a425cc74b80bf6"
+  },
+  "266_handoff": {
+    "commit": "cfa491dda33a1130746743ff15e10bdbbf11a324",
+    "files": {
+      "scripts/kaola-launchd-broker.py": {
+        "sha256": "63cc4efb2e03eac2766c4c06a69e073ffb6c836e22b3a91ca0e235bc2e73b6d4",
+        "equal_handoff": true
+      },
+      "tests/contract/test-issue-266-launch-broker.py": {
+        "sha256": "5c3b55150e2aebbb0abd8e3ee5741dd3e11567272d936669d31a9f7c15dbc3cc",
+        "equal_handoff": true
+      },
+      "tests/contract/test-issue-266-launch-broker-composed.py": {
+        "sha256": "7044000052f47581cdf6aea52de52a948dfbbf890be4c7bb5006e6d2bbded249",
+        "equal_handoff": true
+      }
+    },
+    "original_writer_stopped": "Host963 handoff receipt; no new native control call"
+  },
+  "current_state_write": false,
+  "index_reconstruction": false,
+  "installation": false,
+  "lifecycle": false,
+  "source_custody": "Original259, original claim/worktree; fresh ACP recovery after prior61df exact-stop; same owner and sole writer, Host retains custody.",
+  "mixed_version_988": {
+    "installed_tool_sha256": "9fef880e28d94caad43f347fdf9d1e1e25e8de20c72967b935e2a49cdbfabe2b",
+    "main_tool_sha256": "baaedc029bfc8bb05aef1b74913ed417eb443d4511e21bd1822cf187b2662c4c",
+    "actual_2989_tool_sha256": "2db85d7597f42d93b1d47a0f0f95216eef650b0b961ec07d866af14f633d7ae7",
+    "candidate_retire_record_unchanged_from_2989": false,
+    "candidate_host_changes_unchanged_from_2989": true,
+    "candidate_node_guidance_unchanged_from_2989": true,
+    "installed_activation_unmeasured": true,
+    "retirement_change": "1000 adds only source-bound accepted continuation reconciliation and transient command evidence; prior resolved alert removal is not replayed."
+  },
+  "pending": "Required per-platform/backend changed-default live ACP smoke; fresh affected Opus Extra High conclusion and THIS outer personal verdict; Host current-only cleanup and original259/263/264/265/266 lifecycle before authorized unused PATCH;260 keep-open; reader-first/outer mapping/install/native limits.",
+  "checks": [
+    {
+      "receipt": "/tmp/kpr-i259-982-final-records.json",
+      "sha256": "55b1a87cfad85a6d5a9b055da24e26c0c7a05744d7f81e38c666576efd5ab267",
+      "exit": 0,
+      "seconds": 6.636510999989696,
+      "reuse_limit": "Original PASS covers only the executed bodies. Unreachable worker_pause/D9 block was not executed. The affected Delegator case is replaced by991-pause-class-final."
+    },
+    {
+      "receipt": "/tmp/kpr-i259-982-final-dispatch.json",
+      "sha256": "9bd393d17e3277b5e955b922c3bb2eba462858ac8e315074b16044e65ff5948b",
+      "exit": 0,
+      "seconds": 4.966795583022758
+    },
+    {
+      "receipt": "/tmp/kpr-i259-982-final-reader.json",
+      "sha256": "4d9211e9ae2a168c1f9a951d37145c35bf418e022f99e92c63487213a1fb3429",
+      "exit": 0,
+      "seconds": 2.3622722920263186
+    },
+    {
+      "receipt": "/tmp/kpr-i259-982-final-generated.json",
+      "sha256": "199145eed65785de1b9a6bbf38663dd222f3b05c07b014334bc0b7b5bb381dbc",
+      "exit": 0,
+      "seconds": 4.234249291999731
+    },
+    {
+      "receipt": "/tmp/kpr-i259-982-role-final.json",
+      "sha256": "6bf51485529b003ef1321e2b9784616ee3ffbbf6f27ff1a06c7554232321d674",
+      "exit": 0,
+      "seconds": 14.128142250003293
+    },
+    {
+      "receipt": "/tmp/kpr-i259-982-upgrade-short-root.json",
+      "sha256": "5594482c0248f9ff22ba14ce74eb6ba684b1caef04b3728a878fd15e390c94d0",
+      "exit": 0,
+      "seconds": 2.14561370795127
+    },
+    {
+      "receipt": "/tmp/kpr-i259-982-bridge-facts.json",
+      "sha256": "6486a218edb8fd8aead3c073434d7b4d51958e51e82c647a8e55c569d2285e23",
+      "exit": 0,
+      "seconds": 2.0145447499817237
+    },
+    {
+      "receipt": "/tmp/kpr-i259-982-delegator-transport.json",
+      "sha256": "ec64414ac9baea90c778ba11ede873ce2cb7a81c1657187d9f2ab9e99294acb8",
+      "exit": 0,
+      "seconds": 4.560837124998216
+    },
+    {
+      "receipt": "/tmp/kpr-i259-982-broker-structure.json",
+      "sha256": "5405c222fe36e9e2045389833373e64de082d812fdb07b4232a069428f954223",
+      "exit": 0,
+      "seconds": 0.20497349998913705
+    },
+    {
+      "receipt": "/tmp/kpr-i259-982-validate-routes.json",
+      "sha256": "e78024140b2e12040a61b5926e0a5ca88b3de2a8b736ccfc84ec1b65908b6501",
+      "exit": null,
+      "seconds": 0.013101166987325996
+    },
+    {
+      "receipt": "/tmp/kpr-i259-988-retirement-reconciliation.json",
+      "sha256": "528c77998fbf1f2bf8116bc81e4f2eda741241fad4ea74c7e0295073da760f41",
+      "exit": 0,
+      "seconds": 4.315932790981606
+    },
+    {
+      "receipt": "/tmp/kpr-i259-988-retirement-checkpoint.json",
+      "sha256": "615eaba8df067de52529b6b88e0332858c495f6a87d3555b8c0af51f7a69620c",
+      "exit": 0,
+      "seconds": 0.9630976670305245
+    },
+    {
+      "receipt": "/tmp/kpr-i259-982-fixture-names.json",
+      "sha256": "26a256e158e2c0f9d2825fbb57c6db91033389343bb2259c0a47e1283f89bb88",
+      "exit": 0,
+      "seconds": 3.273870832985267
+    },
+    {
+      "receipt": "/tmp/kpr-i259-991-pause-class-final.json",
+      "sha256": "a0a70d680c149617acd401397c0931e19e459269c26be11d35546bad7205721d",
+      "exit": 0,
+      "seconds": 0.8020184580236673
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-droid-bounded.json",
+      "sha256": "eb66f268acd852d88ab032aa8ab9815a57d28c91e02d71310d190c601bd24440",
+      "exit": 0,
+      "seconds": 11.919434125011321
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-droid.json",
+      "sha256": "6deef66e48ed7f04250fe81a9ffc9c09216faca7a866c9062da5e686f11278c3",
+      "exit": 0,
+      "seconds": 12.184775250032544
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-dsh-shapes.json",
+      "sha256": "07bac07abf6227bd23099aad7d5391dd4e4ddb80ca6a6ba53d3457f0d00664f8",
+      "exit": 0,
+      "seconds": 1.9737150000291876
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-f1-bounded.json",
+      "sha256": "1b5775862876572860e39528d1e9f041a9e8204e4f74e5fa286a986928324e5d",
+      "exit": 0,
+      "seconds": 1.7653115420253016
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-f1-exact.json",
+      "sha256": "c2307d016daaf972bedee58999e3993f1845be4ba80a5a168ff8e9d252aa0877",
+      "exit": 0,
+      "seconds": 1.9581606250139885
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-filtered-host.json",
+      "sha256": "55e8c8f6dea60fa075e1c9f9353d504c47a38147a7c352025ea857d571cb3ef5",
+      "exit": 0,
+      "seconds": 4.339580541010946
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-filtered-reader.json",
+      "sha256": "7810627f278567452d4ed6fa091f4e709a581a4eb0d2662ed4993a83e4d1f90f",
+      "exit": 0,
+      "seconds": 3.9827981250127777
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-filtered-root.json",
+      "sha256": "8b7af85f60d921e04771f53d7f3a0842425921b381302fab46c8634f236e51fe",
+      "exit": 0,
+      "seconds": 7.739449540968053
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-filtered-steering.json",
+      "sha256": "c3d9b1d9c71413ef58be4a76c0b49a18e0c7805caf7c663d7ab4026ef5dfebb6",
+      "exit": 0,
+      "seconds": 12.361823707993608
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-isolated-copy.json",
+      "sha256": "89ec69e9a1fafd36f416194972d992cb71d627bb98d7280581e8c6c1747cd883",
+      "exit": 0,
+      "seconds": 0.7807225830038078
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-isolated-shared-entry.json",
+      "sha256": "194bf687951094b2d682d9a778a98c7c631f7e826e73dbcc7f9f174a7aefbc5e",
+      "exit": 0,
+      "seconds": 1.339728292019572
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-module244-failed-cases.json",
+      "sha256": "c7e1fd9e6078e1d3d92fca1e902884249fac20b5ca417eb43440efc6a5ec0939",
+      "exit": 0,
+      "seconds": 0.972688083013054
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-module244.json",
+      "sha256": "c0689de5335445e3f28b41bc9d1d8d1bd388a42ce0caccae921f51fcd8f38a09",
+      "exit": 1,
+      "seconds": 43.8989968750393
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-projection-final.json",
+      "sha256": "067a5eae074eda21925abe36dbbb9e7d9262d39af930fe06fb3e36f597c3e49c",
+      "exit": 0,
+      "seconds": 0.5762615409912542
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-projection.json",
+      "sha256": "bcf9f27aea153b615d37f240f12fe52f6e1ede7a6c1e7c6dca1e972082d74cda",
+      "exit": 1,
+      "seconds": 0.4592785830027424
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-source-check.json",
+      "sha256": "fd7cbd36cbe5c92e77a63a633081a1f0315f68718aa02ef231ca5944dfa41c05",
+      "exit": 0,
+      "seconds": 0.39868470799410716
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-continuation-task-clearance.json",
+      "sha256": "219d7a47b6892dc9ba40a9de5ab14fa2b08dc123d60995c08e3a5e2d26ca1899",
+      "exit": 0,
+      "seconds": 0.6391344589646906,
+      "reuse_limit": "Historical clean469 clearance, replaced by extended final case"
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-continuation-retirement-reconcile.json",
+      "sha256": "e2d1e4f4c8d1614f0b536028713b4e67a3bfcfe5ae03efd529574d5bf222e01e",
+      "exit": 0,
+      "seconds": 1.4490110409678891,
+      "reuse_limit": "Intermediate precommit shape, replaced by final source proof"
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-continuation-retirement-final.json",
+      "sha256": "124b7b35e4b3fbe6a01a9da105795001cfb99510d0edee1ea9ba181d8295e353",
+      "exit": 0,
+      "seconds": 1.515564583009109,
+      "reuse_limit": "Final affected proof; no live operation"
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-continuation-original-retirement.json",
+      "sha256": "044406a0db59758a6f84c25ca205a0977bef3d6aa9e22bd313c04c7797ed2345",
+      "exit": 0,
+      "seconds": 0.0792539999820292,
+      "reuse_limit": "Final affected proof; no live operation"
+    },
+    {
+      "receipt": "/tmp/kpr-i259-997-continuation-source-final.json",
+      "sha256": "e5de93863eb47f6c56597dee3aaf7f6dbf25510a8d03c0590961f5d851e6cc61",
+      "exit": 0,
+      "seconds": 0.35910187498666346,
+      "reuse_limit": "Final affected proof; no live operation"
+    }
+  ],
+  "repair_base": "03e0cb21f22330841dd9edece264124d635f225c",
+  "evidence_fix": {
+    "finding": "/tmp/kpr-991-host-review.md",
+    "scope": "Move unreachable test block; correct assertion receipt key removed to dropped. No product-source change.",
+    "changed_authored_paths": 1,
+    "changed_generated_paths": 0,
+    "invalidated_evidence": "Prior final-records did not execute D1/D9 worker_pause block; replace this case with991 receipt.",
+    "reuse": "Other cases, product/source render, native925/926/929 and266 proof retain their original measured scopes. No rerun was necessary.",
+    "historical_candidate": "5079042e12e17182897866a589e6b3a5d2248383",
+    "current_scope": "The991 disposition describes the previous test-only repair. Current Host projection and generated evidence are replaced by997. evidence_fix_files keeps the historical5079 hashes."
+  },
+  "repair_997": {
+    "previous_candidate": "5079042e12e17182897866a589e6b3a5d2248383",
+    "review": {
+      "path": "/tmp/kpr-i259-993-opus-final-review.md",
+      "sha256": "5d30356933c4fbf52f0814186f4dfaafff4560e6303a1a4de9d707f18e219a2e"
+    },
+    "host_disposition": {
+      "path": "/tmp/kpr-i259-997-host-opus-disposition.md",
+      "sha256": "22c65499477eb489f25d2a6713ac9f3944264a72cf56d313c6a3ee2a94b4e334"
+    },
+    "scope": "F1/F2/L1/L2 and three demonstrated stale 244 module cases; source return only",
+    "product_functions_changed": [
+      "host_view"
+    ],
+    "module244_aggregate_pass": false,
+    "module244_unchanged_passes": 76,
+    "module244_focused_repaired_passes": 3,
+    "no_native_run": true,
+    "no_install": true,
+    "no_current_record_write": true,
+    "no_ledger_write": true,
+    "closeout_pending": true,
+    "source_custody": "Original259, original claim/worktree; fresh ACP recovery after prior61df exact-stop; same owner and sole writer, Host retains custody.",
+    "evidence_binding": {
+      "path": "/tmp/kpr-i259-997-evidence-binding.json",
+      "sha256": "75a3c975b22bcfefd7207dc8ebc7088335634fc07df1e823d445321eae42e4b9"
+    },
+    "historical_candidate": "469015649b72a6ef846ed608648f1e8f4ebf5d9d",
+    "reuse_limit": "F1/F2/L1/L2 bytes unchanged. Current retirement projection is separately repaired and tested by1000."
+  },
+  "continuation_1000": {
+    "previous_candidate": "469015649b72a6ef846ed608648f1e8f4ebf5d9d",
+    "owner_scope": {
+      "path": "/tmp/kpr-i259-1000-owner-final-duties.txt",
+      "sha256": "94dd3d6bce54bddd75f2e9d1d499f224059b57f9d288e28c7e4eac34dbf36cf7"
+    },
+    "retirement_scope": {
+      "path": "/tmp/kpr-i259-1000-current-retirement-gap.txt",
+      "sha256": "a07c13022b1dc22dd83a0aff3e55cfc4f58e8e6ebd6838da384912bc8c9ede14"
+    },
+    "host_disposition": {
+      "path": "/tmp/kpr-1000-host-review.md",
+      "sha256": "677377029e01cb7c22c872e5951a7d1ab52c660ee1b19c86e4a332f799b76d6d"
+    },
+    "product_functions_changed": [
+      "open_dispatch",
+      "retire_record"
+    ],
+    "launch_source_sha256": {
+      "scripts/kaola-acp.py": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73",
+      "scripts/kaola-acp-holder.py": "d8cc9dc147f69db50dc5be5c7cf1f7efced677c19813155792a191aedb72f280",
+      "scripts/kaola-launchd-broker.py": "63cc4efb2e03eac2766c4c06a69e073ffb6c836e22b3a91ca0e235bc2e73b6d4",
+      "scripts/kaola-tmux.sh": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b",
+      "scripts/kaola-zcode-acp.py": "35815c836d91ffb27066de2a4be17935a4a29de79a064be6279e2c98699ecadd",
+      "scripts/kaola-quota.py": "b3613c096e00402466e9bfd64b08c1e390e541e59e5aeeaa3c61b61c04395dcc",
+      "scripts/kaola-dispatch.py": "140d13992f1749b003c69222c3d6f714bdf8e5e9c7db19ed7e84c05245c6fbfd",
+      "scripts/kaola-record-contract.py": "8406b2f289d5209f1d4244343070c755085031ab7bee36b377b01887aa298598",
+      "vendor/claude-code-acp/dist/index.js": "2135ad71793902a3a5e91118ddf6d7c8ef46477e3db051fc834de1be0d9efd51"
+    },
+    "platform_launch_source_sha256": {
+      "claude-code": {
+        "platforms/claude-code.yaml": "d61fb0667031dee3bef19ea9167859ffd81173dd98cec6ee9dbbcd824a0f590e",
+        "scripts/adapters/claude-code.sh": "038a2e372442c8f7e5e541325786c28a8e972aadfaef58d01244601cf6f1a791",
+        "skills/claude-code-kaola-project-runner/scripts/runtime-tmux.sh": "d8a680b92db360849a840e8b4a1464c9cc5eb7435b037cdb4f89496b978d895a",
+        "skills/claude-code-kaola-project-runner/scripts/kaola-tmux.sh": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b",
+        "skills/claude-code-kaola-project-runner/scripts/kaola-acp.py": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+      },
+      "codex": {
+        "platforms/codex.yaml": "feccec4c41f9c57a4d2a912b6062a6f54de990c46f9e3a0f63a77c2c544a0d09",
+        "scripts/adapters/codex.sh": "c1e8f59ee12505d8b208860a2f099558c4620819274a54bcef032a629d577ace",
+        "skills/codex-kaola-project-runner/scripts/runtime-tmux.sh": "13bfc9e92e01b29f07b793bbcfe99b412735f08464d751104fa783817ed01088",
+        "skills/codex-kaola-project-runner/scripts/kaola-tmux.sh": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b",
+        "skills/codex-kaola-project-runner/scripts/kaola-acp.py": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+      },
+      "cursor-cli": {
+        "platforms/cursor-cli.yaml": "8e93c382c899d0a7174f04ea1609d0ae13a735808501dc7e80a2249e7724acc3",
+        "scripts/adapters/cursor-cli.sh": "8e6ec05d90b7409164136719b71aacd5cfc195d070a53108f9b86bcad4cd6f77",
+        "skills/cursor-cli-kaola-project-runner/scripts/runtime-tmux.sh": "b4a425d193e64969ef6ae60826f3a405c3864d303d4bc2bc03d6281a8a8fb3ea",
+        "skills/cursor-cli-kaola-project-runner/scripts/kaola-tmux.sh": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b",
+        "skills/cursor-cli-kaola-project-runner/scripts/kaola-acp.py": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+      },
+      "devin": {
+        "platforms/devin.yaml": "6e7b284ebdfcc1360846d6acb989f248d3fbff8aa3ae6dbf4a3878b182cf51bc",
+        "scripts/adapters/devin.sh": "7e05443eeb21bef5ba64ab06ae1999b53bbe2b5765c1fb5dc17b965639ef16fc",
+        "skills/devin-kaola-project-runner/scripts/runtime-tmux.sh": "419db1e17846ab89d89f8dbb8cc33f9241f3c8a5221ab4d28ab1262d76d840cd",
+        "skills/devin-kaola-project-runner/scripts/kaola-tmux.sh": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b",
+        "skills/devin-kaola-project-runner/scripts/kaola-acp.py": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+      },
+      "droid": {
+        "platforms/droid.yaml": "4bc00dde6c2418a006b2b95f6bddf5ef542fbed2df957deb46c72bcb6cfc2846",
+        "scripts/adapters/droid.sh": "73a1059b0f0d04a017600280583ba3516896ef0ed642a6d867436d233bc5ba51",
+        "skills/droid-kaola-project-runner/scripts/runtime-tmux.sh": "bdc2cb9198355471d84952633da3b848a003aca5f652b92c3f4a63dc0d88e598",
+        "skills/droid-kaola-project-runner/scripts/kaola-tmux.sh": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b",
+        "skills/droid-kaola-project-runner/scripts/kaola-acp.py": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+      },
+      "dsh": {
+        "platforms/dsh.yaml": "c7769d9ae67903d5fcbf1e22f085bb4ed89f781b90998310a8c4b8a106b45092",
+        "scripts/adapters/dsh.sh": "6f706ba0184302a63fb14b89aca3b738ccec8f6cd07fbe542216d0b7a592abf6",
+        "skills/dsh-kaola-project-runner/scripts/runtime-tmux.sh": "db9d2bae926683c719478d2d51dd22910f1faa1e4b39b3b17ef32ec4e32cdae0",
+        "skills/dsh-kaola-project-runner/scripts/kaola-tmux.sh": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b",
+        "skills/dsh-kaola-project-runner/scripts/kaola-acp.py": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+      },
+      "grok": {
+        "platforms/grok.yaml": "da77685d91c3be48f0210f421f95ac7be39d11a941a573949ac92a793d98ba78",
+        "scripts/adapters/grok.sh": "25232ab540b7a49463089de31d9f181e25a0eeb11aac24ccbc5fd7733393231a",
+        "skills/grok-kaola-project-runner/scripts/runtime-tmux.sh": "4fed2687380e5d6b238b0e30443136f7ac442c6434e29259bef1b8a4ecdf09e4",
+        "skills/grok-kaola-project-runner/scripts/kaola-tmux.sh": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b",
+        "skills/grok-kaola-project-runner/scripts/kaola-acp.py": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+      },
+      "kimi-cli": {
+        "platforms/kimi-cli.yaml": "3e18badec36f3669e9f4dbaf5a867e93c62ece852b74926ce18f58fe9af4585e",
+        "scripts/adapters/kimi-cli.sh": "f65f74080a387b00db918a8095a9782988a0b58ca57a5bf8815a4d5e69584868",
+        "skills/kimi-cli-kaola-project-runner/scripts/runtime-tmux.sh": "62e5f371e194cbb15249337a06e7e0b7122ea4ea1afdd5eae4eb3f0c6e0e53c9",
+        "skills/kimi-cli-kaola-project-runner/scripts/kaola-tmux.sh": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b",
+        "skills/kimi-cli-kaola-project-runner/scripts/kaola-acp.py": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+      },
+      "opencode": {
+        "platforms/opencode.yaml": "be949231bbf07d320eda966cc95494b8a190cde9ace0ebe47ce1acc874107fef",
+        "scripts/adapters/opencode.sh": "63661dc70c03a24e33590c21eb93b4d96d5072f59a2d1e6c34a05c40bfd5c757",
+        "skills/opencode-kaola-project-runner/scripts/runtime-tmux.sh": "0843a9b54832252a8f5cc1137326c7b5b7bb04ceec883d251fe1f086845e97cc",
+        "skills/opencode-kaola-project-runner/scripts/kaola-tmux.sh": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b",
+        "skills/opencode-kaola-project-runner/scripts/kaola-acp.py": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+      },
+      "zcode": {
+        "platforms/zcode.yaml": "bb1eb519bc8b8fa3fdf7d66281e65f62b08d24cd18a530b4ec6c877df970699d",
+        "scripts/adapters/zcode.sh": "43d968b692d29c73b1f591eaea510d05719abc04b6e15984aa5aa5951f6bcaf7",
+        "skills/zcode-kaola-project-runner/scripts/runtime-tmux.sh": "8e0d647135f74d42f3c0e1fbb206f2a9a1e5fb6f7c77ab8204a7334c8534b743",
+        "skills/zcode-kaola-project-runner/scripts/kaola-tmux.sh": "b03d9fca3ded8f98bad7788c175f76da2815ca85aeeb9ebd25d7721283be5b8b",
+        "skills/zcode-kaola-project-runner/scripts/kaola-acp.py": "299ec8d005d380bd0a29a7aeba70eb73a948301948b80a88b44268068b831e73"
+      }
+    },
+    "original266_receipts": [
+      {
+        "path": "/tmp/kpr-i266-entry/launch-broker-test.json",
+        "sha256": "911b52be01da5f20632ae2fb5ca4aee2661f9def94ac6aa20ce463a48eb7c137"
+      },
+      {
+        "path": "/tmp/kpr-i266-entry/launch-broker-composed.json",
+        "sha256": "c456c1ac76a3933eb7343b0d4a671ef98aac86a083c2555cf28e9965c42b6528"
+      },
+      {
+        "path": "/tmp/kpr-i266-entry/launch-broker-custody-probes.json",
+        "sha256": "40eb9951a90165104462879414e42f574202468dbc26a2112d66831c0826fc86"
+      },
+      {
+        "path": "/tmp/kpr-i266-entry/launch-broker-custody-composed.json",
+        "sha256": "928cd6e8a90ee7bce87b6045d88ebd718f26967e73b42f6da2ce8b78fa11f4cb"
+      }
+    ],
+    "native_default_smoke": "UNVERIFIED per applicable platform/backend; Host allocates, executes and judges missing scope",
+    "original_correlation_sources": {
+      "path": "/tmp/kpr-1000-retirement-correlation/sources.json",
+      "sha256": "e8f0c9f4368b171230949e8541736e20c73c546f22271d37ad441a35995eedaa"
+    },
+    "actual_source_proof": "Read-only open_dispatch with original Host accepted task,0-collect and list198; Rust/ZCode initial refs reconcile without index mutation. Atomic tool removal is fixture-proven, not live-applied by this writer.",
+    "limits": [
+      "i264-compact-behavior holder-mismatch/unknown mutation does not qualify; exact original custody/reclaim or current duty reconciliation remains Host-owned",
+      "No missing/foreign/in-flight/unknown-effect bypass",
+      "Missing original refs require copied original receipts, not recreated index history",
+      "Host owns current cleanup;260 owner-approved keep-open; original259/263/264/265/266 integration and lifecycle remain current",
+      "Matching reader before migration; outer mapping stays outer-owned; no install"
+    ],
+    "receipt_label_correction": "continuation-retirement-reconcile literal execution_worktree says clean469, but it ran with precommit retirement edits. Captured hashes prove those bytes. It is intermediate proof and is replaced by continuation-retirement-final. No receipt was rewritten.",
+    "render_limit": "Attempted lifecycle-state guidance addition made8633B >8192B. Both write/check refused the budget. Addition was removed; only existing docs/dispatch-collect.md was changed. The final renderer write/check pass; budget unchanged.",
+    "no_live_state_write": true,
+    "no_index_write": true,
+    "no_install": true,
+    "no_ledger_write": true,
+    "final_acceptance": "Fresh affected Opus Extra High and THIS outer personal integrated verdict pending before original lifecycle/authorized unused PATCH.",
+    "current_index_limit": "Historical copied correlation is retained as evidence, not current state. Retirement does not clear an unknown row already in the current index or settle its effects.",
+    "binding_verification_correction": "First binding script lookup incorrectly searched the dispatch module for host_changes, which is an alias of RECORD.host_changes. It stopped before manifest/binding write. The corrected lookup reads the unchanged contract source. Product/test evidence was not affected.",
+    "candidate_function_sha256": {
+      "open_dispatch": "4a3644068be2e0fa9d8f314856410fe22fe0d80d426f11bcf4436ff1e08a91b1",
+      "retire_record": "3072e56b706f8dd1ea4843eb05ada2d8184bf8eb15d498edaacdf14a2ed0d63c",
+      "mirror_task": "e40d31cfb361a450aa980b6d31de446192164d5978eea100748ba1da941136f2",
+      "open_seats": "20102432844dacd29d403a573478d3d0955182a8fadf9571f144952c3f5871d3",
+      "host_changes": "52fec1eaad94c56b565f64b22d90f7bcb22d0c7be3f18862c85a28fcf2ad2e5c",
+      "host_view": "b72d6ae4e08cab2ac5788d6c9f0f9ecae5d4b3e9751a4b6069aed0bcb72c4659"
+    },
+    "affected_case_sha256": {
+      "RecordContract.test_retire_mirrors_original_verdict_without_hiding_open_dispatch": "eda9bfe512c1699d312f5bd4c4a2ed10747f752d7417a65da02125710df9c4ec",
+      "RecordContract.test_settled_task_and_retirement_leave_the_routine_view": "45dfa6d56e92ce09516ae63a72398cacbb07ba57c653bec58d81adb1d4f463ab"
+    }
+  },
+  "host1033_continuation": {
+    "candidate": "291b33b5247d57fc0c8428b1601bcd8ab21a262c",
+    "source_boundary": "c337 unchanged behavior; two owner-accepted prose fragments plus expected generation",
+    "delivery": {
+      "path": "/tmp/kpr-i259-host-compact-implementation-delivery-20261006.md",
+      "sha256": "42859f76170147669c712b05103428ca98f334250a9c8e0ebdc9a896656bc76e"
+    },
+    "six_answers": {
+      "path": "/tmp/kpr-i259-six-requirement-answers-20261006.md",
+      "sha256": "b6759ecee1d86dee9f36394f7bdd7172e724463ac1d9d72d1c090bdffeaf1bda",
+      "body_sha256": "0ca3ec7e281f3afa07ef6ce63394adc0210d08539522902ea0f1ab924d84addd"
+    },
+    "authored_diff": {
+      "path": "/tmp/kpr-i259-1033-owner-prose-authored.diff",
+      "sha256": "73ea2349c5f57c73facef089fd938dd090083c7e0a6803d2e858d617b4b6ee8f"
+    },
+    "outer_audit": {
+      "path": "/tmp/kpr-outer-personal-audit-c337-20261006.md",
+      "sha256": "c0debb285ddd11bf51156a5b4ed09e16cbf7cc3dfa3512bf1da49ffb9cb3999a"
+    },
+    "native_launch_verified": 10,
+    "kimi": "original token/end82, zero tools; exact-stop1035 exit0/residual[]",
+    "installation": false,
+    "lifecycle": "pending"
+  }
+}

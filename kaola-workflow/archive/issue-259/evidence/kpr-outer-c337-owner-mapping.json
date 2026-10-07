@@ -1,0 +1,96 @@
+{
+  "project": {
+    "root": null,
+    "forge": null,
+    "scope": null,
+    "release_install": null,
+    "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+    "goal": "Complete authorized KPR issues and tasks, integrated QA, final outer and Opus review, then publish the next unused patch release.",
+    "user_language": "zh"
+  },
+  "host": {
+    "evidence": null,
+    "state": "active"
+  },
+  "authorization": {
+    "elite_grants": [
+      {
+        "preset_id": "grok/default",
+        "count": 1
+      },
+      {
+        "preset_id": "cursor-cli/default",
+        "count": 1
+      },
+      {
+        "preset_ids": [
+          "droid/default",
+          "droid/opus",
+          "droid/core"
+        ],
+        "count": 2,
+        "switch_authorization": true
+      },
+      {
+        "preset_ids": [
+          "claude-code/default",
+          "claude-code/opus-xhigh",
+          "claude-code/sonnet"
+        ],
+        "count": 1,
+        "switch_authorization": true,
+        "special_requirements": "claude-code/opus-xhigh is for thinking and review only."
+      },
+      {
+        "preset_id": "codex/default",
+        "count": 1
+      }
+    ],
+    "known_resource_limits": null
+  },
+  "watch": {
+    "issue_intake": null,
+    "live_run_observation": null,
+    "record_contract_design": null,
+    "inquiry": null,
+    "consumer_observation": {
+      "kind": "observation",
+      "status": "open",
+      "source": "Owner-authorized read-only observation of VRPAI and VRPCAD.",
+      "scope": "Observe useful task progress, current-state correction, task links and maintenance at the existing inquiry. Do not control either project.",
+      "evidence": "/tmp/kpr-consumer-record-findings-20261005.md",
+      "next": "Use existing regression observations and bounded current evidence for the final state-maintenance judgment.",
+      "projects": null,
+      "latest": null
+    },
+    "external_report_260": null,
+    "transient_failure_policy": null,
+    "grok_paseo_research": null,
+    "writing_standard": null,
+    "harness_paper_design": null,
+    "compact_recovery_design": null,
+    "overnight_completion": null,
+    "release": null,
+    "qa_test_proportionality": null,
+    "recent_harness_research": null,
+    "continuous_improvement_implementation": null,
+    "sideagent_independent_duty": null,
+    "compact_runtime_verification": null,
+    "final_audit": {
+      "kind": "observation",
+      "status": "open",
+      "source": "AGENTS.md; https://github.com/KaolaBrother/kaola-project-runner/issues/259",
+      "scope": "Personal integrated review with Opus Extra High against the six project requirements.",
+      "evidence": "/tmp/kpr-i259-1017-opus-c337-review.md",
+      "next": "Finish the personal verdict, resolve concrete gaps through the same Host, and verify authorized release and closeout."
+    }
+  },
+  "cadence": {
+    "mode": null
+  },
+  "stop": {
+    "no_login": null,
+    "boundary": "Continue hourly, including overnight, until authorized tasks, QA, outer and Opus acceptance, next patch release and cleanup are verified. Stop workers first, then exact-stop Host and pause the timer. No installation."
+  },
+  "source": "Owner instructions in this conversation; current task scope in forge; project and Delegator requirements in AGENTS.md."
+}

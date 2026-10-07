@@ -1,0 +1,1637 @@
+{
+  "candidate": "badca11e4f3b7b109b1b93c8536d4893208f50d7",
+  "base": "77d57fc0bae03cbcb70aa0b0b618c76ea7499a33",
+  "branch": "workflow/issue-259",
+  "clean": true,
+  "commits": [
+    "badca11e4f3b7b109b1b93c8536d4893208f50d7 0553a8dbad2d6e9813075f07e3705a42844eca12 Scope current usage and add finite native DSH compaction route",
+    "0553a8dbad2d6e9813075f07e3705a42844eca12 431940da890856d1cda1df9abbb83bb0b3c5d10b Keep recovery selection bound to a verified Host role",
+    "431940da890856d1cda1df9abbb83bb0b3c5d10b 963aca745ce5d7ad36867e7ca1b5f1783e6fcf79 Record the actual written initialize frame for bounded proof",
+    "963aca745ce5d7ad36867e7ca1b5f1783e6fcf79 af4cfcb476ecf0158cb91e34fd7cf6c7888bfbaa Use typed maintenance brief in Delegator pending view",
+    "af4cfcb476ecf0158cb91e34fd7cf6c7888bfbaa f893a9ff9a223c33131f445f43ac0db488deac20 Keep invalid maintenance source visible in current role views",
+    "f893a9ff9a223c33131f445f43ac0db488deac20 4c682f0e280f22b4d095c7865254f0278115259a Check Host PreCompact notice without completed maintenance attestation",
+    "4c682f0e280f22b4d095c7865254f0278115259a 77d57fc0bae03cbcb70aa0b0b618c76ea7499a33 Register independent Host compact maintenance and bind scoped checkpoints"
+  ],
+  "patch": {
+    "path": "/tmp/kpr-i259-host-compact-implementation.patch",
+    "bytes": 524461,
+    "sha256": "6a34249574f02319d811e6a49fedf2d6fe1e5e68777b49398955ea315f10c398"
+  },
+  "authored_patch": {
+    "path": "/tmp/kpr-i259-host-compact-implementation-authored.patch",
+    "sha256": "b281ca316384214c20a732e93049743858dc97f68ecd3cb9004d9953149cca93"
+  },
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "kind": "authored",
+      "parent_sha256": "75d7de8e46d1c2d6f5ed808896bc767d64677b236b7ad8fc753a5d5fac448083",
+      "candidate_sha256": "b5a2313e341f6fab163773846fdcb4d0ff6c4ea62baa9523dcd1bd21141fddba"
+    },
+    {
+      "path": "docs/api.md",
+      "kind": "authored",
+      "parent_sha256": "4b115a5c319fd9e4b0b8307cc8f1b8b3d75d0c1a9a9aa956209d6c2f75ce2a10",
+      "candidate_sha256": "e2a77e2346ca06f9df9874f8f49f4968544361aed290805db6f25c78e178820c"
+    },
+    {
+      "path": "platforms/codex.yaml",
+      "kind": "authored",
+      "parent_sha256": "6d109c2bf06ad77eca1bc8f575dde2ded80ef5469594952ec6c4301cbbfd538b",
+      "candidate_sha256": "feccec4c41f9c57a4d2a912b6062a6f54de990c46f9e3a0f63a77c2c544a0d09"
+    },
+    {
+      "path": "platforms/dsh.yaml",
+      "kind": "authored",
+      "parent_sha256": "1e3d4be84c6273a6feab509a2d4ebc68410e08ebbf6e7d1804c45c6a19793925",
+      "candidate_sha256": "c7769d9ae67903d5fcbf1e22f085bb4ed89f781b90998310a8c4b8a106b45092"
+    },
+    {
+      "path": "scripts/kaola-acp-holder.py",
+      "kind": "authored",
+      "parent_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "scripts/kaola-dispatch.py",
+      "kind": "authored",
+      "parent_sha256": "0868fe1617fa24d1ba89f8ccc98d40f75ea66eacc42872a375107cfeae8e54d6",
+      "candidate_sha256": "71357f283ab403e4987dc82c74a684da929f34dc9afe47ad1238aceac8c22a8f"
+    },
+    {
+      "path": "scripts/kaola-dsh-acp.py",
+      "kind": "authored",
+      "parent_sha256": "033e52eb720f4fdaaf21d40bf770f563c517f81b56864d21a7e57b1ac162e674",
+      "candidate_sha256": "b1879fca1791845608ce00fa162c122f0729cdb105516d0d4f27dbe69c506e6a"
+    },
+    {
+      "path": "scripts/kaola-dsh-steer.mjs",
+      "kind": "authored",
+      "parent_sha256": "c3d91a21c575847149ee88f839a61637121861d0609cb5db064265aa0f80d1d5",
+      "candidate_sha256": "f19a3beea03899dfae883ef84de5ede36e0503ed7be9df8b2f5d9de4f9b82da2"
+    },
+    {
+      "path": "scripts/kaola-record-contract.py",
+      "kind": "authored",
+      "parent_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "0b76dd76113230b24775db6907a878fc11deb51b9169b687edcd2a9bc1bc3d1e"
+    },
+    {
+      "path": "skills/claude-code-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "kind": "generated",
+      "parent_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "skills/claude-code-kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "parent_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "0b76dd76113230b24775db6907a878fc11deb51b9169b687edcd2a9bc1bc3d1e"
+    },
+    {
+      "path": "skills/claude-code-kaola-project-runner/scripts/main-skill-build.json",
+      "kind": "generated",
+      "parent_sha256": "209a2f61aef012304643aa82153af553e51830abe168ea8547753de3c54ab415",
+      "candidate_sha256": "a4f580f8330c7358f0188d7c8c793c39c26d73d7b5214d9453426c4272b28a61"
+    },
+    {
+      "path": "skills/codex-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "kind": "generated",
+      "parent_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "skills/codex-kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "parent_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "0b76dd76113230b24775db6907a878fc11deb51b9169b687edcd2a9bc1bc3d1e"
+    },
+    {
+      "path": "skills/codex-kaola-project-runner/scripts/main-skill-build.json",
+      "kind": "generated",
+      "parent_sha256": "209a2f61aef012304643aa82153af553e51830abe168ea8547753de3c54ab415",
+      "candidate_sha256": "a4f580f8330c7358f0188d7c8c793c39c26d73d7b5214d9453426c4272b28a61"
+    },
+    {
+      "path": "skills/codex-kaola-project-runner/scripts/platform.yaml",
+      "kind": "generated",
+      "parent_sha256": "6d109c2bf06ad77eca1bc8f575dde2ded80ef5469594952ec6c4301cbbfd538b",
+      "candidate_sha256": "feccec4c41f9c57a4d2a912b6062a6f54de990c46f9e3a0f63a77c2c544a0d09"
+    },
+    {
+      "path": "skills/cursor-cli-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "kind": "generated",
+      "parent_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "skills/cursor-cli-kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "parent_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "0b76dd76113230b24775db6907a878fc11deb51b9169b687edcd2a9bc1bc3d1e"
+    },
+    {
+      "path": "skills/cursor-cli-kaola-project-runner/scripts/main-skill-build.json",
+      "kind": "generated",
+      "parent_sha256": "209a2f61aef012304643aa82153af553e51830abe168ea8547753de3c54ab415",
+      "candidate_sha256": "a4f580f8330c7358f0188d7c8c793c39c26d73d7b5214d9453426c4272b28a61"
+    },
+    {
+      "path": "skills/devin-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "kind": "generated",
+      "parent_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "skills/devin-kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "parent_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "0b76dd76113230b24775db6907a878fc11deb51b9169b687edcd2a9bc1bc3d1e"
+    },
+    {
+      "path": "skills/devin-kaola-project-runner/scripts/main-skill-build.json",
+      "kind": "generated",
+      "parent_sha256": "209a2f61aef012304643aa82153af553e51830abe168ea8547753de3c54ab415",
+      "candidate_sha256": "a4f580f8330c7358f0188d7c8c793c39c26d73d7b5214d9453426c4272b28a61"
+    },
+    {
+      "path": "skills/droid-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "kind": "generated",
+      "parent_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "skills/droid-kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "parent_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "0b76dd76113230b24775db6907a878fc11deb51b9169b687edcd2a9bc1bc3d1e"
+    },
+    {
+      "path": "skills/droid-kaola-project-runner/scripts/main-skill-build.json",
+      "kind": "generated",
+      "parent_sha256": "209a2f61aef012304643aa82153af553e51830abe168ea8547753de3c54ab415",
+      "candidate_sha256": "a4f580f8330c7358f0188d7c8c793c39c26d73d7b5214d9453426c4272b28a61"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/references/acp.md",
+      "kind": "generated",
+      "parent_sha256": "49bb20f1b0187e4ba6765950e96ebed161fc5696f7eff52fb5d5b4ae50e92489",
+      "candidate_sha256": "30ff40c8999524fe20e2f8b951beabd6a970982e53183ea1266d9ae59bb3f1db"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "kind": "generated",
+      "parent_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/scripts/kaola-dsh-acp.py",
+      "kind": "generated",
+      "parent_sha256": "033e52eb720f4fdaaf21d40bf770f563c517f81b56864d21a7e57b1ac162e674",
+      "candidate_sha256": "b1879fca1791845608ce00fa162c122f0729cdb105516d0d4f27dbe69c506e6a"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/scripts/kaola-dsh-steer.mjs",
+      "kind": "generated",
+      "parent_sha256": "c3d91a21c575847149ee88f839a61637121861d0609cb5db064265aa0f80d1d5",
+      "candidate_sha256": "f19a3beea03899dfae883ef84de5ede36e0503ed7be9df8b2f5d9de4f9b82da2"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "parent_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "0b76dd76113230b24775db6907a878fc11deb51b9169b687edcd2a9bc1bc3d1e"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/scripts/main-skill-build.json",
+      "kind": "generated",
+      "parent_sha256": "209a2f61aef012304643aa82153af553e51830abe168ea8547753de3c54ab415",
+      "candidate_sha256": "a4f580f8330c7358f0188d7c8c793c39c26d73d7b5214d9453426c4272b28a61"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/scripts/platform.yaml",
+      "kind": "generated",
+      "parent_sha256": "1e3d4be84c6273a6feab509a2d4ebc68410e08ebbf6e7d1804c45c6a19793925",
+      "candidate_sha256": "c7769d9ae67903d5fcbf1e22f085bb4ed89f781b90998310a8c4b8a106b45092"
+    },
+    {
+      "path": "skills/grok-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "kind": "generated",
+      "parent_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "skills/grok-kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "parent_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "0b76dd76113230b24775db6907a878fc11deb51b9169b687edcd2a9bc1bc3d1e"
+    },
+    {
+      "path": "skills/grok-kaola-project-runner/scripts/main-skill-build.json",
+      "kind": "generated",
+      "parent_sha256": "209a2f61aef012304643aa82153af553e51830abe168ea8547753de3c54ab415",
+      "candidate_sha256": "a4f580f8330c7358f0188d7c8c793c39c26d73d7b5214d9453426c4272b28a61"
+    },
+    {
+      "path": "skills/kaola-delegator/references/inquiry-report.md",
+      "kind": "generated",
+      "parent_sha256": "54ce7d1031561b6f79c2cf8cc3ec7fadbd885b0f92166a757d5874b941444abc",
+      "candidate_sha256": "3e25037f44605b5f224e1fdc9aff610bebab7e5aa280b9fb21c52ef5a3dee9ac"
+    },
+    {
+      "path": "skills/kaola-project-runner/references/duty-reconcile.md",
+      "kind": "generated",
+      "parent_sha256": "0c9257570e7ddb072aaabf03449dcfe29cb1b19d80303c4553cda614284df178",
+      "candidate_sha256": "ab59435d13dcf29f462eeb7813a8d3248265aa48f2364c10acd3090d1c834c4d"
+    },
+    {
+      "path": "skills/kaola-project-runner/references/sideagent-node.md",
+      "kind": "generated",
+      "parent_sha256": "fc3e335e2e40f794ef452095cc1b253db6ab6d6ac82d1002b86523fab148d6db",
+      "candidate_sha256": "884fc413fdc01c5f094692b00109fb7ba824efe8236d760fb2a89b820a3f3eae"
+    },
+    {
+      "path": "skills/kaola-project-runner/scripts/kaola-dispatch.py",
+      "kind": "generated",
+      "parent_sha256": "0868fe1617fa24d1ba89f8ccc98d40f75ea66eacc42872a375107cfeae8e54d6",
+      "candidate_sha256": "71357f283ab403e4987dc82c74a684da929f34dc9afe47ad1238aceac8c22a8f"
+    },
+    {
+      "path": "skills/kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "parent_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "0b76dd76113230b24775db6907a878fc11deb51b9169b687edcd2a9bc1bc3d1e"
+    },
+    {
+      "path": "skills/kimi-cli-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "kind": "generated",
+      "parent_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "skills/kimi-cli-kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "parent_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "0b76dd76113230b24775db6907a878fc11deb51b9169b687edcd2a9bc1bc3d1e"
+    },
+    {
+      "path": "skills/kimi-cli-kaola-project-runner/scripts/main-skill-build.json",
+      "kind": "generated",
+      "parent_sha256": "209a2f61aef012304643aa82153af553e51830abe168ea8547753de3c54ab415",
+      "candidate_sha256": "a4f580f8330c7358f0188d7c8c793c39c26d73d7b5214d9453426c4272b28a61"
+    },
+    {
+      "path": "skills/opencode-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "kind": "generated",
+      "parent_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "skills/opencode-kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "parent_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "0b76dd76113230b24775db6907a878fc11deb51b9169b687edcd2a9bc1bc3d1e"
+    },
+    {
+      "path": "skills/opencode-kaola-project-runner/scripts/main-skill-build.json",
+      "kind": "generated",
+      "parent_sha256": "209a2f61aef012304643aa82153af553e51830abe168ea8547753de3c54ab415",
+      "candidate_sha256": "a4f580f8330c7358f0188d7c8c793c39c26d73d7b5214d9453426c4272b28a61"
+    },
+    {
+      "path": "skills/zcode-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "kind": "generated",
+      "parent_sha256": "9c7b38a1e3806588feb36d4a3023b85dc1cd0ca36e7d17c692cc681d0b9a3a59",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "skills/zcode-kaola-project-runner/scripts/kaola-record-contract.py",
+      "kind": "generated",
+      "parent_sha256": "96212e7c7aad0f34dc2fe5214005250a2c587e6978b30317f93ee45eb1c6bdda",
+      "candidate_sha256": "0b76dd76113230b24775db6907a878fc11deb51b9169b687edcd2a9bc1bc3d1e"
+    },
+    {
+      "path": "skills/zcode-kaola-project-runner/scripts/main-skill-build.json",
+      "kind": "generated",
+      "parent_sha256": "209a2f61aef012304643aa82153af553e51830abe168ea8547753de3c54ab415",
+      "candidate_sha256": "a4f580f8330c7358f0188d7c8c793c39c26d73d7b5214d9453426c4272b28a61"
+    },
+    {
+      "path": "templates/kaola-delegator/references/inquiry-report.md",
+      "kind": "authored",
+      "parent_sha256": "54ce7d1031561b6f79c2cf8cc3ec7fadbd885b0f92166a757d5874b941444abc",
+      "candidate_sha256": "3e25037f44605b5f224e1fdc9aff610bebab7e5aa280b9fb21c52ef5a3dee9ac"
+    },
+    {
+      "path": "templates/orchestrator/references/duty-reconcile.md",
+      "kind": "authored",
+      "parent_sha256": "0c9257570e7ddb072aaabf03449dcfe29cb1b19d80303c4553cda614284df178",
+      "candidate_sha256": "ab59435d13dcf29f462eeb7813a8d3248265aa48f2364c10acd3090d1c834c4d"
+    },
+    {
+      "path": "templates/orchestrator/references/sideagent-node.md",
+      "kind": "authored",
+      "parent_sha256": "fc3e335e2e40f794ef452095cc1b253db6ab6d6ac82d1002b86523fab148d6db",
+      "candidate_sha256": "884fc413fdc01c5f094692b00109fb7ba824efe8236d760fb2a89b820a3f3eae"
+    },
+    {
+      "path": "tests/contract/test-acp-contract.py",
+      "kind": "authored",
+      "parent_sha256": "d42ab9f6e9b73b097c6ca43526dfffd648215b84bd28059af4abd0f288b96f3b",
+      "candidate_sha256": "fd292ecf8cb9d51bbfd3511b8515cf5d0d27efa7d48fba05aa840e0da6cf6128"
+    },
+    {
+      "path": "tests/contract/test-issue-255-lifecycle-state.py",
+      "kind": "authored",
+      "parent_sha256": "6bf8d7e558462c7e74c0ca28a62a0f95f13581c566d47eba5295a47e8f06d109",
+      "candidate_sha256": "0441f05d9520f80647045c38453e6049f4fb94918b965775bdfcf2bb7273e2ff"
+    },
+    {
+      "path": "tests/contract/test-issue-264-compact-recovery.py",
+      "kind": "authored",
+      "parent_sha256": "e9346da8652c8709c4eb4d0f117906ab57b133aa99352266189dc621884fab2e",
+      "candidate_sha256": "d2b6e6917a77921f621cbdfdcd50b3b3568c4018659ec5d8840eef1bea8a879a"
+    },
+    {
+      "path": "tests/contract/test-project-compact-notice.py",
+      "kind": "authored",
+      "parent_sha256": "0a4820e7dc4c375a4f4d5b9116ca0a9f4e8337f431625fe0816129edeed43b07",
+      "candidate_sha256": "9f64dad5d7f6f7e8111970e3e7b8f426b83b92b4fbdb38de45f92e1e4e0bdc42"
+    }
+  ],
+  "protected": {
+    "scripts/validate.sh": {
+      "unchanged": true,
+      "sha256": "4cc650b9e68c0210a5770e36b24582e6bf258945df5feb9be076820464b6763b"
+    },
+    "tests/contract/test-issue-101-validate-watchdog.py": {
+      "unchanged": true,
+      "sha256": "4ce144d481d07fe02df0a272a013e9cb049dbbc9e2c5083182b4a0952bcb5ec1"
+    },
+    "templates/budgets.json": {
+      "unchanged": true,
+      "sha256": "47faf099081f0740b6ae9ec27740331ae111180c5ec6d96758cc351168aeec11"
+    },
+    "scripts/kaola-compact-recovery.py": {
+      "unchanged": true,
+      "sha256": "c45662a4297047bd860a46157e950b4aac460b3e9df1a889abe99ca687e90f27"
+    },
+    "scripts/kaola-codex-compact-hook.py": {
+      "unchanged": true,
+      "sha256": "c21e463e5b2bc69609347b220124197c4719b3607525e5a518b3e13318462682"
+    },
+    "templates/codex-host/compact-recovery.md": {
+      "unchanged": true,
+      "sha256": "0a382e58e65e6142f718db15aceba3859f870d006c3b233f459d389bb97d6784"
+    },
+    "templates/orchestrator/references/qa-evidence.md": {
+      "unchanged": true,
+      "sha256": "6793efce6a91c9348188c277c801fdabb068c0c9189fe586b0543a6e45dd9c0b"
+    },
+    "templates/orchestrator/SKILL.md.tmpl": {
+      "unchanged": true,
+      "sha256": "9db1b2e344de3e38ac955704441d270ffa9ca2ac31fc32d325394c902971bcef"
+    }
+  },
+  "frozen_golden_unchanged": true,
+  "original_tests": {
+    "tests/contract/test-issue-255-lifecycle-state.py": {
+      "parent_cases": 113,
+      "modified_or_missing": [],
+      "added": [
+        "HolderNodeMode.test_inquiry_request_recovers_recipe_without_business_write",
+        "HolderNodeMode.test_native_owned_reload_does_not_clear_host_maintenance",
+        "HolderNodeMode.test_owed_business_recipe_failure_survives_carrier_memory_loss",
+        "HolderNodeMode.test_recipe_refusal_for_owed_recovery_is_visible_once_in_both_views",
+        "HolderNodeMode.test_recovery_only_batch_at_same_revision_coalesces_and_keeps_safe_boundary",
+        "HolderNodeMode.test_recovery_receipt_missing_in_checkpoint_is_partial_and_visible",
+        "HolderNodeMode.test_resume_scan_repairs_registration_window_and_pending_blocks_old_live_node",
+        "HolderNodeMode.test_sent_recovery_checkpoint_keeps_later_signal_and_exact_reclaims_first_node",
+        "HolderNodeMode.test_worker_foreign_start_and_unknown_role_register_no_recovery",
+        "MaintenanceCheckpoint.test_malformed_recovery_migration_refuses_without_losing_duty",
+        "MaintenanceCheckpoint.test_recovery_checkpoint_binds_sent_input_batch_and_holder_keeps_newer",
+        "MaintenanceCheckpoint.test_recovery_kind_requires_original_completed_session_bound_host_signal",
+        "MaintenanceCheckpoint.test_recovery_request_and_repeat_preserve_business_revision_and_migrate",
+        "MaintenanceCheckpoint.test_recovery_unavailable_sources_stay_visible_and_scoped_clear_keeps_other_alerts"
+      ]
+    },
+    "tests/contract/test-acp-contract.py": {
+      "parent_cases": 84,
+      "modified_or_missing": [],
+      "added": [
+        "Issue34ModelSelectionAcpTests.test_codex_alone_advertises_completed_compaction_at_probe_and_start"
+      ]
+    },
+    "tests/contract/test-project-compact-notice.py": {
+      "parent_cases": 20,
+      "modified_or_missing": [],
+      "added": [
+        "Notice.test_host_precompact_owes_reload_only_without_completed_maintenance"
+      ]
+    },
+    "tests/contract/test-issue-264-compact-recovery.py": {
+      "parent_cases": 42,
+      "modified_or_missing": [],
+      "added": [
+        "DshCompactTests.test_busy_command_refuses_and_other_prompts_keep_native_model_route",
+        "DshCompactTests.test_finite_compact_maps_only_original_matching_success_before_end_turn",
+        "DshCompactTests.test_native_cancel_stays_live_during_manual_compaction_without_replay",
+        "DshCompactTests.test_native_plugin_uses_current_agent_seam_and_original_events",
+        "DshCompactTests.test_null_failure_foreign_and_mismatched_originals_never_emit_completion",
+        "SessionUsageTests.test_foreign_usage_cannot_replace_turn_or_current_projection",
+        "SessionUsageTests.test_local_sessionless_null_and_new_turn_keep_existing_contract"
+      ]
+    },
+    "tests/contract/test-issue-263-steer-adaptation.py": {
+      "parent_cases": 28,
+      "modified_or_missing": [],
+      "added": []
+    }
+  },
+  "claim": {
+    "identity": "5ea624f9b9c061bd8c53dc4e20b20ac5a7c35ce95f4d1f244b17fd164f9a29d5",
+    "state_sha256": "610d647040b2ad4c948e36ee9480f14d92e96ade95aa3449210808fd7ef9cb75",
+    "ledger_sha256": "2efb63f6fb7c9da77f74d12abb4754d3e1b4de558599057bd9a2b59a133ab53b",
+    "mission_statuses": [
+      "done",
+      "done",
+      "done",
+      "done"
+    ]
+  },
+  "six_requirements_equal_current_canonical": true,
+  "checks": [
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "255-affected",
+      "candidate": "f893a9ff9a223c33131f445f43ac0db488deac20",
+      "argv": [
+        "python3",
+        "tests/contract/test-issue-255-lifecycle-state.py",
+        "HolderNodeMode.test_retirement_only_starts_no_node_and_later_work_selects_the_full_range",
+        "HolderNodeMode.test_startup_then_empty_exact_stops_only_the_owned_unassigned_node",
+        "HolderNodeMode.test_startup_coalesces_new_useful_work_until_the_host_turn_ends",
+        "HolderNodeMode.test_one_host_turn_makes_one_batch_at_its_end",
+        "HolderNodeMode.test_a_pinned_legacy_contract_keeps_revision_only_node_selection",
+        "HolderNodeMode.test_a_checkpoint_short_of_its_batch_is_partial_and_reaches_the_host_once",
+        "HolderNodeMode.test_a_partial_checkpoint_returns_its_batch_to_the_host_once",
+        "HolderNodeMode.test_a_missing_checkpoint_reaches_the_host_once",
+        "HolderNodeMode.test_a_batch_the_node_does_not_admit_is_returned_once_and_not_resent",
+        "HolderNodeMode.test_an_unconfirmed_stop_blocks_a_competing_node",
+        "HolderNodeMode.test_a_resume_recipe_or_failed_start_is_not_retried",
+        "HolderNodeMode.test_a_holder_known_not_to_be_the_host_never_starts_a_node",
+        "MaintenanceCheckpoint.test_two_consecutive_nodes_account_for_their_fixed_inputs",
+        "MaintenanceCheckpoint.test_host_retirement_preserves_an_earlier_sent_checkpoint_range",
+        "MaintenanceCheckpoint.test_a_host_rewrite_during_the_batch_is_superseded_not_returned",
+        "MaintenanceCheckpoint.test_a_checkpoint_needs_the_nodes_own_identity_and_a_valid_range",
+        "Migration.test_plan_then_write_preserves_duties_and_lists_unknowns",
+        "Migration.test_interrupted_migration_resumes_from_the_same_raw_evidence",
+        "StateTool.test_delegator_view_reports_user_requirements_from_agents",
+        "RenderedGuidance.test_lifecycle_reference_is_generated_linked_and_bounded",
+        "RenderedGuidance.test_node_reference_names_the_implemented_contract"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 9.829086,
+      "output": "/tmp/kpr-i259-compact-final-255-affected.txt",
+      "output_sha256": "a7da5a695bed7f3e70ca8a841d56983cbe1d8f07966a6419ab9ab99cd63b41fa",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-255-affected.json",
+      "receipt_sha256": "4d379ce2a5e900f2541cb2398b633002d75dcdf14df050b4d4bacfe33ac2cc66"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "255-changed",
+      "candidate": "f893a9ff9a223c33131f445f43ac0db488deac20",
+      "argv": [
+        "python3",
+        "tests/contract/test-issue-255-lifecycle-state.py",
+        "MaintenanceCheckpoint.test_recovery_request_and_repeat_preserve_business_revision_and_migrate",
+        "MaintenanceCheckpoint.test_malformed_recovery_migration_refuses_without_losing_duty",
+        "MaintenanceCheckpoint.test_recovery_kind_requires_original_completed_session_bound_host_signal",
+        "MaintenanceCheckpoint.test_recovery_checkpoint_binds_sent_input_batch_and_holder_keeps_newer",
+        "MaintenanceCheckpoint.test_recovery_unavailable_sources_stay_visible_and_scoped_clear_keeps_other_alerts",
+        "HolderNodeMode.test_recovery_only_batch_at_same_revision_coalesces_and_keeps_safe_boundary",
+        "HolderNodeMode.test_recipe_refusal_for_owed_recovery_is_visible_once_in_both_views",
+        "HolderNodeMode.test_worker_foreign_start_and_unknown_role_register_no_recovery",
+        "HolderNodeMode.test_native_owned_reload_does_not_clear_host_maintenance",
+        "HolderNodeMode.test_sent_recovery_checkpoint_keeps_later_signal_and_exact_reclaims_first_node",
+        "HolderNodeMode.test_recovery_receipt_missing_in_checkpoint_is_partial_and_visible",
+        "HolderNodeMode.test_resume_scan_repairs_registration_window_and_pending_blocks_old_live_node",
+        "HolderNodeMode.test_owed_business_recipe_failure_survives_carrier_memory_loss",
+        "HolderNodeMode.test_inquiry_request_recovers_recipe_without_business_write"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 5.329285,
+      "output": "/tmp/kpr-i259-compact-final-255-changed.txt",
+      "output_sha256": "333bed7dbda63357c35d9b120cee2cbd0d09969d88ff71bf0b6598b405d39af7",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-255-changed.json",
+      "receipt_sha256": "02d672a78ed4ae5be686a5d297f062f80a7e1b28ce749e4c0f869690c429329c"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "259-affected-final-r2",
+      "candidate": "963aca745ce5d7ad36867e7ca1b5f1783e6fcf79",
+      "argv": [
+        "python3",
+        "tests/contract/test-issue-259-record-contract.py",
+        "RecordContract.test_sideagent_idle_binding_is_not_a_missing_binding",
+        "RecordContract.test_node_process_write_does_not_change_delivery_open",
+        "RecordContract.test_node_running_follows_the_bound_record",
+        "RecordContract.test_delegator_role_view_uses_locators",
+        "RecordContract.test_settled_task_and_retirement_leave_the_routine_view",
+        "RealAcpInjection.test_start_send_observe_stop_injects_the_projected_view"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 3.659644,
+      "output": "/tmp/kpr-i259-compact-final-259-affected-final-r2.txt",
+      "output_sha256": "406713f945e4b2a5ff5fed26864380f9178617f508c0daf182fb8ca15e3a561a",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-259-affected-final-r2.json",
+      "receipt_sha256": "462a84640f220a54b994e76f9fcebfa5a75576ef49aa131aa3f00f491b9c3244"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "259-affected-final",
+      "candidate": "af4cfcb476ecf0158cb91e34fd7cf6c7888bfbaa",
+      "argv": [
+        "python3",
+        "tests/contract/test-issue-259-record-contract.py",
+        "RecordContract.test_sideagent_idle_binding_is_not_a_missing_binding",
+        "RecordContract.test_node_process_write_does_not_change_delivery_open",
+        "RecordContract.test_node_running_follows_the_bound_record",
+        "RecordContract.test_delegator_role_view_uses_locators",
+        "RecordContract.test_settled_task_and_retirement_leave_the_routine_view",
+        "RealAcpInjection.test_start_send_observe_stop_injects_the_projected_view"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 5.371373,
+      "output": "/tmp/kpr-i259-compact-final-259-affected-final.txt",
+      "output_sha256": "30b44d720e80f592a887e3e8a66a9827c4a59ad9641fe1c860d262c2c9ac03ec",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-259-affected-final.json",
+      "receipt_sha256": "b8d6050fbc424ed84590250a0c3f75ab86cbee6c7ca18ecf4bde4c7819bfe8d7"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "259-affected",
+      "candidate": "f893a9ff9a223c33131f445f43ac0db488deac20",
+      "argv": [
+        "python3",
+        "tests/contract/test-issue-259-record-contract.py",
+        "RecordContract.test_sideagent_idle_binding_is_not_a_missing_binding",
+        "RecordContract.test_node_process_write_does_not_change_delivery_open",
+        "RecordContract.test_node_running_follows_the_bound_record",
+        "RecordContract.test_delegator_role_view_uses_locators",
+        "RecordContract.test_settled_task_and_retirement_leave_the_routine_view",
+        "RealAcpInjection.test_start_send_observe_stop_injects_the_projected_view"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 3.431761,
+      "output": "/tmp/kpr-i259-compact-final-259-affected.txt",
+      "output_sha256": "a4783dc46554c4fe416f03e6ac1def56ef18a6ab2a6bfad7f614b30b41596837",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-259-affected.json",
+      "receipt_sha256": "23d4f2a92414631fa2b55c5d0f6d3af5c3bbb7c6119e074b18e2fb9f1da7b170"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "264-notice",
+      "candidate": "f893a9ff9a223c33131f445f43ac0db488deac20",
+      "argv": [
+        "python3",
+        "tests/contract/test-issue-264-compact-recovery.py",
+        "TrackerTests",
+        "ClassifyTests.test_codex_completed_compaction_update",
+        "ClassifyTests.test_same_session_scope"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.038918,
+      "output": "/tmp/kpr-i259-compact-final-264-notice.txt",
+      "output_sha256": "5406f5a94d121f02cfe2f9fc4b968d5354dbdc26e93746d335a1196552dc2a82",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-264-notice.json",
+      "receipt_sha256": "1d50d93894ec9989d39a207cf6f1c279d14b80c532adaee514b630866e1186a7"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "882-generated",
+      "candidate": "badca11e4f3b7b109b1b93c8536d4893208f50d7",
+      "argv": [
+        "bash",
+        "scripts/validate.sh",
+        "--suite",
+        "test-generated-skills.py"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 2.79739,
+      "output": "/tmp/kpr-i259-compact-final-882-generated.txt",
+      "output_sha256": "baf45c04cb3acc209efa4d6e2d8827218c2a29c190eeeb60622118de2671aa5e",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-882-generated.json",
+      "receipt_sha256": "10d9bd19e18f6fca8e8521d4be4927e0eb87ada4acfdde04f6ae7b087fe07c7f"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "882-host-interface",
+      "candidate": "badca11e4f3b7b109b1b93c8536d4893208f50d7",
+      "argv": [
+        "python3",
+        "tests/contract/test-issue-255-lifecycle-state.py",
+        "HolderNodeMode.test_native_owned_reload_does_not_clear_host_maintenance",
+        "HolderNodeMode.test_worker_foreign_start_and_unknown_role_register_no_recovery",
+        "HolderNodeMode.test_sent_recovery_checkpoint_keeps_later_signal_and_exact_reclaims_first_node"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 1.923647,
+      "output": "/tmp/kpr-i259-compact-final-882-host-interface.txt",
+      "output_sha256": "e93c621c34b5a2442cff9f5f542244df3f7634525aa64c9fec544a4f7758120a",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-882-host-interface.json",
+      "receipt_sha256": "b5fa566015179e9b7ef0e1d54c29e1172a4d735a982f73b35e6f6b061c881996"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "882-index",
+      "candidate": "badca11e4f3b7b109b1b93c8536d4893208f50d7",
+      "argv": [
+        "python3",
+        "tests/contract/test-issue-244-dispatch.py",
+        "DispatchEntry.test_later_plan_keeps_an_unresolved_index_row"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 1.680472,
+      "output": "/tmp/kpr-i259-compact-final-882-index.txt",
+      "output_sha256": "575e0e52cb7de969a31fdd10e39378df801a42a69dc3713f2111981d24e79e59",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-882-index.json",
+      "receipt_sha256": "6196f6adb18813b725f9d8927e777f5cb7219d042c0bcf2aa1cf8944e9934827"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "882-render",
+      "candidate": "badca11e4f3b7b109b1b93c8536d4893208f50d7",
+      "argv": [
+        "./scripts/render-skills.py",
+        "--check"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.069242,
+      "output": "/tmp/kpr-i259-compact-final-882-render.txt",
+      "output_sha256": "e14a9f0f57ab1bc40982fee681546c80b6692d8ee9c916f8035cf9cc9f07ae66",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-882-render.json",
+      "receipt_sha256": "f99a1b596037a07a48861c758ec89942d0688280a9e54d918650c55934c4855d"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "882-steer",
+      "candidate": "badca11e4f3b7b109b1b93c8536d4893208f50d7",
+      "argv": [
+        "python3",
+        "tests/contract/test-issue-263-steer-adaptation.py",
+        "DshAdapter",
+        "OpenCodeAdapter.test_foreign_or_replaced_or_ended_turn_writes_nothing"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 1.129074,
+      "output": "/tmp/kpr-i259-compact-final-882-steer.txt",
+      "output_sha256": "f04a5aef578d430460a33b38b474003b38e5f9e9d86592d6870a8b3d4fcd1f36",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-882-steer.json",
+      "receipt_sha256": "2951b948acd73d56ed4c7e6abfd5978e443cbcf48d5089bb58c22720808564d9"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "882-syntax",
+      "candidate": "badca11e4f3b7b109b1b93c8536d4893208f50d7",
+      "argv": [
+        "python3",
+        "-c",
+        "import py_compile,subprocess; [py_compile.compile(p,doraise=True) for p in ['scripts/kaola-acp-holder.py','scripts/kaola-dsh-acp.py','tests/contract/test-issue-264-compact-recovery.py']]; subprocess.run(['node','--check','scripts/kaola-dsh-steer.mjs'],check=True); subprocess.run(['git','diff','--check','77d57fc0bae03cbcb70aa0b0b618c76ea7499a33','HEAD'],check=True); print('PASS Python/Node syntax and diff')"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.117606,
+      "output": "/tmp/kpr-i259-compact-final-882-syntax.txt",
+      "output_sha256": "aaee73fee7bcd42f1169f319c6cfa79a05bd55789aad9682251e00bd3cc18445",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-882-syntax.json",
+      "receipt_sha256": "67c6e2ea0a2a4a7cf8c61f0f50c26e6a1076e4faa6bdd797134be1b6846cac47"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "882-usage-before",
+      "candidate": "badca11e4f3b7b109b1b93c8536d4893208f50d7",
+      "argv": [
+        "python3",
+        "/tmp/kpr-i259-882-usage-before.py"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 1,
+      "wall_seconds": 0.102542,
+      "output": "/tmp/kpr-i259-compact-final-882-usage-before.txt",
+      "output_sha256": "441d8e2c06261bde863a0b9fb7ad51f7fbc1bab3e7f1cb5a80fb907304a0e2b3",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "source_holder_candidate": "0553a8dbad2d6e9813075f07e3705a42844eca12",
+      "source_holder_sha256": "4ae5543d05fc97b8fa1c3bb3f00bdb7de623396e410afa6ea78c8e2134cd5989",
+      "fixture_tests_candidate": "badca11e4f3b7b109b1b93c8536d4893208f50d7",
+      "expected_result": "Original foreign usage overwrite; exit1 intentionally retained, no PASS",
+      "receipt": "/tmp/kpr-i259-compact-final-882-usage-before.json",
+      "receipt_sha256": "86715ee2dc6000701d9ec6a2e6f8e86c52daa84d8c7b7acf1f744318607057d2"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "882-usage-dsh",
+      "candidate": "badca11e4f3b7b109b1b93c8536d4893208f50d7",
+      "argv": [
+        "python3",
+        "tests/contract/test-issue-264-compact-recovery.py",
+        "SessionUsageTests",
+        "DshCompactTests",
+        "ClassifyTests.test_codex_completed_compaction_update",
+        "ClassifyTests.test_non_completed_and_prose_never_match",
+        "ClassifyTests.test_same_session_scope"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.189891,
+      "output": "/tmp/kpr-i259-compact-final-882-usage-dsh.txt",
+      "output_sha256": "8a577e07d5402cb909c1946e69ffb30bf10a0a0926171f125067ed14fa8f9585",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-882-usage-dsh.json",
+      "receipt_sha256": "8048e93536531451fdcba26f5b8dfdd486836f156e9e530e903788be90f18cf0"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "controlled-generated-final-r2-frame-role",
+      "candidate": "0553a8dbad2d6e9813075f07e3705a42844eca12",
+      "argv": [
+        "bash",
+        "scripts/validate.sh",
+        "--suite",
+        "test-generated-skills.py"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 2.769541,
+      "output": "/tmp/kpr-i259-compact-final-controlled-generated-final-r2-frame-role.txt",
+      "output_sha256": "2ce22a5396821094d98459ee8375358a846a2a64206304d9c3d53888b350d60a",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-controlled-generated-final-r2-frame-role.json",
+      "receipt_sha256": "fdfdd3298f4b4803462bdd7436875a28b1b5f233f74d29af56111dec671c4473"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "controlled-generated-final-r2-frame",
+      "candidate": "431940da890856d1cda1df9abbb83bb0b3c5d10b",
+      "argv": [
+        "bash",
+        "scripts/validate.sh",
+        "--suite",
+        "test-generated-skills.py"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 2.863973,
+      "output": "/tmp/kpr-i259-compact-final-controlled-generated-final-r2-frame.txt",
+      "output_sha256": "ae59547535e7fbbe1b38cf430c83a7109d3ee962ddc6cafcbaf6adfd66b638fe",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-controlled-generated-final-r2-frame.json",
+      "receipt_sha256": "bb0694ce9844f015f9d354520959e25fdf90c4bdd1e66a1312be2b0c8fa41a8d"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "controlled-generated-final-r2",
+      "candidate": "963aca745ce5d7ad36867e7ca1b5f1783e6fcf79",
+      "argv": [
+        "bash",
+        "scripts/validate.sh",
+        "--suite",
+        "test-generated-skills.py"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 3.417833,
+      "output": "/tmp/kpr-i259-compact-final-controlled-generated-final-r2.txt",
+      "output_sha256": "891323e0eff73842f444be93f669bb4bd37c6ec443e56843edf9f2a79b837980",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-controlled-generated-final-r2.json",
+      "receipt_sha256": "61e5900bb241f79a9e27eb9ce8f9dd4a64e92618badd45ce9b44803761ab00d8"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "controlled-generated-final",
+      "candidate": "af4cfcb476ecf0158cb91e34fd7cf6c7888bfbaa",
+      "argv": [
+        "bash",
+        "scripts/validate.sh",
+        "--suite",
+        "test-generated-skills.py"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 4.789862,
+      "output": "/tmp/kpr-i259-compact-final-controlled-generated-final.txt",
+      "output_sha256": "d90e344730797a6b4337890208cfaee50a0078d09eceff725e8f8b8785134480",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-controlled-generated-final.json",
+      "receipt_sha256": "aa1c60c3d0ac09647c79ed94ef4601e371d62338d9e5efb4479f7ed96488f9f9"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "controlled-generated",
+      "candidate": "f893a9ff9a223c33131f445f43ac0db488deac20",
+      "argv": [
+        "bash",
+        "scripts/validate.sh",
+        "--suite",
+        "test-generated-skills.py"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 3.189281,
+      "output": "/tmp/kpr-i259-compact-final-controlled-generated.txt",
+      "output_sha256": "592e5dc8e9ba8712c709e0b31db506eb05b875c0a9e7d6e19500ce8b562d1115",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-controlled-generated.json",
+      "receipt_sha256": "29b1d8859810b5f8273c206383e2479ac7080328b7500c161d776385582a89be"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "delegator-entry",
+      "candidate": "f893a9ff9a223c33131f445f43ac0db488deac20",
+      "argv": [
+        "python3",
+        "-c",
+        "import runpy; d=runpy.run_path('tests/contract/test-issue-74-kaola-delegator.py'); d['test_generated_entry_matrix_and_no_engine_leak'](); print('PASS test_generated_entry_matrix_and_no_engine_leak')"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.03738,
+      "output": "/tmp/kpr-i259-compact-final-delegator-entry.txt",
+      "output_sha256": "2b223115c41e1925cc1c1acf94f0d7a1f9bda73ef2f13eff4834be5321bb1de2",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-delegator-entry.json",
+      "receipt_sha256": "56f7b24d14310342cc188ef11fb099e544380fe161e3c7136c9b4b5f2feb4a85"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "initialize-frame",
+      "candidate": "431940da890856d1cda1df9abbb83bb0b3c5d10b",
+      "argv": [
+        "python3",
+        "tests/contract/test-acp-contract.py",
+        "Issue34ModelSelectionAcpTests.test_codex_alone_advertises_completed_compaction_at_probe_and_start",
+        "Issue34ModelSelectionAcpTests.test_codex_does_not_send_cursor_init_meta",
+        "Issue34ModelSelectionAcpTests.test_cursor_sends_parameterized_picker_init_meta"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 11.266657,
+      "output": "/tmp/kpr-i259-compact-final-initialize-frame.txt",
+      "output_sha256": "38651c894bb8f26543ad933bf036905d37e48f31debc827a7979b46537adcdc4",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-initialize-frame.json",
+      "receipt_sha256": "0bad98a7ab26a74346f019aa6f835acda903f164522fd6fad714209843b384d8"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "initialize",
+      "candidate": "f893a9ff9a223c33131f445f43ac0db488deac20",
+      "argv": [
+        "python3",
+        "tests/contract/test-acp-contract.py",
+        "Issue34ModelSelectionAcpTests.test_codex_alone_advertises_completed_compaction_at_probe_and_start",
+        "Issue34ModelSelectionAcpTests.test_codex_does_not_send_cursor_init_meta",
+        "Issue34ModelSelectionAcpTests.test_cursor_sends_parameterized_picker_init_meta"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 12.415923,
+      "output": "/tmp/kpr-i259-compact-final-initialize.txt",
+      "output_sha256": "951cb3d77edb446404b9cb180b7d34c2a6f4e276d0ca7a6a959c6e4ed41f461b",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-initialize.json",
+      "receipt_sha256": "29c767417f967f752e47e6f2521e306ae2ae8aef26a0046cf6be5c411836a731"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "inspection-final-r2",
+      "candidate": "963aca745ce5d7ad36867e7ca1b5f1783e6fcf79",
+      "argv": [
+        "python3",
+        "tests/contract/test-issue-255-lifecycle-state.py",
+        "MaintenanceCheckpoint.test_malformed_recovery_migration_refuses_without_losing_duty",
+        "MaintenanceCheckpoint.test_recovery_request_and_repeat_preserve_business_revision_and_migrate",
+        "MaintenanceCheckpoint.test_recovery_unavailable_sources_stay_visible_and_scoped_clear_keeps_other_alerts",
+        "HolderNodeMode.test_recipe_refusal_for_owed_recovery_is_visible_once_in_both_views",
+        "HolderNodeMode.test_inquiry_request_recovers_recipe_without_business_write"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 3.521802,
+      "output": "/tmp/kpr-i259-compact-final-inspection-final-r2.txt",
+      "output_sha256": "bb10b763f037a1267e33c46a0961bd1f23bce59248014639b2125174902cab72",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-inspection-final-r2.json",
+      "receipt_sha256": "4f99eb2cf6885b0a4519823586eff375343067feee39c41e016076a2135f0da5"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "inspection-final",
+      "candidate": "af4cfcb476ecf0158cb91e34fd7cf6c7888bfbaa",
+      "argv": [
+        "python3",
+        "tests/contract/test-issue-255-lifecycle-state.py",
+        "MaintenanceCheckpoint.test_malformed_recovery_migration_refuses_without_losing_duty",
+        "MaintenanceCheckpoint.test_recovery_request_and_repeat_preserve_business_revision_and_migrate",
+        "MaintenanceCheckpoint.test_recovery_unavailable_sources_stay_visible_and_scoped_clear_keeps_other_alerts",
+        "HolderNodeMode.test_recipe_refusal_for_owed_recovery_is_visible_once_in_both_views",
+        "HolderNodeMode.test_inquiry_request_recovers_recipe_without_business_write"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 1,
+      "wall_seconds": 2.330895,
+      "output": "/tmp/kpr-i259-compact-final-inspection-final.txt",
+      "output_sha256": "4d5e4720865e0e7e7095361d4ac9fd690415940b379a2219adfc1756a6e639fc",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-inspection-final.json",
+      "receipt_sha256": "950342cced863248e0d37333d6278f0a0c767836384f031d106d2d9adbe13f0a"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "precompact",
+      "candidate": "f893a9ff9a223c33131f445f43ac0db488deac20",
+      "argv": [
+        "python3",
+        "tests/contract/test-project-compact-notice.py",
+        "Notice.test_host_precompact_owes_reload_only_without_completed_maintenance",
+        "Notice.test_notice_waits_for_real_successful_response_then_standard_prompt",
+        "Notice.test_native_codex_remains_exempt",
+        "Notice.test_newer_native_occurrence_less_signal_survives_notice_admission"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.088584,
+      "output": "/tmp/kpr-i259-compact-final-precompact.txt",
+      "output_sha256": "7af296c0dc5496acc28dff76d91ad6feac1079f0cd1bbe44ec422d03733a5866",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-precompact.json",
+      "receipt_sha256": "dca19061891a1592eaa3c3ab041e93f7405eecdd16afe653a5aa343ac5f87290"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "progressive-final-r2-frame-role",
+      "candidate": "0553a8dbad2d6e9813075f07e3705a42844eca12",
+      "argv": [
+        "python3",
+        "tests/contract/test-progressive-disclosure.py",
+        "BudgetsDeclared",
+        "DiscoveryIsNameAndShortDescription",
+        "ActivationBoundaries",
+        "BoundedOrdinaryOutputs",
+        "InvariantIsDocumented"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.150726,
+      "output": "/tmp/kpr-i259-compact-final-progressive-final-r2-frame-role.txt",
+      "output_sha256": "49f588de6cf62b655e376f90e183171dbeb097fac21da86cf682b3479fd9e0e3",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-progressive-final-r2-frame-role.json",
+      "receipt_sha256": "55b466dc1a0c27dfc0108eb6e9a7850313f09765f3de0a6f0791daa4495448c6"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "progressive-final-r2-frame",
+      "candidate": "431940da890856d1cda1df9abbb83bb0b3c5d10b",
+      "argv": [
+        "python3",
+        "tests/contract/test-progressive-disclosure.py",
+        "BudgetsDeclared",
+        "DiscoveryIsNameAndShortDescription",
+        "ActivationBoundaries",
+        "BoundedOrdinaryOutputs",
+        "InvariantIsDocumented"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.159437,
+      "output": "/tmp/kpr-i259-compact-final-progressive-final-r2-frame.txt",
+      "output_sha256": "a2f4153553e746b4c04de97953ff172e6720dc3a249e94e7e4442b3960c13119",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-progressive-final-r2-frame.json",
+      "receipt_sha256": "7833ebbf186c601b6b09f5bcf28ad1f7adc016acad6f7ae1329b8b09cd3df3a8"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "progressive-final-r2",
+      "candidate": "963aca745ce5d7ad36867e7ca1b5f1783e6fcf79",
+      "argv": [
+        "python3",
+        "tests/contract/test-progressive-disclosure.py",
+        "BudgetsDeclared",
+        "DiscoveryIsNameAndShortDescription",
+        "ActivationBoundaries",
+        "BoundedOrdinaryOutputs",
+        "InvariantIsDocumented"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.192402,
+      "output": "/tmp/kpr-i259-compact-final-progressive-final-r2.txt",
+      "output_sha256": "5847e3778622e9f75ba8d9778d8dd20baac36d707086b00b372e60d35baad06e",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-progressive-final-r2.json",
+      "receipt_sha256": "50a92f0872e7a207280df76be4ae305cac7a582cdf77f4b102c4dc14969bb054"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "progressive-final",
+      "candidate": "af4cfcb476ecf0158cb91e34fd7cf6c7888bfbaa",
+      "argv": [
+        "python3",
+        "tests/contract/test-progressive-disclosure.py",
+        "BudgetsDeclared",
+        "DiscoveryIsNameAndShortDescription",
+        "ActivationBoundaries",
+        "BoundedOrdinaryOutputs",
+        "InvariantIsDocumented"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.263273,
+      "output": "/tmp/kpr-i259-compact-final-progressive-final.txt",
+      "output_sha256": "170a732eb7199f408c5e7f890a5177aa6a12a492de627a5f1a608d995936ea3a",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-progressive-final.json",
+      "receipt_sha256": "19d4fafd0ea230d3ffa4a7dbb3531054cc8acc6ea754d8afc8316f2827806440"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "progressive",
+      "candidate": "f893a9ff9a223c33131f445f43ac0db488deac20",
+      "argv": [
+        "python3",
+        "tests/contract/test-progressive-disclosure.py",
+        "BudgetsDeclared",
+        "DiscoveryIsNameAndShortDescription",
+        "ActivationBoundaries",
+        "BoundedOrdinaryOutputs",
+        "InvariantIsDocumented"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.208042,
+      "output": "/tmp/kpr-i259-compact-final-progressive.txt",
+      "output_sha256": "c86951a7f822abdb8c2f7cd8badfb662adaf9c24db9ee6c8f723d92e90c7135b",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-progressive.json",
+      "receipt_sha256": "59bac6f6fae7c572e3e5b0e1019f314197364a692149ce430f2b54ea024efba8"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "recovery-role-final",
+      "candidate": "0553a8dbad2d6e9813075f07e3705a42844eca12",
+      "argv": [
+        "python3",
+        "tests/contract/test-issue-255-lifecycle-state.py",
+        "HolderNodeMode.test_recovery_only_batch_at_same_revision_coalesces_and_keeps_safe_boundary",
+        "HolderNodeMode.test_recipe_refusal_for_owed_recovery_is_visible_once_in_both_views",
+        "HolderNodeMode.test_worker_foreign_start_and_unknown_role_register_no_recovery",
+        "HolderNodeMode.test_native_owned_reload_does_not_clear_host_maintenance",
+        "HolderNodeMode.test_sent_recovery_checkpoint_keeps_later_signal_and_exact_reclaims_first_node",
+        "HolderNodeMode.test_recovery_receipt_missing_in_checkpoint_is_partial_and_visible",
+        "HolderNodeMode.test_resume_scan_repairs_registration_window_and_pending_blocks_old_live_node",
+        "HolderNodeMode.test_owed_business_recipe_failure_survives_carrier_memory_loss",
+        "HolderNodeMode.test_inquiry_request_recovers_recipe_without_business_write"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 2.685231,
+      "output": "/tmp/kpr-i259-compact-final-recovery-role-final.txt",
+      "output_sha256": "29392101974b914215fad0b0e0179ba7cff48ab79a2586bb218f9be793b25a9a",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-recovery-role-final.json",
+      "receipt_sha256": "bcc6854a7b97da8410eb3a23f787e1dbd89616fb5fe3899c1622b34461fc56cd"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "render-final-r2-frame-role",
+      "candidate": "0553a8dbad2d6e9813075f07e3705a42844eca12",
+      "argv": [
+        "./scripts/render-skills.py",
+        "--check"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.053754,
+      "output": "/tmp/kpr-i259-compact-final-render-final-r2-frame-role.txt",
+      "output_sha256": "e14a9f0f57ab1bc40982fee681546c80b6692d8ee9c916f8035cf9cc9f07ae66",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-render-final-r2-frame-role.json",
+      "receipt_sha256": "337f8b8ed571f64809d0c123632de680d57bc61b8dbf591b55403158fa2bb0c3"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "render-final-r2-frame",
+      "candidate": "431940da890856d1cda1df9abbb83bb0b3c5d10b",
+      "argv": [
+        "./scripts/render-skills.py",
+        "--check"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.056011,
+      "output": "/tmp/kpr-i259-compact-final-render-final-r2-frame.txt",
+      "output_sha256": "e14a9f0f57ab1bc40982fee681546c80b6692d8ee9c916f8035cf9cc9f07ae66",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-render-final-r2-frame.json",
+      "receipt_sha256": "499ef7050fc29e57e0173fb8a2ab911172ae4c068bc5a35141d411706d5c7357"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "render-final-r2",
+      "candidate": "963aca745ce5d7ad36867e7ca1b5f1783e6fcf79",
+      "argv": [
+        "./scripts/render-skills.py",
+        "--check"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.088136,
+      "output": "/tmp/kpr-i259-compact-final-render-final-r2.txt",
+      "output_sha256": "e14a9f0f57ab1bc40982fee681546c80b6692d8ee9c916f8035cf9cc9f07ae66",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-render-final-r2.json",
+      "receipt_sha256": "52002f1d17b25b250e029b9665011a93c5f59b460d9f40a6f38d20ced46deac6"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "render-final",
+      "candidate": "af4cfcb476ecf0158cb91e34fd7cf6c7888bfbaa",
+      "argv": [
+        "./scripts/render-skills.py",
+        "--check"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.099484,
+      "output": "/tmp/kpr-i259-compact-final-render-final.txt",
+      "output_sha256": "e14a9f0f57ab1bc40982fee681546c80b6692d8ee9c916f8035cf9cc9f07ae66",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-render-final.json",
+      "receipt_sha256": "cf17514bb2bc97c5e15e9e3818fcb7d5a74d2d7b9e27c8f7136642baed995150"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "render",
+      "candidate": "f893a9ff9a223c33131f445f43ac0db488deac20",
+      "argv": [
+        "./scripts/render-skills.py",
+        "--check"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.077987,
+      "output": "/tmp/kpr-i259-compact-final-render.txt",
+      "output_sha256": "e14a9f0f57ab1bc40982fee681546c80b6692d8ee9c916f8035cf9cc9f07ae66",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-render.json",
+      "receipt_sha256": "b2eb0fad525652e93743dfce12755946881eb1709e971c3b499cab7e6fc8e360"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "rpc-frame-interface",
+      "candidate": "431940da890856d1cda1df9abbb83bb0b3c5d10b",
+      "argv": [
+        "python3",
+        "tests/contract/test-acp-contract.py",
+        "AcpContractTests.test_send_wait_end_turn_receipt"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 2.547938,
+      "output": "/tmp/kpr-i259-compact-final-rpc-frame-interface.txt",
+      "output_sha256": "a9927b55910f9a17bf0cd8dfc14892c4b2005763172bb7936bfc986816e52677",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-rpc-frame-interface.json",
+      "receipt_sha256": "74631574af7b509beaf766b96b235a1851b5916891e1e4c54f7edadeecf33aeb"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "syntax-diff-final-r2-frame-role",
+      "candidate": "0553a8dbad2d6e9813075f07e3705a42844eca12",
+      "argv": [
+        "python3",
+        "-c",
+        "import py_compile,subprocess; [py_compile.compile(p,doraise=True) for p in ['scripts/kaola-acp-holder.py','scripts/kaola-dispatch.py','scripts/kaola-record-contract.py']]; subprocess.run(['git','diff','--check','77d57fc0bae03cbcb70aa0b0b618c76ea7499a33','HEAD'],check=True); print('PASS syntax and authored/generated diff')"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.112285,
+      "output": "/tmp/kpr-i259-compact-final-syntax-diff-final-r2-frame-role.txt",
+      "output_sha256": "aa719cfb453a679e1e852fbaf20a07e2db4277e57988550dfc76a47e053e295b",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-syntax-diff-final-r2-frame-role.json",
+      "receipt_sha256": "a28f10b2df908b94e6639f957c5bbb14324cdb1f8f564b6002021168e85cbcb6"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "syntax-diff-final-r2-frame",
+      "candidate": "431940da890856d1cda1df9abbb83bb0b3c5d10b",
+      "argv": [
+        "python3",
+        "-c",
+        "import py_compile,subprocess; [py_compile.compile(p,doraise=True) for p in ['scripts/kaola-acp-holder.py','scripts/kaola-dispatch.py','scripts/kaola-record-contract.py']]; subprocess.run(['git','diff','--check','77d57fc0bae03cbcb70aa0b0b618c76ea7499a33','HEAD'],check=True); print('PASS syntax and authored/generated diff')"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.114388,
+      "output": "/tmp/kpr-i259-compact-final-syntax-diff-final-r2-frame.txt",
+      "output_sha256": "aa719cfb453a679e1e852fbaf20a07e2db4277e57988550dfc76a47e053e295b",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-syntax-diff-final-r2-frame.json",
+      "receipt_sha256": "3189249b09c1fc40775fd30476e5cee1d367a8e6952839ae5360e78c555242a7"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "syntax-diff-final-r2",
+      "candidate": "963aca745ce5d7ad36867e7ca1b5f1783e6fcf79",
+      "argv": [
+        "python3",
+        "-c",
+        "import py_compile,subprocess; [py_compile.compile(p,doraise=True) for p in ['scripts/kaola-acp-holder.py','scripts/kaola-dispatch.py','scripts/kaola-record-contract.py']]; subprocess.run(['git','diff','--check','77d57fc0bae03cbcb70aa0b0b618c76ea7499a33','HEAD'],check=True); print('PASS syntax and authored/generated diff')"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.137663,
+      "output": "/tmp/kpr-i259-compact-final-syntax-diff-final-r2.txt",
+      "output_sha256": "aa719cfb453a679e1e852fbaf20a07e2db4277e57988550dfc76a47e053e295b",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-syntax-diff-final-r2.json",
+      "receipt_sha256": "51128bf0df7aebe03c6a48c780f6c57d62e98cfcd7251f96c6f4863948fa7117"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "syntax-diff-final",
+      "candidate": "af4cfcb476ecf0158cb91e34fd7cf6c7888bfbaa",
+      "argv": [
+        "python3",
+        "-c",
+        "import py_compile,subprocess; [py_compile.compile(p,doraise=True) for p in ['scripts/kaola-acp-holder.py','scripts/kaola-dispatch.py','scripts/kaola-record-contract.py']]; subprocess.run(['git','diff','--check','77d57fc0bae03cbcb70aa0b0b618c76ea7499a33','HEAD'],check=True); print('PASS syntax and authored/generated diff')"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.181656,
+      "output": "/tmp/kpr-i259-compact-final-syntax-diff-final.txt",
+      "output_sha256": "aa719cfb453a679e1e852fbaf20a07e2db4277e57988550dfc76a47e053e295b",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-syntax-diff-final.json",
+      "receipt_sha256": "60d30696bb1b5903d84b4f129afc402f8754f8bb4ede9778c2b9fe349fc02689"
+    },
+    {
+      "scope": "source/tool/fixture, no native model proof",
+      "group": "syntax-diff",
+      "candidate": "f893a9ff9a223c33131f445f43ac0db488deac20",
+      "argv": [
+        "python3",
+        "-c",
+        "import py_compile,subprocess; [py_compile.compile(p,doraise=True) for p in ['scripts/kaola-acp-holder.py','scripts/kaola-dispatch.py','scripts/kaola-record-contract.py']]; subprocess.run(['git','diff','--check','77d57fc0bae03cbcb70aa0b0b618c76ea7499a33','HEAD'],check=True); print('PASS syntax and authored/generated diff')"
+      ],
+      "cwd": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kw/worktrees/issue-259",
+      "exit": 0,
+      "wall_seconds": 0.134407,
+      "output": "/tmp/kpr-i259-compact-final-syntax-diff.txt",
+      "output_sha256": "aa719cfb453a679e1e852fbaf20a07e2db4277e57988550dfc76a47e053e295b",
+      "worktree_clean": true,
+      "bash_path": "/Users/ylmacstudio/.local/share/bash-5.3.20/bin",
+      "receipt": "/tmp/kpr-i259-compact-final-syntax-diff.json",
+      "receipt_sha256": "6946931c7233bb82d554982e39f17d08974834756973b1b981f685672b6a6ccd"
+    }
+  ],
+  "cleanup": [
+    {
+      "candidate": "badca11e4f3b7b109b1b93c8536d4893208f50d7",
+      "group": "882-generated",
+      "root": "/tmp/kaola-val.v2QqOH",
+      "exists_after": false,
+      "sweep": {
+        "killed_group_members": [],
+        "matched_pids": [],
+        "pgid_identity_unverified": [],
+        "residual_pids": [],
+        "results": [],
+        "root": "/tmp/kaola-val.v2QqOH",
+        "swept_groups": []
+      }
+    },
+    {
+      "candidate": "0553a8dbad2d6e9813075f07e3705a42844eca12",
+      "group": "controlled-generated-final-r2-frame-role",
+      "root": "/tmp/kaola-val.Jp6XCO",
+      "exists_after": false,
+      "sweep": {
+        "killed_group_members": [],
+        "matched_pids": [],
+        "pgid_identity_unverified": [],
+        "residual_pids": [],
+        "results": [],
+        "root": "/tmp/kaola-val.Jp6XCO",
+        "swept_groups": []
+      }
+    },
+    {
+      "candidate": "431940da890856d1cda1df9abbb83bb0b3c5d10b",
+      "group": "controlled-generated-final-r2-frame",
+      "root": "/tmp/kaola-val.QaSRhF",
+      "exists_after": false,
+      "sweep": {
+        "killed_group_members": [],
+        "matched_pids": [],
+        "pgid_identity_unverified": [],
+        "residual_pids": [],
+        "results": [],
+        "root": "/tmp/kaola-val.QaSRhF",
+        "swept_groups": []
+      }
+    },
+    {
+      "candidate": "963aca745ce5d7ad36867e7ca1b5f1783e6fcf79",
+      "group": "controlled-generated-final-r2",
+      "root": "/tmp/kaola-val.PgIzkv",
+      "exists_after": false,
+      "sweep": {
+        "killed_group_members": [],
+        "matched_pids": [],
+        "pgid_identity_unverified": [],
+        "residual_pids": [],
+        "results": [],
+        "root": "/tmp/kaola-val.PgIzkv",
+        "swept_groups": []
+      }
+    },
+    {
+      "candidate": "af4cfcb476ecf0158cb91e34fd7cf6c7888bfbaa",
+      "group": "controlled-generated-final",
+      "root": "/tmp/kaola-val.OcHd3y",
+      "exists_after": false,
+      "sweep": {
+        "killed_group_members": [],
+        "matched_pids": [],
+        "pgid_identity_unverified": [],
+        "residual_pids": [],
+        "results": [],
+        "root": "/tmp/kaola-val.OcHd3y",
+        "swept_groups": []
+      }
+    },
+    {
+      "candidate": "f893a9ff9a223c33131f445f43ac0db488deac20",
+      "group": "controlled-generated",
+      "root": "/tmp/kaola-val.pG0opK",
+      "exists_after": false,
+      "sweep": {
+        "killed_group_members": [],
+        "matched_pids": [],
+        "pgid_identity_unverified": [],
+        "residual_pids": [],
+        "results": [],
+        "root": "/tmp/kaola-val.pG0opK",
+        "swept_groups": []
+      }
+    }
+  ],
+  "native_proof": "NOT RUN; Host allocation required; no live PASS from fixture",
+  "scope": "source and temporary deterministic/tool fixtures only",
+  "accepted_scoped_parent": "0553a8dbad2d6e9813075f07e3705a42844eca12",
+  "bounded_882_diff": [
+    {
+      "path": "docs/api.md",
+      "accepted_sha256": "4b115a5c319fd9e4b0b8307cc8f1b8b3d75d0c1a9a9aa956209d6c2f75ce2a10",
+      "candidate_sha256": "e2a77e2346ca06f9df9874f8f49f4968544361aed290805db6f25c78e178820c"
+    },
+    {
+      "path": "platforms/dsh.yaml",
+      "accepted_sha256": "1e3d4be84c6273a6feab509a2d4ebc68410e08ebbf6e7d1804c45c6a19793925",
+      "candidate_sha256": "c7769d9ae67903d5fcbf1e22f085bb4ed89f781b90998310a8c4b8a106b45092"
+    },
+    {
+      "path": "scripts/kaola-acp-holder.py",
+      "accepted_sha256": "4ae5543d05fc97b8fa1c3bb3f00bdb7de623396e410afa6ea78c8e2134cd5989",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "scripts/kaola-dsh-acp.py",
+      "accepted_sha256": "033e52eb720f4fdaaf21d40bf770f563c517f81b56864d21a7e57b1ac162e674",
+      "candidate_sha256": "b1879fca1791845608ce00fa162c122f0729cdb105516d0d4f27dbe69c506e6a"
+    },
+    {
+      "path": "scripts/kaola-dsh-steer.mjs",
+      "accepted_sha256": "c3d91a21c575847149ee88f839a61637121861d0609cb5db064265aa0f80d1d5",
+      "candidate_sha256": "f19a3beea03899dfae883ef84de5ede36e0503ed7be9df8b2f5d9de4f9b82da2"
+    },
+    {
+      "path": "skills/claude-code-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "accepted_sha256": "4ae5543d05fc97b8fa1c3bb3f00bdb7de623396e410afa6ea78c8e2134cd5989",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "skills/codex-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "accepted_sha256": "4ae5543d05fc97b8fa1c3bb3f00bdb7de623396e410afa6ea78c8e2134cd5989",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "skills/cursor-cli-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "accepted_sha256": "4ae5543d05fc97b8fa1c3bb3f00bdb7de623396e410afa6ea78c8e2134cd5989",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "skills/devin-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "accepted_sha256": "4ae5543d05fc97b8fa1c3bb3f00bdb7de623396e410afa6ea78c8e2134cd5989",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "skills/droid-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "accepted_sha256": "4ae5543d05fc97b8fa1c3bb3f00bdb7de623396e410afa6ea78c8e2134cd5989",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/references/acp.md",
+      "accepted_sha256": "49bb20f1b0187e4ba6765950e96ebed161fc5696f7eff52fb5d5b4ae50e92489",
+      "candidate_sha256": "30ff40c8999524fe20e2f8b951beabd6a970982e53183ea1266d9ae59bb3f1db"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "accepted_sha256": "4ae5543d05fc97b8fa1c3bb3f00bdb7de623396e410afa6ea78c8e2134cd5989",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/scripts/kaola-dsh-acp.py",
+      "accepted_sha256": "033e52eb720f4fdaaf21d40bf770f563c517f81b56864d21a7e57b1ac162e674",
+      "candidate_sha256": "b1879fca1791845608ce00fa162c122f0729cdb105516d0d4f27dbe69c506e6a"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/scripts/kaola-dsh-steer.mjs",
+      "accepted_sha256": "c3d91a21c575847149ee88f839a61637121861d0609cb5db064265aa0f80d1d5",
+      "candidate_sha256": "f19a3beea03899dfae883ef84de5ede36e0503ed7be9df8b2f5d9de4f9b82da2"
+    },
+    {
+      "path": "skills/dsh-kaola-project-runner/scripts/platform.yaml",
+      "accepted_sha256": "1e3d4be84c6273a6feab509a2d4ebc68410e08ebbf6e7d1804c45c6a19793925",
+      "candidate_sha256": "c7769d9ae67903d5fcbf1e22f085bb4ed89f781b90998310a8c4b8a106b45092"
+    },
+    {
+      "path": "skills/grok-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "accepted_sha256": "4ae5543d05fc97b8fa1c3bb3f00bdb7de623396e410afa6ea78c8e2134cd5989",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "skills/kimi-cli-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "accepted_sha256": "4ae5543d05fc97b8fa1c3bb3f00bdb7de623396e410afa6ea78c8e2134cd5989",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "skills/opencode-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "accepted_sha256": "4ae5543d05fc97b8fa1c3bb3f00bdb7de623396e410afa6ea78c8e2134cd5989",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "skills/zcode-kaola-project-runner/scripts/kaola-acp-holder.py",
+      "accepted_sha256": "4ae5543d05fc97b8fa1c3bb3f00bdb7de623396e410afa6ea78c8e2134cd5989",
+      "candidate_sha256": "b6723918027d4010887a99b86d2e37575f17ba427152e985458cccd4b7a391eb"
+    },
+    {
+      "path": "tests/contract/test-issue-264-compact-recovery.py",
+      "accepted_sha256": "e9346da8652c8709c4eb4d0f117906ab57b133aa99352266189dc621884fab2e",
+      "candidate_sha256": "d2b6e6917a77921f621cbdfdcd50b3b3568c4018659ec5d8840eef1bea8a879a"
+    }
+  ],
+  "preserved_055_artifacts": [
+    {
+      "path": "/tmp/kpr-i259-host-compact-implementation-accepted-0553.patch",
+      "sha256": "aca247f72e0d497842babfee8717b79a478211692458fc2b2f5d4211dc63734c"
+    },
+    {
+      "path": "/tmp/kpr-i259-host-compact-implementation-authored-accepted-0553.patch",
+      "sha256": "bb69e0e5ca5f4a608ea62747d07010add18896bc0dee74c757da333d0eefe054"
+    },
+    {
+      "path": "/tmp/kpr-i259-host-compact-implementation-delivery-20261006-accepted-0553.md",
+      "sha256": "cfb9b80b0c30fc815ff205d0a44aa04145519c738e7f5e550040580cca859f3b"
+    },
+    {
+      "path": "/tmp/kpr-i259-host-compact-implementation-hashes-20261006-accepted-0553.json",
+      "sha256": "e3daf684dfdb3278cca3d70e413e655281a7fec5d9a8a92e116a8b6d5628af04"
+    }
+  ],
+  "bounded_882_intermediate_failure": {
+    "path": "/tmp/kpr-i259-882-bounded-first.txt",
+    "sha256": "271289418bca00ff0b8a24e89e87860220468fe7ad5174be27984b98bd2e7bbc",
+    "argv": [
+      "python3",
+      "tests/contract/test-issue-264-compact-recovery.py",
+      "SessionUsageTests",
+      "DshCompactTests"
+    ],
+    "scope": "precommit new test binding NameError, exit1; product assertions preserved and corrected; final matching named checks exit0"
+  },
+  "index_inspection": {
+    "path": "/tmp/kpr-i259-882-index-inspection.json",
+    "sha256": "8fb3d6670a7b83fcc91625ee0cbe3936285385a1dad6168f491cb3114145797c",
+    "live_mutation": false,
+    "exact_historical_deletion_write": "not established; installed source provides a reproducible omission loss path, already fixed in candidate"
+  },
+  "dsh_installed_source": [
+    {
+      "package": "dsh-acp",
+      "version": "0.2.0-rc.2",
+      "source": "/Users/ylmacstudio/.local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-acp/lib/index.js",
+      "source_sha256": "c08ed51ebe53b7b45ca8f475630afc0271bf4ccb8b53f13b456fe2b4568a61b3"
+    },
+    {
+      "package": "dsh-compaction-basic",
+      "version": "0.2.0-rc.2",
+      "source": "/Users/ylmacstudio/.local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-compaction-basic/lib/index.js",
+      "source_sha256": "b7ac52f20a36430cf01a66b3a36f23a48ffdb22708d714dbe1fff541b5df4ec5"
+    },
+    {
+      "package": "dsh-command-compact",
+      "version": "0.2.0-rc.2",
+      "source": "/Users/ylmacstudio/.local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-command-compact/lib/index.js",
+      "source_sha256": "ee8b2519449ad549db3c2d81d652b2b0827492b3ae1d809e8c01df3f79b6ad94"
+    },
+    {
+      "package": "dsh-agent-loop",
+      "version": "0.2.0-rc.2",
+      "source": "/Users/ylmacstudio/.local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-agent-loop/lib/index.js",
+      "source_sha256": "00c4814d63f3d1e2754eb09144832d19b30499d6ea444730473f740b587948c2"
+    }
+  ],
+  "dsh_native_proof": "NOT RUN. Finite manual route model-free fixtures pass. Automatic events outside that request still unforwarded. Host owns exact DSH target grant, live event/read/use/stop; no universal unsupported claim.",
+  "delivery": {
+    "path": "/tmp/kpr-i259-host-compact-implementation-delivery-20261006.md",
+    "bytes": 51126,
+    "sha256": "557f2dda69507d408501c37d0423bc24a305e03ab8e18785a71038021ac1e83e"
+  },
+  "prepared_proof_correction": "Unexecuted --role host flag removed; actual CLI derives Host class from standard session name. Accepted055 report retains old preparation; no native attempt ran.",
+  "proof_scripts": [
+    {
+      "path": "/tmp/kpr-i259-882-usage-before.py",
+      "sha256": "5873fc3199016332fa55b248b34176edaebf62f5efd16edecdd122838732dd02"
+    }
+  ]
+}

@@ -1,0 +1,144 @@
+{
+  "correlation_only": true,
+  "coverage": {
+    "failed": [],
+    "in-flight": [],
+    "not-run": [],
+    "returned": [],
+    "unknown": [
+      "i262-writing"
+    ]
+  },
+  "dispatcher": {
+    "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+    "platform": "codex",
+    "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+    "session": "codex-KPR-orchestrator-main"
+  },
+  "effective_cap": 4,
+  "index_path": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/dispatch-index.json",
+  "items": [
+    {
+      "acceptance": "pending",
+      "dispatch_event_cursor": 1,
+      "dispatcher": {
+        "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "evidence": {
+        "collect_status": {
+          "acp_session_id": "d62ade89-d4c8-4506-a9bb-4ef449c6b630",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "dc1d0aeb5c64bc4659875421900c58cd",
+          "mutation_status": "completed",
+          "outcome": "stopped",
+          "prompt_fingerprint": "sha256:c48fabf3ba404b4285e2ed733ab0b772315de507a3fbd0c3305622739bd56534",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "send": {
+          "acp_session_id": "d62ade89-d4c8-4506-a9bb-4ef449c6b630",
+          "dispatch_event_cursor": 1,
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": "in_progress",
+          "outcome": "in_progress",
+          "prompt_fingerprint": "sha256:b87f4386206e38751fc7b8d21bed1bdc2df5ba0c5eb2ed760ca3598ded73797e",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "start": {
+          "acp_session_id": "d62ade89-d4c8-4506-a9bb-4ef449c6b630",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "dc1d0aeb5c64bc4659875421900c58cd",
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "status": {
+          "acp_session_id": null,
+          "dispatch_event_cursor": null,
+          "error_code": "no-session",
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        }
+      },
+      "holder_instance_id": "dc1d0aeb5c64bc4659875421900c58cd",
+      "item_id": "i262-writing",
+      "notify_target": {
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "output": "/tmp/kpr-i262-writing-delivery.md",
+      "platform": "dsh",
+      "preset": "dsh/default",
+      "prompt_fingerprint": "sha256:c48fabf3ba404b4285e2ed733ab0b772315de507a3fbd0c3305622739bd56534",
+      "prompt_sha256": "sha256:b87f4386206e38751fc7b8d21bed1bdc2df5ba0c5eb2ed760ca3598ded73797e",
+      "prompt_source": {
+        "kind": "full",
+        "prompt_sha256": "sha256:b87f4386206e38751fc7b8d21bed1bdc2df5ba0c5eb2ed760ca3598ded73797e"
+      },
+      "reason": "fingerprint-differs",
+      "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+      "selection": {
+        "advertised": {
+          "effort": "",
+          "model_id": "[\"opencode-go\",\"deepseek-v4.1-flash\"]"
+        },
+        "advertised_source": "effective_selection",
+        "applied": {
+          "effort": null,
+          "model_id": "opencode-go/deepseek-v4.1-flash"
+        },
+        "applied_state": {
+          "effort": "unapplied",
+          "model_id": "applied"
+        },
+        "comparison": "match",
+        "fields": {
+          "effort": {
+            "advertised": "not-requested",
+            "applied": "not-requested"
+          },
+          "model_id": {
+            "advertised": "unknown",
+            "applied": "match"
+          }
+        },
+        "requested": {
+          "effort": null,
+          "model_id": "opencode-go/deepseek-v4.1-flash",
+          "preset": "dsh/default",
+          "tier": "default"
+        },
+        "source": "config_application"
+      },
+      "session": "dsh-KPR-i262-writing",
+      "status": "unknown",
+      "task_id": "writing-guidance"
+    }
+  ],
+  "occupancy": "known",
+  "phase": "collection",
+  "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+  "schema": "kaola-dispatch-index/1",
+  "scope": "implementation",
+  "task_links": {
+    "index": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/dispatch-index.json",
+    "linked": {
+      "writing-guidance": [
+        "i262-writing"
+      ]
+    }
+  }
+}

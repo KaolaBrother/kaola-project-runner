@@ -1,0 +1,30 @@
+{
+  "backups": {
+    "backups": [
+      {
+        "bytes": 6975,
+        "deleted": false,
+        "name": "heartbeat-prompt.v1-754a4d19cefe.json",
+        "referenced": false,
+        "trusted": false
+      }
+    ],
+    "deleted": false,
+    "procedure": "Do not delete heartbeat-prompt.vN-<hash>.json files from this command. A backup is not authority. Read it only to see whether it names a pending grant, hold, task, or relay that the current file and the project's Git, Runner, and forge records do not. Leave that file in place until the installation's own authorized migration rehomes that evidence. Cleanup of one live installation is that migration, not a bulk delete."
+  },
+  "carrier": {
+    "capability": "heartbeat-state/2",
+    "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+    "observed_at": "2026-10-05T08:58:36.940418+00:00",
+    "platform": "codex",
+    "session": "codex-KPR-orchestrator-main"
+  },
+  "overwrite_detection": {
+    "alert": "state-overwritten",
+    "detail": "Migration does not write heartbeat-prompt.vN-<hash>.json or recovery.migration.raw. state-overwritten is not raised from those copies. An older writer that replaces the current file is no longer detected that way. Recover from project, Runner, and forge records.",
+    "raised": false
+  },
+  "removed": [],
+  "result": "current",
+  "revision": 971
+}

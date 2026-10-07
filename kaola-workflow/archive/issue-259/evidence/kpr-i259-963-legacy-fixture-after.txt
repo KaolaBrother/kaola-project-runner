@@ -1,0 +1,8 @@
+test_grant_state_cap_and_owner_precedence (__main__.DispatchEntry.test_grant_state_cap_and_owner_precedence) ... ok
+test_heartbeat_envelope_feeds_project_and_execute (__main__.DispatchEntry.test_heartbeat_envelope_feeds_project_and_execute) ... ok
+test_live_rows_use_status_selection_not_platform_class (__main__.DispatchEntry.test_live_rows_use_status_selection_not_platform_class) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 3.200s
+
+OK

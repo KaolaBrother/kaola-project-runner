@@ -1,0 +1,231 @@
+{
+  "correlation_only": true,
+  "coverage": {
+    "failed": [],
+    "in-flight": [
+      "i261-live-default",
+      "i261-live-opus"
+    ],
+    "not-run": [],
+    "returned": [],
+    "unknown": []
+  },
+  "dispatcher": {
+    "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+    "platform": "codex",
+    "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+    "session": "codex-KPR-orchestrator-main"
+  },
+  "effective_cap": 4,
+  "index_path": "/tmp/kpr-i261-live-dispatch-index.json",
+  "items": [
+    {
+      "acceptance": "pending",
+      "dispatch_event_cursor": 7,
+      "dispatcher": {
+        "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "evidence": {
+        "send": {
+          "acp_session_id": "7b8c56c9-0449-4231-a955-7333a2a7a8b5",
+          "dispatch_event_cursor": 7,
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": "in_progress",
+          "outcome": "in_progress",
+          "prompt_fingerprint": "sha256:9572dd6d93d766d53b210e65dd3ac9d83728e0a831621c04cf00fc5a6a3d96dd",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "start": {
+          "acp_session_id": "7b8c56c9-0449-4231-a955-7333a2a7a8b5",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "56a5ebc0d8ef7a5a8b6f6b75dc723bf4",
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "status": {
+          "acp_session_id": null,
+          "dispatch_event_cursor": null,
+          "error_code": "no-session",
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        }
+      },
+      "holder_instance_id": "56a5ebc0d8ef7a5a8b6f6b75dc723bf4",
+      "item_id": "i261-live-default",
+      "notify_target": {
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "platform": "droid",
+      "preset": "droid/default",
+      "prompt_fingerprint": "sha256:9572dd6d93d766d53b210e65dd3ac9d83728e0a831621c04cf00fc5a6a3d96dd",
+      "prompt_sha256": "sha256:9572dd6d93d766d53b210e65dd3ac9d83728e0a831621c04cf00fc5a6a3d96dd",
+      "prompt_source": {
+        "kind": "full",
+        "prompt_sha256": "sha256:9572dd6d93d766d53b210e65dd3ac9d83728e0a831621c04cf00fc5a6a3d96dd"
+      },
+      "reason": "admitted",
+      "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+      "selection": {
+        "advertised": {
+          "effort": "none",
+          "model_id": "auto"
+        },
+        "advertised_source": "effective_selection",
+        "applied": {
+          "effort": null,
+          "model_id": "auto"
+        },
+        "applied_state": {
+          "effort": "unapplied",
+          "model_id": "applied"
+        },
+        "comparison": "match",
+        "fields": {
+          "effort": {
+            "advertised": "not-requested",
+            "applied": "not-requested"
+          },
+          "model_id": {
+            "advertised": "match",
+            "applied": "match"
+          }
+        },
+        "requested": {
+          "effort": null,
+          "model_id": "auto",
+          "preset": "droid/default",
+          "tier": "default"
+        },
+        "source": "config_application"
+      },
+      "session": "droid-KPR-shared-capacity-default-proof",
+      "status": "in-flight",
+      "task_id": "i261-shared-capacity"
+    },
+    {
+      "acceptance": "pending",
+      "dispatch_event_cursor": 10,
+      "dispatcher": {
+        "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "evidence": {
+        "send": {
+          "acp_session_id": "20683a44-651d-4d00-aefd-2e528c2bc2a3",
+          "dispatch_event_cursor": 10,
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": "in_progress",
+          "outcome": "in_progress",
+          "prompt_fingerprint": "sha256:ce17dc92b3ae54d49efcdfa6105faaf25a336eb3cb74186b9e3e7d2a9035ebbc",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "start": {
+          "acp_session_id": "20683a44-651d-4d00-aefd-2e528c2bc2a3",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "e5b80754621f13789822ee00b7349552",
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "status": {
+          "acp_session_id": null,
+          "dispatch_event_cursor": null,
+          "error_code": "no-session",
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        }
+      },
+      "holder_instance_id": "e5b80754621f13789822ee00b7349552",
+      "item_id": "i261-live-opus",
+      "notify_target": {
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "platform": "droid",
+      "preset": "droid/opus",
+      "prompt_fingerprint": "sha256:ce17dc92b3ae54d49efcdfa6105faaf25a336eb3cb74186b9e3e7d2a9035ebbc",
+      "prompt_sha256": "sha256:ce17dc92b3ae54d49efcdfa6105faaf25a336eb3cb74186b9e3e7d2a9035ebbc",
+      "prompt_source": {
+        "kind": "full",
+        "prompt_sha256": "sha256:ce17dc92b3ae54d49efcdfa6105faaf25a336eb3cb74186b9e3e7d2a9035ebbc"
+      },
+      "reason": "admitted",
+      "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+      "selection": {
+        "advertised": {
+          "effort": "high",
+          "model_id": "claude-opus-5-5"
+        },
+        "advertised_source": "effective_selection",
+        "applied": {
+          "effort": "high",
+          "model_id": "claude-opus-5-5"
+        },
+        "applied_state": {
+          "effort": "applied",
+          "model_id": "applied"
+        },
+        "comparison": "match",
+        "fields": {
+          "effort": {
+            "advertised": "match",
+            "applied": "match"
+          },
+          "model_id": {
+            "advertised": "match",
+            "applied": "match"
+          }
+        },
+        "requested": {
+          "effort": "high",
+          "model_id": "claude-opus-5-5",
+          "preset": "droid/opus",
+          "tier": "opus"
+        },
+        "source": "config_application"
+      },
+      "session": "droid-KPR-shared-capacity-opus-proof",
+      "status": "in-flight",
+      "task_id": "i261-shared-capacity"
+    }
+  ],
+  "occupancy": "known",
+  "phase": "admission",
+  "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+  "schema": "kaola-dispatch-index/1",
+  "scope": "qa",
+  "task_links": {
+    "index": "/tmp/kpr-i261-live-dispatch-index.json",
+    "linked": {
+      "i261-shared-capacity": [
+        "i261-live-default",
+        "i261-live-opus"
+      ]
+    }
+  }
+}

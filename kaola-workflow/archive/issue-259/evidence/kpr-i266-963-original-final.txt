@@ -1,0 +1,49 @@
+Let me read the Host review and verification.
+
+Let me repair `do_cleanup` to keep unresolved failed-attempt evidence and report truthfully.
+
+Let me commit and capture hashes.
+
+
+
+Let me update the report's current conclusion.
+
+Seventh Host-review round complete on the same claim/worktree. No self-finalize, no new mission, no shared-source writes.
+
+## Candidate (one clean commit)
+**`cfa491dd`** on `workflow/issue-266`:
+
+| Artifact | sha256 |
+|---|---|
+| `scripts/kaola-launchd-broker.py` | `63cc4efb2e03eac2766c4c06a69e073ffb6c836e22b3a91ca0e235bc2e73b6d4` |
+| `tests/contract/test-issue-266-launch-broker.py` | `5c3b55150e2aebbb0abd8e3ee5741dd3e11567272d936669d31a9f7c15dbc3cc` |
+| `tests/contract/test-issue-266-launch-broker-composed.py` | `7044000052f47581cdf6aea52de52a948dfbbf890be4c7bb5006e6d2bbded249` |
+
+## The cleanup custody disposition
+`do_cleanup` now distinguishes a **failed-unresolved attempt** from a successful launch by the existing artifact/record paths:
+- A leftover attempt dir means `submit` did not complete it. While this session's own recorded **holder or native agent** is still alive, cleanup refuses `attempt-unresolved` with exact-stop recovery and **keeps** the attempt artifact and run dir. An absent manager no longer erases the sole evidence.
+- A **successful normal launch leaves no attempt artifact**, so it is never blocked merely because its intended worker is alive. This is artifact cleanup, not a Runner stop.
+- The attempt is removed only after the exact recorded identities are gone (`cleaned`, `unresolved_effect: false`).
+- The recovery hint no longer offers cleanup as an alternative to exact-stop: it states that cleanup removes artifacts only and cannot reclaim a live effect.
+
+No new store, registry, engine, history, or guessed kill.
+
+## Affected evidence (smallest cases only)
+- `/tmp/kpr-i266-entry/launch-broker-custody-probes.json` — **10 checks**, `40eb9951a90165104462879414e42f574202468dbc26a2112d66831c0826fc86`: absent-stop-reply custody unknown; unknown manager untouched; nonowned exited job untouched; **cleanup keeps a failed attempt whose native agent is alive**; **cleanup removes the attempt after the exact identities are gone**; live-agent reconciliation unresolved; both identities dead resolves it.
+- `/tmp/kpr-i266-entry/launch-broker-custody-composed.json` — 7 checks, `928cd6e8a90ee7bce87b6045d88ebd718f26967e73b42f6da2ce8b78fa11f4cb` (unchanged this round).
+
+The full 39/22 inventories and native models were **not** rerun. The old `launch-broker-test.json` (35) and `launch-broker-composed.json` remain prior results. The normal Host/seat/preserve-worker and refusal/custody evidence is preserved.
+
+## Overlapping proposals (unchanged, base `badca11e`, for #259)
+`kaola-acp.py.patch` `61413906…`, `kaola-tmux.sh.patch` `9e44bfc7…`, `render-skills.py.patch` `7d52525a…`, `validate.sh.patch` `a32d8b27…`.
+
+## Preserved limits
+macOS launchd proven; Linux user systemd implemented but **unmeasured**; other systems unmeasured and degrade only under `auto`. `auto` degrades to direct with a receipt flag; an explicit backend refuses with actionable recovery. GUI/TCC/Keychain, app-quit/relaunch, logout/reboot, quota, and outer timer stay unverified. Worktree clean; main shared source untouched; no leaks.
+
+```
+Workflow project: issue-266
+Issue: 266
+Branch: workflow/issue-266
+Mission ledger: 10 done / 0 in-flight / 0 todo / 0 blocked / 0 failed
+Next: Host acceptance of cfa491dd, #259 coordination on the integration patch, then /kaola-workflow-finalize issue-266
+```

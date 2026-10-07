@@ -1,0 +1,37 @@
+{
+  "candidate": "2989c8cfe61db1f98902fa7759d2fbb55e382fcc",
+  "scope": "four affected existing cases measured before commit on identical final source/test bytes; no native proof",
+  "cases": [
+    {
+      "argv": [
+        "python3",
+        "tests/contract/test-issue-244-dispatch.py",
+        "DispatchEntry.test_grant_state_cap_and_owner_precedence",
+        "DispatchEntry.test_heartbeat_envelope_feeds_project_and_execute",
+        "DispatchEntry.test_live_rows_use_status_selection_not_platform_class"
+      ],
+      "exit": 0,
+      "test_seconds": 3.2,
+      "output": "/tmp/kpr-i259-963-legacy-fixture-after.txt",
+      "output_sha256": "58aba001879c0f5f31c7a779524e21e033cc3a004e5c3d27b02b6cf171710e00"
+    },
+    {
+      "argv": [
+        "python3",
+        "tests/contract/test-issue-255-lifecycle-state.py",
+        "Migration.test_plan_then_write_preserves_duties_and_lists_unknowns"
+      ],
+      "exit": 0,
+      "test_seconds": 0.216,
+      "output": "/tmp/kpr-i259-963-owner-source-migration.txt",
+      "output_sha256": "802a4fdee95af2adbc684d7f10d916ea325d9b8fedf7d219f43c62c849075d92"
+    }
+  ],
+  "source_hashes": {
+    "scripts/kaola-dispatch.py": "2db85d7597f42d93b1d47a0f0f95216eef650b0b961ec07d866af14f633d7ae7",
+    "scripts/kaola-record-contract.py": "ba2ce83f1aaadf028b4ed15efe66e8f5381726c4d1a59171bb78d594871bc9e8",
+    "tests/contract/test-issue-244-dispatch.py": "2cfaa6e407e401748e6206b6b2df045504ece47099d6ab6875505593ca85a61c",
+    "tests/contract/test-issue-255-lifecycle-state.py": "a638c97f0ec99aa797e8df7bae4729a6d42f61d8850b55dd089a3b2bac106594"
+  },
+  "intermediate_failures": "/tmp/kpr-i259-963-legacy-fixture-before.txt"
+}

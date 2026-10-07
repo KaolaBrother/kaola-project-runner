@@ -1,0 +1,9 @@
+# Host disposition — batch b-1edbe61516ac
+
+Full original node return /tmp/kpr-985-node-original-final.txt and current revision984 agree: Host-written tasks/i259-impl@734 and section/project@735 match /tmp/kpr-i259-982-host-opus-disposition.md. Actual /tmp/kpr-i259-982-repair-steer.json is injected on preserved writer request7; /tmp/kpr-i259-982-opus-exact-stop.json confirms reviewer exit0 and residual[]. No state inconsistency, missing dispatch or unfinished stop is shown.
+
+Nodef8cffcba159c3392b166c5a4bcf3753b again used applied for Host-authored records; retained was the correct entry. Partial checkpoint verified:false, acked733/handled735 remains truthful. The Host resolves the returned-input alert from originals, without a forced acknowledgment or checkpoint replay. Node status /tmp/kpr-985-node-status.json is stopped with residual[]; no duplicate stop/start. Writer61df72c4e538d6dd4dfc12197d4f04d9 request7 is still in progress, without pending permissions.
+
+This repeat is mixed-version maintenance accounting evidence for the existing requirement2/6 delivery, not proof that the changed candidate prompt was used by the installed holder. Existing source clarification and its installed activation boundary remain distinct. No new error loop, automatic semantic cleanup, timer, installation or parallel source assignment. Current repair/final acceptance/outer mapping/original lifecycle/PATCH duties stay intact.
+
+Writer is modifying dispatch and contract source. This one retirement uses immutable2989 script/contract objects loaded from Git with their existing source paths for catalog discovery; it does not execute moving repair bytes or install a payload. Receipt /tmp/kpr-985-maintenance-returned-retire.json owns the actual tool outcome. No routine business rewrite beyond retirement is needed.

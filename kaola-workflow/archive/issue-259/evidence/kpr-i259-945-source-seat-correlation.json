@@ -1,0 +1,47 @@
+{
+  "scope": "read-only original admission/start/status and existing current task correlation; no live state/index write, fresh native status call or new occupancy store",
+  "canonical_task_source": "/Users/ylmacstudio/Workspace/kaola-project-runner/.kaola/heartbeat-prompt.json",
+  "source_sha256_at_read": "f37c1158877bdb59d069c23d8c25d2fce07458f9541400328205b90d680e3db3",
+  "file_revision_at_read": 948,
+  "task": "i259-impl",
+  "task_revision": 160,
+  "links": {
+    "session": "codex-KPR-i259-host-compact-impl",
+    "holder_instance_id": "f888667b7e6a5071753d218d0cc0484f",
+    "admitted_item": "i259-host-compact-implementation",
+    "acp_session_id": "01a10ef7-cb78-70c0-8380-ec495356e431"
+  },
+  "preset": "codex/default",
+  "applied_selection": {
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "fast": "off"
+  },
+  "original_status_observation": {
+    "event_cursor": 4516,
+    "turn_active": true,
+    "mutation_status": "accepted",
+    "activity_hint": "busy",
+    "agent_alive": true
+  },
+  "current_disposition": "Host945 confirms occupied/unreclaimed between turns. Missing installed index correlation does not make the seat free. The existing task already has exact holder/session links; no repair or replay is needed.",
+  "sources": [
+    {
+      "path": "/tmp/kpr-i259-862-compact-implementation-admission.json",
+      "sha256": "a4cdc4c9fd1373d8a089329ab124e9d16876a9de50c129e7bc8a6bd15a43838b"
+    },
+    {
+      "path": "/tmp/kpr-i259-929-status.json",
+      "sha256": "7dc0854f67d035d54fac490ba71ffb5190ae5fe925bf395634b742152ed375dc"
+    },
+    {
+      "path": "/tmp/kpr-i259-945-host-review.md",
+      "sha256": "f5e95efc3122d09bffe7131c30503273c691910298e3e285bf178cb981d3d61d"
+    },
+    {
+      "path": "/tmp/kpr-945-maintenance-returned-disposition.md",
+      "sha256": "6315a34396de2dbcd323e03c44649c81f866337787e3b507b53fa742d7df12a0"
+    }
+  ],
+  "recovery": "Host/Delegator reads original bound Runner start/status and current task; use existing on-demand project --seats/--platforms for partial catalogs. Keep resource or unmatched turn facts unknown; do not create an index row."
+}

@@ -1,0 +1,86 @@
+{
+  "candidate": "2989c8cfe61db1f98902fa7759d2fbb55e382fcc",
+  "parent": "7810c60061d19bec492d3115af1e8bd3d46369bb",
+  "branch": "workflow/issue-259",
+  "clean": true,
+  "delivery": {
+    "path": "/tmp/kpr-i259-host-compact-implementation-delivery-20261006.md",
+    "sha256": "d6b6575311bc718beab1f64063e47d7d444942a404e20cca72905ea13cffe83a"
+  },
+  "six_answers": {
+    "path": "/tmp/kpr-i259-six-requirement-answers-20261006.md",
+    "sha256": "54c030dd7bb0c40b53d2a2252ed671003ff01e0623f8f8002e5ec0b04ba0501a",
+    "body_sha256": "faa92487631443fd95e9c99d4691b8808d07793012a4ceea27ca64aed51e2dff"
+  },
+  "six_body_matches_delivery": true,
+  "manifest": {
+    "path": "/tmp/kpr-i259-host-compact-implementation-hashes-20261006.json",
+    "sha256": "572ac212af7441fc353f5745a0a175e55f64c6622ea0ea43eb05e9027e0e1755"
+  },
+  "patch": {
+    "path": "/tmp/kpr-i259-host-compact-implementation.patch",
+    "sha256": "2646ff5e748d798a01e26a165760ab0d3f28b1041cdece89291d1975f8834392",
+    "bytes": 2126755
+  },
+  "authored_patch": {
+    "path": "/tmp/kpr-i259-host-compact-implementation-authored.patch",
+    "sha256": "55d4b393c3553b532cd2052ae18402cf9e0045f4237422f6ce02ddf0ac005f84"
+  },
+  "all_changed_candidate_hashes_match": true,
+  "all_changed_committed_hashes_match": true,
+  "changed_path_count": 113,
+  "claim": {
+    "digest": "5ea624f9b9c061bd8c53dc4e20b20ac5a7c35ce95f4d1f244b17fd164f9a29d5",
+    "state_sha256": "610d647040b2ad4c948e36ee9480f14d92e96ade95aa3449210808fd7ef9cb75",
+    "ledger_sha256": "2efb63f6fb7c9da77f74d12abb4754d3e1b4de558599057bd9a2b59a133ab53b",
+    "statuses": [
+      "done",
+      "done",
+      "done",
+      "done"
+    ]
+  },
+  "native_proof": "No new native model run; unchanged original055/DSH/266 boundaries reused only at their actual scope",
+  "copied_current_report": {
+    "candidate": "2989c8cfe61db1f98902fa7759d2fbb55e382fcc",
+    "calls": 25,
+    "seconds": 1.825492,
+    "cleanup": {
+      "scratch": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kpr-i259-963-final-copy-c755ib_o",
+      "exists_after": false
+    },
+    "receipt_sha256": "f51953b2ae5a87cc6a47a74ca8498b8d6442584c809eed1ba5a425cc74b80bf6"
+  },
+  "generated_cleanup": {
+    "killed_group_members": [],
+    "matched_pids": [],
+    "pgid_identity_unverified": [],
+    "residual_pids": [],
+    "results": [],
+    "root": "/tmp/kaola-val.r6TBFU",
+    "swept_groups": []
+  },
+  "266_handoff": {
+    "commit": "cfa491dda33a1130746743ff15e10bdbbf11a324",
+    "files": {
+      "scripts/kaola-launchd-broker.py": {
+        "sha256": "63cc4efb2e03eac2766c4c06a69e073ffb6c836e22b3a91ca0e235bc2e73b6d4",
+        "equal_handoff": true
+      },
+      "tests/contract/test-issue-266-launch-broker.py": {
+        "sha256": "5c3b55150e2aebbb0abd8e3ee5741dd3e11567272d936669d31a9f7c15dbc3cc",
+        "equal_handoff": true
+      },
+      "tests/contract/test-issue-266-launch-broker-composed.py": {
+        "sha256": "7044000052f47581cdf6aea52de52a948dfbbf890be4c7bb5006e6d2bbded249",
+        "equal_handoff": true
+      }
+    },
+    "original_writer_stopped": "Host963 handoff receipt; no new native control call"
+  },
+  "current_state_write": false,
+  "index_reconstruction": false,
+  "lifecycle": false,
+  "source_custody": "Original259 f888 sole writer remains occupied/unreclaimed until Host acceptance and exact stop",
+  "pending": "Host exact-candidate judgment; affected Opus Extra High + outer personal verdict; named missing native boundaries; pins/Seats and original lifecycles"
+}

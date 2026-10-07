@@ -1,0 +1,195 @@
+{
+  "correlation_only": true,
+  "coverage": {
+    "failed": [],
+    "in-flight": [],
+    "not-run": [],
+    "returned": [
+      "i259-continuous-improvement-opus-review"
+    ],
+    "unknown": []
+  },
+  "dispatcher": {
+    "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+    "platform": "codex",
+    "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+    "session": "codex-KPR-orchestrator-main"
+  },
+  "effective_cap": 4,
+  "items": [
+    {
+      "acceptance": "pending",
+      "capture_since": 13,
+      "dispatch_event_cursor": 13,
+      "dispatcher": {
+        "holder_instance_id": "e4d8aaf7b644cdf422605c04bb297b1c",
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "evidence": {
+        "capture": {
+          "acp_session_id": "f220b2421c51bd026d0bb93102e4f981",
+          "dispatch_event_cursor": null,
+          "error_code": "holder-lost",
+          "exit_code": 0,
+          "holder_instance_id": "34cb60df91003ec7f0eeb707421524b3",
+          "mutation_status": "completed",
+          "outcome": "holder_lost",
+          "prompt_fingerprint": "sha256:afe281008f729f800a26112ead205227a54c5829ce5130694ef88470f8f90dc5",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "collect_status": {
+          "acp_session_id": "f220b2421c51bd026d0bb93102e4f981",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "34cb60df91003ec7f0eeb707421524b3",
+          "mutation_status": "completed",
+          "outcome": "stopped",
+          "prompt_fingerprint": "sha256:afe281008f729f800a26112ead205227a54c5829ce5130694ef88470f8f90dc5",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "send": {
+          "acp_session_id": "f220b2421c51bd026d0bb93102e4f981",
+          "dispatch_event_cursor": 13,
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": "in_progress",
+          "outcome": "in_progress",
+          "prompt_fingerprint": "sha256:afe281008f729f800a26112ead205227a54c5829ce5130694ef88470f8f90dc5",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "start": {
+          "acp_session_id": "f220b2421c51bd026d0bb93102e4f981",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "34cb60df91003ec7f0eeb707421524b3",
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "status": {
+          "acp_session_id": null,
+          "dispatch_event_cursor": null,
+          "error_code": "no-session",
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        }
+      },
+      "holder_instance_id": "34cb60df91003ec7f0eeb707421524b3",
+      "item_id": "i259-continuous-improvement-opus-review",
+      "notify_target": {
+        "platform": "codex",
+        "session": "codex-KPR-orchestrator-main"
+      },
+      "output": "/tmp/kpr-continuous-improvement-opus-review-20261006.md",
+      "platform": "claude-code",
+      "preset": "claude-code/opus-xhigh",
+      "prompt_fingerprint": "sha256:afe281008f729f800a26112ead205227a54c5829ce5130694ef88470f8f90dc5",
+      "prompt_sha256": "sha256:afe281008f729f800a26112ead205227a54c5829ce5130694ef88470f8f90dc5",
+      "prompt_source": {
+        "kind": "full",
+        "prompt_sha256": "sha256:afe281008f729f800a26112ead205227a54c5829ce5130694ef88470f8f90dc5"
+      },
+      "reason": "collected",
+      "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+      "result": {
+        "cursor": 13,
+        "excerpt": null,
+        "excerpt_truncated": false,
+        "gaps": [
+          "reply-text-absent"
+        ],
+        "locator": {
+          "argv": [
+            "capture",
+            "--repo",
+            "/Users/ylmacstudio/Workspace/kaola-project-runner",
+            "--session",
+            "claude-code-KPR-i259-improvement-review",
+            "--full",
+            "--inline"
+          ],
+          "event_log_path": null,
+          "platform": "claude-code",
+          "session": "claude-code-KPR-i259-improvement-review",
+          "since": 13
+        },
+        "output": {
+          "checked": true,
+          "declared": "/tmp/kpr-continuous-improvement-opus-review-20261006.md",
+          "kind": "file",
+          "path": "/tmp/kpr-continuous-improvement-opus-review-20261006.md",
+          "present": true
+        },
+        "reply_chars": null,
+        "stop_reason": "end_turn",
+        "turn": {
+          "holder_instance_id": "34cb60df91003ec7f0eeb707421524b3",
+          "prompt_fingerprint": "sha256:afe281008f729f800a26112ead205227a54c5829ce5130694ef88470f8f90dc5"
+        }
+      },
+      "selection": {
+        "advertised": {
+          "effort": "xhigh",
+          "model_id": "opus"
+        },
+        "advertised_source": "effective_selection",
+        "applied": {
+          "effort": "xhigh",
+          "model_id": "opus"
+        },
+        "applied_state": {
+          "effort": "applied",
+          "model_id": "applied"
+        },
+        "comparison": "match",
+        "fields": {
+          "effort": {
+            "advertised": "match",
+            "applied": "match"
+          },
+          "model_id": {
+            "advertised": "match",
+            "applied": "match"
+          }
+        },
+        "requested": {
+          "effort": "xhigh",
+          "model_id": "opus",
+          "preset": "claude-code/opus-xhigh",
+          "tier": "opus-xhigh"
+        },
+        "source": "config_application"
+      },
+      "session": "claude-code-KPR-i259-improvement-review",
+      "status": "returned",
+      "stop_reason": "end_turn",
+      "task_id": "recent-harness-research",
+      "task_scope": "thinking and review only",
+      "turn_active": null,
+      "turn_outcome": "stopped"
+    }
+  ],
+  "occupancy": "known",
+  "phase": "collection",
+  "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+  "schema": "kaola-dispatch-index/1",
+  "scope": "qa",
+  "task_links": {
+    "linked": {
+      "recent-harness-research": [
+        "i259-continuous-improvement-opus-review"
+      ]
+    }
+  }
+}

@@ -1,0 +1,153 @@
+{
+  "candidate": "13f0720c9b6fc9b748abbc4f1ee07b0052c24b57",
+  "parent": "cefcda13980b888c731a31e4069429412b3a6fba",
+  "clean": true,
+  "new_source_changes": "Only holder _node_prompt instructions and ten renderer copies",
+  "changed_holder_ast": [
+    "_node_prompt"
+  ],
+  "all_other_holder_asts_equal_parent": true,
+  "checkpoint_engine_equal_parent": true,
+  "tests_and_owner_requirements_equal_parent": true,
+  "generated_holder_copies": 10,
+  "changed_holder_sha256": "d8cc9dc147f69db50dc5be5c7cf1f7efced677c19813155792a191aedb72f280",
+  "native_named_functions_equal_immutable055": 13,
+  "native_named_function_changed": "_node_prompt instructions only",
+  "reused_named_behavior_cases": 33,
+  "new_existing_binding_cases": 4,
+  "reused_disposable_upgrade_calls": 17,
+  "reused_disposable_upgrade_seconds": 1.662225,
+  "six_answer_bodies_equal": true,
+  "prompt_disposable_removed": true,
+  "generated_cleanup": {
+    "candidate": "13f0720c9b6fc9b748abbc4f1ee07b0052c24b57",
+    "group": "945-generated",
+    "root": "/tmp/kaola-val.khQXnL",
+    "exists_after": false,
+    "sweep": {
+      "killed_group_members": [],
+      "matched_pids": [],
+      "pgid_identity_unverified": [],
+      "residual_pids": [],
+      "results": [],
+      "root": "/tmp/kaola-val.khQXnL",
+      "swept_groups": []
+    }
+  },
+  "claim": {
+    "identity": "5ea624f9b9c061bd8c53dc4e20b20ac5a7c35ce95f4d1f244b17fd164f9a29d5",
+    "state_sha256": "610d647040b2ad4c948e36ee9480f14d92e96ade95aa3449210808fd7ef9cb75",
+    "ledger_sha256": "2efb63f6fb7c9da77f74d12abb4754d3e1b4de558599057bd9a2b59a133ab53b",
+    "mission_statuses": [
+      "done",
+      "done",
+      "done",
+      "done"
+    ]
+  },
+  "checks": [
+    {
+      "path": "/tmp/kpr-i259-compact-final-945-checkpoint-binding.json",
+      "sha256": "3ef6c512bda8f79cd6ac3a064beb000454b02ef2e06913e319fc04ce2ff6e4cf",
+      "group": "945-checkpoint-binding",
+      "exit": 0,
+      "wall_seconds": 2.967599
+    },
+    {
+      "path": "/tmp/kpr-i259-compact-final-945-render.json",
+      "sha256": "07b75a4c812a729eb84d5582332bca9b5603a7f58baa780201a6c8cf717e8d96",
+      "group": "945-render",
+      "exit": 0,
+      "wall_seconds": 0.04875
+    },
+    {
+      "path": "/tmp/kpr-i259-compact-final-945-generated.json",
+      "sha256": "2b8039ef244845249685f58a329cdb12cd9bef898dbafc7b69052f25bb747b48",
+      "group": "945-generated",
+      "exit": 0,
+      "wall_seconds": 2.494332
+    },
+    {
+      "path": "/tmp/kpr-i259-compact-final-945-syntax.json",
+      "sha256": "43efea477decacd576e8a1619db08c31c2ce95b60a989c2588ff7f1acce80dd1",
+      "group": "945-syntax",
+      "exit": 0,
+      "wall_seconds": 0.064345
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "/tmp/kpr-i259-host-compact-implementation-delivery-20261006.md",
+      "bytes": 45942,
+      "sha256": "8604bfc5e921fe981c95518c40b4c515e9b92eeda38624b5eb383452e8e83233"
+    },
+    {
+      "path": "/tmp/kpr-i259-host-compact-implementation.patch",
+      "bytes": 822254,
+      "sha256": "c8ce920ccad55a99ffb668c8f5129b97f8b6c7935b981f004a440953aecce28e"
+    },
+    {
+      "path": "/tmp/kpr-i259-host-compact-implementation-authored.patch",
+      "bytes": 224563,
+      "sha256": "4364b8c1825eaff9c53e48d7b9ae48424562b1795b3af1850e36e269e8fecccc"
+    },
+    {
+      "path": "/tmp/kpr-i259-host-compact-implementation-hashes-20261006.json",
+      "bytes": 165458,
+      "sha256": "650aff51c50fb8e34701d9a94ec9db149867f88e27b493abe5917b7627c805fc"
+    },
+    {
+      "path": "/tmp/kpr-i259-six-requirement-answers-20261006.md",
+      "bytes": 7116,
+      "sha256": "b2cd6b8686360596542ad62c87125e4bcb563cecd7fc2722ab274f3c31cda073"
+    },
+    {
+      "path": "/tmp/kpr-i259-939-report-upgrade-continuity-20261006.md",
+      "bytes": 17004,
+      "sha256": "311578856450ae5347f9e5aeea914282b6dfd44ec0befc71c2344dc66159e8f9"
+    },
+    {
+      "path": "/tmp/kpr-i259-939-disposable-upgrade-20261006/result.json",
+      "bytes": 7071,
+      "sha256": "8daacf6e6327a94c46827f8cc299936ee5da3308c52e9c88dbaf02287c65c160"
+    },
+    {
+      "path": "/tmp/kpr-i259-939-disposable-upgrade-20261006/trace.json",
+      "bytes": 219409,
+      "sha256": "e5488be5582907e75fc2e1512c4cfb8824f592a5e4e009b18b29b7237d445678"
+    },
+    {
+      "path": "/tmp/kpr-i259-945-constructed-prompts-20261006/receipt.json",
+      "bytes": 1354,
+      "sha256": "98d3a3703eb43e8997fde886bd7e3e0e09933b8e870534d4e047464deb43efd0"
+    },
+    {
+      "path": "/tmp/kpr-i259-945-source-seat-correlation.json",
+      "bytes": 2124,
+      "sha256": "03de66fbacdfd1164426c7f21d88dde3971fd682b4cda271680c7075e7610ad9"
+    },
+    {
+      "path": "/tmp/kpr-i259-compact-final-945-checkpoint-binding.json",
+      "bytes": 984,
+      "sha256": "3ef6c512bda8f79cd6ac3a064beb000454b02ef2e06913e319fc04ce2ff6e4cf"
+    },
+    {
+      "path": "/tmp/kpr-i259-compact-final-945-render.json",
+      "bytes": 572,
+      "sha256": "07b75a4c812a729eb84d5582332bca9b5603a7f58baa780201a6c8cf717e8d96"
+    },
+    {
+      "path": "/tmp/kpr-i259-compact-final-945-generated.json",
+      "bytes": 616,
+      "sha256": "2b8039ef244845249685f58a329cdb12cd9bef898dbafc7b69052f25bb747b48"
+    },
+    {
+      "path": "/tmp/kpr-i259-compact-final-945-syntax.json",
+      "bytes": 805,
+      "sha256": "43efea477decacd576e8a1619db08c31c2ce95b60a989c2588ff7f1acce80dd1"
+    }
+  ],
+  "native": "Accepted independent immutable055/finiteDSH evidence reused; no new native model, node or reviewer run. Changed prompt native adoption unmeasured.",
+  "frontier": "Original26695871b8d request9/e507800b unaccepted; no overlapping integration. Current prompt awaits Host. Final affected Opus/outer and lifecycle remain pending. Corrected Codex negotiation/real outer inquiry stay unverified/Host-owned; prepared plan is not a resource grant.",
+  "custody": "Original259/f888 remains sole overlapping source writer. Host owns acceptance and exact stop. No live state/index, installed/global, main/otherworktree or claim/ledger write; no lifecycle."
+}

@@ -1,0 +1,94 @@
+[
+  {
+    "session": "claude-code-KPR-record-design",
+    "holder_instance_id": "157018ed35e452086a53df53069e8da8",
+    "original_record": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kaola-501/claude-code/claude-code-KPR-record-design/906acb94c0d1178e/record.json",
+    "original_events": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kaola-501/claude-code/claude-code-KPR-record-design/906acb94c0d1178e/events.jsonl",
+    "path_event_count": 6,
+    "path_event_cursors": [
+      37,
+      39,
+      40,
+      41,
+      42,
+      43
+    ],
+    "turn_ended": [
+      {
+        "cursor": 47,
+        "kind": "turn_ended",
+        "outcome": "turn_completed",
+        "prompt_fingerprint": "sha256:1568b014e093f6500bfecc49478c6a1be7eee81e2fa0d30bf9668264af09e81e",
+        "stop_reason": "end_turn",
+        "ts": 1791169723.13
+      }
+    ]
+  },
+  {
+    "session": "claude-code-KPR-record-revise",
+    "holder_instance_id": "3b53230ee48628373a75f797d64bf438",
+    "original_record": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kaola-501/claude-code/claude-code-KPR-record-revise/906acb94c0d1178e/record.json",
+    "original_events": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kaola-501/claude-code/claude-code-KPR-record-revise/906acb94c0d1178e/events.jsonl",
+    "path_event_count": 25,
+    "path_event_cursors": [
+      14,
+      67,
+      70,
+      71,
+      72,
+      73,
+      74,
+      75,
+      76,
+      77,
+      78,
+      79,
+      80,
+      81,
+      82,
+      83,
+      84,
+      85,
+      88,
+      89,
+      90,
+      91,
+      92,
+      93,
+      94
+    ],
+    "turn_ended": [
+      {
+        "cursor": 101,
+        "kind": "turn_ended",
+        "outcome": "turn_completed",
+        "prompt_fingerprint": "sha256:0b6d8b4a2ad36d80cf296d216720f3edd6f95a07b0750a19d0496476f50634c7",
+        "stop_reason": "end_turn",
+        "ts": 1791172621.335
+      }
+    ]
+  },
+  {
+    "session": "claude-code-KPR-record-addendum",
+    "holder_instance_id": "a674eea3eddee0800ea8b2c5b1eb1a82",
+    "original_record": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kaola-501/claude-code/claude-code-KPR-record-addendum/906acb94c0d1178e/record.json",
+    "original_events": "/var/folders/7n/rrf1ybxd463984bqhxzx3mcr0000gn/T/kaola-501/claude-code/claude-code-KPR-record-addendum/906acb94c0d1178e/events.jsonl",
+    "path_event_count": 4,
+    "path_event_cursors": [
+      14,
+      17,
+      28,
+      29
+    ],
+    "turn_ended": [
+      {
+        "cursor": 33,
+        "kind": "turn_ended",
+        "outcome": "turn_completed",
+        "prompt_fingerprint": "sha256:26897a27bbf57a2a8cd6efc927f76e8235b52f9e752c1ee4943a959a21e4ae4c",
+        "stop_reason": "end_turn",
+        "ts": 1791175471.463
+      }
+    ]
+  }
+]
