@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: python3 tests/contract/test-issue-263-steer-adaptation.py
+validated_candidate_hash: dc63693539592d99fba1565ef0f1d540dc7cce811d4330f551869604fba4f209
