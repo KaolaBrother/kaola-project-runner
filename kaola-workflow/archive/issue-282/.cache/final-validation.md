@@ -1,3 +1,3 @@
 verdict: pass
 validation_command: python3 tests/contract/test-ddd-pack.py
-validated_candidate_hash: 2685915fb6a3f2f36d5b051f6da47a838f153884d51b5af49b8618abe1bc69ae
+validated_candidate_hash: 56060645bcb2e2039a66430ddb3cdae6a34518db7fc124e053814ae47c91a7ab
