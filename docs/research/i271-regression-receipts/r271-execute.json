@@ -1,0 +1,124 @@
+{
+  "correlation_only": true,
+  "coverage": {
+    "failed": [],
+    "in-flight": [
+      "i271-entry-regression"
+    ],
+    "not-run": [],
+    "returned": [],
+    "unknown": []
+  },
+  "dispatcher": {
+    "holder_instance_id": "a3aac555065cbe4fa7e35e5ceac28d77",
+    "platform": "zcode",
+    "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+    "session": "zcode-KPR-orchestrator-main"
+  },
+  "index_path": "/tmp/r271-index.json",
+  "items": [
+    {
+      "acceptance": "pending",
+      "dispatch_event_cursor": 7,
+      "dispatcher": {
+        "holder_instance_id": "a3aac555065cbe4fa7e35e5ceac28d77",
+        "platform": "zcode",
+        "session": "zcode-KPR-orchestrator-main"
+      },
+      "evidence": {
+        "send": {
+          "acp_session_id": "01a1176e-8b93-7f72-8acd-e914f48c94fb",
+          "dispatch_event_cursor": 7,
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": "in_progress",
+          "outcome": "in_progress",
+          "prompt_fingerprint": "sha256:723f0e5e995f947bfbfbfda705a9b15f1297e6f03eff278fae06c82f9b6c86d7",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "start": {
+          "acp_session_id": "01a1176e-8b93-7f72-8acd-e914f48c94fb",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "af4426fd1c9394efcf4a16880a963f61",
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "status": {
+          "acp_session_id": null,
+          "dispatch_event_cursor": null,
+          "error_code": "no-session",
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        }
+      },
+      "holder_instance_id": "af4426fd1c9394efcf4a16880a963f61",
+      "item_id": "i271-entry-regression",
+      "notify_target": {
+        "platform": "zcode",
+        "session": "zcode-KPR-orchestrator-main"
+      },
+      "output": "/tmp/kpr-271-regression-result.md",
+      "platform": "codex",
+      "preset": "codex/luna",
+      "prompt_fingerprint": "sha256:723f0e5e995f947bfbfbfda705a9b15f1297e6f03eff278fae06c82f9b6c86d7",
+      "prompt_sha256": "sha256:723f0e5e995f947bfbfbfda705a9b15f1297e6f03eff278fae06c82f9b6c86d7",
+      "prompt_source": {
+        "kind": "full",
+        "prompt_sha256": "sha256:723f0e5e995f947bfbfbfda705a9b15f1297e6f03eff278fae06c82f9b6c86d7"
+      },
+      "reason": "admitted",
+      "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+      "selection": {
+        "advertised": {
+          "effort": "max",
+          "model_id": "gpt-6-luna"
+        },
+        "advertised_source": "effective_selection",
+        "applied": {
+          "effort": "max",
+          "model_id": "gpt-6-luna"
+        },
+        "applied_state": {
+          "effort": "applied",
+          "model_id": "applied"
+        },
+        "comparison": "match",
+        "fields": {
+          "effort": {
+            "advertised": "match",
+            "applied": "match"
+          },
+          "model_id": {
+            "advertised": "match",
+            "applied": "match"
+          }
+        },
+        "requested": {
+          "effort": "max",
+          "model_id": "gpt-6-luna",
+          "preset": "codex/luna",
+          "tier": "luna"
+        },
+        "source": "config_application"
+      },
+      "session": "codex-KPR-i271-entry-regression",
+      "status": "in-flight",
+      "task_id": "kpr-a-issue-271"
+    }
+  ],
+  "occupancy": "known",
+  "phase": "admission",
+  "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+  "schema": "kaola-dispatch-index/1",
+  "scope": "qa"
+}
