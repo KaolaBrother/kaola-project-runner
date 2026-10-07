@@ -85,3 +85,8 @@ that owner. Session facts stay in Runner receipts and run facts in `workflow-sta
 The name is a scheduling and display fact: it never overrides repository identity or
 `issue_number`, and `--resume` stays same-issue recovery only. Consumer progress display and
 non-goals: `docs/issue-dispatch-display.md` in the Project Runner checkout.
+
+Before deciding no eligible work from a snapshot, re-read live issue state
+(`gh issue view <N> --json state`): a reopened issue a stale CLOSED snapshot
+hides is eligible. A dependency needed only for ACCEPTANCE never blocks
+STARTING other work; record which kind a dependency is when it matters.

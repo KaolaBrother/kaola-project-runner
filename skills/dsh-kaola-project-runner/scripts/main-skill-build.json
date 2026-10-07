@@ -1,5 +1,5 @@
 {
-  "build": "0aa354050773",
+  "build": "1e7f4c319473",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "e87411af5a117aa5edaa26ed935059ff381db776857767f70009b6fcad66e6ca",
@@ -10,7 +10,7 @@
     "references/heartbeat-skeleton.md": "9e7db23e0f1ef15655e5aafc5d648784f260deaaa1ae2d9958d5a2daaa7d6786",
     "references/host-entry-matrix.md": "0c81c9b9be00c7d009d9027f9a8860e20e005c77b811759255b4b71b86fa55fe",
     "references/host-startup.md": "897028f4fdf61ea34f96675f98cbf5dc1dc4d7b2d8fc0b386ae749c0b6557637",
-    "references/issue-dispatch.md": "3be5a5b491126a423228ca90a7da437ac7f05b88793b316392d43cd34916aa72",
+    "references/issue-dispatch.md": "a3ce7085ce16fef3d6a850806af10fe0cedd83cda41e1ab3f32d4121cdbb1aa4",
     "references/lifecycle-state.md": "b06fba5cd6b8681328dfe08610c0404141335142c76f1224d3109bfc531b4ffd",
     "references/profile-catalog.md": "38a6e4b9a17421a4ce1ebad5cb886def225e8e17794cdf26a8158ae72ea3caf9",
     "references/public-research.md": "86e2ad1cd11840fd58900cde429e9b45457f149b67fa91a32e5fe6429a58407c",

@@ -55,22 +55,24 @@ Bind `--section sideagent` with `"mode": "node"` and
 "<root>", "--session", "<bound name>", "--role", "sideagent", ...]}` (the
 checkout `kaola-tmux.sh` takes the platform before `start`), without
 `--continue` or `--resume` (an optional absolute `state_tool` names
-`kaola-dispatch.py` when it is not beside the holder or in the sibling Skill). Worker
-returns and terminations are not node inputs: they reach the Host at its next
-idle boundary as without a binding, and the Host reads the original. A Host
+`kaola-dispatch.py` when it is not beside the holder or in the sibling Skill).
+`runner`/`state_tool` must name a stable pinned source — installed Skill
+root or verified accepted checkout — never a mutable dev checkout: dev
+renders drift that build and the consumer skew check refuses legitimately. Worker returns and terminations are not node inputs: they reach the Host at
+its next idle boundary as without a binding, and the Host reads the original. A Host
 holder advertising `sideagent-node/1` selects current Host business changes
 past the handled revision. `host-compact-maintenance/1` also selects a pending
 recovery input, at the same safe boundary after the Host turn ends. It starts one fresh node from that argv (no
 shell), sends one prompt with the batch id, the Host revision range and the
 node's role limits (source pointers only, no restated result, no dispatch or
-judgment, exact-stop only a Host-recorded reclaim), and reads the node's checkpoint at its turn end. A turn end alone
-acknowledges nothing. An owed batch with a refused recipe reaches both current views
+judgment, exact-stop only a Host-recorded reclaim), and reads the node's
+checkpoint at its turn end. A turn end alone acknowledges nothing. An owed batch with a refused recipe reaches both views
 and wakes the Host once. An idle binding with no owed input stays quiet.
 With the shared current-input selector, retirement alone starts or sends no
-node when no input remains. It advances no checkpoint revision. If startup
+node when no input remains; it advances no checkpoint revision. If startup
 finishes after the input disappears, the carrier waits for the Host turn end
 and exact-stops its unassigned node. An assigned batch keeps its range and
-checkpoint. Older bundles without the selector keep revision-only selection.
+checkpoint. Older bundles keep revision-only selection.
 
 For ordinary Host business inputs, the node writes once:
 
