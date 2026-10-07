@@ -12,27 +12,46 @@ Target: a **minimal core** + replaceable components. **The B-line direction is A
 
 What must stay together because everything else depends on it and splitting it adds contracts without removing coupling:
 
-- **Identity model**: platform/session/holder_instance_id/native-id/repo canonicalization (`canonical`, `normalize_id`, `worker_event_id` (single owner: core; C3 consumes), `holder_of`, `assignment_identity`), plus the record-dir layout and schema names (`kaola-heartbeat-prompt/2`, `kaola-delegator-heartbeat/1`, `kaola-dispatch-index/1`). ~Small; zero I/O deps.
+- **Identity model**: platform/session/holder_instance_id/native-id/repo canonicalization (`canonical`, `normalize_id`, `worker_event_id` (single owner: core; C3 consumes), `holder_of`, `assignment_identity`), plus the record-dir layout. Version IDs for the THREE KPR-owned schemas are REGISTERED BY THEIR OWNING COMPONENTS (C4: heartbeat+delegator-heartbeat; C5: dispatch-index) — core holds only the registration mechanism and the identity schemas, not permanent ownership of every project business kind.
 - **Process facts**: pid/liveness/spawn-time/argv anchor/process-tree groups (`process_alive`, `libproc_ps`, `process_table`, `child_groups`, `spawn_time_matches`, `holder_argv_anchor`, `holder_identity` in kaola-acp.py). NOTE (accuracy): these perform real I/O — /proc+sysctl reads, unix-socket probes with timeouts; they are I/O-*narrow* (local kernel + one socket), not I/O-free. Locks serialize access; **authorization of the single writer is a separate rule** (§6a lease), not implied by the lock.
 - **Atomic state access**: `read_state_file`/`atomic_write`/`StateLock` + `kaola-record-contract.py` allowlists. Depends on identity only.
 - **Contract registry (thin, MINIMAL)**: version numbers + the identity/deterministic-access schemas ONLY. **Module-owned schemas register independently** — project business kinds (tasks/holds/alerts/decisions, dispatch items, KW artifacts) belong to their owning components, NOT permanently to core; KW is never forced to accept KPR's heartbeat schema or cross-repo sync. Shared-schema alignment targets ONE contract per shared artifact — the current dual code-tree digests (`computeCodeTreeHash` vs `computeLandableTreeDigest`) have DIFFERENT semantics (finalize gate vs landable-tree record) and are aligned to one contract with two named views, not erased into one function.
 
 ## 3. Components (cut along measured seams)
 
-Each row: current source (function clusters with line anchors). **The auditable, function-by-function assignment lives in `inventory-appendix.md`** (generated from source: 208+51+195+68 functions across the four scripts; every function assigned to exactly ONE component or listed UNASSIGNED-with-reason — UNASSIGNED must reach zero before P1). Duplicate-ownership errors in the v1 draft (e.g. `worker_event_id` listed under both core and C3) are resolved there by primary-responsibility rule. `main`/event-loop blocks are inventoried as their own rows, not omitted. Contract specifics per component (exact versions, data owner, test names, replace/uninstall steps) are the per-component contract documents P1 produces; §3 rows carry the seam rationale, not those details.
+Each row: current source (function clusters with line anchors). **The auditable assignment is `inventory-appendix.md` + `inventory-matrix.json` — 721 qualified-name rows from the bridge read-only original (source `7012e4d6`, per-file sha256): every row carries a keyword-assigned DRAFT primary or an explicit per-file keep-in-place hold (223 holds, none blank; P1 step-1 source review replaces keyword evidence). `recount.py` machine-verifies per-file top/nested/all + sha256 (522/199/721).** `worker_event_id` single-ownership (core) and the 5 Fable sample corrections are applied. Per-component CONTRACTS are §3b (this round), not deferred to P1.
 
 | # | Component | Current source (measured) | Why not core | Key interfaces / typed errors | Deps |
 |---|---|---|---|---|---|
 | C1 | Session/process lifecycle | kaola-acp-holder.py: parse_dispatcher/parse_heartbeat_host/read_heartbeat_file/start_epoch/live_spawn_entries/worker_tree_groups/dispatched_worker_groups/scrub/run_probe; kaola-acp.py start/stop/status/drain-restart/rebind-host | holder orchestration policy, not identity facts | receipts (`schema_version 3`, `stopped/exit/residual_pids`), `holder-lost`, `holder-not-ready` | core identity+process facts |
 | C2 | ACP transport adapters | platforms/*.yaml, scripts/adapters/*.sh, kaola-zcode-acp.py / -opencode- / -dsh-, vendor claude-code-acp | per-platform variance; catalogs are data not logic | manifest fields, `acp_mode_config_id`, per-platform quirks docs | core identity |
-| C3 | Events | kaola-acp-holder.py worker_event_id/attention_fingerprint; kaola-acp.py observe/capture/follow; events.jsonl rotations | consumers differ (Host UI vs state) | bounded capture receipts, `truncated` fields, cursor discipline | C1 |
+| C3 | Events | kaola-acp-holder.py attention_fingerprint (consuming core's worker_event_id); kaola-acp.py observe/capture/follow; events.jsonl rotations | consumers differ (Host UI vs state) | bounded capture receipts, `truncated` fields, cursor discipline | C1 |
 | C4 | Current-state access | kaola-dispatch.py state CRUD (init/update/retire/view/check/migrate; 47-fn cluster incl. task/hold/alert/decision records) | record kinds evolve; core keeps only atomic access | StateRefusal codes (`conflict`, `retire-unmet`, `schema-unsupported`...), rev numbers | core atomic access |
 | C5 | Dispatch/admission facts | kaola-dispatch.py execute/collect/project/delegator_seats (27-fn cluster; dispatch_links, seat_projection) | admission policy is Agent judgment over tool facts; the tool only records facts | plan schema, index schema, dispositions, `requirement-unmet`, `resource-conflict`, `shared-occupied` | C4, C3, core |
 | C6 | Bounded maintenance/recovery | recovery-input/checkpoint; kaola-compact-recovery.py; kaola-project-compact-notice.py; sideagent binding+recipe | optional (absent → inputs simply queue) | recovery_input seq, checkpoint batches, `signal-unverified` | C4, C3 |
-| C7 | Generation/install/versioning | render-skills.py, install-local.sh, budgets.json, accepted-revision pin, install-verify | pure build-time; absent at runtime | render receipts, budget check, pin gate, `kaola-project-runner-install-verify/1` | none (consumes core schemas) |
-| C8 | KW engineering bridge | Kaola-Workflow repo (READ-ONLY design partner): claim/finalize/sink, chain receipts | separate ownership & artifact model already | workflow-state.md, ledger, `chain-receipt.json` codeTreeHash | C4 contract registry |
+| C7 | Generation/install/versioning | render-skills.py, install-local.sh, budgets.json, accepted-revision pin, install-verify | pure build-time; absent at runtime | render receipts, budget check, pin gate, `kaola-project-runner-install-verify/1` | CORE (registry mechanism; C4/C5 schema registrations) |
+| C8 | KW engineering bridge | Kaola-Workflow repo (READ-ONLY design partner): claim/finalize/sink, chain receipts | separate ownership & artifact model already | workflow-state.md, ledger, `chain-receipt.json` codeTreeHash | C4 (optional schema registration via the core mechanism; KW artifacts stay KW-owned) |
 
 **Not components**: Agent judgment (planning/selection/acceptance) stays in Agents by definition; #267 escalation stays per-task inside C4/C5 facts.
+
+
+## 3b. Per-component contracts (THIS-round formal output)
+
+Minimal but concrete: each component names its contract artifacts (version carrier, data owner, IO surface, typed errors, independent tests, replace/uninstall). "Version" = the schema/receipt version string ALREADY in the artifact unless marked NEW.
+
+| Component | Contract artifacts (version carrier) | Data owner | Independent tests (existing) | Replace / uninstall |
+|---|---|---|---|---|
+| CORE identity/atomic | record-dir layout; identity schemas; StateLock protocol (NEW version field only if lock format changes) | consuming project `.kaola/` | test-issue-273-list-identity (real entry); test-zcode-host-contract | replace = swap library file, md5 render-enforced; uninstall N/A (core) |
+| C1 lifecycle | receipt `schema_version 3` + `holder_features` advertisement | runner record roots (tempdir) | test-acp-holder-continue; test-issue-50-runner-integration | replace per-skill copy; uninstall = skill removal (C7) |
+| C2 adapters | platforms/*.yaml manifest fields; `acp_mode_config_id`; kaola-quota.py parse/resolution API (CODE contract) | repo platforms/ | test-progressive-disclosure; per-platform contract suites | replace manifest+adapter pair; uninstall = --platform omit |
+| C3 events | events.jsonl rotation + bounded capture receipts (`truncated` fields) | record dir | test-acp-watch/follow/sweep-contract | replace handler; uninstall = no observe (degrades) |
+| C4 state | `kaola-heartbeat-prompt/2` + `kaola-delegator-heartbeat/1` schemas + StateRefusal codes | consuming project `.kaola/` | test-issue-255-lifecycle-state (128); test-issue-259-record-contract | reader-fallback set (P2) then replaceable |
+| C5 dispatch | `kaola-dispatch-index/1`; plan schema; typed refusals (`requirement-unmet`, `resource-conflict`, `shared-occupied`) | repo `.kaola/dispatch-index.json` | test-issue-244-dispatch; test-issue-273 consumer class | replace engine behind same index schema |
+| C6 recovery | recovery_input seq/checkpoint batch envelopes; `signal-unverified` | state file (C4 namespace) | test-issue-274-package-closure; #264 suites | optional module: absent = queued (P3 contract) |
+| C7 render/install | build hashes (`main-skill-build.json`); budgets.json; pin envelope; install-verify/1 | repo + installed roots | render --check; test-issue-264-validate-lane-integrity | tooling; uninstall flags exist |
+| C8 KW bridge | KW's own artifacts (workflow-state/ledger/chain-receipt) — referenced, not owned | KW repo | KW's suites (their side) | optional bridge; removal = no claim lifecycle |
+
+Failure/loading obligations (per component): typed refusal codes above are the complete error surface each component promises; load optionality = install-time selection (C7) + C6/C8 runtime-optional with the §5 queue/refuse contracts. These are the contracts P1 implements against; changes to them are ADR-3 additive.
 
 ## 4. Mermaid dependency DAG
 
@@ -57,7 +76,7 @@ graph TD
   AGT -.state.-> C4
 ```
 
-Cycles: C5→C1 (subprocess start) and C1→C2-data/C1→C6 (loader reads) are REAL and stay visible — they are resolved by data/mechanics separation (C1 reads C2 catalog data and loads C6 code; neither reverses), not by hiding edges. C2 and C7 depend on nothing but the core (independently skippable at install time).
+Cycles, honestly: the mermaid graph CONTAINS C1→C6→C3→C1 (holder loads C6 helper; C6 writes recovery inputs; C3 carries the events that wake C1) and C1→C2-code (quota_module loads parse/resolution CODE, not data). These are RUNTIME FEEDBACK loops, not import cycles: the code-load edges (C1→C2-code, C1→C6-code) are unidirectional at import time (no component file-loads back into C1), while the event/control edges (C6→C3, C3→C1) run through the event stream at runtime. The design keeps them separate: **code interface acyclic** (imports only toward core), **runtime control loop explicit and controlled** (bounded recovery inputs, one node per batch). C2 and C7 depend on nothing but the core (independently skippable at install time).
 
 ## 5. Optional install / runtime loading / subtraction
 
@@ -68,7 +87,7 @@ Cycles: C5→C1 (subprocess start) and C1→C2-data/C1→C6 (loader reads) are R
 ## 6. Failure, fencing, upgrade semantics (design, all UNTESTED until staged)
 
 - Single-writer per artifact stays (StateLock/atomic write). Cross-store fencing: any future shared store (B-line option) requires an explicit **handoff token** (lease with epoch) — **un-handed-off fallback dual-write is forbidden** (root constraint).
-- Startup contention: last-writer detection by holder_instance_id epoch (already the exact-stop guard substrate); a newer holder supersedes, older refuses.
+- Startup contention: per resource scope — sessions by identity-guarded exact-stop; state store by lease handoff (a random holder id never implies seniority).
 - Crash recovery: C1 holder exit does not lose C4 state (files+locks); C6 re-binds queued inputs; no auto-restart (Host-on-demand boundary unchanged).
 - Version compat: contract registry versions; reader-older → typed refuse (never silent). Cross-version data migration staged per component with reader-before-writer rollout (Fable C6 fact: current validator already refuses unknown keys → fail-closed).
 - idle-exit is a *candidate* policy for optional components only; it must not weaken the resident-service goal (owner A/B decision) nor the per-user/per-machine lightweight core direction (B0).
@@ -83,8 +102,8 @@ Each component ships its own suite plus one integration contract test per edge i
 
 ## 8. Open decisions for root/Fable convergence
 
-1. Core library language/packaging: single python package consumed by generated skills (recommend) vs multi-language contract generation.
-2. C4/C5 boundary: whether seat_projection belongs in C5 facts or core (recommend C5; core stays free of grant semantics).
+1. DECIDED (root): Python internal package. (Was: packaging language.)
+2. DECIDED (root): C5 owns seat_projection semantics; core stays free of grant semantics. Open remainder: the C4/C5 interface contract text (P1).
 3. C8 contract-registry co-ownership with KW maintainers.
 4. Whether C7 gains a `--component` install grammar now or after the pilot.
 5. Staging order (see migration.md) and the B0 resident-core pilot scope (lifecycle+events first, per Fable AB).
