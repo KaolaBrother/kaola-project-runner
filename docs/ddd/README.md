@@ -1,18 +1,22 @@
 # Optional DDD context packs (`kaola-ddd/1`)
 
-Status: phase 1 of [#280](https://github.com/KaolaBrother/kaola-project-runner/issues/280); phase 4
+Status: phase 1 of [#280](https://github.com/KaolaBrother/kaola-project-runner/issues/280)
+delivered these documents. Phase 3 of [#282](https://github.com/KaolaBrother/kaola-project-runner/issues/282)
+adds the optional checker `scripts/kaola-ddd-pack.py`. Phase 4
 ([#283](https://github.com/KaolaBrother/kaola-project-runner/issues/283)) adds a second pack and the
-Host usage decision.
-Documentation only. Design: [`docs/designs/ddd-component-2026-10-07/design.md`](../designs/ddd-component-2026-10-07/design.md)
+Host usage decision. Design:
+[`docs/designs/ddd-component-2026-10-07/design.md`](../designs/ddd-component-2026-10-07/design.md)
 revision 2 at `8b3779c9c9c76e03f6794b5bf5cf6ffb76bd27c0`. Method baseline:
 [`docs/research/i279-ddd-method.md`](../research/i279-ddd-method.md) (§4, §5, §6b), accepted as a
 documentation-design baseline at `f4accb11`.
 
 This directory is an optional design aid. It is not a B0 or migration precondition, a permission
 gate, a task splitter, an authorization or history store, or a mandate for services, processes or
-databases. Nothing here is read by `render-skills.py --check`, `validate.sh`, a release gate, the
-state tool, the dispatch index, a Host prompt or any consumer project. If you delete this directory,
-KPR, Kaola-Workflow and consumers keep working exactly as before.
+databases. `render-skills.py --check`, release gates, the state tool, the dispatch index, Host
+prompts and consumer projects do not read it. `validate.sh` runs `test-ddd-pack.py` only as that
+suite's own test of the checker. A pack carries no authority and is not a gate. If you delete this
+directory, KPR, Kaola-Workflow and consumers keep working exactly as before. The default uninstall
+below does not delete it.
 
 | File | Version contract | Role |
 |---|---|---|
@@ -21,6 +25,7 @@ KPR, Kaola-Workflow and consumers keep working exactly as before.
 | [`packs/c4-state-retire.md`](packs/c4-state-retire.md) | `kaola-ddd-pack/1` | Pilot pack: C4 state "retire a record" |
 | [`packs/c1-exact-stop.md`](packs/c1-exact-stop.md) | `kaola-ddd-pack/1` | Second pack: C1 lifecycle "exact-stop a seat" |
 | [`host-usage-decision.md`](host-usage-decision.md) | — | Phase 4 decision on an optional Skill pointer (none added) |
+| [`../../scripts/kaola-ddd-pack.py`](../../scripts/kaola-ddd-pack.py) | result `schema: kaola-ddd-check/1` | Optional read-only checker |
 
 ## Pack schema `kaola-ddd-pack/1`
 
@@ -141,24 +146,88 @@ The counter-example in baseline §5 applies. A one-line consumer config or docum
 direct reviewed edit with a focused check, not a pack. The method never applies itself
 automatically, at any scale.
 
+## Checker (`kaola-ddd-check/1`)
+
+`scripts/kaola-ddd-pack.py` reads packs. It writes nothing and calls no network. Nothing in
+`render-skills.py`, a release gate, `scripts/kaola-dispatch.py` or Kaola-Workflow calls it.
+
+```bash
+./scripts/kaola-ddd-pack.py check
+./scripts/kaola-ddd-pack.py check --repo . docs/ddd/packs/c4-state-retire.md
+```
+
+With no pack paths, `check` reads `docs/ddd/packs/*.md`. If `docs/ddd/` is missing, or that
+directory has no packs, the result is `absent` and the exit code is 0. Every selected pack is
+evaluated on its own. One pack's result does not stop the others. Every invocation prints one
+JSON object. A bad command line is `result: usage`, exit 2, and evaluates nothing.
+
+```json
+{"schema": "kaola-ddd-check/1", "result": "ok", "note": "A clean run proves form and references only, not meaning or contract satisfaction.", "counts": {"ok": 0, "invalid": 0, "unsupported": 0}, "packs": []}
+```
+
+The `note` is always that sentence. Advisory findings are allowed when `result` is `ok`.
+
+| Condition | `result` | Exit |
+|---|---|---|
+| Bad command line (nothing evaluated) | `usage` | 2 |
+| No `docs/ddd/` or no packs | `absent` | 0 |
+| At least one pack `invalid` (with or without `unsupported`) | `invalid` | 1 |
+| No `invalid`, at least one `unsupported` | `unsupported` | 3 |
+| All packs `ok` | `ok` | 0 |
+
+Per-pack `status` is `ok` (schema 1, no errors), `invalid` (schema 1 with at least one error),
+or `unsupported` (`pack_schema` is not `kaola-ddd-pack/1`, and that pack is not checked further).
+
+### Kept checks
+
+The phase-1 pilot justified these checks:
+
+- Forbidden authority keys in front matter are errors. A key is forbidden when, after lowercasing
+  and reading `-` as `_`, it is or contains `authorization`, `grant`, `grants`, `seat`, `seats`,
+  `writer`, `writers`, `permission`, `permissions`, `approval`, `approved_by` or `cap`, or it
+  ends with `_cap`.
+- Required front matter and the eight level-2 sections, in order, including `context_primary`
+  and `contexts_touched`.
+- Each `suite: <name>` is a name `./scripts/validate.sh --list` prints. The checker reads the
+  `shell_suites` and `python_suites_all` arrays that `--list` prints. It does not run
+  `validate.sh`. `suite: none (gap: ...)` is the gap form and is not an inventory name.
+- Cited repo paths exist. Those are explicit `scripts/`, `tests/`, `docs/`, `templates/` and
+  `platforms/` files, plus a path introduced by `` `Alias` means `path` ``.
+- `baseline_commit` is a 7 to 40 hex commit that `git rev-parse --verify <commit>^{commit}`
+  resolves in the local repository.
+
+An unknown descriptive key is an advisory finding. It leaves the pack `ok` when nothing else
+is an error.
+
+### Checks not automated
+
+Each dropped candidate has one reason, from the pilot findings below:
+
+- Vocabulary terms present in referenced code: the pilot's presence check passed every term; the four real findings were differences of meaning.
+- Files changed since `baseline_commit` outside the expected-change surface: the pilot had no code change after `baseline_commit`, so this check is unmeasured.
+- Advisory `path:line` symbol drift: citations are prose aliases and line ranges, with no grammar that binds a symbol to those lines, so a simple scan cannot reliably detect the off-by-a-few-lines edits the pilot fixed by reading.
+
 ## Uninstall
 
 **Default uninstall removes only the tool and its integrations**, in one reviewed commit:
 
 - `scripts/kaola-ddd-pack.py`;
-- `tests/contract/test-ddd-pack.py` and its line in the `validate.sh` inventory;
+- `tests/contract/test-ddd-pack.py`;
+- the `"test-ddd-pack.py"` lines in `scripts/validate.sh` (`python_suites_all` and the one lane array);
 - any optional Skill pointer added in phase 4.
 
-Each of these is removed only if a later phase actually added it. Phase 1 adds none of them, and
-phase 4 adds no Skill pointer ([decision](host-usage-decision.md)), so for both the default
-uninstall is a no-op.
+Phase 3 added the checker, its suite, and the inventory lines named above, so those are what
+this uninstall removes. Phase 1 adds none of the other integrations. Phase 4 adds no Skill
+pointer ([decision](host-usage-decision.md)), so there is nothing to remove under `templates/`
+or `skills/`. For phase 1 and phase 4, that part of the default uninstall is a no-op.
 
 **The current `docs/ddd/` documents stay in the working tree.** Deleting them is a separate action,
 taken only when the user asks for it. The fact that Git history keeps old versions is not a
 reason to delete current documents by default.
 
-With or without the documents, nothing in KPR reads them. A Host assignment or task that cites a
-pack path as free text keeps working.
+`tests/contract/test-ddd-pack.py` performs that removal on a copy: `docs/ddd` stays byte for byte,
+and the unrelated suite `test-issue-271-dispatch-help.py` still passes. `render-skills.py` does
+not call the checker. A Host assignment or task that cites a pack path as free text keeps working.
 
 ## Pilot findings (phase 1, C4 "retire a record")
 
@@ -219,3 +288,8 @@ shape (including the new keys), `suite:`/path/baseline existence and, worth eval
 advisory `path:line` symbol drift. A checker must label all of these as form/reference checks
 that never prove meaning or coverage. Building no checker is equally consistent with this
 evidence; #282 decides.
+
+Phase 3 ([#282](https://github.com/KaolaBrother/kaola-project-runner/issues/282)) built that
+small checker. The kept checks, the three dropped reasons, usage and the default uninstall are
+in the Checker and Uninstall sections above. Symbol drift was not kept: the citations have no
+grammar that binds a symbol to a line.

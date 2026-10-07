@@ -314,6 +314,7 @@ python_suites_all=(
   "test-issue-274-package-closure.py"
   "test-issue-271-dispatch-help.py"
   "test-issue-264-validate-lane-integrity.py"
+  "test-ddd-pack.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -404,6 +405,7 @@ python_suites_b=(
   "test-issue-260-transport.py"
   "test-issue-254-opencode-model.py"
   "test-issue-259-record-contract.py"
+  "test-ddd-pack.py"
 )
 
 # Selectable shell contract suites: they run serially before the Python lanes.
