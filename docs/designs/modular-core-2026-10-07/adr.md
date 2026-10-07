@@ -35,4 +35,4 @@ Consequences: dev checkouts never become implicit consumer dependencies. Evidenc
 ## ADR-7: KW is an optional module sharing runtime norms, never merged repos
 Context: KPR+KW unified data management goal; distinct ownership must survive.
 Decision: C8 bridge consumes the core contract registry; KW keeps its lifecycle scripts and artifact ownership; shared schemas get generated validators on both sides (closes the dual-implementation divergence).
-Consequences: either side can ship alone; contracts change additively per ADR-3. Evidence: KW README drift; final-validation dual-digest hazard (research §3).
+Consequences: either side can ship alone; contracts change additively per ADR-3. Scope note: shared-schema alignment TARGETS one contract with two named views (finalize-gate vs landable-record) — it does not AUTOMATICALLY close the dual-digest hazard; the two digests keep distinct semantics until the P4 contract text explicitly reconciles them. Evidence: KW README drift; research §3 dual-digest analysis.

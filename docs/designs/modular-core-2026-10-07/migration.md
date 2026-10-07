@@ -6,7 +6,7 @@ Status: PROPOSED staging; each phase gates on its own acceptance evidence + root
 
 | Phase | Scope | Issues | Component | Acceptance (concrete) | Rollback |
 |---|---|---|---|---|---|
-| P0 | SHIPPED TO MAIN — but pushed main is NOT a release or an install: #273/#274 remain OPEN and consumers have NOT installed the fixes (next release/pin cycle carries them; Seats implications at that boundary). #271 six-step acceptance + #272 loop execution evidence delivered (ff1caef6/cbe1f2ae). | #273 #274 (shipped-to-main); #271 #272 (evidence delivered) | C7/C5/C6 edges | 5cef759a/93662173/9498af34/e7aea057/ff1caef6/cbe1f2ae | git revert per commit; no data migration |
+| P0 | SHIPPED TO MAIN — but pushed main is NOT a release or an install: #273/#274 remain OPEN and consumers have NOT installed the fixes (next release/pin cycle carries them; Seats implications at that boundary). #271 six-step acceptance + #272 loop execution evidence delivered (ff1caef6/cbe1f2ae). | #273 #274 (shipped-to-main); #271 #272 (evidence delivered) | C7/C5/C6 edges | 5cef759a/93662173/9498af34/e7aea057/cbe1f2ae (later corrections: 7cb361d3 partial ruling, aa1c1444 cursor correction) | git revert per commit; no data migration |
 | P1 | Extract core library (identity+process+atomic state+contract registry) as an internal package; components import it | (new, to file) | CORE | 208-fn/50-fn inventories split without behavior change: full inventory green at same HEAD; import graph test (no component reaches around core) | revert import indirection; single-file restore |
 | P2 | C7 gains component manifests (`provides`/`requires` grammar = capability ids) + `--component` install selection | (new) | C7 | render --check verifies manifests; install-verify receipt per selected set; subtraction dry-run (uninstall a component's payload, suites for remaining set green) | re-render full set; no consumer data touched |
 | P3 | C6 maintenance optionality pilot (recovery inputs queue without node; recipe bind-time source verification per ADR-6) | #271-adjacent | C6 | recovery-input queued≠lost with node absent; bind-time verification refuses mutable-dev source (negative fixture); deployment-isolation regression | restore binding; inputs replay |
@@ -18,7 +18,7 @@ P1 unblocks everything (contracts live in core). P2/P3 are independent after P1.
 
 ## Technical gates vs owner value choices (explicit)
 - Technical gates (Host/engineering decide, evidence-bound): component cut completeness (inventory UNASSIGNED=0), import-graph test, manifest grammar, bind-time verification fixture, lease design + drills, event cursor semantics, reader-fallback set.
-- Owner value choices (user decides, with options/costs): resident-core supervision mechanism; B0 adapter placement; any byte-budget ceiling change (#271 C7); D4 schema fields after replay test; the eight choices already catalogued in the Fable final review. The B0 direction itself is DECIDED and is not re-asked at any gate.
+- Owner value choices (user decides, with options/costs): only genuine operational/deployment commitment changes; the previously catalogued eight choices are NOT revived as gates. Supervision (launchd/systemd) and adapter placement are ENGINEERING recommendations per the root ruling. D4 schema fields remain behind the replay-test gate as a technical decision with owner visibility.
 
 ## What is explicitly NOT migration
 - A-line fixes (#269 consumer-owned cleanup; #271/#272/#273/#274 follow-ups) proceed independently.
