@@ -37,6 +37,7 @@ Hard rules:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import hashlib
 import json
 import os
@@ -50,6 +51,17 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+
+# Issue #278: readiness uses the holder's applied socket, independent of TMPDIR.
+_paths_spec = importlib.util.spec_from_file_location(
+    "kaola_acp_paths", Path(__file__).resolve().with_name("kaola-acp-paths.py"))
+acp_paths = importlib.util.module_from_spec(_paths_spec)
+_paths_bytecode = sys.dont_write_bytecode
+sys.dont_write_bytecode = True
+try:
+    _paths_spec.loader.exec_module(acp_paths)
+finally:
+    sys.dont_write_bytecode = _paths_bytecode
 
 SCHEMA = "kaola-launch-broker/3"
 NONCE_BYTES = 16
@@ -226,8 +238,7 @@ def validate_holder_argv(argv: list[str], record_dir: Path, socket: Path, platfo
 
 
 def sock_path_for(record_dir: Path) -> Path:
-    return (Path(tempfile.gettempdir()) / f"kaola-{owner_uid()}-acp"
-            / (sha(str(record_dir))[:24] + ".sock"))
+    return acp_paths.socket_path(record_dir)
 
 
 def socket_op(sock: Path, op: str, params: dict, timeout: float = 5.0) -> dict:

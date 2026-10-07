@@ -136,7 +136,7 @@ def wait_until(predicate, timeout: float, label: str) -> None:
 def holder_socket(record_dir: Path) -> Path:
     """The holder's deterministic socket path (kaola-acp.sock_path_for_directory)."""
     digest = hashlib.sha256(str(record_dir).encode("utf-8")).hexdigest()[:24]
-    return Path(tempfile.gettempdir()) / f"kaola-{os.getuid()}-acp" / f"{digest}.sock"
+    return Path("/tmp") / f"kaola-{os.getuid()}-acp" / f"{digest}.sock"
 
 
 def holder_op(sock: Path, op: str, params: dict, timeout: float = 15.0) -> dict:

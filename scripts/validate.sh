@@ -64,13 +64,9 @@ fi
 # runtime) configuration is required, and real user configuration is never
 # read or modified.
 sandbox_home="$(mktemp -d "${TMPDIR:-/tmp}/kaola-validate-home.XXXXXX")"
-# Issue #63: the suites run under one validate-owned TMPDIR root, so every
-# fixture temp root and the shared kaola-<uid>-acp ACP socket dir — and with
-# them every spawned holder's --record-dir/--socket — lands under it. An
-# interrupted or early-exited run (set -e, SIGINT, SIGTERM) then sweeps
-# exactly its own holders on the way out instead of leaking them re-parented
-# to launchd. The root is short and flat because ACP admin sockets live
-# under it and AF_UNIX sun_path is ~104 bytes on macOS.
+# Fixtures and records stay under this invocation's root for exact interrupted-run
+# sweeping. Production sockets are now short fixed per-UID paths (#278); their
+# holders remain scoped by --record-dir, not the caller's TMPDIR.
 validate_tmp="$(mktemp -d "/tmp/kaola-val.XXXXXX")"
 # Issue #101: every suite runs under scripts/validate-watchdog.sh, which kills
 # and diagnoses a suite that is still running after the budget instead of
@@ -228,6 +224,7 @@ done
 # Mock holders need their fixture environment (MOCK_ACP_*). Production broker
 # filtering stays unchanged; the explicit 266 suites exercise auto/broker below.
 export KAOLA_LAUNCH_BACKEND=direct
+export KAOLA_ACP_RECORD_ROOT="$validate_tmp/records"
 
 python_suites_all=(
   "test-issue-78-heredoc-deadlock.py"
@@ -313,6 +310,7 @@ python_suites_all=(
   "test-issue-267-rejection-count.py"
   "test-issue-268-selection-continuity.py"
   "test-issue-273-list-identity.py"
+  "test-issue-278-record-root.py"
   "test-issue-274-package-closure.py"
   "test-issue-271-dispatch-help.py"
   "test-issue-264-validate-lane-integrity.py"

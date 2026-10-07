@@ -2,8 +2,8 @@
 """Issue #63: exact sweep of one invocation's ACP holder processes.
 
 ``scripts/validate.sh`` runs its suites under a validate-owned ``TMPDIR``
-root, so every holder those suites spawn carries a ``--record-dir`` and a
-``--socket`` under that root. A normal suite teardown already stops each
+root, with an explicit record root, so every holder those suites spawn carries
+a ``--record-dir`` under that root. Short sockets are caller-independent (#278). A normal suite teardown already stops each
 holder through the admin-socket ``stop`` op, which sweeps the agent process
 group and the noted child groups; an interrupted or early-exited run
 (``set -e``, SIGINT, SIGTERM) skips that teardown, and the holders — spawned

@@ -1,3 +1,6 @@
+> Issue #278 updates the record/socket defaults and legacy discovery.
+> Current contract: [ACP record and socket roots](architecture.md#acp-record-and-socket-roots).
+
 > Superseded by #130 (2026-09-22): PTY retired, ACP only. Historical record; body unchanged.
 
 # Kaola Project Runner v2 设计文档：ACP 优先、tmux 兜底的双通道架构

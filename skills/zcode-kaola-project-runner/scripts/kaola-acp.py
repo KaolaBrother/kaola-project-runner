@@ -24,10 +24,20 @@ import signal
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 from typing import Any
+
+# Issue #278: shared paths also ship beside every generated worker Runner.
+_paths_spec = importlib.util.spec_from_file_location(
+    "kaola_acp_paths", Path(__file__).resolve().with_name("kaola-acp-paths.py"))
+acp_paths = importlib.util.module_from_spec(_paths_spec)
+_paths_bytecode = sys.dont_write_bytecode
+sys.dont_write_bytecode = True
+try:
+    _paths_spec.loader.exec_module(acp_paths)
+finally:
+    sys.dont_write_bytecode = _paths_bytecode
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 HOLDER = SCRIPT_DIR / "kaola-acp-holder.py"
@@ -802,18 +812,15 @@ def resolve_repo(raw: str) -> str:
 
 
 def record_root(args: argparse.Namespace) -> Path:
-    if getattr(args, "record_root", None):
-        return Path(args.record_root)
-    env = os.environ.get("KAOLA_ACP_RECORD_ROOT")
-    if env:
-        return Path(env)
-    base = os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
-    return Path(base) / f"kaola-{os.getuid()}"
+    return acp_paths.record_root(getattr(args, "record_root", None))
+
+
+def session_directory(args: argparse.Namespace, platform: str, session: str, repo: str) -> Path:
+    return acp_paths.find_directory(platform, session, repo, getattr(args, "record_root", None))
 
 
 def record_dir(args: argparse.Namespace, repo: str) -> Path:
-    digest = hashlib.sha256(repo.encode("utf-8")).hexdigest()[:16]
-    return record_root(args) / args.platform / args.session / digest
+    return session_directory(args, args.platform, args.session, repo)
 
 
 def spawn_record_dir(args: argparse.Namespace, repo: str) -> Path | None:
@@ -826,9 +833,8 @@ def spawn_record_dir(args: argparse.Namespace, repo: str) -> Path | None:
 
 
 def sock_path_for_directory(directory: Path) -> Path:
-    """Short deterministic socket path; AF_UNIX sun_path is ~104 bytes on macOS."""
-    digest = hashlib.sha256(str(directory).encode("utf-8")).hexdigest()[:24]
-    return Path(tempfile.gettempdir()) / f"kaola-{os.getuid()}-acp" / f"{digest}.sock"
+    """Applied legacy socket, or the short fixed per-UID socket for a new record."""
+    return acp_paths.socket_path(directory)
 
 
 def sock_path(args: argparse.Namespace, repo: str) -> Path:
@@ -869,12 +875,9 @@ def parse_list_args(argv: list[str]) -> argparse.Namespace:
 
 
 def command_list(args: argparse.Namespace) -> dict[str, Any]:
-    root = record_root(args)
     repo_filter = resolve_repo(args.repo) if args.repo else None
     rows: list[dict[str, Any]] = []
-    if not root.is_dir():
-        return {"schema": LIST_SCHEMA, "rows": rows}
-    for path in sorted(root.glob("*/*/*/record.json")):
+    for path in acp_paths.record_paths("*/*/*/record.json", getattr(args, "record_root", None)):
         platform = path.parent.parent.parent.name
         session = path.parent.parent.name
         if platform not in PLATFORMS:
@@ -2911,8 +2914,7 @@ def validate_heartbeat_target(target: Any, args: argparse.Namespace, repo: str,
     if session == args.session and host_repo == repo:
         die(f"{origin} names this worker's own session; "
             "a session cannot be its own heartbeat host")
-    digest = hashlib.sha256(host_repo.encode("utf-8")).hexdigest()[:16]
-    directory = record_root(args) / platform / session / digest
+    directory = session_directory(args, platform, session, host_repo)
     return {"platform": platform, "session": session, "repo": host_repo,
             "socket": str(sock_path_for_directory(directory))}
 
@@ -2955,8 +2957,7 @@ def verify_dispatcher_host_live(args: argparse.Namespace, dispatcher: dict[str, 
     """Design #99 §a.3: the four read-only checks that the dispatching Host
     holder is the live one this worker would notify. Returns the failed
     check as text, or None when every check passed."""
-    digest = hashlib.sha256(target["repo"].encode("utf-8")).hexdigest()[:16]
-    directory = record_root(args) / target["platform"] / target["session"] / digest
+    directory = session_directory(args, target["platform"], target["session"], target["repo"])
     record = read_record(directory)
     if not record:
         return f"host holder record is missing at {directory / 'record.json'}"
@@ -3004,8 +3005,7 @@ def resolve_send_wait(args: argparse.Namespace, repo: str,
     if not isinstance(owner, dict) or any(owner.get(k) != dispatcher[k] for k in
                                          ("platform", "session", "repo", "holder_instance_id")):
         return blocking("target dispatcher does not prove this caller owns it")
-    digest = hashlib.sha256(repo.encode("utf-8")).hexdigest()[:16]
-    host_dir = record_root(args) / dispatcher["platform"] / dispatcher["session"] / digest
+    host_dir = session_directory(args, dispatcher["platform"], dispatcher["session"], dispatcher["repo"])
     target = {k: dispatcher[k] for k in ("platform", "session", "repo")}
     target["socket"] = str(sock_path_for_directory(host_dir))
     binding = worker.get("heartbeat_host")
@@ -3043,8 +3043,7 @@ def sideagent_host_anchor(args: argparse.Namespace, repo: str, dispatcher: dict[
     and who receives events (the existing Host holder) stay separate facts,
     and a Sideagent replacement leaves its workers' carrier unchanged.
     Returns ``(target, None)`` or ``(None, failed check)``."""
-    digest = hashlib.sha256(dispatcher["repo"].encode("utf-8")).hexdigest()[:16]
-    record = read_record(record_root(args) / dispatcher["platform"] / dispatcher["session"] / digest)
+    record = read_record(session_directory(args, dispatcher["platform"], dispatcher["session"], dispatcher["repo"]))
     if not isinstance(record, dict) or record.get("session_role") not in ("sideagent", "sidekick"):
         return None
     if (record.get("holder_instance_id") != dispatcher["holder_instance_id"]
@@ -3059,8 +3058,7 @@ def sideagent_host_anchor(args: argparse.Namespace, repo: str, dispatcher: dict[
         return None, f"the Sideagent's Host platform {bound['platform']} has no measured Host entry"
     target = validate_heartbeat_target(
         {key: bound[key] for key in ("platform", "session", "repo")}, args, repo, DISPATCHER_ENV)
-    host_digest = hashlib.sha256(target["repo"].encode("utf-8")).hexdigest()[:16]
-    host = read_record(record_root(args) / target["platform"] / target["session"] / host_digest)
+    host = read_record(session_directory(args, target["platform"], target["session"], target["repo"]))
     role = host.get("session_role") if isinstance(host, dict) else None
     if role is None and isinstance(host, dict) and host_session(target["platform"], host.get("session")):
         role = "host"
@@ -3097,8 +3095,7 @@ def command_rebind_host(args: argparse.Namespace, repo: str, directory: Path) ->
         return refused(f"dispatcher repo {dispatcher['repo']} {problem}")
     target = validate_heartbeat_target(
         {key: dispatcher[key] for key in ("platform", "session", "repo")}, args, repo, DISPATCHER_ENV)
-    digest = hashlib.sha256(target["repo"].encode("utf-8")).hexdigest()[:16]
-    host = read_record(record_root(args) / target["platform"] / target["session"] / digest) or {}
+    host = read_record(session_directory(args, target["platform"], target["session"], target["repo"])) or {}
     role = host.get("session_role")
     if role is None and host_session(target["platform"], host.get("session")):
         role = "host"
@@ -3182,8 +3179,7 @@ def resolve_heartbeat_host(args: argparse.Namespace, repo: str) -> dict[str, Any
                 "refusal": {"reason": "heartbeat-host-unresolved",
                             "detail": f"dispatcher repo {dispatcher['repo']} {problem}"}}
     if explicit is None:
-        digest = hashlib.sha256(resolve_repo(dispatcher["repo"]).encode("utf-8")).hexdigest()[:16]
-        record = read_record(record_root(args) / dispatcher["platform"] / dispatcher["session"] / digest)
+        record = read_record(session_directory(args, dispatcher["platform"], dispatcher["session"], dispatcher["repo"]))
         role = record.get("session_role") if isinstance(record, dict) else None
         if role in SESSION_ROLES - {"host"}:
             # Issue #255: a worker's own sessions are its business. Deriving
@@ -3252,7 +3248,8 @@ SKILL_DISCOVERY_DIRS = (".zcode/skills", ".agents/skills")
 # The three required names ship in every worker Skill; the ZCode bridge is
 # compared only where both sides have it.
 WORKER_SKILL_SCRIPTS = ("kaola-acp.py", "kaola-acp-holder.py", "kaola-tmux.sh")
-WORKER_SKILL_OPTIONAL_SCRIPTS = ("kaola-zcode-acp.py", "kaola-opencode-acp.py", "kaola-opencode-steer.mjs", "kaola-dsh-acp.py", "kaola-dsh-steer.mjs")
+# Version-specific: absent on pre-278 worker packages; compare it when shipped.
+WORKER_SKILL_OPTIONAL_SCRIPTS = ("kaola-acp-paths.py", "kaola-zcode-acp.py", "kaola-opencode-acp.py", "kaola-opencode-steer.mjs", "kaola-dsh-acp.py", "kaola-dsh-steer.mjs")
 SKEW_DETAIL_CAP = 12
 # Issue #121: the main orchestrator Skill ships no scripts, so #105 never saw
 # it. Every worker Skill carries the main Skill's build record instead, and a
@@ -4455,7 +4452,7 @@ def _restart_required_name(name: str) -> bool:
     """
     return (
         name in ("kaola-acp-holder.py", "kaola-zcode-acp.py", "kaola-quota.py",
-                 "kaola-record-contract.py",
+                 "kaola-record-contract.py", "kaola-acp-paths.py",
                  "kaola-opencode-acp.py", "kaola-opencode-steer.mjs",
                  "kaola-dsh-acp.py", "kaola-dsh-steer.mjs",
                  "platform.yaml")
@@ -4862,11 +4859,14 @@ def verified_hosts(args: argparse.Namespace, repo: str) -> list[dict[str, Any]]:
     free; the others are attached, or exact-stopped and proven gone first."""
     digest = hashlib.sha256(repo.encode("utf-8")).hexdigest()[:16]
     hosts: list[dict[str, Any]] = []
-    for path in sorted(record_root(args).glob(f"*/*/{digest}/record.json")):
+    own_directory = record_dir(args, repo)
+    for path in acp_paths.record_paths(f"*/*/{digest}/record.json",
+                                      getattr(args, "record_root", None), all_roots=True):
         platform, session = path.parent.parent.parent.name, path.parent.parent.name
         if platform not in PLATFORMS or not host_session(platform, session):
             continue
-        if (platform, session) == (args.platform, args.session):
+        if ((platform, session) == (args.platform, args.session)
+                and os.path.realpath(path.parent) == os.path.realpath(own_directory)):
             continue
         record = read_record(path.parent)
         if not record or record.get("repo") != repo:
@@ -5066,6 +5066,8 @@ def command_start(args: argparse.Namespace, repo: str,
     # A caller that already ran the pre-spawn decision, like drain-restart
     # before it stops anything, hands its result in so the installed Skill
     # roots are scanned once, not twice.
+    directory = record_dir(args, repo)
+    acp_paths.check_record_root(directory.parent.parent.parent)
     refused, facts = decided if decided is not None else pre_spawn_refusal(args, repo)
     if refused is not None:
         return refused
@@ -5097,7 +5099,6 @@ def command_start(args: argparse.Namespace, repo: str,
     # ACP config option below, so a recorded mode is never a raw None that a
     # later command has to re-derive.
     mode_value = args.mode or ACP_SKIP_MODE.get(args.platform)
-    directory = record_dir(args, repo)
     record = read_record(directory)
     # Issue #203: read before the new holder replaces it; the only source of
     # evidence a resume of the same native session may inherit.
@@ -5121,14 +5122,15 @@ def command_start(args: argparse.Namespace, repo: str,
                 return attach_binding_fact(receipt, record)
             receipt["replaced_record"] = {"holder_pid": holder_pid, "pid_reused": True,
                                           "holder_instance_id": record.get("holder_instance_id")}
-            try:
-                sock_path(args, repo).unlink()
-            except OSError:
-                pass
         if pid_alive(record.get("agent_pgid")) or pid_alive(record.get("agent_pid")):
             receipt.update(holder_lost_receipt(args, repo, record))
             return receipt
-    directory.mkdir(parents=True, exist_ok=True)
+    acp_paths.prepare_record_directory(directory, directory.parent.parent.parent)
+    if receipt.get("replaced_record"):
+        try:
+            sock_path(args, repo).unlink()
+        except OSError:
+            pass
     log_path = directory / "holder.out.log"
     # Issue #132: keep --record-dir, --socket, --repo in this order; the
     # identity anchors (HOLDER_RECORD_DIR, HOLDER_SOCKET) parse it.
@@ -5702,6 +5704,7 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
         })
         return receipt
     directory = record_dir(args, repo)
+    acp_paths.check_record_root(directory.parent.parent.parent)
     record = read_record(directory)
     if not record or (not pid_alive(record.get("holder_pid")) and record.get("state") != "stopped"):
         receipt = base_receipt(args, repo)
@@ -5947,12 +5950,11 @@ def main() -> int:
         die(f"no ACP command for platform {args.platform} (use --command)")
     args.agent_command, args.agent_command_facts = resolve_agent_command(args.agent_command)
 
-    directory = record_dir(args, repo) if args.session else None
-
     if args.command == "preflight":
         receipt = command_preflight(args, repo)
         print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
         return 0
+    directory = record_dir(args, repo) if args.session else None
     if args.command == "start":
         receipt = command_start(args, repo)
         print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
@@ -6206,6 +6208,16 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
+    except acp_paths.RecordRootUnsafe as exc:
+        print(json.dumps({"result": "refused", "reason": "record-root-unsafe",
+                          "error": {"code": "record-root-unsafe", "message": str(exc)},
+                          "mutation_performed": False, "mutation_status": "not_started"}))
+        raise SystemExit(1)
+    except acp_paths.RecordRootMismatch as exc:
+        print(json.dumps({"result": "refused", "reason": "record-root-mismatch",
+                          "error": {"code": "record-root-mismatch", "message": str(exc)},
+                          "mutation_performed": False, "mutation_status": "not_started"}))
+        raise SystemExit(1)
     except InputError as exc:
         argv = sys.argv[1:]
         def argument_value(flag: str) -> str | None:

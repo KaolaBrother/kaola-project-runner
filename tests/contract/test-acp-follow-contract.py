@@ -396,7 +396,7 @@ class AcpFollowContractTests(unittest.TestCase):
     def holder_sock(self, platform: str, session: str, repo: Path) -> Path:
         directory = self.record_dir(platform, session, repo)
         digest = hashlib.sha256(str(directory).encode("utf-8")).hexdigest()[:24]
-        return Path(tempfile.gettempdir()) / f"kaola-{os.getuid()}-acp" / f"{digest}.sock"
+        return Path("/tmp") / f"kaola-{os.getuid()}-acp" / f"{digest}.sock"
 
     def read_mock_log(self) -> list[dict]:
         if not self.mock_log.is_file():

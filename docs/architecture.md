@@ -142,6 +142,46 @@ is deferred to controlled live E2E, not emulated by executing prompts. The three
 layers stay separately trackable: the Runner session name, the ACP session id, and the native
 `sess_*` id (reported credential-free as `native_session_identity`).
 
+### ACP record and socket roots
+
+`scripts/kaola-acp-paths.py` is the shared path helper shipped beside every
+worker Runner. New records use `/tmp/kaola-<uid>/<platform>/<session>/<sha256(repo)[:16]>/`;
+new sockets use `/tmp/kaola-<uid>-acp/<sha256(record_dir)[:24]>.sock` to stay
+within macOS AF_UNIX limits. Neither default follows `TMPDIR` or
+`XDG_RUNTIME_DIR`. The holder records its applied `socket_path` and maintains
+the `holder.sock` symlink; Runner and holder-to-Sideagent calls reuse that
+applied legacy path before deriving a new socket.
+
+Runner start and holder construction create the selected record root with mode
+`0700`, verify with `lstat` that it is a directory owned by the caller, and
+reject symlinked, non-directory or foreign-owned roots as `record-root-unsafe`
+before writing session data. Owned roots with broader permissions are tightened
+to `0700` through a verified directory descriptor. Session directories are also
+created/opened without following symlinks. Legacy discovery remains read-only;
+status/list/locate do not change old root permissions.
+
+Default exact-session reads and `list` cover the fixed root, `/var/tmp`,
+`/run/user/<uid>`, the caller's legacy temp/XDG roots, the macOS native user
+temp root, and record roots named by same-UID live holder argv in one bounded
+process-table read. Aliases are deduplicated by realpath. An existing live
+record wins over a dead record in another root; two live records for the
+same exact identity refuse `record-root-mismatch`. Records are read in place,
+never copied or migrated. A stopped record in an arbitrary custom legacy root
+needs its original explicit root once no live holder identifies that root.
+
+`--record-root` / `KAOLA_ACP_RECORD_ROOT` retain explicit scoped record reads
+(for fixtures and recovery); the one-Host-per-repository check additionally
+looks across the known and live holder roots, including a same-named Host in
+a different root. A failed process-table lookup cannot prove absence outside
+the scoped roots: default missing-session reads and global inventory/Host
+checks refuse `record-root-mismatch` with a recovery path. Existing scoped
+reads remain usable. No daemon, registry, lock or scheduler is introduced.
+
+The locator's `--project --worker --session` receipt uses the same resolver:
+`session.present` means an ACP record exists and `acp_holder_alive` separately
+reports holder PID liveness. These observations do not prove ownership or
+native agent liveness; Runner identity/state receipts remain authoritative.
+
 ### Progressive disclosure
 
 Discovery exposes only a stable name and a short description. Activating Project Runner

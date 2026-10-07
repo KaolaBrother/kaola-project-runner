@@ -11,7 +11,7 @@ EXIT/INT/TERM through ``scripts/kaola-acp-sweep.py``.
 
 This suite proves the sweep through the real code path: it starts real
 holders via ``kaola-acp.py start`` (mock agent, no real CLI) with their
-record root and TMPDIR under a test-owned root, issues no stop — precisely
+record root under a test-owned root, issues no stop — precisely
 the state an interrupted run leaves behind — then runs the sweep for that
 root and asserts zero survivors while a holder under a second root, standing
 in for a foreign or concurrent run, stays alive and keeps serving its admin
@@ -92,8 +92,8 @@ def wait_gone(pid: Any, timeout: float = 10.0) -> bool:
 
 def start_holder(root: Path, name: str) -> dict:
     """Start one real holder through the ``kaola-acp.py start`` code path
-    (mock agent), with its record root and TMPDIR — the fixture temp roots
-    and the shared kaola-<uid>-acp socket dir both follow TMPDIR — under the
+    (mock agent), with its record root and TMPDIR — fixture temp roots follow TMPDIR,
+    but the short per-UID sockets are independent of it — under the
     given root: exactly how validate.sh's suites spawn holders."""
     repo = root / "repo"
     repo.mkdir(parents=True, exist_ok=True)
@@ -125,15 +125,14 @@ def start_holder(root: Path, name: str) -> dict:
 
 def holder_socket(root: Path, receipt: dict) -> Path:
     """The admin socket path kaola-acp.py derives for this start: the digest
-    of the canonical repo's record directory, under the root's
-    kaola-<uid>-acp socket dir (sock_path_for_directory, mirrored)."""
+    of the canonical repo's record directory, read through the production
+    applied-path resolver (the socket no longer follows TMPDIR)."""
     repo = os.path.realpath(str(root / "repo"))
     directory = (
         root / "records" / receipt["platform"] / receipt["session"]
         / hashlib.sha256(repo.encode("utf-8")).hexdigest()[:16]
     )
-    digest = hashlib.sha256(str(directory).encode("utf-8")).hexdigest()[:24]
-    return root / f"kaola-{os.getuid()}-acp" / f"{digest}.sock"
+    return SWEEP_MODULE.KAOLA_ACP.sock_path_for_directory(directory)
 
 
 class AcpSweepContractTests(unittest.TestCase):
@@ -219,6 +218,7 @@ class AcpSweepContractTests(unittest.TestCase):
         # One validate-owned, short, flat TMPDIR root for the whole run.
         self.assertIn('validate_tmp="$(mktemp -d "/tmp/kaola-val.XXXXXX")"', text)
         self.assertIn('export TMPDIR="$validate_tmp"', text)
+        self.assertIn('export KAOLA_ACP_RECORD_ROOT="$validate_tmp/records"', text)
         # The sweep runs on exit, interrupt, and terminate.
         self.assertIn("trap cleanup EXIT", text)
         self.assertIn("trap 'exit 130' INT", text)

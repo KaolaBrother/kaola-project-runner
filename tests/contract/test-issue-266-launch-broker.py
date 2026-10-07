@@ -111,7 +111,7 @@ class Sandbox:
         self.record_dir = (self.record_root / self.platform / self.session
                            / sha(self.repo.as_posix())[:16])
         self.record_dir.mkdir(parents=True, exist_ok=True)
-        self.sock = (Path(self.tmp) / f"kaola-{os.getuid()}-acp"
+        self.sock = (Path("/tmp") / f"kaola-{os.getuid()}-acp"
                      / (sha(self.record_dir.as_posix())[:24] + ".sock"))
         self.sock.parent.mkdir(parents=True, exist_ok=True)
         self.label = LABEL_PREFIX + sha(f"{self.platform}\0{self.session}\0{self.repo.as_posix()}")[:16]

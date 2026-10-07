@@ -181,7 +181,7 @@ Codex and generic Delegator entries do not. Its receipt is one JSON line
 | `registration` | receipt path, `present`, recorded target and accepted revision, `fingerprint_match`, `target_match`, `root_match`, `revision_current` |
 | `project` | path on this host (real local path), Git top level, normalised origin |
 | `worker` | selected id, `skills/<id>-kaola-project-runner/scripts/runtime-tmux.sh`, `under_root`, `executable` |
-| `session` | exact session name and whether the tmux server reachable from the locator reports it present (presence on that server only: not existence elsewhere, never ownership, which is the worker preflight's proof) |
+| `session` | with `--project --worker`, exact ACP record presence across the fixed/legacy roots and separate `acp_holder_alive` PID liveness; neither proves ownership. Without a worker, legacy tmux-server presence only |
 | `result` | `ok`, or `refused` with `reasons` |
 
 What the receipt proves is bounded and real: the command ran on the bound
