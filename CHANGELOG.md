@@ -4,7 +4,7 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.9.1 — 2026-10-07 (compaction recovery, steer adaptations, launch broker, task-failure count, selection continuity)
 
 Seats: restart required
 
@@ -12,6 +12,42 @@ The changed launch resolution and input parsing run in the client. Since
 v0.9.0 the holder, the ZCode bridge, and the eight platform manifests
 have changed; see the operator test in docs/conventions.md.
 
+- **Turn timing and answered permissions (Issue #257).** `kaola-acp-view/1`
+  receipts expose turn timing and answered permissions.
+- **Bounded routine-state contract (Issue #259).** Routine heartbeat records
+  are typed, key-allowlisted records validated by the new
+  `scripts/kaola-record-contract.py` on every `kaola-dispatch.py state`
+  write; closed-contract writers without the allowlist refuse instead of
+  guessing, and delivery-open content hashes cover rejection counts and
+  escalation.
+- **Delegator writing rule (Issue #262).** Minimal ASD-STE100-inspired
+  product writing guidance loads on Delegator entry; the language field is
+  optional.
+- **Noninterrupting steer adaptations (Issue #263).** Grok and OpenCode V2
+  steer adapters, exact OpenCode binary binding without proxy changes, DSH
+  native steer exposure and later-turn delivery, and pending-delivery
+  identity that guards old holders. All ten platforms now steer natively
+  with the composite path intact.
+- **Post-compaction recovery (Issue #264).** Compaction-completed detection
+  per runtime, a bounded installed-Skill reread/use recovery path, the new
+  `scripts/kaola-compact-recovery.py` and
+  `scripts/kaola-project-compact-notice.py`, and the ZCode bridge mapping
+  that reloads the full Skill body after a native compaction.
+- **Scoped validation with timing (Issue #265).** `./scripts/validate.sh
+  --suite <name>` runs one registered suite with per-suite timing; an
+  interrupted validate stops owned writers before its sweep.
+- **Outside-caller holder launcher (Issue #266).** The new
+  `scripts/kaola-launchd-broker.py` launches Host/seat holders through
+  macOS launchd outside the caller's environment behind a fixed environment
+  allowlist (`PASS_ALWAYS`/`PASS_PROXY`/`PASS_KAOLA`), with attempt-bound
+  rollback and truthful partial/custody outcomes.
+- **Task-failure rejection count (Issue #267).** The state tool keeps the
+  current owner's rejection count at the verdict transition: a counted
+  repair needs the dispatch item, a unique delivery receipt and the review
+  cycle together; an unordered repair carries a visible `pending-binding`
+  duty instead of masking; a proven responsibility handoff resets the
+  segment. The automatic effort-raise reset is not implemented — no catalog
+  declares an effort order.
 - Codex manifest launches use an explicit absolute `CODEX_PATH`, or resolve
   `CODEX_BIN` then PATH and supply the absolute executable to the adapter.
   An invalid explicit child path still fails before spawn. The error gives
