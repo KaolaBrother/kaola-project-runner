@@ -14,3 +14,52 @@ CORRECTION on the earlier "undocumented three fields" claim: the execute receipt
 ## Verdict
 
 With run-2 (author-run execute/reclaim), the reader (independent discovery/help/dependency-answer), and this chain (independent-seat real execute → attributable result → collect bound to the ORIGINAL execute correlation, honestly reporting the now-unavailable event range → guarded reclaim), #271's evidence set is complete for root's acceptance decision, with the cursor discrepancy corrected and both receipts preserved. Issue remains open until root rules.
+
+---
+
+# Regression run (2026-10-08) — full-range live collect, receipts bound
+
+Dot's personal review kept the old chain PARTIAL (cursor-8 collect `event-range-unavailable`,
+range_complete/failure_count/permission_count null; retained 0 is not PASS) and directed one
+bounded real original-entry regression under the user's complete-issues authorization. The
+bridge independently re-verified the full range and the stop before this binding.
+
+## Receipts (stable locators, kept distinct from the old `/tmp/chain-*.json` set)
+
+| Step | Fact | Receipt |
+|---|---|---|
+| execute | item `i271-entry-regression`, task `kpr-a-issue-271`, worker pool `codex/luna` (pool seat, not an Elite grant), session `codex-KPR-i271-entry-regression`, worker holder `af4426fd…`, prompt fp `sha256:723f0e5e…`; exec receipt's `dispatch_event_cursor` **7** copied verbatim into the index (no hand-built fields); dry-run validated first | `/tmp/r271-plan.json`, `/tmp/r271-execute.json`, `/tmp/r271-index.json` |
+| attributable result | `/tmp/kpr-271-regression-result.md`: `./scripts/render-skills.py --check` exit 0 PASS (10 workers + kaola-project-runner + kaola-delegator + grok-bot host; budgets OK); `./scripts/validate.sh --suite test-issue-244-dispatch` exit 0, 80 tests OK; reply `REGRESSION-DONE <path>` | result file + `/tmp/r271-collect.json` excerpt |
+| collect BEFORE stop, live session | `since: 7` (original execute cursor, as-is) → `through: 95` (turn_ended terminal), contiguous window, turn fingerprint matched, **`range_complete: true`**, **actual counts: failure_count 0, permission_count 0, pending 0**, no truncation, event_log_path recorded | `/tmp/r271-collect.json` |
+| exact-stop AFTER collect | `stopped: true, exit 0, residual_pids: []` | `/tmp/r271-stop.json` |
+
+## Old/new range distinction (both preserved)
+
+- old `chain-collect5`: zero-width window (224, 224] — vacuous 0, withdrawn as range evidence (1cfe7d51→aa1c1444 correction);
+- old `chain-collect6/7`: after stop → `event-range-unavailable`, counts honestly null;
+- new `r271-collect`: live session, pre-stop, full original range (7, 95], `range_complete: true` with actual counts.
+
+Mechanism boundary (demonstrated, no standard change): the complete range is obtainable only
+while the seat is alive, before reclamation/log rotation; after stop the runner reports
+`event-range-unavailable` instead of fabricating coverage.
+
+## Navigation and manual cost (dispatch authoring, Host)
+
+Skill body → issue-quoted collect contract → `kaola-dispatch.py --help` + `execute`/`collect`
+subcommand help = 3 hops, 0 undocumented steps this run (old chain: 2 execute start refusals
+without recorded reason + 1 undocumented diagnostic step). Manual supplements: one refused
+state write (record-level `--expect-rev` vs file-level revision, corrected in the same turn)
+and one dry-run before the real execute.
+
+## Candidate identity (facts kept separate)
+
+Working tree = commit `13a0e271` (local = origin/main) + the four protected dirty files
+(`hosts/grok-bot/INSTALL.md`, `hosts/grok-bot/bridge.json`, `hosts/grok-bot/kaola-delegator.md`,
+`templates/grok-bot/accepted-revision.json`; original ownership, NOT published by this binding)
++ known untracked docs/workflow paths. The worker's render PASS is the working-checkout
+content-stage fact on that combined tree. The clean-origin "194 pin findings" figure carried in
+earlier records is a stale, unremeasured number for this candidate — marked stale-unknown, not
+re-tested in this run.
+
+No source implementation changed in this binding. Issue #271 remains open awaiting dot's new
+ruling on this receipt package.
