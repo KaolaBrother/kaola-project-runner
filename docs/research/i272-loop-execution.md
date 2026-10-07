@@ -5,7 +5,7 @@ The working-method link (qa-evidence @5cef759a) executed end-to-end on three rea
 ## Finding 1: entry-coverage gap (symptom: phase-1 zero-dispatch)
 - Attribution (per hypothesis): H1 planning/role (role: primary, status: confirmed — comment 6030420812); H2 contract friction (role: contributing, confirmed — two real refusals); H3 tool failure (refuted — zero admission attempts).
 - QA class: coverage-insufficiency (assertion-proof: test-issue-244:3706-3720 re-read).
-- Minimal design: D1/D2 (batch 1). Independent verification: oracle+render+budget suites; six-step behavioral acceptance (i271-behavioral-acceptance). Host adoption: committed 5cef759a, shipped.
+- Minimal design: D1/D2 (batch 1). Independent verification: oracle+render+budget suites (real and green). The six-step behavioral acceptance was initially cited here; its PASS has been WITHDRAWN (@91373205) — the standing parts (admission/collection/guarded-stop receipts, guard-id hop) remain verification of steps 4-5 only; text/suite-level evidence covers 1-3 until the isolated fixture rerun. Host adoption: committed 5cef759a, shipped-to-main (NOT installed; see P0 honesty).
 - Observation: recurrence watch = the six-step fixture itself re-run at next fresh Host (named condition: discovery hops stay 0); retreat = git revert (text-only).
 
 ## Finding 2: PID-reuse false agent_alive (#273)
