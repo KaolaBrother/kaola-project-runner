@@ -31,9 +31,12 @@ under review; nothing here changes the reviewed P2 tree or its pin binding.
 
 94-entry suite map = 92 `.py` suites ok + 2 `.sh` acceptance PASS (`test-installer-migration.sh`,
 `test-installer-runtimes.sh`); the 74 `Ran N tests` lines are unittest reports (1539 tests), not
-the suite count. The P1 244 failure (`foreign capture`, subTest with 1s runner timeout) did not
-reproduce sequentially on the same tree; Fable qualified the contamination attribution as
-plausible-not-strictly-proven — recorded as such, non-blocking.
+the suite count. The P1 244 failure did not reproduce sequentially on the same tree
+(`rqa-P-244-recheck.log`); its cause is NOT proven: the failing subTest runs under a 1-second
+runner-timeout threshold (`KAOLA_DISPATCH_RUNNER_TIMEOUT=1`), so under load the status call
+times out (`status-timeout`) before the identity conflict is classified — concurrent-run
+interference is one plausible hypothesis, not an established fact. Recorded as
+not-reproduced/cause-unknown, non-blocking; no re-run of the 94 required for this note.
 
 ## Fable final review (standing thinking scope, shared claude-code seat)
 
