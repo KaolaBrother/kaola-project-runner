@@ -4,7 +4,7 @@ Status: REVISED DRAFT integrating ROOT'S personal technical decisions (this roun
 
 ## 1. Current state → target
 
-Today: ten generated platform worker Skills (transport-only), one generated orchestrator Skill (`kaola-project-runner`), one external Delegator Skill, render+install pipeline (`render-skills.py`, `install-local.sh`), per-session ACP holders + optional launchd broker, typed state tool (`kaola-dispatch.py state`), KW lifecycle scripts as a sibling repo. Monoliths: `kaola-dispatch.py` (208 functions) and `kaola-acp-holder.py` (50 functions) each span at least five distinct responsibilities.
+Today: ten generated platform worker Skills (transport-only), one generated orchestrator Skill (`kaola-project-runner`), one external Delegator Skill, render+install pipeline (`render-skills.py`, `install-local.sh`), per-session ACP holders + optional launchd broker, typed state tool (`kaola-dispatch.py state`), KW lifecycle scripts as a sibling repo. Monoliths (AST-measured, see inventory-appendix + recount.py): `kaola-dispatch.py` (208 top-level / 233 all), `kaola-acp-holder.py` (51 top / 209 all), `kaola-acp.py` (195 top / 207 all), `kaola-record-contract.py` (68 top / 72 all) — 721 nodes total, each spanning at least five distinct responsibilities.
 
 Target: a **minimal core** + replaceable components. **The B-line direction is ACCEPTED: a per-user/per-machine lightweight RESIDENT core (B0, lifecycle+events first) is the target runtime form.** In staging, the core begins as a shared library so the cut is provable and the pilot has something real to host; the library is the resident core's implementation, not an alternative to it. The design must state the resident core's own runtime responsibilities and its liveness/failure boundary with holders (§6a); it does NOT default back to no-daemon. Per owner: components are cut along ACTUAL source seams (measured below), not a predecided count; no per-function microservices; dependencies are explicit contracts; subtraction (remove/replace/retire/uninstall) is a first-class operation; KPR+KW remain optional modules sharing runtime norms without forcing synchronized consumer upgrades or a central credential store.
 
@@ -51,7 +51,7 @@ Minimal but concrete: each component names its contract artifacts (version carri
 | C7 render/install | build hashes (`main-skill-build.json`); budgets.json; pin envelope; install-verify/1 | repo + installed roots | render --check; test-issue-264-validate-lane-integrity | tooling; uninstall flags exist |
 | C8 KW bridge | KW's own artifacts (workflow-state/ledger/chain-receipt) — referenced, not owned | KW repo | KW's suites (their side) | optional bridge; removal = no claim lifecycle |
 
-Failure/loading obligations: the refusal codes listed are the KNOWN error surface from current source — completeness is NOT claimed until the source-review matrix (P1 step 1) enumerates every raise/exit path per component. Load optionality = install-time selection (C7) + C6/C8 runtime-optional per §5 queue/refuse contracts. §3b is the P1 implementation TARGET, ADR-3 additive; interface IO payloads, version-negotiation and required-absent behavior rows are produced by that same source review (tracked in #275), not asserted complete here.
+Failure/loading obligations, SPLIT: (a) DECIDED THIS ROUND — the B0 IPC envelope (§6b: contract_version/request_id/operation/project_ref/session_ref/expected_holder_instance_id/body + replay/conflict semantics), the three write-resource ownership table (§6a), registry adoption handshake semantics, event cursor triple and typed-gap behavior, and the manifest grammar fields; these are the contracts B0 implements against. (b) P1 WORK — per-component exhaustive error-surface enumeration and per-function implementation (the 721-node audit), which must MATCH (a) but adds detail, not new decisions.
 
 ## 4. Mermaid dependency DAG
 
@@ -76,7 +76,35 @@ graph TD
   AGT -.state.-> C4
 ```
 
-Cycles, honestly: the mermaid graph CONTAINS C1→C6→C3→C1 (holder loads C6 helper; C6 writes recovery inputs; C3 carries the events that wake C1) and C1→C2-code (quota_module loads parse/resolution CODE, not data). These are RUNTIME FEEDBACK loops, not import cycles: the code-load edges (C1→C2-code, C1→C6-code) are unidirectional at import time (no component file-loads back into C1), while the event/control edges (C6→C3, C3→C1) run through the event stream at runtime. The design keeps them separate: **code interface acyclic** (imports only toward core), **runtime control loop explicit and controlled** (bounded recovery inputs, one node per batch). C2 and C7 depend on nothing but the core (independently skippable at install time).
+Two SEPARATE graphs (the v1 text wrongly merged them):
+
+**Code-dependency graph (imports/file-loads only — ACYCLIC):**
+```mermaid
+graph LR
+  CORE[Core]
+  C1[C1] -->|imports| CORE
+  C2[C2] -->|imports| CORE
+  C3[C3] -->|imports| CORE
+  C4[C4] -->|imports| CORE
+  C5[C5] -->|imports| CORE
+  C6[C6] -->|imports| CORE
+  C1 -->|file-loads quota_module| C2
+  C1 -->|file-loads compact-recovery| C6
+  C5 -->|subprocess run_runner| C1
+```
+Every edge points away from core; C1-to-C2/C6 are one-way file-loads (no component file-loads back into C1); C5-to-C1 is a one-way subprocess spawn. No cycles.
+
+**Runtime event/control feedback (deliberate, bounded — NOT a code dependency):**
+```mermaid
+graph LR
+  C6w[C6 recovery-input write] -->|state queue| C4
+  C4 -->|pending input| C1w[C1 carrier wake]
+  C1w -->|event stream| C3
+  C3 -->|worker events| C1w
+```
+That loop IS the maintenance design (bounded recovery inputs, one node per batch, settled by checkpoint); it never appears in the code-dependency graph.
+
+
 
 ## 5. Optional install / runtime loading / subtraction
 
@@ -96,7 +124,7 @@ Cycles, honestly: the mermaid graph CONTAINS C1→C6→C3→C1 (holder loads C6 
 
 ## 6a. Resident-core runtime responsibilities and holder boundary (B0)
 
-The resident core (per-user/per-machine) owns ONLY: the local registry of adopted holders, event-index/subscriptions, and lifecycle REQUESTS sent to already-identified holders. ACP sessions, process trees, and session-local events remain HOLDER-owned. The core never migrates or writes Host business JSON and never proxies Agent semantic judgments — its first job is removing the shared-write window that exists TODAY between Host-side tools and holders. Process identity authority = the holder handshake + OS matching; the core's cached identity entries always carry `observed_at` + the source identity, and an expired/unreachable cache entry NEVER releases a seat. This boundary is DESIGN; untested until P5 drills.
+The resident core (per-user/per-machine) owns ONLY: the local registry of adopted holders, event-index/subscriptions, and lifecycle REQUESTS sent to already-identified holders. ACP sessions, process trees, and session-local events remain HOLDER-owned. The core never migrates or writes Host business JSON and never proxies Agent semantic judgments. Whether a shared-write window exists today between Host-side tools and holders is an OPEN measurement question (the three write-resource classes below define the target ownership; current-source verification of every file's actual writers is P1 inventory work, not asserted here). Process identity authority = the holder handshake + OS matching; the core's cached identity entries always carry `observed_at` + the source identity, and an expired/unreachable cache entry NEVER releases a seat. This boundary is DESIGN; untested until P5 drills.
 
 
 ## 6b. IPC, registry adoption, and event semantics (root ruling, design)
