@@ -105,3 +105,21 @@ A closed loop over **existing** structures — no new framework, per the AGENTS 
 **Constraints honored.** Design only, no implementation; no project-wide hard gates from single incidents; no authorization-history revival (no new stored kinds; recurrence checks are read-only; D4 adds dependency kind, not authorization data); the Host files the GitHub issue only after this design is confirmed. Standing UNKNOWNs: startup complete visibility; prose-length causality; adapter entry-line injection; CAD first-startup context/catalog/loaded-body-hash; kill-92376 PID ownership; Host native WebSearch/WebFetch call counts.
 
 **Delivery note.** This file experienced concurrent external rewrites during production (a mirroring compiler raced my writes: duplicated headings, dropped appends). The final content above was rebuilt atomically and deduplicated; an identical stable copy is at `/tmp/kpr-i270-toolaudit-final.md` (sha256 prefix 4792bf89281c031b) in case the canonical path is rewritten again before compilation. If any duplication reappears, each Part heading should occur exactly once.
+
+
+---
+
+## CORRECTIONS (bridge re-verification of test-issue-244-dispatch.py:3706-3720 — supersedes the S4 classification above)
+
+The actual assertions are: `assertIn` "planned dispatch uses `execute`" plus the preset/direct-fallback contract; `assertNotIn` only rejects OLD phrasings ("Pass selected tier" / "An adopted plan"). They do NOT forbid adding `project --seats` / `collect` navigation. Therefore **S4 is reclassified: coverage-insufficiency / text-contract-not-behavioral-acceptance — NOT a wrong oracle that would fail a naming fix**. The old asserts stay; new navigation adds compatible assertions; nothing is relaxed. `test-issue260:63` is transport-CLI `--help` usage, not a dispatch-help test — applicability so scoped. D4 schema fields must first be compared against the no-new-field existing semantic breadcrumbs; that value choice is not pre-confirmed. Rollback must be TESTED (new-writer data meeting an old reader; stop-write/migration/recovery) — "no data migration needed" may not be asserted.
+
+## Bounded behavioral acceptance design (for later reproduction; NOT implemented now)
+
+One scripted scenario, no forced per-turn tool calls, judged on outcomes:
+1. **Startup**: fresh Host session at the canonical root; native Skill invocation loads the body (receipt-pinned version).
+2. **Discovery**: without reading references beyond the loaded body, the Host must be able to NAME the dispatch entry, the seat-projection entry, and the collect entry (recorded verbatim; misses are findings, not gate failures).
+3. **Minimal correct params**: the Host authors a one-item research plan to a throwaway target (fixture repo or /tmp scratch), using only body+`--help`; invocation refusals (if any) are recorded as cost evidence.
+4. **Autonomous independent dispatch**: the item is admitted to an eligible pool/grant seat; receipt captured.
+5. **Original result collection + precise reclamation**: the delivery is collected from the worker's own output/reply; the seat is exact-stopped with holder guard; `residual_pids==[]` and terminated event close the loop.
+6. **Freshness/dependency probes** (from the coordination cases): a stale done-snapshot must be re-verified at the existing no-eligible boundary before deciding; an acceptance-only dependency must not block start.
+Acceptance = the whole scenario passes with zero undocumented steps; each failure maps to one of the five QA classes (not-covered / wrong-oracle / static-only / ran-not-triggered / usage-deviation).
