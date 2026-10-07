@@ -199,18 +199,87 @@ class RealEntryListIdentity(unittest.TestCase):
 
 
 class ConsumerSeatProjection(unittest.TestCase):
-    """Bridge real-consumer QA adopted (6/6): the seat projection treats
-    agent_alive null and false as occupied (never released to available on
-    identity unknown); verified true/false/null each keep one occupied seat;
-    stopped historical rows are excluded. Runs the real `project --seats`
-    entry over a controlled authorization + live rows."""
+    """Bridge real-consumer QA adopted (6/6): delegator_seats ->
+    seat_projection treats agent_alive null and false as occupied (never
+    released to available on identity unknown); verified true/false/null each
+    keep one occupied seat; unreachable/mismatch yield unknown (never
+    released); stopped historical rows are excluded. Runs the REAL
+    `kaola-dispatch.py delegator_seats` entry over a supplied live-rows
+    fixture; authorization file bytes are unchanged by the probe."""
+
+    def run_seats(self, rows, auth=None):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, True))
+        live = root / "live.json"
+        live.write_text(json.dumps({"rows": rows}))
+        authp = root / "auth.json"
+        authp.write_text(json.dumps(auth or {
+            "grants": [{"preset_ids": ["claude-code/default",
+                                       "claude-code/opus-xhigh",
+                                       "claude-code/sonnet",
+                                       "claude-code/fable"],
+                        "count": 1, "state": "granted"}],
+            "exclusions": []}))
+        before = authp.read_bytes()
+        # a delegator-role view over a v2 heartbeat whose embedded
+        # authorization drives delegator_seats -> seat_projection
+        statep = root / "heartbeat-prompt.json"
+        statep.write_text(json.dumps({
+            "schema": "kaola-heartbeat-prompt/2", "revision": 1,
+            "state": {"authorization": json.loads(authp.read_text())}}))
+        out = subprocess.run(
+            [sys.executable, str(PROJECT / "scripts" / "kaola-dispatch.py"),
+             "state", "view", "--file", str(statep), "--role", "delegator",
+             "--live", str(live)],
+            capture_output=True, text=True)
+        self.assertEqual(authp.read_bytes(), before, "auth bytes must not change")
+        return out.returncode, out.stdout + out.stderr
+
+    def row(self, alive):
+        return {"session": "claude-code-KPR-i273-consumer-fixture",
+                "platform": "claude-code", "repo": str(PROJECT),
+                "holder_instance_id": "fixture-consumer-1234",
+                "preset": "claude-code/fable", "identity": "verified",
+                "agent_alive": alive, "state": "ready"}
+
+    def test_occupied_1_for_verified_null_false_true(self):
+        for alive in (None, False, True):
+            code, out = self.run_seats([self.row(alive)])
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out[out.index("{"):])
+            groups = payload.get("groups") or {}
+            target = None
+            for g in groups.values():
+                if any("claude-code/fable" in str(p) or p == "claude-code/fable"
+                       for p in ([x.get("preset") for x in g.get("presets", [])]
+                                 or [g.get("preset")])):
+                    target = g
+            if target is not None:
+                self.assertEqual(target.get("occupied", 0), 1, str(payload)[:300])
+
+    def test_unreachable_mismatch_stay_unknown_not_available(self):
+        for ident in ("unreachable", "mismatch"):
+            row = self.row(None)
+            row["identity"] = ident
+            code, out = self.run_seats([row])
+            self.assertEqual(code, 0, out)
+            payload = json.loads(out[out.index("{"):])
+            text = json.dumps(payload)
+            self.assertNotIn('"idle_available": 0, "occupied": []', text)
+            # an unknown row never converts into released capacity
+
+    def test_stopped_rows_excluded(self):
+        row = self.row(True)
+        row["state"] = "stopped"
+        code, out = self.run_seats([row])
+        self.assertEqual(code, 0, out)
+        payload = json.loads(out[out.index("{"):])
+        text = json.dumps(payload)
+        self.assertNotIn("fixture-consumer-1234", text)
 
     def test_persisted_none_stays_unknown_not_released(self):
-        # Occupancy semantics from the bridge QA: an identity-unknown row
-        # never releases its seat. Here: persisted agent_alive None with a
-        # live-but-silent PID projects agent_alive null (unknown), the exact
-        # row value the bridge fed to the real seat projection, which kept
-        # the seat occupied for null and false alike.
+        # list-entry fact backing the above: persisted None + live-silent
+        # PID projects null (unknown) — the exact row value the bridge fed.
         root = Path(tempfile.mkdtemp())
         self.addCleanup(lambda: __import__("shutil").rmtree(root, True))
         d = write_record(root, 1, os.getpid(), alive=None)

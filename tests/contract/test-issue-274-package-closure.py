@@ -33,6 +33,99 @@ class PackageClosure(unittest.TestCase):
         spec.loader.exec_module(module)
         self.assertTrue(callable(getattr(module, "classify", None)))
 
+    def test_isolated_package_recovery_input_positive_then_helper_removal(self):
+        """Positive: the ISOLATED shipped package (dispatch + contract +
+        helper) completes the host-compaction recovery-input with a real
+        completed, session-bound, host-role signal (the #255 fixture shape)
+        -> exit 0. Then the SAME tree with the helper removed must fail
+        naming the dependency (missing-file, not signal-unverified), and a
+        foreign session / non-host role / unfinished status each still refuse
+        with signal-unverified. No repo-root or sibling fallback is allowed:
+        the isolated dir is the only source."""
+        with tempfile.TemporaryDirectory() as td:
+            repo_dir = Path(td) / "repo"
+            (repo_dir / ".kaola").mkdir(parents=True)
+            repo = str(repo_dir)
+            state = repo_dir / ".kaola" / "heartbeat-prompt.json"
+            state.write_text(json.dumps({
+                "schema": "kaola-heartbeat-prompt/2", "revision": 1,
+                "state": {"project": {"code": "T", "repo": repo}}}))
+            # full shipped trio, isolated
+            isolated = Path(td) / "scripts"
+            isolated.mkdir()
+            for name in ("kaola-dispatch.py", "kaola-record-contract.py",
+                         "kaola-compact-recovery.py"):
+                shutil.copy2(PKG / name, isolated / name)
+            # caller: host-role record + completed session-bound signal
+            import hashlib as hl
+            records = Path(td) / "records"
+            holder = "h274" + "0" * 12
+            cdir = records / "zcode" / "zcode-T-host" / hl.sha256(repo.encode()).hexdigest()[:16]
+            cdir.mkdir(parents=True)
+            (cdir / "record.json").write_text(json.dumps({
+                "platform": "zcode", "session": "zcode-T-host",
+                "session_role": "host", "acp_session_id": "original-host",
+                "holder_instance_id": holder, "repo": repo}))
+            def write_event(**over):
+                event = {"cursor": 1, "kind": "compact_reload_detected",
+                         "holder": holder, "role": "host",
+                         "signal": {"method": "session/update",
+                                    "params": {"sessionId": "original-host",
+                                               "update": {
+                                                   "sessionUpdate": "compaction_update",
+                                                   "status": "completed",
+                                                   "compactionId": "occ-274"}}}}
+                event.update(over)
+                (cdir / "events.jsonl").write_text(json.dumps(event) + "\n")
+            write_event()
+            import os as _os
+            env = dict(_os.environ,
+                       KAOLA_ACP_DISPATCHER=json.dumps({
+                           "holder_instance_id": holder, "platform": "zcode",
+                           "repo": repo, "session": "zcode-T-host"}),
+                       KAOLA_ACP_RECORD_ROOT=str(records))
+            def run():
+                return subprocess.run(
+                    [sys.executable, str(isolated / "kaola-dispatch.py"), "state",
+                     "recovery-input", "--file", str(state), "--source", "fixture",
+                     "--kind", "host-compaction", "--signal-cursor", "1"],
+                    capture_output=True, text=True, env=env)
+            # POSITIVE: isolated package completes the branch (exit 0)
+            out = run()
+            self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+            self.assertIn('"result": "written"', out.stdout)
+            # guards: foreign session / non-host role / unfinished status
+            for over, why in (
+                    ({"signal": {"method": "session/update", "params": {
+                        "sessionId": "foreign", "update": {
+                            "sessionUpdate": "compaction_update",
+                            "status": "completed", "compactionId": "x"}}}},
+                     "foreign session"),
+                    ({"role": "worker"}, "non-host role"),
+                    ({"signal": {"method": "session/update", "params": {
+                        "sessionId": "original-host", "update": {
+                            "sessionUpdate": "compaction_update",
+                            "status": "started", "compactionId": "x"}}}},
+                     "unfinished status")):
+                before = state.read_bytes()
+                write_event(**over)
+                out = run()
+                self.assertNotEqual(out.returncode, 0, why)
+                self.assertIn("signal-unverified", out.stdout + out.stderr, why)
+                self.assertEqual(state.read_bytes(), before, why)
+            # restore a valid signal, then REMOVE the helper: failure must
+            # name the missing dependency, not fall back anywhere
+            write_event()
+            (isolated / "kaola-compact-recovery.py").unlink()
+            out = run()
+            self.assertNotEqual(out.returncode, 0)
+            joined = out.stdout + out.stderr
+            self.assertTrue(
+                "kaola-compact-recovery" in joined
+                or "FileNotFoundError" in joined,
+                f"must name the missing dependency, got: {joined[:200]}")
+            self.assertNotIn('"result": "written"', joined)
+
     def test_missing_helper_fails_the_recovery_input_not_silently(self):
         with tempfile.TemporaryDirectory() as td:
             isolated = Path(td) / "scripts"
