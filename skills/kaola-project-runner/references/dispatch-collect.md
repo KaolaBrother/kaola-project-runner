@@ -51,15 +51,15 @@ grants, count/shared occupancy and unknown reasons. No authority verdict.
 [--availability "$AVAIL"] [--prior-index "$PRIOR"] [--index "$INDEX"] [--live "$LIVE"]`.
 - `collect --index "$INDEX" --skills-root "$SKILLS"`: update correlation.
 - Add `--item <exact item_id>` to `collect` for a read-only turn view.
-Identity/cursor-bound outcome, permissions, failures survive the 480-char excerpt. Full native capture reads rotated logs; source/as-of, raw pointers and truncation reasons stay visible. Missing ranges are uncertainty.
+Identity/cursor-bound outcome, permissions/failures survive the 480-char excerpt. Full native capture reads rotated logs; source/as-of, raw pointers and truncation reasons are visible. Missing ranges are uncertainty.
 - `snapshot --state "$STATE" --out "$PROJECT/.kaola/heartbeat-prompt.json"`: atomically replaces
 `--out` with only `body`; a v2 `--out` is `state-managed`: use `state`.
 
 `$SKILLS`: sibling Runner root.
 `--plan --authorization --availability --live --index --prior-index` take
 JSON **file** paths; `--set`: inline JSON or `@path`. `$LIVE`:
-`{"rows":[...]}` from `list --repo` (omit = fresh); supplied rows
-not fresh proof. Unreadable occupancy: `not-run`/`occupancy-unknown`.
+`{"rows":[...]}` from `list --repo --include-dead` (omit=fresh);
+supplied rows not fresh proof. Unreadable occupancy: `not-run`/`occupancy-unknown`.
 
 ## execute
 
@@ -109,7 +109,7 @@ never `resolved_*`. Explicit `applied: false` or `model_verified: false` does
 not send (`selection-mismatch`). Missing application, unknown observations and
 advertised differences stay unknown and do not block send. Mapped
 `requested_id` matches catalog id. Provider qualification matches after `\\`;
-a slash stays part of the id.
+a slash is part of the id.
 
 A live assignment binds matching repo, session, preset, holder, prompt
 hash; fingerprint alone is `assignment-unbound`. Bound active/completed work

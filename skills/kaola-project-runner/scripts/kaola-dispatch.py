@@ -81,6 +81,9 @@ CEILING_DUTY = {
 }
 LEGACY_LIVE_STATE = re.compile(r"^\d+\s+live$")
 COVERAGE = ("in-flight", "returned", "failed", "unknown", "not-run")
+# Issue #286 (G6): the one closed-status vocabulary retire shares with its
+# index mirror. Any other value — absent, renamed or unreadable — is a duty.
+CLOSED_COVERAGE = ("returned", "failed", "not-run")
 RUNNER_TIMEOUT = float(os.environ.get("KAOLA_DISPATCH_RUNNER_TIMEOUT", "120"))
 INDEX_LOCK = threading.Lock()
 SIDEAGENT_ROLES = ("sideagent", "sidekick")
@@ -4883,6 +4886,19 @@ def open_seats(seats: dict[str, list[str]], rows: list[dict[str, Any]]) -> list[
     return problems
 
 
+def index_identity_problem(index: dict[str, Any], repo: str) -> str | None:
+    """Issue #286 (G5): retire and its index mirror read only this project's
+    dispatch index. A file that declares another schema or another project's
+    repo proves no closure; an index that declares no identity stays the
+    accepted input."""
+    declared = index.get("schema")
+    if declared is not None and declared != "kaola-dispatch-index/1":
+        return f"declares schema {declared!r}, not kaola-dispatch-index/1"
+    if not same_repo(index.get("repo"), repo):
+        return f"declares repo {index.get('repo')!r}, not this project"
+    return None
+
+
 def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
     """Why a task's dispatched items are not shown closed: each needs an index
     row that is no longer in flight and stopped seats. A Host can reconcile
@@ -4903,14 +4919,30 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
         return problems
     live = live_rows_of(args.live) or []
     if refs:
-        rows = {row.get("item_id"): row for row in load_object(Path(args.index)).get("items") or []
+        index = load_object(Path(args.index))
+        mismatch = index_identity_problem(index, str(repo_of_state_file(Path(args.file))))
+        if mismatch:
+            raise StateRefusal(
+                "index-unidentified",
+                f"the index at {args.index} {mismatch}; retire proves closure only from this "
+                "project's dispatch index",
+                recovery="pass --index pointing at this project's kaola-dispatch-index/1, the "
+                         "file execute and collect write here")
+        rows = {row.get("item_id"): row for row in index.get("items") or []
                 if isinstance(row, dict)}
         for ref in refs:
             row = rows.get(ref)
             if row is None:
                 problems.append(f"{ref} is not in the index")
                 continue
-            if row.get("status") not in ("in-flight", "unknown"):
+            status = row.get("status")
+            if status in CLOSED_COVERAGE:
+                continue
+            if status not in ("in-flight", "unknown"):
+                # Issue #286 (G6): one allow-list shared with the mirror. A
+                # status this vocabulary does not know is still a duty; a
+                # missing or renamed value never proves closure.
+                problems.append(f"{ref} status {status!r} is not a known closed value")
                 continue
             evidence_rows = row.get("evidence") if isinstance(row.get("evidence"), dict) else {}
             collected = evidence_rows.get("collect_status")
@@ -5169,6 +5201,11 @@ def mirror_dispositions(args: argparse.Namespace, doc: dict[str, Any], path: Pat
 def mirror_task(args: argparse.Namespace, task: dict[str, Any], path: Path, index_path: str) -> dict[str, Any]:
     with IndexLock(Path(index_path)):
         index = load_object(Path(index_path))
+        mismatch = index_identity_problem(index, str(repo_of_state_file(Path(path))))
+        if mismatch:
+            # Issue #286 (G5): the state write above stays (I12); the mirror
+            # leaves a foreign index exactly as it was and reports why.
+            raise ValueError(f"index identity differs: it {mismatch}")
         refs = task.get("dispatch")
         refs = {refs} if isinstance(refs, str) else {ref for ref in refs or [] if isinstance(ref, str)}
         dispositions = task.get("dispositions") if isinstance(task.get("dispositions"), dict) else {}
@@ -5181,7 +5218,7 @@ def mirror_task(args: argparse.Namespace, task: dict[str, Any], path: Path, inde
             if getattr(args, "_retired_task", None) is not None:
                 # An in-flight, unknown, or unreadable status is still a duty,
                 # including after a handoff. Never settle it from retirement.
-                if row.get("status") not in ("returned", "failed", "not-run"):
+                if row.get("status") not in CLOSED_COVERAGE:
                     continue
                 if value is None and verdict in ("accepted", "cancelled"):
                     value = verdict
@@ -5658,7 +5695,16 @@ def command_state_view(args: argparse.Namespace) -> int:
 def live_rows_of(path: str | None) -> list[dict[str, Any]] | None:
     if not path:
         return None
-    rows = load_object(Path(path)).get("rows")
+    rows_document = load_object(Path(path))
+    declared = rows_document.get("schema")
+    if declared is not None and declared != "kaola-acp-list/1":
+        # Issue #286 (G9): identify the --live input. `kaola-acp.py list`
+        # output declares kaola-acp-list/1; a file that declares another
+        # schema is not live rows and proves no seat state.
+        raise StateRefusal("live-unidentified", f"the live rows at {path} declare schema "
+                           f"{declared!r}, not kaola-acp-list/1; pass `kaola-acp.py list` output "
+                           "for this repo")
+    rows = rows_document.get("rows")
     if not isinstance(rows, list):
         raise ValueError("live rows must be an array")
     return [row for row in rows if isinstance(row, dict)]
@@ -6169,8 +6215,10 @@ def build_parser() -> argparse.ArgumentParser:
     retire.add_argument("--evidence", required=True)
     retire.add_argument("--cite", help="JSON {commit, path} for a completed outcome that must survive")
     retire.add_argument("--outcome")
-    retire.add_argument("--index", help="JSON file path: dispatch index showing the task's items closed")
-    retire.add_argument("--live", help="JSON file path: Runner rows showing its sessions stopped")
+    retire.add_argument("--index", help="JSON file path: this project's kaola-dispatch-index/1 "
+                        "showing the task's items closed")
+    retire.add_argument("--live", help="JSON file path: kaola-acp.py list --repo --include-dead rows "
+                        "(kaola-acp-list/1) showing its sessions stopped")
     retire.add_argument("--handoff", help="current task that takes over its seats and dispatch")
     retire.set_defaults(func=command_state_retire)
 

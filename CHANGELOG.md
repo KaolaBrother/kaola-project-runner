@@ -16,6 +16,18 @@ Seats: restart required
   A legacy-root lookup that cannot establish absence reports
   `record-root-mismatch`. Restart at a safe boundary to load the new holder
   path helper; existing holders remain readable in place.
+- **State retire fails closed on unreadable inputs (Issue #286).** `state
+  retire` refuses an index whose declared schema or repo mismatches the
+  target (typed refusal `index-unidentified`, no bytes written) and names an
+  open duty for any dispatch-item status outside the known closed values
+  (`returned`, `failed`, `not-run`) and the documented `in-flight`/`unknown`;
+  `state check` and `state migrate` share the refusal. A `--live` input that
+  declares a schema other than `kaola-acp-list/1` is refused as
+  `live-unidentified`. The index mirror applies the same closed-status
+  coverage and records an identity mismatch in `index_mirror.error`. Retire
+  help and the `$LIVE` doc name `kaola-dispatch-index/1` and
+  `list --repo --include-dead` rows. This entry alone is state tooling only;
+  the section restart comes from the #278 holder change.
 
 ## 0.9.1 — 2026-10-07 (compaction recovery, steer adaptations, launch broker, task-failure count, selection continuity)
 

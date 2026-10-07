@@ -1,17 +1,17 @@
 {
-  "build": "1e7f4c319473",
+  "build": "e4a4f54307dc",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "e87411af5a117aa5edaa26ed935059ff381db776857767f70009b6fcad66e6ca",
     "agents/openai.yaml": "7e353e90103c16b5f3d27855f63087cc4785e77b4d5a4d36118ba3843435640e",
-    "references/dispatch-collect.md": "178d2e306b248c72908a078e732a6bde78d7bf8f0b57b693f1e7ff915ac0b9b9",
+    "references/dispatch-collect.md": "ecdc73ff90868d0be3506fc35997999a66c3f240e7664e92a547ba38e10d2662",
     "references/doc-maintenance.md": "6970e4387cf71862da5860710db033582c66ebf7fbc62e2fbda2358f4b25f2a5",
     "references/duty-reconcile.md": "ab59435d13dcf29f462eeb7813a8d3248265aa48f2364c10acd3090d1c834c4d",
     "references/heartbeat-skeleton.md": "9e7db23e0f1ef15655e5aafc5d648784f260deaaa1ae2d9958d5a2daaa7d6786",
     "references/host-entry-matrix.md": "0c81c9b9be00c7d009d9027f9a8860e20e005c77b811759255b4b71b86fa55fe",
     "references/host-startup.md": "897028f4fdf61ea34f96675f98cbf5dc1dc4d7b2d8fc0b386ae749c0b6557637",
     "references/issue-dispatch.md": "a3ce7085ce16fef3d6a850806af10fe0cedd83cda41e1ab3f32d4121cdbb1aa4",
-    "references/lifecycle-state.md": "b06fba5cd6b8681328dfe08610c0404141335142c76f1224d3109bfc531b4ffd",
+    "references/lifecycle-state.md": "729bcb50459f0772f60b8daa5a567e74fe1435e1e2049dca091903506142e6f0",
     "references/profile-catalog.md": "38a6e4b9a17421a4ce1ebad5cb886def225e8e17794cdf26a8158ae72ea3caf9",
     "references/public-research.md": "86e2ad1cd11840fd58900cde429e9b45457f149b67fa91a32e5fe6429a58407c",
     "references/qa-evidence.md": "bf9c3beff60f4407d0bf951ce7a67da4450ac6cca96062a960cd009c38daae7a",
@@ -23,7 +23,7 @@
     "references/zcode-host-dispatch.md": "8ea2c0c95378c4ac24ae70066829e1d2217d5a2adf68d01913ff96a3d3ab6565",
     "references/zcode-native-skill-entry.md": "22f5e4ce50d92a0e264c71252616a9c2db8473817be1c5eb99d0a415f814918f",
     "scripts/kaola-compact-recovery.py": "c45662a4297047bd860a46157e950b4aac460b3e9df1a889abe99ca687e90f27",
-    "scripts/kaola-dispatch.py": "64fcb90de126a684ea2ca62a2e569382d8666bf80f79d4c0adb5e8ef39f78260",
+    "scripts/kaola-dispatch.py": "2f633f814468ca34076d2bcb18a183cb26ddfe6c520765f1cb1e2cfbfc5b4bb2",
     "scripts/kaola-record-contract.py": "b5b61d8fdf4f30dee92afe5b342579a2e4dba216478c1966c5de14562b4c1cc9"
   },
   "skill": "kaola-project-runner"

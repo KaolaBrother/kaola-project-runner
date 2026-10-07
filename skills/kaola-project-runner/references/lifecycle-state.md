@@ -2,7 +2,7 @@
 
 `<project>/.kaola/heartbeat-prompt.json` (`kaola-heartbeat-prompt/2`) holds
 current tasks, authorization, Sideagent binding, holds, alerts and decisions.
-`body` is the generated Host view. Write through `scripts/kaola-dispatch.py
+`body` is the generated Host view. Write through `kaola-dispatch.py
 state` for revision checks. Other files retain their own authority; keep
 references and current duties here, never copied backlog, ledger or history.
 
@@ -37,8 +37,8 @@ The Host gets outcomes, capacity and pending decisions.
   --expect-revision N --set PATCH`: first three Host-only.
 - `$S retire --kind K --id ID --expect-rev N --evidence REF [--outcome T]
   [--index I --live L] [--handoff TASK]`: a task needs verdict `accepted` or
-  `cancelled`, its dispatch items closed and seats stopped, or handed to a
-  continuing `TASK`.
+  `cancelled`, dispatch items closed and seats stopped, or handed to a
+  continuing `TASK`. `L` is `list --repo --include-dead` rows.
 - `$S view --role host|sideagent|delegator [--repo ROOT]` (read-only).
 - `$S checkpoint`, `update --index`: [sideagent-node.md](sideagent-node.md).
 - `$S check [--index I] [--live L] [--repo R]`: read-only problems such as
@@ -58,7 +58,7 @@ The Host gets outcomes, capacity and pending decisions.
   `owner`, `resume_when`, `next`. A hold keeps the grant.
 - `alerts` (`level` `watch|warn|severe`, `summary`): applicable unresolved
   exceptions. Read, acknowledged or in progress is not resolved. Once handled,
-  use `retire --expect-rev REV --evidence ORIGINAL`; it removes the stored row.
+  use `retire --expect-rev REV --evidence ORIGINAL`.
 - `decisions` (`owner` `host|delegator|user`, `question`): open owner answers.
   Host settles with `update --set status/evidence ORIGINAL` or, judged
   handled, `retire --evidence ORIGINAL`. A Sideagent copy needs
@@ -132,7 +132,7 @@ recorded `carrier` advertising `heartbeat-state/2`, else 64 KiB
 After a Skill update, at a safe point, run `$S migrate --index I --live L`;
 without `--write` it only plans. With `--write`, each v1 `active` row becomes
 a `doing` task, `pending` keeps its stated stage or stays `todo`, and
-`recovery.protected_untracked` stays when it is a list of strings. Other
+`recovery.protected_untracked` stays for a list of strings. Other
 legacy names leave and are not copied. Unknown keys become `unverified`
 locators. A critical mapping writes nothing. Do not write
 `heartbeat-prompt.v1-<sha12>.json`. `state-overwritten` is not raised from
