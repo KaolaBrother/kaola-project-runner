@@ -1,16 +1,21 @@
 # KPR source inventory for the KPM programme mapping
 
-Version: 2026-10-07 v3 (supersedes v2 `de26b31c`). Git-versioned; this file is the single
-KPR-side input to the two-repo responsibility/issue/evidence mapping. Owner of this file:
-the KPR Host. Programme lead: the KPM bridge (`01a11660-1189-77d1-8639-40e896a4a025`,
-repo `/Users/ylmacstudio/Workspace/kaola-project-manager`), which will create the KPM issues
-with back-links; original tickets keep cross-references marking migrated-out/stopped (never
-"implemented"). No ticket is blind-closed and no implementation is copied. The
+Version: 2026-10-07 v4 (supersedes v3 `56936906`; fact correction: v3 wrongly said no KPM
+issue numbers exist). Git-versioned; this file is the single KPR-side input to the two-repo
+responsibility/issue/evidence mapping. Owner of this file: the KPR Host. Programme lead:
+the KPM bridge (`01a11660-1189-77d1-8639-40e896a4a025`,
+repo `/Users/ylmacstudio/Workspace/kaola-project-manager`), which has created KPM tracking
+issues with back-links; original tickets keep cross-references marking migrated-out/stopped
+(never "implemented"). No ticket is blind-closed and no implementation is copied. The
 single-implementation constraint (no repo copy, vendor, or fork) stands; beyond that,
 **no final migration mechanism is predetermined here**: KW updates are currently stopped,
 how KPR and KW would incorporate any new architecture awaits KPM design confirmation, and
-**nothing has actually been migrated yet**. No KPM issue numbers exist yet — reference the
-KPM repo and bridge above instead of guessing them.
+**nothing has actually been migrated yet**. Known KPM tracking links, verified read-only on
+2026-10-07 (`KaolaBrother/kaola-project-manager`, all OPEN): #270→KPM#2/#7/#8, #275→KPM#2/#8,
+#276→KPM#3/#8, #277→KPM#4/#8, #291→KPM#5/#8 (KPM#2 B0 resident core; KPM#3 P2/P3 read-only
+classification; KPM#4 KW ownership migration + B0 pilot; KPM#5 lifecycle + single
+Host-bound admission; KPM#7 transition/cutover; KPM#8 consolidated framework design v1 —
+the stated gate before migration). Final mapping and design acceptance remain pending.
 
 Scope of this revision (owner direction `Sentinel_64a7198f` / `f8a26d7b` and the final
 boundary round): ALL KPR architecture-upgrade implementation is revoked in this repo —
