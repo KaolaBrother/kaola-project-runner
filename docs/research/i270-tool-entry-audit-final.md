@@ -123,3 +123,13 @@ One scripted scenario, no forced per-turn tool calls, judged on outcomes:
 5. **Original result collection + precise reclamation**: the delivery is collected from the worker's own output/reply; the seat is exact-stopped with holder guard; `residual_pids==[]` and terminated event close the loop.
 6. **Freshness/dependency probes** (from the coordination cases): a stale done-snapshot must be re-verified at the existing no-eligible boundary before deciding; an acceptance-only dependency must not block start.
 Acceptance = the whole scenario passes with zero undocumented steps; each failure maps to one of the five QA classes (not-covered / wrong-oracle / static-only / ran-not-triggered / usage-deviation).
+
+
+## CORRECTIONS II (bridge/dot review of the revision materials)
+
+- S6 over-absolute withdrawn: a schema lacking a typed `kind` does NOT mean free-text fields cannot express semantics.
+- Discovery-phase acceptance (step 2) revised: NORMAL progressive-ref navigation is ALLOWED — record any extra undocumented prompts needed and their cost, judged against the no-new-field baseline; do not ban refs.
+- Self-evolution scope covers BOTH incident repair and normal-work improvement discovery (redundancy/coupling during ordinary planning/review/QA, per AGENTS #255).
+- A machine stale indicator must NOT claim to force an automatic reload of a live session.
+- Rollback / old-reader safety is UNKNOWN until tested (new-writer data vs old reader; stop-write; migration-interrupt recovery).
+- Full self-evolution loop design now carried by issue #272 (entry scope stays in #271; distinct root causes not merged).
