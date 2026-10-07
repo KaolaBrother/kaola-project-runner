@@ -388,8 +388,10 @@ class NonZCodeLocatorAttestation(unittest.TestCase):
             for reason in ("worker-unknown", "script-missing"):
                 self.assertNotIn(reason, codex.get("reasons") or [], codex)
             self.assertEqual((codex.get("session") or {}).get("name"), host, codex)
-            # tmux presence only; no ACP liveness claim for a non-zcode Host.
-            self.assertNotIn("acp_holder_alive", codex.get("session") or {}, codex)
+            # #278: worker presence reads ACP records for all ten platforms, so a
+            # non-zcode attestation may carry record liveness; it must never
+            # claim alive without a live record.
+            self.assertIsNot((codex.get("session") or {}).get("acp_holder_alive"), True, codex)
             self.assertIs((codex.get("zcode_runtime") or {}).get("required"), False, codex)
             for reason in ("zcode-runtime-unset", "zcode-runtime-invalid"):
                 self.assertNotIn(reason, codex.get("reasons") or [], codex)

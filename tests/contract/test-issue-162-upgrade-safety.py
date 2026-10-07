@@ -622,8 +622,13 @@ class UpgradeSafetyTests(unittest.TestCase):
             platform="codex", session="codex-KPR-i198-drain", resume="r", use_continue=False,
             manifest={}, tier=None)
         alive = iter([True, True, True])
+        # #278: record roots must be private caller-owned directories; the real
+        # layout is <root>/<platform>/<session>/<instance>, so parent^3 of the
+        # stubbed instance dir must land inside this test's private root, not /.
+        record_root = self.root / "rec-root"
+        record_root.mkdir()
         stubs = {
-            "record_dir": lambda *_: self.root,
+            "record_dir": lambda *_: record_root / "codex" / "i198" / "h1",
             "read_record": lambda *_: {"holder_pid": 4242, "holder_instance_id": "old"},
             "pid_alive": lambda *_: next(alive, False),
             "apply_recorded_selection": lambda *_: {},
