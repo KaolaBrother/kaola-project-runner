@@ -1,0 +1,1 @@
+render-skills: PASS (10 workers + kaola-project-runner + kaola-delegator + grok-bot host: 1 bridge skill, 2510 B, pinned at 6ca79623d9ca, pin verified; budgets OK)

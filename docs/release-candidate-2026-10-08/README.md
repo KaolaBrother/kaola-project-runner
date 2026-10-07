@@ -56,3 +56,14 @@ not-reproduced/cause-unknown, non-blocking; no re-run of the 94 required for thi
 Publish, tag, install and consumer adoption remain BLOCKED until root's personal review (dot
 arranges) passes on the SAME candidate `57550098`. Main's four protected files stay dirty and
 owner-owned; no KW changes; no new issues; no architecture.
+
+## Log-archival note (2026-10-08)
+
+`.gitignore` (`*.log`) silently excluded the eight `.log` originals from commit `32b372be`;
+they are now archived verbatim as `<name>.log.txt` — byte-identical copies, sha256 unchanged
+(P2 full inventory original = `fe62a4d2bbaca6c1d1a89ca06e402c0db27a7b73336bae2bca3151272c8fe792`;
+working full = `717622df…`; P1 full = `41cbd834…`; P2 require-pinned = `d9fd2b90…`;
+P1 244 sequential recheck = `ea9875e0…`; R1 render = `e14a9f0f…`; clean render = `d87e1b76…`;
+clean validate = `c989e7e4…`). The old working/P1 failure originals are what support the three
+R2 corrections. `MANIFEST.sha256` covers the tracked set; the `.txt` names carry the same
+hashes as the `.log` names above.
