@@ -88,6 +88,26 @@ No ceiling is raised. Affected suites, if it is applied:
 - `--suite test-progressive-disclosure.py`;
 - `--suite test-generated-skills.py`.
 
+## Host comparison (measured by Host)
+
+The Host measured this comparison after the candidate above was written. I did not run or
+observe these assignments; the facts below are the Host's.
+
+- **With a pack cited:** #281 (cursor-cli, default preset). The assignment cited
+  `docs/ddd/packs/c4-state-retire.md` and its gap ids. The worker asked 0 clarification
+  questions. It delivered exactly the six named gaps, and correctly left G5/G6/G9 to #286. There
+  was 1 Host repair round. The cause was an omitted acceptance item (oracle-bite evidence), not
+  the pack content.
+- **Without a pack:** #278 (record-root fix; the assignment cited no pack). 0 clarification
+  questions. 1 Host repair round, caused by a security regression in the new record-root code.
+- **Limits:** elapsed time was not measured comparably. The tasks differ in kind (test fixtures
+  vs a runtime code fix), and n = 1 for each.
+- **Result:** no measurable benefit or cost attributable to citing a pack is established. #286
+  (also pack-cited) is still in flight and is not included.
+
+The decision is unchanged: no orchestrator template change this round. The re-open criterion
+below is unchanged.
+
 ## Re-open criterion
 
 Apply the text above only if both of these hold:
@@ -124,5 +144,4 @@ Same conclusion as the pilot: the value came from reading and probing, not from 
 checks. The measured line-drift rate is the strongest argument for an advisory `path:line`
 check, if #282 builds one.
 
-S1–S3 are new seam gaps. #281 covers the pilot's G1–G9 only, so whether S1/S2 are defects, and
-who fixes them, is a Host decision. A new issue is the usual route.
+S1–S3 are new seam gaps. #281 covers the pilot's G1–G9 only. The Host opened #289 for S1–S3.

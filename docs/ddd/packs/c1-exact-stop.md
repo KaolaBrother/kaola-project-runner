@@ -6,7 +6,7 @@ owner: host
 context_primary: session-runtime/C1-lifecycle
 contexts_touched: session-runtime/CORE-identity, session-runtime/C3-events, orchestration-state/C6-recovery, orchestration-state/C4-state
 baseline_commit: 4c30b71d0b964628c5a39159ff0cd89504adcd6b
-related_issues: 283, 73, 132, 191, 255, 280, 281
+related_issues: 283, 73, 132, 191, 255, 280, 281, 289
 ---
 
 # Second pack — exact-stop a seat (C1 lifecycle, crossing CORE identity, C3 events, C6 recovery and C4 state)
@@ -179,19 +179,20 @@ goes through another command or a direct function call that reaches the same cod
   force_killed_pids: [<orphan>]`, orphan gone, record rewritten `state: stopped`. Whether this is a
   defect is a Host judgment: only processes the record's own identity proves are touched (I2), but
   the I1 "refused instead of stopped" promise (`A:6185-6187`,
-  `workflow-worktree.md:34-38`) does not hold once the holder is dead)
+  `workflow-worktree.md:34-38`) does not hold once the holder is dead. Tracked in #289)
 - CORE identity → C1 dead-holder stop **without** `--force`. suite: none (gap: S2 — the same
   branch sweeps whether or not `--force` was given; the docstring says "stop --force path when the
   holder is already gone" (`A:2232`). The S1 probe ran without `--force` and swept. The preserve
   docstring treats a Runner sweep of a dead holder as normal (`A:2211-2214`), so this may be the
-  intent and only the docstring is narrow. No suite runs a non-force stop on a dead holder)
+  intent and only the docstring is narrow. No suite runs a non-force stop on a dead holder.
+  Tracked in #289)
 
 **C1 ↔ C3 (events)**
 
 - C1 refused exact stop → C3 `events.jsonl` `holder_instance_mismatch` event (`H:4636-4637`).
   suite: none (gap: S3 — `grep -rn holder_instance_mismatch tests/` is empty; every mismatch
   assertion reads the receipt's `error`, never the event stream. It is the only trace a refused
-  stop leaves for `observe`/`follow`)
+  stop leaves for `observe`/`follow`. Tracked in #289)
 
 **C1 ↔ C6 (Sideagent node and dispatched workers)**
 
@@ -284,7 +285,7 @@ never refused.
   (exact stop), test-issue-255-lifecycle-state.py (preserve, node). Fixtures for S1–S3 would land in
   test-acp-contract.py next to `test_t7_dead_holder_force_stop_sweeps_and_proves_gone`, which
   already builds a dead holder with an identity-verified orphan. Phase 2 (#281) owns the pilot's
-  gaps; S1–S3 are new and belong to whoever takes them.
+  gaps; S1–S3 are tracked in #289.
 - Docs: `templates/SKILL.md.tmpl:131-133` and `templates/orchestrator/references/workflow-worktree.md:34-38`
   if S1's outcome changes what "exact" promises for a dead holder. That is a template change,
   rendered as usual.
@@ -309,8 +310,8 @@ never refused.
   meaning (I4). If a consumer starts treating the receipt's `stopped: true` as proof, rename the
   receipt key or document it at the consumer; evidence would be a consumer that reads `stopped`
   without `residual_pids`.
-- **Retire this pack** when S1 and S2 are decided and either fixed with fixtures or documented as
-  intended, and P1 has moved these functions; refresh it instead if the cut lines stay. It then
+- **Retire this pack** when S1 and S2 are decided in #289 and either fixed with fixtures or
+  documented as intended, and P1 has moved these functions; refresh it instead if the cut lines stay. It then
   stays in Git history.
 
 ## Evidence
