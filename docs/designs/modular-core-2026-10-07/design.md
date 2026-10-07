@@ -53,28 +53,7 @@ Minimal but concrete: each component names its contract artifacts (version carri
 
 Failure/loading obligations, SPLIT: (a) DECIDED THIS ROUND — the B0 IPC envelope (§6b: contract_version/request_id/operation/project_ref/session_ref/expected_holder_instance_id/body + replay/conflict semantics), the three write-resource ownership table (§6a), registry adoption handshake semantics, event cursor triple and typed-gap behavior, and the manifest grammar fields; these are the contracts B0 implements against. (b) P1 WORK — per-component exhaustive error-surface enumeration and per-function implementation (the 721-node audit), which must MATCH (a) but adds detail, not new decisions.
 
-## 4. Mermaid dependency DAG
-
-```mermaid
-graph TD
-  CORE[Core: identity + process facts + atomic state + contract registry]
-  C1[C1 lifecycle holders] --> CORE
-  C2[C2 ACP adapters+catalog data] --> CORE
-  C3[C3 events] --> C1
-  C4[C4 state records] --> CORE
-  C5[C5 dispatch/admission + seat_projection semantics] --> C4
-  C5 --> C3
-  C5 -->|run_runner subprocess| C1
-  C1 -->|quota_module load| C2
-  C1 -->|compact_module load| C6
-  C1 -->|queue record| C4
-  C6[C6 maintenance/recovery] --> C4
-  C6 --> C3
-  C7[C7 generate/install/version] --> CORE
-  KW[C8 KW bridge - optional, originals referenced] --> C4
-  AGT[Agent judgment] -.facts only.-> C5
-  AGT -.state.-> C4
-```
+## 4. Dependency graphs (code vs runtime — the v1 merged graph is removed)
 
 Two SEPARATE graphs (the v1 text wrongly merged them):
 
@@ -124,7 +103,20 @@ That loop IS the maintenance design (bounded recovery inputs, one node per batch
 
 ## 6a. Resident-core runtime responsibilities and holder boundary (B0)
 
-The resident core (per-user/per-machine) owns ONLY: the local registry of adopted holders, event-index/subscriptions, and lifecycle REQUESTS sent to already-identified holders. ACP sessions, process trees, and session-local events remain HOLDER-owned. The core never migrates or writes Host business JSON and never proxies Agent semantic judgments. Whether a shared-write window exists today between Host-side tools and holders is an OPEN measurement question (the three write-resource classes below define the target ownership; current-source verification of every file's actual writers is P1 inventory work, not asserted here). Process identity authority = the holder handshake + OS matching; the core's cached identity entries always carry `observed_at` + the source identity, and an expired/unreachable cache entry NEVER releases a seat. This boundary is DESIGN; untested until P5 drills.
+The resident core (per-user/per-machine) owns ONLY: the local registry of adopted holders, event-index/subscriptions, and lifecycle REQUESTS sent to already-identified holders. ACP sessions, process trees, and session-local events remain HOLDER-owned. The core never migrates or writes Host business JSON and never proxies Agent semantic judgments. Whether a shared-write window exists today between Host-side tools and holders is an OPEN measurement question (current-source verification of every file's actual writers is P1 inventory work, not asserted here). Process identity authority = the holder handshake + OS matching; the core's cached identity entries always carry `observed_at` + the source identity, and an expired/unreachable cache entry NEVER releases a seat. This boundary is DESIGN; untested until P5 drills.
+
+### Write-resource ownership table (DECIDED)
+
+| Resource | Primary writer | Rule |
+|---|---|---|
+| Session records + session events (`record.json`, `events.jsonl` under a session's record dir) | The corresponding HOLDER | Holders write their own sessions; nobody co-writes a session file |
+| Project state (`.kaola/heartbeat-prompt.json` etc.) | The existing role-tool path (host/bound-sideagent under StateLock) | Unchanged in B0; migrating these writes into the core is a SEPARATE future migration issue |
+| Core registry + event index | The CORE, holding its single-instance OS lock | Only the lock holder writes; a stale/unknown lock holder is never preempted by timeout |
+
+### Unreachable-core and fallback clauses (DECIDED)
+
+- The core being unreachable NEVER transfers write authority: a legacy CLI direct fallback runs only under the same resource's existing protocol and NEVER seizes write rights because a socket is unreachable.
+- On uncertainty the fallback returns a typed `unavailable` receipt and the in-flight holder continues (fail-open for live work, no dual writes).
 
 
 ## 6b. IPC, registry adoption, and event semantics (root ruling, design)

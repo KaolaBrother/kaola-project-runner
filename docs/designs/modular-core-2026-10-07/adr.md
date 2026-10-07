@@ -1,6 +1,6 @@
 # ADRs — KPR minimal core + components (2026-10-07 draft)
 
-Format: Context / Decision / Consequences. Each ADR cites its evidence locator. Status: PROPOSED — root + Fable convergence pending; none is decided.
+Format: Context / Decision / Consequences. Each ADR cites its evidence locator. Status: root has DECIDED the technical directions recorded here (Python internal package; C5 owns seat_projection; resident core accepted; per-resource lease semantics; dev isolation not global refusal). ADRs record those decisions and their consequences; Fable reviews challenge only NEW disagreements.
 
 ## ADR-1: The resident core is the accepted target; staging starts as a shared library
 Context: owner ACCEPTED the B direction — per-user/per-machine lightweight RESIDENT core, lifecycle+events first (B0). The A/B split forbids letting the minimal-patch line constrain B; it does NOT forbid the resident form.
