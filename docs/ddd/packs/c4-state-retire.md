@@ -126,15 +126,15 @@ assertion goes through another command that reaches the same function.
 - CORE `atomic_write` → C4: a failed temp write leaves the original and no temp file (`test_a_failed_write_removes_its_temp_file`). suite: test-issue-259-record-contract.py
 - C4 retire CAS: a stale `--expect-rev` gives exit 3 and unchanged bytes (`test_current_exception_resolution_repeated_cli_views_and_newer_recovery`, retire calls at :436-445). suite: test-issue-259-record-contract.py
 - C4 schema reader → retire: future `/3` is `schema-unsupported` and the file is unchanged (`test_future_schema_is_refused_unchanged`). This is asserted through `state view`/`migrate`; retire reaches the same `require_current` (`D:5130`). suite: test-issue-255-lifecycle-state.py
-- C4 schema reader → retire, v1 file. suite: none (gap: G1 — no suite asserts `legacy-format` (`D:3546`) for any command; `grep -rn legacy-format tests/` is empty)
-- C4 retire refusal codes `record-missing` (`D:4997`) and `evidence-required` (`D:5003`, reachable with `--evidence ""`). suite: none (gap: G2 — neither code is asserted by name in any suite; `grep -rn` is empty for both)
+- C4 schema reader → retire, v1 file: `state retire` on schema `kaola-heartbeat-prompt/1` is `legacy-format` and the file is unchanged (`test_a_v1_file_is_legacy_format_on_retire`, commit `7815e0b43c3143851631d437e7ce872697c23bb0`). suite: test-issue-255-lifecycle-state.py
+- C4 retire refusal codes `record-missing` (`D:4997`) and `evidence-required` (`D:5003`, reachable with `--evidence ""`): both names are asserted, and the file is unchanged (`test_retire_names_record_missing_and_evidence_required`, commit `7815e0b43c3143851631d437e7ce872697c23bb0`). suite: test-issue-255-lifecycle-state.py
 - C4 task verdict precondition (I5): not done, done without a verdict, and `partial` are all `retire-unmet`; accepted+cite retires (`test_retire_and_late_event_cannot_reopen`). suite: test-issue-255-lifecycle-state.py
 - C4 → Git cite (I7): a fabricated commit is refused with unchanged bytes, and a real path is kept (`test_a_fabricated_cite_is_refused_and_a_real_path_is_kept`; the reason is asserted through `detail` "invent", not by the `cite-required` name). suite: test-issue-259-record-contract.py
 - C4 → Git cite with a real commit (`gate` task retired with `{"path","commit": HEAD}`, :430-433). suite: test-issue-267-rejection-count.py
-- C4 accepted task **without** `--cite`. suite: none (gap: G3 — every suite retire of an accepted task passes `--cite`; the missing-cite branch `RC:205-206` → `cite-required` (`D:5045`) is never exercised, and the code name `cite-required` is asserted nowhere)
+- C4 accepted task **without** `--cite`: `cite-required` and the file is unchanged (`test_an_accepted_task_without_cite_is_cite_required`, commit `7815e0b43c3143851631d437e7ce872697c23bb0`). suite: test-issue-259-record-contract.py
 - C4 current-only storage (I4): a handled row leaves no stone, no body text and nothing in the host/sideagent/delegator views (`test_current_exception_resolution_…` :446-460; `test_retire_and_late_event_cannot_reopen` :165-172). suite: test-issue-259-record-contract.py
 - C4 migration drops settled stones (`test_cleanup_keeps_pending_duties_and_does_not_delete_hash_copies`). suite: test-issue-259-record-contract.py
-- C4 pending-reclaim stones (I4 keep branch `D:5087-5088`, `RC:246-252`; I10 refusal `D:4570-4579`). suite: none (gap: G4 — no suite seeds a stone with `seats`/`dispatch` and no `handed_to`; the only seeded stone (test-259 :893) has neither, so the keep and refuse branches are unexecuted)
+- C4 pending-reclaim stones (I4 keep branch `D:5087-5088`, `RC:246-252`; I10 refusal `D:4570-4579`): migrate and retire keep a stone with seats or dispatch and no `handed_to`, and `state update` of that id at `--expect-rev 0` is `record-retired` (`test_a_pending_reclaim_stone_is_kept_and_blocks_its_id`, commit `7815e0b43c3143851631d437e7ce872697c23bb0`). suite: test-issue-259-record-contract.py
 - C4 decisions (I8): a Sideagent retire of a pending decision is `retire-unmet`, the Host retire works, and an old rev gives `record-retired` (`test_retire_and_late_event_cannot_reopen`); a transcribed settlement is first seen by the Host (`test_a_sideagent_settles_a_decision_only_as_transcribed_evidence`). suite: test-issue-255-lifecycle-state.py
 
 **C4 ↔ C5 (dispatch index, `kaola-dispatch-index/1`)**
@@ -144,8 +144,8 @@ assertion goes through another command that reaches the same function.
 - C4 retire → C5 index mirror (I12): a returned row gets `acceptance: accepted` + `acceptance_source`, and in-flight/unknown/foreign rows are untouched (same test, :1856-1884). suite: test-issue-259-record-contract.py
 - C5 index identity → C4 retire. suite: none (gap: G5 — retire's index read (`D:4906`) and the mirror (`D:5171`) do not check `schema: kaola-dispatch-index/1` or `repo`, unlike the other index readers (`D:605-607`, `D:3143`, `D:3932`). A probe at this commit retired a task against `{"schema":"other/9","repo":"/elsewhere",…}`: `written`. No suite asserts either behaviour)
 - C5 `status` vocabulary → C4 `open_dispatch`. suite: none (gap: G6 — `open_dispatch` closes any status except `in-flight`/`unknown` (`D:4913`), while `mirror_task` accepts only `returned`/`failed`/`not-run` (`D:5184`). A probe retired a task whose row had **no** `status`, and one with `"status":"inflight"`: both `written`. No suite has an absent or unrecognized status)
-- C5 producer (`execute`/`collect`) → C4 retire consumer. suite: none (gap: G7 — every retire fixture hand-writes the index. test-issue-244-dispatch.py exercises the producer but contains no `state retire` call. test-255 `test_a_disposition_mirrored_during_a_collect_survives_it` feeds a real collect into `state update --index`, not into retire)
-- C4 retire → C5 mirror failure after the state write landed (I12 `D:5161-5166`). suite: none (gap: G8 — `index_mirror.error` is never asserted; the only `index_mirror` assertions (test-255 :2326, :2350) are success paths through `update`)
+- C5 producer (`execute`/`collect`) → C4 retire consumer: retire reads the index execute created and collect rewrote to `returned`, then mirrors `acceptance: accepted` (`test_retire_reads_the_index_execute_and_collect_wrote`, commit `7815e0b43c3143851631d437e7ce872697c23bb0`). suite: test-issue-255-lifecycle-state.py
+- C4 retire → C5 mirror failure after the state write landed (I12 `D:5161-5166`): `index_mirror.error` with `changed: {}`, index bytes unchanged, task already gone (`test_index_mirror_error_is_reported_after_retire_writes`, commit `7815e0b43c3143851631d437e7ce872697c23bb0`). suite: test-issue-259-record-contract.py
 - C4 retire `--handoff` → receiving C4 task, carrying C5 dispatch refs and seats (`test_a_live_seat_can_be_handed_to_a_continuing_task_with_its_evidence`; `test_a_known_holder_in_any_seat_shape_survives_a_handoff`). suite: test-issue-255-lifecycle-state.py
 
 **C4 ↔ C1 (session lifecycle, `kaola-acp-list/1`, holder identity)**
@@ -176,13 +176,13 @@ it is marked as a gap.
   - `conflict` (exit 3);
   - `retire-unmet` (each I5/I6/I8/I9 cause);
   - `invalid-input` (bad kind, bad `--handoff`, cite not JSON);
-  - `cite-required`;
-  - `record-missing` (gap G2);
-  - `evidence-required` (gap G2);
+  - `cite-required` (accepted task, no `--cite`);
+  - `record-missing`;
+  - `evidence-required`;
   - `schema-unsupported`;
-  - `legacy-format` (gap G1);
+  - `legacy-format` (v1 file);
   - `writer-refused` / `binding-superseded` / `writer-mismatch`.
-- A later update of the retired id with its old rev gives `record-retired` (I10).
+- A later update of the retired id with its old rev gives `record-retired` (I10). So does reuse of an id that still has a pending-reclaim stone.
 
 ## Expected-change surface
 
@@ -198,7 +198,7 @@ never refused.
   (`D:4848-4952`, `D:5658-5664`).
 - C1 producer (read-only for this unit): `A:command_list` (`A:871-968`).
 - Suites: test-issue-255-lifecycle-state.py and test-issue-259-record-contract.py. Phase 2
-  (#281) fixtures for G1–G9 would land there or in a new suite.
+  (#281) added the G1, G2, G3, G4, G7 and G8 fixtures there. G5, G6 and G9 remain for #286.
 - Docs: `templates/orchestrator/references/lifecycle-state.md:38-41` and
   `templates/orchestrator/references/dispatch-collect.md:60-61`, if G9's `$LIVE` wording is
   corrected. That correction is a template change, rendered as usual.
@@ -226,7 +226,8 @@ never refused.
 - Commits: `8b3779c9c9c76e03f6794b5bf5cf6ffb76bd27c0`, the design `kaola-ddd/1` revision 2
   followed here. `git diff 1a2f577e 8b3779c9 --stat` touches only
   `docs/designs/ddd-component-2026-10-07/design.md`, so the `1a2f577e` source reading carries
-  over unchanged.
+  over unchanged. `7815e0b43c3143851631d437e7ce872697c23bb0` adds the G1, G2, G3, G4, G7 and
+  G8 assertions named above. G5, G6 and G9 are unchanged and belong to #286.
 - Source read: `scripts/kaola-dispatch.py` (lines cited above); `scripts/kaola-record-contract.py:156,
   203-259`; `scripts/kaola-acp.py:838-968, 2194-2203, 2268-2285`;
   `docs/designs/lifecycle-state-2026-10-04/design.md:28-37, 50, 62-73, 168-176`;
