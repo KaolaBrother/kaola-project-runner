@@ -40,7 +40,7 @@ change to it.
 | `session-runtime` | `CORE-identity`, `C1-lifecycle`, `C2-adapters`, `C3-events` | core (reliable ACP session lifecycle) |
 | `orchestration-state` | `C4-state`, `C5-dispatch`, `C6-recovery` | supporting, possibly a differentiator |
 | `build-install` | `C7-render-install` | generic |
-| `kw-model` | `C8-kw-bridge` (KW itself is external) | a separate domain model; internal context count unverified |
+| `kw-model` | `C8-kw-bridge` (the KPR-side bridge) plus KW's own candidate contexts `kw-run-lifecycle`, `kw-validation`, `kw-install-editions` | Q1 resolved: KW is several candidate contexts, not one (see the section below) |
 | `consumer-*` | VRPAI, CAD (external) | bridge record read in phase 6; consumer domain model still `[ASSUMPTION]` |
 
 ## session-runtime — `candidate`
@@ -124,17 +124,89 @@ change to it.
 - **Open question:** is C7 a separate language, or build tooling that only carries the other
   groupings' schemas? No pack touches it yet.
 
-## kw-model — `candidate` (separate model; context count unverified)
+## kw-model — `candidate` (Q1 resolved: several candidate contexts, not one)
 
-- **Evidence so far:**
-  - Separate ownership and artifacts: `workflow-state.md`, the ledger, `chain-receipt.json`
-    (`docs/designs/modular-core-2026-10-07/design.md:33`, `:52`).
-  - Multi-writer step receipts and a dual code-tree digest, unlike KPR's single-writer state
-    file (baseline §4, from in-repo research; KW source not read).
-- **Candidate relationship:** Customer-Supplier / Published Language with in-process translation
-  at C8 (baseline §4).
-- **Open question:** Q1 — is KW one context or several? This is resolved in phase 5 (#284),
-  reading KW source read-only. It is never a precondition for KPR packs or B0.
+Q1 — *is KW one context or several?* **Result: several candidate contexts, not one.** Evidence is
+a read-only source pass over Kaola-Workflow at `16cab12d41cd72818c40f3773068145b35f3f776` (`main`,
+clean tree). All three parties the map requires are recorded below. The grouping stays `candidate`:
+the exact internal count is not settled, and KW's change coupling is entangled through a shared
+kernel (see "not settled" below).
+
+- **Language — distinct vocabularies, with concrete collisions.**
+  - *Run lifecycle (claim + ledger + delivery):* claim, project, `workflow-state.md`, worktree,
+    branch, lane bucket (`mine`/`live`/`stale`/`ambiguous`), `session_marker`, `claim_ts`,
+    `main_root`, resume, `run_posture`, sink mode (`merge`/`pr`), mission,
+    `n`/`name`/`details`/`status`, frontier
+    (`KW scripts/kaola-workflow-classifier.js:430-476`,
+    `KW scripts/kaola-workflow-adaptive-schema.js:58-68`,
+    `KW docs/workflow-state-contract.md:243-303`).
+  - *Validation/evidence:* chain, edition chain, `.cache/chain-receipt.json`, `codeTreeHash`,
+    `computeCodeTreeHash` vs `computeLandableTreeDigest`, candidate binding, `repo_kind`, and the
+    typed findings `chains_green`/`chains_stale`/`chains_empty`/`chains_red`/`chains_waived`/
+    `final_validation_*` (`KW scripts/kaola-workflow-adaptive-schema.js:1124`,
+    `KW scripts/kaola-workflow-validation-runner.js:554`, `:1167-1172`,
+    `KW docs/architecture.md:198-248`).
+  - *Install/editions:* global contract, runtime-adapter registry, edition, forge, carrier, managed
+    region, routing surface, install receipt, `REMOTE_REQUIRED`
+    (`KW scripts/kaola-workflow-global-contract.js:9-13`, `KW docs/architecture.md:41-72`,
+    `KW docs/decisions/0022-machine-global-workflow-contract.md`).
+  - *Collisions (same word, different model — the DDD boundary signal):* **`stale`** is
+    `lane_bucket: stale` (resume age, `adaptive-schema.js:292`) AND `chains_stale` (chain receipt
+    vs head, `:1244`) AND `final_validation_stale` (candidate hash vs tree, `:1461`). **`receipt`**
+    names chain receipt, sink receipt (`adaptive-schema.js:867-870`), closure receipt
+    (`closure-contract.js:5-11`) and global-contract receipt (`global-contract.js:12`). KW's own
+    kernel splits durable artifacts into four record classes
+    `plan`/`claim-sink`/`evidence`/`forge` (`adaptive-schema.js:839`).
+- **Invariants / consistency boundaries — separate and separately enforced.**
+  - Ledger: one writer (the Main Orchestrator), keys exactly `n`/`name`/`details`/`status` in
+    order, three write moments, `done`/`failed` immutable, main-checkout-only, never mirrored
+    (`KW docs/decisions/0027-the-mission-ledger.md:31-47`;
+    `KW scripts/kaola-workflow-adaptive-schema.js:1664-1715`; KW suite `test-issue-1089-mission-ledger.js`).
+  - Claim/sink state: a flat claim/sink/liveness record written at claim and patched only for sink
+    and closure (`KW docs/workflow-state-contract.md:243-284`).
+  - Durable-kernel ruling: every project-folder artifact is classified
+    `record`/`derivable`/`preference`; every `record` write must use the atomic replace
+    (`KW docs/workflow-state-contract.md:12-94`; `KW scripts/kaola-workflow-adaptive-schema.js:838-911`;
+    KW suite `test-kernel-conformance.js`).
+  - Also separate: bundle coherence (`workflow-state-contract.md:336-345`), archive completeness
+    and its one hard stop (`:184-221`), the validation freshness band that excludes docs/run state
+    (`architecture.md:211-218`), and the release gate (`architecture.md:232-248`).
+- **Change coupling — measured, and entangled.**
+  - Co-change over the last 250 commits touching `KW scripts/`: `kaola-workflow-claim.js` 42,
+    `kaola-workflow-adaptive-schema.js` 17, `sink-pr.js` 13, `sink-merge.js` 11,
+    `install-manifest.js` 7, `global-contract.js` 5; `validation-runner.js` 2, `run-chains.js` 1,
+    `classifier.js` 0. The highest pair is `adaptive-schema.js` + `claim.js` (9).
+  - `kaola-workflow-adaptive-schema.js` is the byte-identical cross-edition drift anchor: every
+    constant shared by a producer and a consumer lives there (`adaptive-schema.js:4-19`), and
+    `edition-sync.js` materializes it verbatim into the plugin trees
+    (`KW docs/conventions.md:142`). That is a Shared Kernel, and it is what keeps the three
+    candidate areas from being independent.
+  - Counter-evidence to a clean split, recorded not hidden: `kaola-workflow-claim.js` is a
+    7806-line monolith that already owns selection, claim, status, worktree, finalization, archive
+    and release, so the split is real in *language and invariants* but not clean in *code*.
+
+**Candidate KW contexts (all `candidate`; the exact count is not settled):**
+
+| Candidate context | Language sketch | Consistency boundaries |
+|---|---|---|
+| `kw-model/kw-run-lifecycle` | claim, project/run, worktree, branch, lane bucket, `workflow-state.md`, mission ledger, finalize, sink, archive, closure | ledger single-writer; claim/sink/liveness; bundle coherence; archive completeness |
+| `kw-model/kw-validation` | chain, edition chain, chain receipt, candidate binding, tree digests, `repo_kind`, findings | candidate-bound receipt; freshness band; release gate |
+| `kw-model/kw-install-editions` | global contract, runtime adapters, edition, forge, carrier, routing, install receipt | one authoring source; byte-identical kernel; batch preflight; receipt-bound install/uninstall |
+
+**C8 seam relationship (Customer-Supplier / Published Language, read-only).** KPR's control-plane
+Host reads the KW mission ledger `{n,status}` projection and inspects `workflow-state.md`;
+`kw-model/C8-kw-bridge` is the KPR-side component that faces it. KW owns the schema (the global
+Workflow contract) and the write; KPR never writes. Every seam maps to a KPR suite or a named gap
+in [`packs/kw-c8-seam.md`](packs/kw-c8-seam.md).
+
+**Not settled, and what would settle it.** The *direction* (several, not one) is evidenced; the
+exact split is not. What would settle it: (1) a KW-side model/ownership statement naming its
+subsystems; (2) **function-level** (not file-level) co-change, since the `claim.js` monolith
+inflates file-level co-change between areas that are not really one model; (3) measuring each
+area's change rate as it is extracted out of `claim.js`. Not split out here: the forge/backlog
+selection shares the run's `issue`/`claim` language and the same owning script, so it stays inside
+`kw-run-lifecycle`; a finer claim-record vs ledger vs delivery split is possible but is not
+separated by a language change today.
 
 ## consumer-* (VRPAI, CAD) — `candidate`
 
