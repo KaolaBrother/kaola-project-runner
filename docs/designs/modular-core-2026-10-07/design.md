@@ -1,6 +1,6 @@
 # KPR minimal core + components — formal design draft v1 (2026-10-07)
 
-Status: DRAFT for root personal review + owner-appointed Fable convergence (one bounded round, authorized). Not a final plan; no implementation/installation authorized by this document. Research corpus: docs/research/ @97551c75; Fable final + AB addendum @c61383b2; root corrections applied in place.
+Status: REVISED DRAFT integrating ROOT'S personal technical decisions (this round) + bridge pre-review + Fable convergence v1 + addendum. Root decisions applied: Python internal package; C5 owns seat_projection semantics; KW interface = optional bridge referencing originals; pilot keeps adapters per-session; Mac supervision uses existing native service mechanisms (launchd), Linux systemd equivalently — engineering recommendations, not Owner questions; no new services created at design stage. Research corpus: docs/research/ @97551c75; Fable final + AB addendum @c61383b2; root corrections applied in place.
 
 ## 1. Current state → target
 
@@ -12,10 +12,10 @@ Target: a **minimal core** + replaceable components. **The B-line direction is A
 
 What must stay together because everything else depends on it and splitting it adds contracts without removing coupling:
 
-- **Identity model**: platform/session/holder_instance_id/native-id/repo canonicalization (`canonical`, `normalize_id`, `worker_event_id`, `holder_of`, `assignment_identity`), plus the record-dir layout and schema names (`kaola-heartbeat-prompt/2`, `kaola-delegator-heartbeat/1`, `kaola-dispatch-index/1`). ~Small; zero I/O deps.
+- **Identity model**: platform/session/holder_instance_id/native-id/repo canonicalization (`canonical`, `normalize_id`, `worker_event_id` (single owner: core; C3 consumes), `holder_of`, `assignment_identity`), plus the record-dir layout and schema names (`kaola-heartbeat-prompt/2`, `kaola-delegator-heartbeat/1`, `kaola-dispatch-index/1`). ~Small; zero I/O deps.
 - **Process facts**: pid/liveness/spawn-time/argv anchor/process-tree groups (`process_alive`, `libproc_ps`, `process_table`, `child_groups`, `spawn_time_matches`, `holder_argv_anchor`, `holder_identity` in kaola-acp.py). NOTE (accuracy): these perform real I/O — /proc+sysctl reads, unix-socket probes with timeouts; they are I/O-*narrow* (local kernel + one socket), not I/O-free. Locks serialize access; **authorization of the single writer is a separate rule** (§6a lease), not implied by the lock.
 - **Atomic state access**: `read_state_file`/`atomic_write`/`StateLock` + `kaola-record-contract.py` allowlists. Depends on identity only.
-- **Contract registry (thin)**: schema names + key allowlists + version numbers consumed by both KPR and KW (closes the Python/JS dual-implementation divergence; generated validators, conformance suites optional per module).
+- **Contract registry (thin, MINIMAL)**: version numbers + the identity/deterministic-access schemas ONLY. **Module-owned schemas register independently** — project business kinds (tasks/holds/alerts/decisions, dispatch items, KW artifacts) belong to their owning components, NOT permanently to core; KW is never forced to accept KPR's heartbeat schema or cross-repo sync. Shared-schema alignment targets ONE contract per shared artifact — the current dual code-tree digests (`computeCodeTreeHash` vs `computeLandableTreeDigest`) have DIFFERENT semantics (finalize gate vs landable-tree record) and are aligned to one contract with two named views, not erased into one function.
 
 ## 3. Components (cut along measured seams)
 
@@ -40,20 +40,24 @@ Each row: current source (function clusters with line anchors). **The auditable,
 graph TD
   CORE[Core: identity + process facts + atomic state + contract registry]
   C1[C1 lifecycle holders] --> CORE
-  C2[C2 ACP adapters] --> CORE
+  C2[C2 ACP adapters+catalog data] --> CORE
   C3[C3 events] --> C1
   C4[C4 state records] --> CORE
-  C5[C5 dispatch/admission] --> C4
+  C5[C5 dispatch/admission + seat_projection semantics] --> C4
   C5 --> C3
+  C5 -->|run_runner subprocess| C1
+  C1 -->|quota_module load| C2
+  C1 -->|compact_module load| C6
+  C1 -->|queue record| C4
   C6[C6 maintenance/recovery] --> C4
   C6 --> C3
   C7[C7 generate/install/version] --> CORE
-  KW[C8 KW bridge] --> C4
+  KW[C8 KW bridge - optional, originals referenced] --> C4
   AGT[Agent judgment] -.facts only.-> C5
   AGT -.state.-> C4
 ```
 
-No cycles; the core is the only shared substrate; C2 and C7 depend on nothing but the core (independently skippable at runtime/install time).
+Cycles: C5→C1 (subprocess start) and C1→C2-data/C1→C6 (loader reads) are REAL and stay visible — they are resolved by data/mechanics separation (C1 reads C2 catalog data and loads C6 code; neither reverses), not by hiding edges. C2 and C7 depend on nothing but the core (independently skippable at install time).
 
 ## 5. Optional install / runtime loading / subtraction
 

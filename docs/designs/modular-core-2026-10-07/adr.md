@@ -24,12 +24,12 @@ Consequences: a replaced component must pass the SAME cross-edge contract tests;
 
 ## ADR-5: No un-handed-off fallback dual-write; fencing needs a real lease
 Context: root constraint on B fencing; #273 shows identity checks are time-bounded snapshots. ACCURACY: `holder_instance_id` is a unique identity, not an ordered epoch — today's exact-stop guard compares identity equality, not seniority.
-Decision: any dual-write path (store migration, core fallback) requires an explicit handoff token: a monotonic lease epoch with acquisition, renewal, expiry and contention arbitration specified in P1 and drilled in P5; without a valid lease the older writer keeps single ownership and the newer refuses with a typed `lease-held` error.
+Decision: any dual-write path requires a RESOURCE-SCOPED handoff token: a monotonic lease epoch stored in the artifact, acquired/transferred atomically under the StateLock write (epoch compare-and-set inside the locked read-modify-write); after transfer the old writer is UNWRITABLE (typed `lease-stale` refusal). Random `holder_instance_id` is identity, never seniority; locks serialize but authorize nothing. Scope is machine-local and names its resource (state store / session control / event fan-out) explicitly.
 Consequences: brief unavailability instead of split-brain; the lease design itself is unimplemented until P1; handoff drills mandatory before any shared store. Evidence: root A/B decision; StateLock single-writer; kaola-acp.py holder guard (identity equality).
 
 ## ADR-6: Recipes bind to stable pinned sources only
 Context: AI event 105633 — the consumer sideagent recipe's `runner`/`state_tool` named the MUTABLE DEV checkout; a dev render changed the adjacent main-skill-build the skew baseline read, so the consumer's build-skew check refused a legal release (expected 4868c8b6 vs installed 0eeb0db6; installs and the accepted checkout were verified untouched). Not a capacity-incident artifact.
-Decision: recipe sources must name installed Skill roots or verified accepted checkouts (guidance shipped in sideagent-node.md @93662173); bind-time source verification that refuses mutable-dev sources is a P3 candidate with a negative fixture, not implemented.
+Decision: consumers bind to accepted deployments (installed roots / verified accepted checkouts) — stability by construction; bind-time verification is a P3 candidate with a negative fixture. Legal development runtimes get an EXPLICIT ISOLATION MODE (a knowingly-dev Host is not refused): the policy targets consumer-binding drift, not a global mutable-dev refusal; no new global transport gate.
 Consequences: dev checkouts never become implicit consumer dependencies. Evidence: AI event 105633 (recipe readback + main-skill-build expected/installed deltas); stable accepted checkout kaola-project-runner-accepted @3de9f61 (installed build 0eeb0db6, verified).
 
 ## ADR-7: KW is an optional module sharing runtime norms, never merged repos
