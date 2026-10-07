@@ -2948,6 +2948,36 @@ class DispatchEntry(unittest.TestCase):
         self.assertEqual(view["source"]["live"], str(stub.resolve()))
         self.assertIsNotNone(view["observed_elite_expert"])
 
+    def test_seats_resolve_direct_runner_started_preset_without_index_or_skills_root(self):
+        dispatch = self.installed_dispatch("droid")
+        install_fake(self.skills, ["droid"])
+        session = "droid-KT-i568-loop-diagnosis"
+        repo = str(self.repo)
+        list_stub = self.skills / "droid-kaola-project-runner" / "scripts" / "kaola-acp.py"
+        list_stub.write_text(textwrap.dedent(f"""\
+            import json, sys
+            repo = sys.argv[sys.argv.index("--repo") + 1]
+            print(json.dumps({{"schema": "kaola-acp-list/1", "rows": [{{
+                "repo": repo, "identity": "verified", "holder_instance_id": "stub-holder",
+                "platform": "droid", "session": {session!r}, "state": "ready"}}]}}))
+            """), encoding="utf-8")
+        list_stub.chmod(0o644)
+        status = {**started(repo, "claude-opus-5-5", "high", holder="stub-holder"),
+                  "session": session}
+        self.use_spec({session: {"status": status}})
+        auth = self.authorization([{"id": "droid/opus", "state": "granted", "count": 1}])
+        proc = subprocess.run(
+            [sys.executable, str(dispatch), "project", "--seats", "--repo", repo,
+             "--authorization", str(auth), "--platforms", str(PLATFORMS)],
+            capture_output=True, text=True, env=self.env)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        view = json.loads(proc.stdout)
+        self.assertEqual(view["source"]["live"], str(list_stub.resolve()))
+        self.assertEqual(view["sessions"][0]["preset"], "droid/opus")
+        self.assertEqual(view["grants"][0]["observed_live"], 1)
+        self.assertNotIn("preset-unknown:" + session, view["unknown_reasons"])
+        self.assertEqual([call["command"] for call in commands(self.log)], ["status"])
+
     def test_seats_explicit_skills_root_governs_and_is_not_replaced_by_another(self):
         dispatch = self.installed_dispatch("zcode")
         empty = self.root / "empty-skills"

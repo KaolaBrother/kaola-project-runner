@@ -39,6 +39,11 @@ Seats: restart required
   pending Host changes, including a failed batch's range, with a Host recovery
   request, so recovery needs no fake business write. Restart Host seats at a
   safe boundary to load the holder change.
+- **Direct-seat preset attribution (Issue #288).** `project --seats` now uses
+  sibling Runner status records to resolve the applied model and effort when
+  a live seat was started directly and no dispatch-index assignment exists.
+  The seat query infers the installed Runner root when `--skills-root` is
+  omitted; explicit roots remain authoritative.
 
 ## 0.9.1 — 2026-10-07 (compaction recovery, steer adaptations, launch broker, task-failure count, selection continuity)
 

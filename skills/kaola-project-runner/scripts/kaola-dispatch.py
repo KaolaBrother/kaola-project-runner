@@ -597,6 +597,7 @@ def seat_projection(args: argparse.Namespace, auth: dict[str, Any],
     repo = str(Path(args.repo).resolve())
     unknown: list[str] = []
     skills = Path(args.skills_root) if args.skills_root else None
+    status_skills = seat_status_skills_root(Path(__file__), skills)
     try:
         rows, state = live_facts(args.live, repo, Path(__file__), skills)
     except ValueError as exc:
@@ -633,7 +634,7 @@ def seat_projection(args: argparse.Namespace, auth: dict[str, Any],
             continue
         bound.append(row)
     resolved = resolve_live_presets(bound, repo, catalog, items,
-                                   Path(args.skills_root) if args.skills_root else None,
+                                   status_skills,
                                    require_identity=True)
     used, elite, shared, unnamed = live_occupancy(bound, repo, catalog, grants, resolved)
     unknown.extend("preset-unresolved:" + grant["id"] for grant in grants if grant["id"] not in catalog)
@@ -2217,6 +2218,21 @@ def acp_runner(script: Path, skills_root: Path | None) -> Path | None:
         return beside
     found = sorted(script.resolve().parent.parent.parent.glob("*-kaola-project-runner/scripts/kaola-acp.py"))
     return found[0] if found else None
+
+
+def seat_status_skills_root(script: Path, skills_root: Path | None) -> Path | None:
+    """Find sibling platform status runners when a seat view omits --skills-root."""
+    if skills_root is not None:
+        return skills_root
+    runner = acp_runner(script, None)
+    roots = []
+    if runner is not None:
+        roots.append(runner.resolve().parents[2])
+    roots.append(script.resolve().parent.parent / "skills")
+    for root in roots:
+        if root.is_dir() and any(root.glob("*-kaola-project-runner/scripts/runtime-tmux.sh")):
+            return root
+    return None
 
 
 def live_facts(path: str | None, repo: str, script: Path,
