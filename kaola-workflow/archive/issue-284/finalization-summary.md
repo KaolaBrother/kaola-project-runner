@@ -88,3 +88,9 @@ Paths left in the main checkout:
 - docs/harness-acp-compat-2026-10-06.md
 - docs/harness-acp-reverify-2026-10-01.md
 
+## Sink Findings
+
+post_rebase_tests: skipped
+
+archived_paths:
+- kaola-workflow/archive/issue-284/finalization-summary.md
