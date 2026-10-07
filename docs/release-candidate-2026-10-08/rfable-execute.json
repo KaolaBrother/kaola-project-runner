@@ -1,0 +1,124 @@
+{
+  "correlation_only": true,
+  "coverage": {
+    "failed": [],
+    "in-flight": [
+      "i-fable-final-review"
+    ],
+    "not-run": [],
+    "returned": [],
+    "unknown": []
+  },
+  "dispatcher": {
+    "holder_instance_id": "a3aac555065cbe4fa7e35e5ceac28d77",
+    "platform": "zcode",
+    "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+    "session": "zcode-KPR-orchestrator-main"
+  },
+  "index_path": "/tmp/rfable-index.json",
+  "items": [
+    {
+      "acceptance": "pending",
+      "dispatch_event_cursor": 14,
+      "dispatcher": {
+        "holder_instance_id": "a3aac555065cbe4fa7e35e5ceac28d77",
+        "platform": "zcode",
+        "session": "zcode-KPR-orchestrator-main"
+      },
+      "evidence": {
+        "send": {
+          "acp_session_id": "738f83d517adb4e0785459ef1d398343",
+          "dispatch_event_cursor": 14,
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": "in_progress",
+          "outcome": "in_progress",
+          "prompt_fingerprint": "sha256:fe8bd111bc431a68cf3552c894e6a07d2cd7adb615769185e5c6d351b3ee8ff6",
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "start": {
+          "acp_session_id": "738f83d517adb4e0785459ef1d398343",
+          "dispatch_event_cursor": null,
+          "exit_code": 0,
+          "holder_instance_id": "5d9d225878f599572305f7ee66b90198",
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        },
+        "status": {
+          "acp_session_id": null,
+          "dispatch_event_cursor": null,
+          "error_code": "no-session",
+          "exit_code": 0,
+          "holder_instance_id": null,
+          "mutation_status": null,
+          "outcome": null,
+          "prompt_fingerprint": null,
+          "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+          "result": null
+        }
+      },
+      "holder_instance_id": "5d9d225878f599572305f7ee66b90198",
+      "item_id": "i-fable-final-review",
+      "notify_target": {
+        "platform": "zcode",
+        "session": "zcode-KPR-orchestrator-main"
+      },
+      "output": "/tmp/kpr-fable-final-review.md",
+      "platform": "claude-code",
+      "preset": "claude-code/fable",
+      "prompt_fingerprint": "sha256:fe8bd111bc431a68cf3552c894e6a07d2cd7adb615769185e5c6d351b3ee8ff6",
+      "prompt_sha256": "sha256:fe8bd111bc431a68cf3552c894e6a07d2cd7adb615769185e5c6d351b3ee8ff6",
+      "prompt_source": {
+        "kind": "full",
+        "prompt_sha256": "sha256:fe8bd111bc431a68cf3552c894e6a07d2cd7adb615769185e5c6d351b3ee8ff6"
+      },
+      "reason": "admitted",
+      "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+      "selection": {
+        "advertised": {
+          "effort": "high",
+          "model_id": "fable"
+        },
+        "advertised_source": "effective_selection",
+        "applied": {
+          "effort": "high",
+          "model_id": "fable"
+        },
+        "applied_state": {
+          "effort": "applied",
+          "model_id": "applied"
+        },
+        "comparison": "match",
+        "fields": {
+          "effort": {
+            "advertised": "match",
+            "applied": "match"
+          },
+          "model_id": {
+            "advertised": "match",
+            "applied": "match"
+          }
+        },
+        "requested": {
+          "effort": "high",
+          "model_id": "fable",
+          "preset": "claude-code/fable",
+          "tier": "fable"
+        },
+        "source": "config_application"
+      },
+      "session": "claude-code-KPR-fable-final-review",
+      "status": "in-flight",
+      "task_id": "kpr-a-release-candidate"
+    }
+  ],
+  "occupancy": "known",
+  "phase": "admission",
+  "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+  "schema": "kaola-dispatch-index/1",
+  "scope": "qa"
+}

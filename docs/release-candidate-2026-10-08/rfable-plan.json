@@ -1,0 +1,16 @@
+{
+ "schema": "kaola-dispatch-plan/1",
+ "repo": "/Users/ylmacstudio/Workspace/kaola-project-runner",
+ "scope": "qa",
+ "items": [
+  {
+   "item_id": "i-fable-final-review",
+   "task_id": "kpr-a-release-candidate",
+   "platform": "claude-code",
+   "preset": "claude-code/fable",
+   "session": "claude-code-KPR-fable-final-review",
+   "prompt": "KPR release-candidate final review (thinking/review only; standing Fable scope). Read /tmp/kpr-fable-final-review-brief.md fully and perform exactly what it says: read-only adjudication of the fixed candidate P2 57550098 (worktree /tmp/kpr-release-candidate), the three R2 test corrections vs their merged #274/#278 contract sources, the QA receipt chain, and the release boundary. You write exactly one file: /tmp/kpr-fable-final-review.md (per-item verdicts with file:line/commit evidence, gaps, final line 'FINAL: PASS' or 'FINAL: FAIL — reason'). No repo writes, no publish, no install, no mutations anywhere. Reply with exactly: FABLE-REVIEW-DONE /tmp/kpr-fable-final-review.md and nothing else.",
+   "output": "/tmp/kpr-fable-final-review.md"
+  }
+ ]
+}
