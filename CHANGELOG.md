@@ -44,6 +44,29 @@ Seats: restart required
   a live seat was started directly and no dispatch-index assignment exists.
   The seat query infers the installed Runner root when `--skills-root` is
   omitted; explicit roots remain authoritative.
+- **Dead-holder stop keeps the expected-holder check (Issue #289).** A `stop`
+  whose holder pid is already dead, including the `holder-unreachable` race,
+  refuses a foreign `--expected-holder-instance-id` with the same
+  `holder-instance-mismatch` receipt as a silent live holder
+  (`mutation_status: not_started`, `mutation_performed: false`) and writes one
+  `holder_instance_mismatch` event. The record and processes stay unchanged.
+  A matching id, or none, still sweeps the identity-verified recorded groups
+  without `--force`. The silent live `--force` path writes that same event.
+  This change is `scripts/kaola-acp.py` only, outside the operator test in
+  `docs/conventions.md` (`scripts/kaola-acp.py` is not in that diff). A running
+  seat loads the Runner on the next `stop`, so this change is `Seats: restart
+  not required`. The Unreleased section stays `Seats: restart required` because
+  #278 changed the holder path helper.
+- **Multi-index dispatch close-out (Issue #290).** `state retire --kind
+  tasks` accepts a repeatable `--index`, so a done+accepted task whose items
+  were dispatched by more than one `execute` run (separate
+  `kaola-dispatch-index/1` files) retires once every item is closed and every
+  seat is stopped. Every supplied file must still pass the index identity
+  check, and every dispatch ref must be found in exactly one supplied index:
+  a ref in no file is still named open, and a ref in two files is refused.
+  The index mirror writes each supplied file. No hand-merged index, forced
+  removal or tombstone. This entry alone is state tooling only; the section
+  restart comes from the #278 holder change.
 
 ## 0.9.1 — 2026-10-07 (compaction recovery, steer adaptations, launch broker, task-failure count, selection continuity)
 

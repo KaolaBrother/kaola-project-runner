@@ -1869,6 +1869,65 @@ def holder_lost_receipt(args: argparse.Namespace, repo: str,
     return receipt
 
 
+def _holder_event_log(path: Path):
+    """The holder's ``EventLog``, so a refused stop writes its event."""
+    module = getattr(_holder_event_log, "module", None)
+    if module is None:
+        spec = importlib.util.spec_from_file_location(
+            "kaola_acp_holder_stop_event", HOLDER)
+        module = importlib.util.module_from_spec(spec)
+        previous = sys.dont_write_bytecode
+        sys.dont_write_bytecode = True
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.dont_write_bytecode = previous
+        _holder_event_log.module = module
+    return module.EventLog(path)
+
+
+def append_holder_instance_mismatch(directory: Path | None, op: str,
+                                    expected: Any) -> None:
+    """One ``holder_instance_mismatch`` line, the object a live holder appends."""
+    if directory is None:
+        return
+    try:
+        _holder_event_log(directory / "events.jsonl").append({
+            "kind": "holder_instance_mismatch",
+            "op": op,
+            "expected_holder_instance_id": expected,
+        })
+    except OSError:
+        pass
+
+
+def holder_instance_mismatch_receipt(args: argparse.Namespace, repo: str,
+                                     directory: Path | None,
+                                     record: dict[str, Any], params: dict[str, Any],
+                                     op: str) -> dict[str, Any] | None:
+    """Refuse a stop that names a holder instance other than the record's.
+
+    Same typed mismatch as a live holder whose socket is silent: code
+    ``holder-instance-mismatch``, both ids, ``mutation_status``
+    ``not_started``, and ``mutation_performed`` false. One
+    ``holder_instance_mismatch`` event is written. The record and every
+    process stay as they were. An omitted expected id is not a mismatch.
+    """
+    expected = params.get("expected_holder_instance_id")
+    actual = record.get("holder_instance_id")
+    if expected is None or expected == actual:
+        return None
+    append_holder_instance_mismatch(directory, op, expected)
+    receipt = base_receipt(args, repo)
+    receipt["error"] = {
+        "code": "holder-instance-mismatch",
+        "expected_holder_instance_id": expected,
+        "holder_instance_id": actual,
+    }
+    receipt.update(mutation_status="not_started", mutation_performed=False)
+    return receipt
+
+
 def op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
                       op: str, params: dict[str, Any],
                       timeout: float | None) -> dict[str, Any]:
@@ -1876,6 +1935,10 @@ def op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
     record = read_record(directory)
     if record and not pid_alive(record.get("holder_pid")):
         if op == "stop":
+            refused = holder_instance_mismatch_receipt(
+                args, repo, directory, record, params, op)
+            if refused is not None:
+                return refused
             return force_kill_from_record(args, repo, record)
         return holder_lost_receipt(args, repo, record)
     if not sock.exists():
@@ -1898,6 +1961,10 @@ def op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
     if response.get("error", {}).get("code") == "holder-unreachable":
         if record and not pid_alive(record.get("holder_pid")):
             if op == "stop":
+                refused = holder_instance_mismatch_receipt(
+                    args, repo, directory, record, params, op)
+                if refused is not None:
+                    return refused
                 return force_kill_from_record(args, repo, record)
             return holder_lost_receipt(args, repo, record)
         if record and op == "stop" and params.get("force"):
@@ -2232,7 +2299,13 @@ def preserve_refusal(args: argparse.Namespace, repo: str, directory: Path) -> di
 
 def force_kill_from_record(args: argparse.Namespace, repo: str,
                            record: dict[str, Any]) -> dict[str, Any]:
-    """stop --force path when the holder is already gone."""
+    """Sweep a dead holder's identity-verified recorded groups.
+
+    ``stop`` reaches this when the record's holder pid is already dead,
+    with or without ``--force``. A foreign ``expected_holder_instance_id``
+    is refused before this runs. Live members of the verified groups are
+    SIGKILLed. ``--force`` is not required for that sweep.
+    """
     groups = recorded_groups(record, spawn_record_dir(args, repo), verified_only=True,
                              preserve_dispatched=preserving(args))
     unverified = unverified_agent_group(record, groups)
@@ -2300,13 +2373,10 @@ def force_stop_unreachable(args: argparse.Namespace, repo: str, directory: Path,
     ``status`` reads ``no-session``. An unreadable argv refuses."""
     receipt = base_receipt(args, repo)
     holder_pid = record.get("holder_pid")
-    expected = params.get("expected_holder_instance_id")
-    if expected is not None and expected != record.get("holder_instance_id"):
-        receipt["error"] = {"code": "holder-instance-mismatch",
-                            "expected_holder_instance_id": expected,
-                            "holder_instance_id": record.get("holder_instance_id")}
-        receipt.update(mutation_status="not_started", mutation_performed=False)
-        return receipt
+    refused = holder_instance_mismatch_receipt(
+        args, repo, directory, record, params, "stop")
+    if refused is not None:
+        return refused
     anchor = holder_argv_anchor(holder_pid, directory)
     if anchor is None:
         receipt["error"] = {"code": "holder-unreachable",

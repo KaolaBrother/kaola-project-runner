@@ -287,5 +287,175 @@ class RetireInput(unittest.TestCase):
         self.assertNotIn("t1", self.doc()["state"]["tasks"])
 
 
+class MultiIndexRetire(unittest.TestCase):
+    """Issue #290: a task dispatched by two execute runs must retire.
+
+    Real run: task `kpr-ddd-component` had `i280-ddd-pilot` in its first
+    index and `i281`..`i285` in a later one; every item was closed and every
+    seat stopped, yet `state retire` read exactly one required `--index`, so
+    the other file's refs were reported missing. Retire now takes a repeatable
+    `--index`; every supplied file still passes `index_identity_problem`, and
+    every dispatch ref must be found in exactly one supplied index. No
+    hand-merged index, forced removal or tombstone.
+
+    Every ``test_regression_`` case fails on main (the second ``--index``
+    overwrites the first) and passes with the fix."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory(prefix="kpr-i290-")
+        self.repo = Path(self.tmp.name) / "consumer"
+        (self.repo / ".kaola").mkdir(parents=True)
+        (self.repo / "README.md").write_text("retire evidence\n", encoding="utf-8")
+        self.file = self.repo / ".kaola" / "heartbeat-prompt.json"
+        code, out = run(["state", "init", "--file", str(self.file), "--writer", "host",
+                         "--source", "turn-1", "--project", json.dumps({"code": "KT", "goal": "ship"}),
+                         "--authorization", json.dumps(AUTH)])
+        self.assertEqual(code, 0, out)
+        self.live = self.repo / "live.json"
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def state(self, action: str, *args: str) -> tuple[int, dict]:
+        return run(["state", action, "--file", str(self.file), "--writer", "host",
+                    "--source", "evt", *args])
+
+    def doc(self) -> dict:
+        return json.loads(self.file.read_text(encoding="utf-8"))
+
+    def state_bytes(self) -> bytes:
+        return self.file.read_bytes()
+
+    def add_task(self, refs: list[str], dispositions: dict | None = None) -> str:
+        patch = {**ACCEPTED, "dispatch": list(refs)}
+        if dispositions is not None:
+            patch["dispositions"] = dispositions
+        code, out = self.state("update", "--kind", "tasks", "--id", "t1", "--set", json.dumps(patch))
+        self.assertEqual(code, 0, out)
+        return str(self.doc()["state"]["tasks"]["t1"]["rev"])
+
+    def write_index(self, name: str, items: list[dict], repo: str | None = None) -> Path:
+        path = self.repo / name
+        path.write_text(json.dumps({"schema": "kaola-dispatch-index/1",
+                                    "repo": repo if repo is not None else str(self.repo),
+                                    "items": items}), encoding="utf-8")
+        return path
+
+    def write_live(self, rows: list[dict]) -> Path:
+        self.live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": rows}),
+                             encoding="utf-8")
+        return self.live
+
+    def row(self, item_id: str, status: str, session: str, **extra) -> dict:
+        return {"item_id": item_id, "status": status, "session": session, **extra}
+
+    def reconcile_row(self, item_id: str, session: str, holder: str, task_id: str = "t1") -> dict:
+        """The pilot's `unknown`/`fingerprint-differs` row with its accepted
+        same-holder collect evidence, exactly the shape retire reconciles."""
+        return {
+            "item_id": item_id, "status": "unknown", "reason": "fingerprint-differs",
+            "session": session, "task_id": task_id, "repo": str(self.repo), "platform": "zcode",
+            "holder_instance_id": holder,
+            "evidence": {"collect_status": {
+                "holder_instance_id": holder, "mutation_status": "completed",
+                "outcome": "stopped", "repo": str(self.repo)}},
+        }
+
+    def stopped_live_row(self, session: str, holder: str | None = None) -> dict:
+        row = {"session": session, "state": "stopped", "platform": "zcode", "repo": str(self.repo)}
+        if holder is not None:
+            row["holder_instance_id"] = holder
+        return row
+
+    def retire(self, rev: str, *extra: str) -> tuple[int, dict]:
+        return run(["state", "retire", "--file", str(self.file), "--writer", "host",
+                    "--source", "s", "--kind", "tasks", "--id", "t1", "--expect-rev", rev,
+                    "--evidence", "original close-out evidence", "--cite", CITE, *extra])
+
+    def test_regression_a_task_split_across_two_indices_retires(self) -> None:
+        rev = self.add_task(["i1", "i2"])
+        a = self.write_index("idx-a.json", [self.row("i1", "returned", "codex-KT-i1-a")])
+        b = self.write_index("idx-b.json", [self.row("i2", "returned", "codex-KT-i2-a")])
+        self.write_live([self.stopped_live_row("codex-KT-i1-a"),
+                         self.stopped_live_row("codex-KT-i2-a")])
+        code, out = self.retire(rev, "--index", str(a), "--index", str(b), "--live", str(self.live))
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("t1", self.doc()["state"]["tasks"])
+        self.assertFalse(self.doc()["state"].get("retired"))
+        for path in (a, b):
+            rows = {row["item_id"]: row for row in json.loads(path.read_text())["items"]}
+            self.assertEqual(rows[next(iter(rows))]["acceptance"], "accepted", path)
+        mirror = out.get("index_mirror")
+        self.assertIsInstance(mirror, list, "several supplied indices report one mirror each")
+        self.assertEqual([entry["changed"] for entry in mirror],
+                         [{"i1": "accepted"}, {"i2": "accepted"}], out)
+
+    def test_regression_the_kpr_ddd_component_shape_retires(self) -> None:
+        refs = ["i280-ddd-pilot", "i281", "i282", "i283", "i284", "i285"]
+        rev = self.add_task(refs, dispositions={ref: "accepted" for ref in refs})
+        holder = "h-phase2"
+        a = self.write_index("kpr-280-index.json", [
+            self.row("i280-ddd-pilot", "returned", "zcode-KT-i280-a")])
+        phase2 = [self.reconcile_row(f"i{n}", f"zcode-KT-i{n}-a", holder) for n in range(281, 285)]
+        phase2.append(self.row("i285", "returned", "zcode-KT-i285-a"))
+        b = self.write_index("kpr-ddd-phase2-index.json", phase2)
+        live = [self.stopped_live_row("zcode-KT-i280-a")]
+        live += [self.stopped_live_row(f"zcode-KT-i{n}-a", holder) for n in range(281, 285)]
+        live.append(self.stopped_live_row("zcode-KT-i285-a"))
+        self.write_live(live)
+        code, out = self.retire(rev, "--index", str(a), "--index", str(b), "--live", str(self.live))
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("t1", self.doc()["state"]["tasks"])
+        stone = out["value"]
+        self.assertEqual(sorted(entry["item_id"] for entry in stone["reconciled_dispatch"]),
+                         ["i281", "i282", "i283", "i284"], "the unknown rows reconciled, not dropped")
+
+    def test_regression_a_ref_in_two_indices_is_refused(self) -> None:
+        rev = self.add_task(["i1"])
+        a = self.write_index("idx-a.json", [self.row("i1", "returned", "codex-KT-i1-a")])
+        b = self.write_index("idx-b.json", [self.row("i1", "returned", "codex-KT-i1-a")])
+        self.write_live([self.stopped_live_row("codex-KT-i1-a")])
+        before = self.state_bytes()
+        code, out = self.retire(rev, "--index", str(a), "--index", str(b), "--live", str(self.live))
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("more than one supplied index", out["detail"], out)
+        self.assertIn("exactly one --index file", out["detail"], out)
+        self.assertEqual(self.state_bytes(), before, "a refused retire writes no state byte")
+
+    def test_regression_a_ref_absent_from_every_index_still_refuses(self) -> None:
+        rev = self.add_task(["i1", "i2"])
+        a = self.write_index("idx-a.json", [self.row("i1", "returned", "codex-KT-i1-a")])
+        b = self.write_index("idx-b.json", [])
+        self.write_live([self.stopped_live_row("codex-KT-i1-a")])
+        before = self.state_bytes()
+        code, out = self.retire(rev, "--index", str(a), "--index", str(b), "--live", str(self.live))
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("i2 is not in the index", out["detail"], out)
+        self.assertEqual(self.state_bytes(), before, "a refused retire writes no state byte")
+
+    def test_regression_a_foreign_index_among_several_is_refused(self) -> None:
+        rev = self.add_task(["i1", "i2"])
+        a = self.write_index("idx-a.json", [self.row("i1", "returned", "codex-KT-i1-a")])
+        foreign = self.write_index("foreign.json", [self.row("i2", "returned", "codex-KT-i2-a")],
+                                   repo="/elsewhere")
+        self.write_live([self.stopped_live_row("codex-KT-i1-a"),
+                         self.stopped_live_row("codex-KT-i2-a")])
+        before = self.state_bytes()
+        code, out = self.retire(rev, "--index", str(a), "--index", str(foreign), "--live", str(self.live))
+        self.assertEqual((code, out.get("result"), out.get("reason")),
+                         (2, "refused", "index-unidentified"), out)
+        self.assertIn("/elsewhere", out["detail"], out)
+        self.assertEqual(self.state_bytes(), before, "an unidentified index writes no state byte")
+
+    def test_guard_one_index_keeps_the_single_object_mirror(self) -> None:
+        rev = self.add_task(["i1"])
+        a = self.write_index("idx-a.json", [self.row("i1", "returned", "codex-KT-i1-a")])
+        self.write_live([self.stopped_live_row("codex-KT-i1-a")])
+        code, out = self.retire(rev, "--index", str(a), "--live", str(self.live))
+        self.assertEqual(code, 0, out)
+        self.assertIsInstance(out["index_mirror"], dict, "one index keeps the existing result shape")
+        self.assertEqual(out["index_mirror"]["changed"], {"i1": "accepted"})
+
+
 if __name__ == "__main__":
     unittest.main()

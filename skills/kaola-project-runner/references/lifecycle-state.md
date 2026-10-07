@@ -36,9 +36,9 @@ The Host gets outcomes, capacity and pending decisions.
 - `$S update --section project|authorization|sideagent|recovery|unverified
   --expect-revision N --set PATCH`: first three Host-only.
 - `$S retire --kind K --id ID --expect-rev N --evidence REF [--outcome T]
-  [--index I --live L] [--handoff TASK]`: a task needs verdict `accepted` or
-  `cancelled`, dispatch items closed and seats stopped, or handed to a
-  continuing `TASK`. `L` is `list --repo --include-dead` rows.
+  [--index I ... --live L] [--handoff TASK]`: needs verdict `accepted` or
+  `cancelled`, items closed, seats stopped, or handed off. `L` is
+  `list --repo --include-dead` rows; repeat `--index`, each ref in one file.
 - `$S view --role host|sideagent|delegator [--repo ROOT]` (read-only).
 - `$S checkpoint`, `update --index`: [sideagent-node.md](sideagent-node.md).
 - `$S check [--index I] [--live L] [--repo R]`: read-only problems such as

@@ -312,6 +312,7 @@ python_suites_all=(
   "test-issue-268-selection-continuity.py"
   "test-issue-273-list-identity.py"
   "test-issue-278-record-root.py"
+  "test-issue-289-dead-holder-stop.py"
   "test-issue-274-package-closure.py"
   "test-issue-271-dispatch-help.py"
   "test-issue-264-validate-lane-integrity.py"
@@ -413,6 +414,7 @@ python_suites_b=(
   "test-issue-259-record-contract.py"
   "test-ddd-pack.py"
   "test-issue-278-record-root.py"
+  "test-issue-289-dead-holder-stop.py"
 )
 
 # Selectable shell contract suites: they run serially before the Python lanes.
