@@ -60,8 +60,17 @@ change to it.
     [`packs/c4-state-retire.md`](packs/c4-state-retire.md#dependency-contracts). The default
     `list` omits a stopped seat, so only `list --include-dead` proves a stop to `state retire`,
     and no suite crosses that edge.
-- **Open question:** CORE identity, C1, C2 and C3 are grouped by vocabulary only. Their invariants
-  and change coupling have not been recorded.
+- **Second pack, C1 exact stop** ([`packs/c1-exact-stop.md`](packs/c1-exact-stop.md), at
+  `4c30b71d`, source identical to `8b3779c9`):
+  - C1 and CORE-identity invariants are now recorded: an exact stop is refused before any change
+    (I1), and only identity-proven processes are signalled (I2).
+  - The C1 "retire" meaning is confirmed again (`scripts/kaola-acp.py:2194-2203`).
+  - "stopped" has more than one meaning inside C1. The meaning of the receipt key depends on
+    the path, and the record `state` is a separate use (pack I4).
+  - New seam gaps: S1/S2, where the dead-holder stop skips the instance check and sweeps
+    without `--force` (measured), and S3, where the C1 → C3 mismatch event is unasserted.
+- **Open question:** C2 and C3 are still grouped by vocabulary only. C1's invariants are in the
+  second pack. Change coupling has not been recorded for any session-runtime component.
 
 ## orchestration-state — `candidate`
 
@@ -104,7 +113,8 @@ change to it.
     share one file. Function-level co-change history was not analysed.
 - **Open question:** C6 (recovery) writes into the same state file (the C4 namespace) and uses
   `recovery#<seq>` inputs (pilot I9). Is C6 the same language too? It was not examined beyond
-  the two retire seams. Phase 4's second pack, or a C6 pack, would be the place to check.
+  the two retire seams. Phase 4's second pack crosses C6 only at the carrier's node reclaim
+  (`c1-exact-stop` I7) and did not examine C6's language. A C6 pack is still the place to check.
 
 ## build-install — `candidate`
 

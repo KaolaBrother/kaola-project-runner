@@ -1,6 +1,8 @@
 # Optional DDD context packs (`kaola-ddd/1`)
 
-Status: phase 1 of [#280](https://github.com/KaolaBrother/kaola-project-runner/issues/280).
+Status: phase 1 of [#280](https://github.com/KaolaBrother/kaola-project-runner/issues/280); phase 4
+([#283](https://github.com/KaolaBrother/kaola-project-runner/issues/283)) adds a second pack and the
+Host usage decision.
 Documentation only. Design: [`docs/designs/ddd-component-2026-10-07/design.md`](../designs/ddd-component-2026-10-07/design.md)
 revision 2 at `8b3779c9c9c76e03f6794b5bf5cf6ffb76bd27c0`. Method baseline:
 [`docs/research/i279-ddd-method.md`](../research/i279-ddd-method.md) (§4, §5, §6b), accepted as a
@@ -17,6 +19,8 @@ KPR, Kaola-Workflow and consumers keep working exactly as before.
 | [`context-map.md`](context-map.md) | `map_schema: kaola-ddd-map/1` | Candidate groupings with their evidence and open questions |
 | [`packs/<pack-id>.md`](packs/) | `pack_schema: kaola-ddd-pack/1` | One context pack per work unit |
 | [`packs/c4-state-retire.md`](packs/c4-state-retire.md) | `kaola-ddd-pack/1` | Pilot pack: C4 state "retire a record" |
+| [`packs/c1-exact-stop.md`](packs/c1-exact-stop.md) | `kaola-ddd-pack/1` | Second pack: C1 lifecycle "exact-stop a seat" |
+| [`host-usage-decision.md`](host-usage-decision.md) | — | Phase 4 decision on an optional Skill pointer (none added) |
 
 ## Pack schema `kaola-ddd-pack/1`
 
@@ -145,8 +149,9 @@ automatically, at any scale.
 - `tests/contract/test-ddd-pack.py` and its line in the `validate.sh` inventory;
 - any optional Skill pointer added in phase 4.
 
-Each of these is removed only if a later phase actually added it. Phase 1 adds none of them, so
-for phase 1 the default uninstall is a no-op.
+Each of these is removed only if a later phase actually added it. Phase 1 adds none of them, and
+phase 4 adds no Skill pointer ([decision](host-usage-decision.md)), so for both the default
+uninstall is a no-op.
 
 **The current `docs/ddd/` documents stay in the working tree.** Deleting them is a separate action,
 taken only when the user asks for it. The fact that Git history keeps old versions is not a
