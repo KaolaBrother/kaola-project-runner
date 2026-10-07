@@ -74,3 +74,23 @@ Contract inheritance (owner clarification): composable optional modules inherit 
 - Owner-name resolutions unconfirmed by owner; "KWL" expansion unknown.
 - The transient `state-missing` cause remains unexplained (hypothesis only).
 - Maintenance snapshots are fetch-day reads (2026-10-07), not continuous monitoring.
+
+---
+
+## 7. Source-inspection appendix (v3, 2026-10-07 — read-only GitHub pages/raw/registry; no installs/clones)
+
+**KPR locator self-verification** (bridge concern settled with evidence): `scripts/kaola-acp.py:666` is the docstring "The one presence decision for preflight and for the pre-spawn refusals ``start`` and ``drain-restart`` share"; `:3068` the `rebind-host` refusal receipt; `scripts/kaola-dispatch.py:666` is unrelated (`seat_projection` emit). The draft v2 locators were correct; quoted here so the match is self-evident.
+
+**Pi** ([earendil-works/pi](https://github.com/earendil-works/pi); MIT; pushed 2026-10-06; 112,996 stars; branch `main`):
+- `packages/chord` = `@earendil-works/chord`, "an application-composition runtime for systems assembled from plugins/extensions" (README). Actual `src/`: `api.ts, bundler.ts, index.ts, json.ts, node.ts, types.ts` + modules `context/ delta/ facets/ node/ services/`; `test/`, `PLANNING.md`. Interface-level reading still not done (files listed, contents unread) — remaining limit.
+- `packages/durable` = `@earendil-works/pi-durable` — "A durable agent harness. Conversations, model turns, tool calls, and your own state are committed to storage **before anything is shown**"; **built on `@earendil-works/pi-ai` and `@earendil-works/chord`** (dependency direction verified). Exported surface (README): `Harness` (`open/root/resume/submit/configure/abort/reset/compact/fork/watch/viewState/taskGraph/usage/waitForTask/watchDoc`), `MemoryStorage`, `createRegistry`, `defineExtension/defineTool/defineDoc`, `wrapTool`, task kinds (`ToolTask/GenerationTask/CompactionTask`), **pluggable storage backends** (`openNodeSqliteStorage`, `openNodeJsonlStorage`, `openDurableObjectSqliteStorage`), and **conformance registrations** (`registerStorageConformance`, `registerEnvConformance`) — the contracts+conformance pattern is now verified in the package's own declared API, not just README prose. Marked experimental by its README.
+
+**Paseo** ([getpaseo/paseo](https://github.com/getpaseo/paseo); Apache-2.0; 5,735 commits): `plugins/` actually contains per-agent `*-usage-source` plugins (claude/codex/copilot/cursor/grok/kimi/minimax/opencode-go/zai) plus `antigravity-provider` and `muse-provider` — real plugin kinds ("usage-source", "provider"), inferred from directory names; individual plugin extension-point code not opened (limit). Daemon = `packages/server` (orchestration, WebSocket API, MCP server) per package map.
+
+**T3 Code** ([pingdotgg/t3code](https://github.com/pingdotgg/t3code); MIT; pnpm TS monorepo): top level `apps/ packages/ native/ infra/relay …`; supporting agents listed in README; provider/session/event source directories live under `apps/`/`packages/` and were **not** opened (limit; recorded rather than inferred).
+
+**DSH upstream** (registry-checked): npm [`@deepseek-ai/dsh-acp`](https://www.npmjs.com/package/@deepseek-ai/dsh-acp) — description "Automation-only Agent Client Protocol server for driving DeepSeek Harness agents over JSON-RPC stdio"; repository **[github.com/deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)** (dir `packages/acp/acp`); latest `0.0.1-rc.1`, alpha `0.2.1-alpha.1` published 2026-10-03; license field **BSD-3-Clause at top level, most individual versions MIT** (mixed — recorded exactly). Matches KPR's in-repo facts (launcher-pinned harness, `agentInfo deepseek-harness-acp/0.0.1`).
+
+**Distinct plugin/extension family — goose** ([block/goose](https://github.com/block/goose); Apache-2.0; Rust; 5,790 commits, 55k stars, active): extension via **MCP servers (70+ extensions) + 15+ model providers + ACP for subscription clients + custom distros** — a second, independent plugin-family pattern (protocol-standard extensions) distinct from Paseo's TS plugins and chord's in-process composition.
+
+**Checked-at note**: all external facts above were read live on 2026-10-07 (GitHub pages / npm registry); no commit-SHA pinning was possible through the page fetches except where stated (Pi API gave branch/pushed-at; per-file SHAs not captured — limit). Ambiguous owner names remain candidate-only.
