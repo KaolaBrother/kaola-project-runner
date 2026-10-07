@@ -254,3 +254,11 @@ never refused.
   - the C5 write exists (I12);
   - three counters, not one `rev` (I3);
   - the stone keep branch is a current duty, not a tombstone (I4).
+- Oracle bites (review 1). Each line is one temporary flip of the asserted value, run as `python3 tests/contract/<suite> <Class>.<test>`, then reverted. Nothing was committed while a test file was mutated.
+  - `StateTool.test_a_v1_file_is_legacy_format_on_retire`: expected `schema-unsupported` instead of `legacy-format`. FAIL: `AssertionError: Tuples differ: (2, 'legacy-format') != (2, 'schema-unsupported')`. Reverted.
+  - `StateTool.test_retire_names_record_missing_and_evidence_required`: expected `not-a-code` instead of `record-missing`. FAIL: `AssertionError: Tuples differ: (2, 'record-missing') != (2, 'not-a-code')`. Reverted.
+  - `RecordContract.test_an_accepted_task_without_cite_is_cite_required`: expected `retire-unmet` instead of `cite-required`. FAIL: `AssertionError: Tuples differ: (2, 'cite-required') != (2, 'retire-unmet')`. Reverted.
+  - `RecordContract.test_a_pending_reclaim_stone_is_kept_and_blocks_its_id`: expected kept id `settled-old` instead of `reclaim-1`. FAIL: `AssertionError: Lists differ: ['reclaim-1'] != ['settled-old']`. Reverted.
+  - `ConsolidatedDispatch.test_retire_reads_the_index_execute_and_collect_wrote`: expected acceptance `pending` instead of `accepted`. FAIL: `AssertionError: 'accepted' != 'pending'`. Reverted.
+  - `RecordContract.test_index_mirror_error_is_reported_after_retire_writes`: expected `index_mirror` to lack `error`. FAIL: `AssertionError: 'error' unexpectedly found in {'changed': {}, 'error': '<index>: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)', 'index': '<index>'}`. Reverted. The live line named the temporary index file; the error text is the unreadable JSON.
+- `./scripts/validate.sh --suite` for `test-issue-255-lifecycle-state.py` and `test-issue-259-record-contract.py` still stops at the inherited stale pin `3de9f61afbfa` (`render-check` exits 1 before the suite body). Suite results are direct `python3 tests/contract/<suite>` runs.
