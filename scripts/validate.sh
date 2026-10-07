@@ -316,6 +316,7 @@ python_suites_all=(
   "test-issue-264-validate-lane-integrity.py"
   "test-ddd-pack.py"
   "test-issue-277-kw-readonly-index.py"
+  "test-issue-275-core-contracts.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -356,6 +357,7 @@ python_suites_a=(
   "test-issue-271-dispatch-help.py"
   "test-issue-264-validate-lane-integrity.py"
   "test-issue-277-kw-readonly-index.py"
+  "test-issue-275-core-contracts.py"
 )
 python_suites_b=(
   "test-issue-78-heredoc-deadlock.py"

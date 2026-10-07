@@ -17,7 +17,7 @@
    "end_line": 125,
    "top_level": true,
    "primary": "keep-in-place",
-   "reason": "source-review: stdout JSON receipt emitter shared by C4/C5 commands; no owner"
+   "reason": "source-review: stdout JSON receipt emitter shared by C4/C5 commands; no owner | P1 adopted keep-in-place: shared stdout JSON receipt emitter for C4/C5 commands; no single owner and not minimal-core identity/process/atomic"
   },
   {
    "file": "scripts/kaola-dispatch.py",
@@ -26,7 +26,7 @@
    "end_line": 132,
    "top_level": true,
    "primary": "keep-in-place",
-   "reason": "source-review: stdout failure emitter shared by all dispatch commands"
+   "reason": "source-review: stdout failure emitter shared by all dispatch commands | P1 adopted keep-in-place: shared stdout failure emitter for all dispatch commands; file-local CLI plumbing"
   },
   {
    "file": "scripts/kaola-dispatch.py",
@@ -43,8 +43,8 @@
    "line": 145,
    "end_line": 161,
    "top_level": true,
-   "primary": "C5-dispatch",
-   "reason": "source-review: flat-YAML reader feeding catalog_from_files preset catalog"
+   "primary": "C2-acp-adapters",
+   "reason": "source-review: flat-YAML reader feeding catalog_from_files preset catalog | P1 resolved C2-acp-adapters: sole consumer catalog_from_files (already C2) reads C2-owned platforms/*.yaml; the generic reader carries no C5 admission policy; the recorded C5 alternative is closed"
   },
   {
    "file": "scripts/kaola-dispatch.py",
@@ -2024,7 +2024,7 @@
    "end_line": 6258,
    "top_level": true,
    "primary": "keep-in-place",
-   "reason": "source-review: argparse plumbing spanning C4/C5 commands; no single owner"
+   "reason": "source-review: argparse plumbing spanning C4/C5 commands; no single owner | P1 adopted keep-in-place: argparse wiring spanning C4/C5 command groups; splitting adds a CLI contract without removing coupling"
   },
   {
    "file": "scripts/kaola-dispatch.py",
@@ -2033,7 +2033,7 @@
    "end_line": 6144,
    "top_level": false,
    "primary": "keep-in-place",
-   "reason": "source-review: shared writer-args plumbing inside build_parser"
+   "reason": "source-review: shared writer-args plumbing inside build_parser | P1 adopted keep-in-place: shared writer-args plumbing nested in build_parser; moves with its parent"
   },
   {
    "file": "scripts/kaola-dispatch.py",
@@ -2096,7 +2096,7 @@
    "end_line": 6403,
    "top_level": true,
    "primary": "keep-in-place",
-   "reason": "source-review: argv->func entrypoint for all dispatch commands"
+   "reason": "source-review: argv->func entrypoint for all dispatch commands | P1 adopted keep-in-place: argv->command entrypoint for the whole dispatch tool; not a component surface"
   },
   {
    "file": "scripts/kaola-acp-holder.py",
@@ -2627,7 +2627,7 @@
    "end_line": 1224,
    "top_level": true,
    "primary": "keep-in-place",
-   "reason": "source-review: generic sibling-module importer; no single owner"
+   "reason": "source-review: generic sibling-module importer; no single owner | P1 adopted keep-in-place: generic sibling-module importer used by holder bootstrap; no domain owner"
   },
   {
    "file": "scripts/kaola-acp-holder.py",
@@ -2636,7 +2636,7 @@
    "end_line": 1247,
    "top_level": true,
    "primary": "keep-in-place",
-   "reason": "source-review: bootstrap wiring quota/record/compact siblings + byte snapshot"
+   "reason": "source-review: bootstrap wiring quota/record/compact siblings + byte snapshot | P1 adopted keep-in-place: holder bootstrap wiring quota/record/compact siblings + byte snapshot; loader plumbing, not core identity/process"
   },
   {
    "file": "scripts/kaola-acp-holder.py",
@@ -4229,7 +4229,7 @@
    "end_line": 731,
    "top_level": false,
    "primary": "keep-in-place",
-   "reason": "source-review: typed CLI input error; shared plumbing"
+   "reason": "source-review: typed CLI input error; shared plumbing | P1 adopted keep-in-place: typed CLI input-error construction shared by all acp commands; CLI surface, not minimal core"
   },
   {
    "file": "scripts/kaola-acp.py",
@@ -4238,7 +4238,7 @@
    "end_line": 734,
    "top_level": false,
    "primary": "keep-in-place",
-   "reason": "source-review: input error formatting; shared plumbing"
+   "reason": "source-review: input error formatting; shared plumbing | P1 adopted keep-in-place: input-error formatting shared by all acp commands"
   },
   {
    "file": "scripts/kaola-acp.py",
@@ -4247,7 +4247,7 @@
    "end_line": 741,
    "top_level": false,
    "primary": "keep-in-place",
-   "reason": "source-review: argparse error->receipt adapter; shared plumbing"
+   "reason": "source-review: argparse error->receipt adapter; shared plumbing | P1 adopted keep-in-place: argparse error->receipt adapter shared by all acp subcommands"
   },
   {
    "file": "scripts/kaola-acp.py",
@@ -4256,7 +4256,7 @@
    "end_line": 751,
    "top_level": true,
    "primary": "keep-in-place",
-   "reason": "source-review: pre-transport input-failure receipt; shared plumbing"
+   "reason": "source-review: pre-transport input-failure receipt; shared plumbing | P1 adopted keep-in-place: pre-transport input-failure receipt shared by all acp commands"
   },
   {
    "file": "scripts/kaola-acp.py",
@@ -4265,7 +4265,7 @@
    "end_line": 756,
    "top_level": true,
    "primary": "keep-in-place",
-   "reason": "source-review: fatal stderr exit; shared plumbing"
+   "reason": "source-review: fatal stderr exit; shared plumbing | P1 adopted keep-in-place: fatal stderr exit helper shared by all acp commands"
   },
   {
    "file": "scripts/kaola-acp.py",
@@ -4355,7 +4355,7 @@
    "end_line": 868,
    "top_level": true,
    "primary": "keep-in-place",
-   "reason": "source-review: argparse plumbing for the list command"
+   "reason": "source-review: argparse plumbing for the list command | P1 adopted keep-in-place: argparse plumbing for the list command; list semantics stay in command_list (C1)"
   },
   {
    "file": "scripts/kaola-acp.py",
@@ -4373,7 +4373,7 @@
    "end_line": 1005,
    "top_level": true,
    "primary": "keep-in-place",
-   "reason": "source-review: argparse plumbing for the survey command"
+   "reason": "source-review: argparse plumbing for the survey command | P1 adopted keep-in-place: argparse plumbing for survey; survey semantics stay in command_survey (C2)"
   },
   {
    "file": "scripts/kaola-acp.py",
@@ -4436,7 +4436,7 @@
    "end_line": 1185,
    "top_level": true,
    "primary": "keep-in-place",
-   "reason": "source-review: argparse plumbing for packages"
+   "reason": "source-review: argparse plumbing for packages | P1 adopted keep-in-place: argparse plumbing for packages; catalog semantics stay in command_packages (C2)"
   },
   {
    "file": "scripts/kaola-acp.py",
@@ -4445,7 +4445,7 @@
    "end_line": 1192,
    "top_level": true,
    "primary": "keep-in-place",
-   "reason": "source-review: argparse plumbing for model-package"
+   "reason": "source-review: argparse plumbing for model-package | P1 adopted keep-in-place: argparse plumbing for model-package; semantics stay in command_model_package (C2)"
   },
   {
    "file": "scripts/kaola-acp.py",
@@ -4499,7 +4499,7 @@
    "end_line": 1281,
    "top_level": true,
    "primary": "C3-events",
-   "reason": "source-review: emitted-receipt byte measure for bounded receipts"
+   "reason": "source-review: emitted-receipt byte measure for bounded receipts | P1 resolved C3-events: only the C3 bounded-receipt helpers (event_stream_bytes/bound_capture_receipt/bound_state_receipt) call it; generic byte measure with no C1/C4 policy; the recorded ambiguity is closed"
   },
   {
    "file": "scripts/kaola-acp.py",
@@ -5831,7 +5831,7 @@
    "end_line": 6203,
    "top_level": true,
    "primary": "keep-in-place",
-   "reason": "source-review: argv->command entrypoint for all acp commands"
+   "reason": "source-review: argv->command entrypoint for all acp commands | P1 adopted keep-in-place: argv->command entrypoint for the whole acp tool; not a component surface"
   },
   {
    "file": "scripts/kaola-acp.py",
@@ -5840,7 +5840,7 @@
    "end_line": 6217,
    "top_level": true,
    "primary": "keep-in-place",
-   "reason": "source-review: argv flag-value helper; CLI plumbing"
+   "reason": "source-review: argv flag-value helper; CLI plumbing | P1 adopted keep-in-place: argv flag-value helper for the CLI entrypoint; pure CLI plumbing"
   },
   {
    "file": "scripts/kaola-record-contract.py",

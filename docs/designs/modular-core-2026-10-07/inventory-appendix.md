@@ -4,14 +4,15 @@ Source revision `7012e4d6` (bridge read-only original `/tmp/kpr-source-inventory
 
 Assignment status, stated honestly: rows with a component are a KEYWORD-ASSIGNED DRAFT (first-match on qualified name); **223 rows carry an explicit per-file keep-in-place hold** (dispatch 92, acp 77, record-contract 34, holder event-loop 20) — these are NOT silently unowned; they are the P1 step-1 source-review set, each hold naming its file. `quota_module` → C2 with a REAL code contract (`scripts/kaola-quota.py` contains parse/resolution code — catalog + deterministic resolution, never "pure data"; the holder's load edge C1→C2-code stays in the DAG). Zero rows are blank.
 
+**P1 residual (issue #275, slice 1) note:** `inventory-matrix.json` remains the authoritative assignment. The 18 explicit keep-in-place rows plus the two recorded arguable calls (`parse_flat_yaml`, `line_size`) are decided in the section at the end of this file and are marked in place below; every other row in this table is the pre-source-review draft.
 
 | file | qualified_name | line | top | primary |
 |---|---|---|---|---|
 | kaola-dispatch.py | `_load_record_contract` | 41 | Y | core-atomic |
-| kaola-dispatch.py | `emit` | 122 | Y | keep-in-place:kaola-dispatch.py (source review pending P1 walk) |
-| kaola-dispatch.py | `fail` | 128 | Y | keep-in-place:kaola-dispatch.py (source review pending P1 walk) |
+| kaola-dispatch.py | `emit` | 122 | Y | keep-in-place (P1 adopted keep-in-place: shared stdout JSON receipt emitter for C4/C5 commands; no single owner and not minimal-core identity/process/atomic) |
+| kaola-dispatch.py | `fail` | 128 | Y | keep-in-place (P1 adopted keep-in-place: shared stdout failure emitter for all dispatch commands; file-local CLI plumbing) |
 | kaola-dispatch.py | `load_object` | 135 | Y | core-atomic |
-| kaola-dispatch.py | `parse_flat_yaml` | 145 | Y | keep-in-place:kaola-dispatch.py (source review pending P1 walk) |
+| kaola-dispatch.py | `parse_flat_yaml` | 145 | Y | C2-acp-adapters (P1 resolved C2-acp-adapters: sole consumer catalog_from_files (already C2) reads C2-owned platforms/*.yaml; the generic reader carries no C5 admission policy; the recorded C5 alternative is closed) |
 | kaola-dispatch.py | `catalog_from_files` | 164 | Y | C2-acp-adapters |
 | kaola-dispatch.py | `platform_paths` | 203 | Y | C2-acp-adapters |
 | kaola-dispatch.py | `authorization_object` | 222 | Y | C1-lifecycle |
@@ -231,15 +232,15 @@ Assignment status, stated honestly: rows with a component are a KEYWORD-ASSIGNED
 | kaola-dispatch.py | `legacy_tasks` | 5833 | Y | C4-state |
 | kaola-dispatch.py | `migrate_document` | 5895 | Y | C4-state |
 | kaola-dispatch.py | `command_state_migrate` | 6013 | Y | C4-state |
-| kaola-dispatch.py | `build_parser` | 6099 | Y | C7-render-install |
-| kaola-dispatch.py | `build_parser.writer_args` | 6141 | n | C7-render-install |
+| kaola-dispatch.py | `build_parser` | 6099 | Y | keep-in-place (P1 adopted keep-in-place: argparse wiring spanning C4/C5 command groups; splitting adds a CLI contract without removing coupling) |
+| kaola-dispatch.py | `build_parser.writer_args` | 6141 | n | keep-in-place (P1 adopted keep-in-place: shared writer-args plumbing nested in build_parser; moves with its parent) |
 | kaola-dispatch.py | `command_state_backups` | 6261 | Y | core-atomic |
 | kaola-dispatch.py | `_delegator_read` | 6270 | Y | keep-in-place:kaola-dispatch.py (source review pending P1 walk) |
 | kaola-dispatch.py | `command_delegator_view` | 6277 | Y | C4-state |
 | kaola-dispatch.py | `delegator_recovery` | 6295 | Y | C4-state |
 | kaola-dispatch.py | `command_delegator_migrate` | 6321 | Y | C4-state |
 | kaola-dispatch.py | `command_delegator_update` | 6342 | Y | keep-in-place:kaola-dispatch.py (source review pending P1 walk) |
-| kaola-dispatch.py | `main` | 6401 | Y | C1-lifecycle |
+| kaola-dispatch.py | `main` | 6401 | Y | keep-in-place (P1 adopted keep-in-place: argv->command entrypoint for the whole dispatch tool; not a component surface) |
 | kaola-acp-holder.py | `canonical` | 57 | Y | core-identity |
 | kaola-acp-holder.py | `normalize_id` | 61 | Y | core-identity |
 | kaola-acp-holder.py | `worker_event_id` | 65 | Y | core-identity |
@@ -298,8 +299,8 @@ Assignment status, stated honestly: rows with a component are a KEYWORD-ASSIGNED
 | kaola-acp-holder.py | `_hex_revision` | 1170 | Y | keep-in-place:holder (event-loop interior; P1 step-1 C1/C3 boundary walk) |
 | kaola-acp-holder.py | `_snapshot_file` | 1176 | Y | C4-state |
 | kaola-acp-holder.py | `capture_script_paths` | 1184 | Y | C3-events |
-| kaola-acp-holder.py | `_import_sibling` | 1206 | Y | keep-in-place:holder (event-loop interior; P1 step-1 C1/C3 boundary walk) |
-| kaola-acp-holder.py | `load_sibling_modules` | 1227 | Y | keep-in-place:holder (event-loop interior; P1 step-1 C1/C3 boundary walk) |
+| kaola-acp-holder.py | `_import_sibling` | 1206 | Y | keep-in-place (P1 adopted keep-in-place: generic sibling-module importer used by holder bootstrap; no domain owner) |
+| kaola-acp-holder.py | `load_sibling_modules` | 1227 | Y | keep-in-place (P1 adopted keep-in-place: holder bootstrap wiring quota/record/compact siblings + byte snapshot; loader plumbing, not core identity/process) |
 | kaola-acp-holder.py | `runner_identity` | 1253 | Y | core-identity |
 | kaola-acp-holder.py | `_as_text` | 1273 | Y | keep-in-place:holder (event-loop interior; P1 step-1 C1/C3 boundary walk) |
 | kaola-acp-holder.py | `_normalize_content_items` | 1283 | Y | C3-events |
@@ -476,11 +477,11 @@ Assignment status, stated honestly: rows with a component are a KEYWORD-ASSIGNED
 | kaola-acp.py | `cli_version_fact` | 695 | Y | C1-lifecycle |
 | kaola-acp.py | `session_new_timeout` | 712 | Y | C1-lifecycle |
 | kaola-acp.py | `session_new_extra` | 722 | Y | C1-lifecycle |
-| kaola-acp.py | `InputError.__init__` | 728 | n | keep-in-place:kaola-acp.py (source review pending P1 walk) |
-| kaola-acp.py | `InputError.__str__` | 733 | n | keep-in-place:kaola-acp.py (source review pending P1 walk) |
-| kaola-acp.py | `ReceiptArgumentParser.error` | 738 | n | keep-in-place:kaola-acp.py (source review pending P1 walk) |
-| kaola-acp.py | `input_error_receipt` | 744 | Y | keep-in-place:kaola-acp.py (source review pending P1 walk) |
-| kaola-acp.py | `die` | 754 | Y | keep-in-place:kaola-acp.py (source review pending P1 walk) |
+| kaola-acp.py | `InputError.__init__` | 728 | n | keep-in-place (P1 adopted keep-in-place: typed CLI input-error construction shared by all acp commands; CLI surface, not minimal core) |
+| kaola-acp.py | `InputError.__str__` | 733 | n | keep-in-place (P1 adopted keep-in-place: input-error formatting shared by all acp commands) |
+| kaola-acp.py | `ReceiptArgumentParser.error` | 738 | n | keep-in-place (P1 adopted keep-in-place: argparse error->receipt adapter shared by all acp subcommands) |
+| kaola-acp.py | `input_error_receipt` | 744 | Y | keep-in-place (P1 adopted keep-in-place: pre-transport input-failure receipt shared by all acp commands) |
+| kaola-acp.py | `die` | 754 | Y | keep-in-place (P1 adopted keep-in-place: fatal stderr exit helper shared by all acp commands) |
 | kaola-acp.py | `canonical_dir` | 759 | Y | core-identity |
 | kaola-acp.py | `load_manifest` | 763 | Y | C2-acp-adapters |
 | kaola-acp.py | `resolve_repo` | 788 | Y | keep-in-place:kaola-acp.py (source review pending P1 walk) |
@@ -490,23 +491,23 @@ Assignment status, stated honestly: rows with a component are a KEYWORD-ASSIGNED
 | kaola-acp.py | `sock_path_for_directory` | 828 | Y | core-identity |
 | kaola-acp.py | `sock_path` | 834 | Y | core-identity |
 | kaola-acp.py | `probe_socket_ok` | 846 | Y | keep-in-place:kaola-acp.py (source review pending P1 walk) |
-| kaola-acp.py | `parse_list_args` | 860 | Y | keep-in-place:kaola-acp.py (source review pending P1 walk) |
+| kaola-acp.py | `parse_list_args` | 860 | Y | keep-in-place (P1 adopted keep-in-place: argparse plumbing for the list command; list semantics stay in command_list (C1)) |
 | kaola-acp.py | `command_list` | 871 | Y | keep-in-place:kaola-acp.py (source review pending P1 walk) |
-| kaola-acp.py | `parse_survey_args` | 1001 | Y | keep-in-place:kaola-acp.py (source review pending P1 walk) |
+| kaola-acp.py | `parse_survey_args` | 1001 | Y | keep-in-place (P1 adopted keep-in-place: argparse plumbing for survey; survey semantics stay in command_survey (C2)) |
 | kaola-acp.py | `survey_login_shell` | 1008 | Y | keep-in-place:kaola-acp.py (source review pending P1 walk) |
 | kaola-acp.py | `survey_login_env` | 1023 | Y | keep-in-place:kaola-acp.py (source review pending P1 walk) |
 | kaola-acp.py | `survey_resolve` | 1075 | Y | keep-in-place:kaola-acp.py (source review pending P1 walk) |
 | kaola-acp.py | `survey_zcode_row` | 1087 | Y | C2-acp-adapters |
 | kaola-acp.py | `command_survey` | 1108 | Y | keep-in-place:kaola-acp.py (source review pending P1 walk) |
 | kaola-acp.py | `quota_module` | 1159 | Y | C2-acp-adapters |
-| kaola-acp.py | `parse_packages_args` | 1180 | Y | keep-in-place:kaola-acp.py (source review pending P1 walk) |
-| kaola-acp.py | `parse_model_package_args` | 1188 | Y | keep-in-place:kaola-acp.py (source review pending P1 walk) |
+| kaola-acp.py | `parse_packages_args` | 1180 | Y | keep-in-place (P1 adopted keep-in-place: argparse plumbing for packages; catalog semantics stay in command_packages (C2)) |
+| kaola-acp.py | `parse_model_package_args` | 1188 | Y | keep-in-place (P1 adopted keep-in-place: argparse plumbing for model-package; semantics stay in command_model_package (C2)) |
 | kaola-acp.py | `command_packages` | 1195 | Y | keep-in-place:kaola-acp.py (source review pending P1 walk) |
 | kaola-acp.py | `stamp_quota_emission` | 1222 | Y | keep-in-place:kaola-acp.py (source review pending P1 walk) |
 | kaola-acp.py | `command_model_package` | 1234 | Y | keep-in-place:kaola-acp.py (source review pending P1 walk) |
 | kaola-acp.py | `view_error` | 1250 | Y | C4-state |
 | kaola-acp.py | `event_stream_bytes` | 1272 | Y | C3-events |
-| kaola-acp.py | `line_size` | 1279 | Y | keep-in-place:kaola-acp.py (source review pending P1 walk) |
+| kaola-acp.py | `line_size` | 1279 | Y | C3-events (P1 resolved C3-events: only the C3 bounded-receipt helpers (event_stream_bytes/bound_capture_receipt/bound_state_receipt) call it; generic byte measure with no C1/C4 policy; the recorded ambiguity is closed) |
 | kaola-acp.py | `bound_capture_receipt` | 1284 | Y | C3-events |
 | kaola-acp.py | `bound_state_receipt` | 1332 | Y | C4-state |
 | kaola-acp.py | `command_view` | 1373 | Y | C4-state |
@@ -654,8 +655,8 @@ Assignment status, stated honestly: rows with a component are a KEYWORD-ASSIGNED
 | kaola-acp.py | `apply_recorded_selection` | 5608 | Y | core-registry |
 | kaola-acp.py | `_note_post_stop_result` | 5652 | Y | C1-lifecycle |
 | kaola-acp.py | `command_drain_restart` | 5674 | Y | C1-lifecycle |
-| kaola-acp.py | `main` | 5856 | Y | C1-lifecycle |
-| kaola-acp.py | `argument_value` | 6211 | Y | keep-in-place:kaola-acp.py (source review pending P1 walk) |
+| kaola-acp.py | `main` | 5856 | Y | keep-in-place (P1 adopted keep-in-place: argv->command entrypoint for the whole acp tool; not a component surface) |
+| kaola-acp.py | `argument_value` | 6211 | Y | keep-in-place (P1 adopted keep-in-place: argv flag-value helper for the CLI entrypoint; pure CLI plumbing) |
 | kaola-record-contract.py | `maintenance_blockers` | 93 | Y | C1-lifecycle |
 | kaola-record-contract.py | `refusal` | 194 | Y | core-registry |
 | kaola-record-contract.py | `cite_problem` | 203 | Y | keep-in-place:kaola-record-contract.py (source review pending P1 walk) |
@@ -728,3 +729,30 @@ Assignment status, stated honestly: rows with a component are a KEYWORD-ASSIGNED
 | kaola-record-contract.py | `delegator_file_view.add` | 1954 | n | C4-state |
 | kaola-record-contract.py | `host_view` | 2036 | Y | C4-state |
 | kaola-record-contract.py | `injection_body` | 2167 | Y | C1-lifecycle |
+
+## P1 residual decisions — issue #275, slice 1 (2026-10-07)
+
+The 18 rows the source review left explicit `keep-in-place` are ADOPTED keep-in-place: they are shared CLI receipt/argparse/bootstrap plumbing with no single component owner, and none is minimal-core identity/process/atomic. The two recorded arguable calls are resolved: `parse_flat_yaml` -> C2-acp-adapters (it joins its only consumer `catalog_from_files`, already C2) and `line_size` stays C3-events (only the C3 bounded-receipt helpers call it). No other row is reassigned.
+
+| file | qualified_name | line | final primary | decision (one line) |
+|---|---|---|---|---|
+| kaola-dispatch.py | `emit` | 122 | keep-in-place | adopted keep-in-place: shared stdout JSON receipt emitter for C4/C5 commands; no single owner and not minimal-core identity/process/atomic |
+| kaola-dispatch.py | `fail` | 128 | keep-in-place | adopted keep-in-place: shared stdout failure emitter for all dispatch commands; file-local CLI plumbing |
+| kaola-dispatch.py | `build_parser` | 6099 | keep-in-place | adopted keep-in-place: argparse wiring spanning C4/C5 command groups; splitting adds a CLI contract without removing coupling |
+| kaola-dispatch.py | `build_parser.writer_args` | 6141 | keep-in-place | adopted keep-in-place: shared writer-args plumbing nested in build_parser; moves with its parent |
+| kaola-dispatch.py | `main` | 6401 | keep-in-place | adopted keep-in-place: argv->command entrypoint for the whole dispatch tool; not a component surface |
+| kaola-acp-holder.py | `_import_sibling` | 1206 | keep-in-place | adopted keep-in-place: generic sibling-module importer used by holder bootstrap; no domain owner |
+| kaola-acp-holder.py | `load_sibling_modules` | 1227 | keep-in-place | adopted keep-in-place: holder bootstrap wiring quota/record/compact siblings + byte snapshot; loader plumbing, not core identity/process |
+| kaola-acp.py | `InputError.__init__` | 728 | keep-in-place | adopted keep-in-place: typed CLI input-error construction shared by all acp commands; CLI surface, not minimal core |
+| kaola-acp.py | `InputError.__str__` | 733 | keep-in-place | adopted keep-in-place: input-error formatting shared by all acp commands |
+| kaola-acp.py | `ReceiptArgumentParser.error` | 738 | keep-in-place | adopted keep-in-place: argparse error->receipt adapter shared by all acp subcommands |
+| kaola-acp.py | `input_error_receipt` | 744 | keep-in-place | adopted keep-in-place: pre-transport input-failure receipt shared by all acp commands |
+| kaola-acp.py | `die` | 754 | keep-in-place | adopted keep-in-place: fatal stderr exit helper shared by all acp commands |
+| kaola-acp.py | `parse_list_args` | 860 | keep-in-place | adopted keep-in-place: argparse plumbing for the list command; list semantics stay in command_list (C1) |
+| kaola-acp.py | `parse_survey_args` | 1001 | keep-in-place | adopted keep-in-place: argparse plumbing for survey; survey semantics stay in command_survey (C2) |
+| kaola-acp.py | `parse_packages_args` | 1180 | keep-in-place | adopted keep-in-place: argparse plumbing for packages; catalog semantics stay in command_packages (C2) |
+| kaola-acp.py | `parse_model_package_args` | 1188 | keep-in-place | adopted keep-in-place: argparse plumbing for model-package; semantics stay in command_model_package (C2) |
+| kaola-acp.py | `main` | 5856 | keep-in-place | adopted keep-in-place: argv->command entrypoint for the whole acp tool; not a component surface |
+| kaola-acp.py | `argument_value` | 6211 | keep-in-place | adopted keep-in-place: argv flag-value helper for the CLI entrypoint; pure CLI plumbing |
+| kaola-dispatch.py | `parse_flat_yaml` | 145 | C2-acp-adapters | resolved C2-acp-adapters: sole consumer catalog_from_files (already C2) reads C2-owned platforms/*.yaml; the generic reader carries no C5 admission policy; the recorded C5 alternative is closed |
+| kaola-acp.py | `line_size` | 1279 | C3-events | resolved C3-events: only the C3 bounded-receipt helpers (event_stream_bytes/bound_capture_receipt/bound_state_receipt) call it; generic byte measure with no C1/C4 policy; the recorded ambiguity is closed |
