@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: python3 tests/contract/test-issue-266-launch-broker.py
+validated_candidate_hash: 6abb4ce3fbe3b4d8115698b70e66298c46beb7f1ba67bce30e0b8e60b884f935
