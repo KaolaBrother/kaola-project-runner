@@ -27,7 +27,6 @@ import socket
 import struct
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 import traceback
@@ -37,6 +36,17 @@ from typing import Any
 
 PROTOCOL_VERSION = 1
 IDLE_EXIT_SECONDS = 600
+# Issue #278: shared paths also ship beside every generated worker Runner.
+_paths_spec = importlib.util.spec_from_file_location(
+    "kaola_acp_paths", Path(__file__).resolve().with_name("kaola-acp-paths.py"))
+acp_paths = importlib.util.module_from_spec(_paths_spec)
+_paths_bytecode = sys.dont_write_bytecode
+sys.dont_write_bytecode = True
+try:
+    _paths_spec.loader.exec_module(acp_paths)
+finally:
+    sys.dont_write_bytecode = _paths_bytecode
+
 STDERR_RING = 64 * 1024
 EVENT_LOG_MAX = 10 * 1024 * 1024
 EVENT_LOG_KEEP = 3
@@ -1151,6 +1161,7 @@ COMPACT_MODULE = "kaola-compact-recovery.py"
 NATIVE_COMPACT_RECOVERY_PLATFORMS = frozenset()
 RUNNER_BUILD_FILES = (
     "kaola-acp-holder.py",
+    "kaola-acp-paths.py",
     "kaola-compact-recovery.py",
     "kaola-zcode-acp.py",
     "kaola-opencode-acp.py",
@@ -1809,7 +1820,13 @@ class Holder:
         self.args = args
         self.init_meta = parse_init_meta(getattr(args, "init_meta", "") or "")
         self.record_dir = Path(args.record_dir)
-        self.record_dir.mkdir(parents=True, exist_ok=True)
+        # Runner layout has a shared root; direct custom holder fixtures may
+        # instead supply the private record directory itself as their root.
+        root = self.record_dir
+        if (root.parent.name == args.session
+                and root.parent.parent.name == args.platform):
+            root = root.parent.parent.parent
+        acp_paths.prepare_record_directory(self.record_dir, root)
         self.events = EventLog(self.record_dir / "events.jsonl")
         self.record_path = self.record_dir / "record.json"
         self.socket_path = Path(args.socket) if args.socket else self.record_dir / "holder.sock"
@@ -1999,6 +2016,7 @@ class Holder:
             "session": self.args.session,
             "repo": self.args.repo,
             "holder_pid": os.getpid(),
+            "socket_path": str(self.socket_path),
             "holder_instance_id": self.holder_instance_id,
             "runner_build": self.runner_identity["runner_build"],
             "accepted_revision": self.runner_identity["accepted_revision"],
@@ -3190,8 +3208,7 @@ class Holder:
                 or not isinstance(record.get("holder_pid"), int)
                 or not process_alive(record["holder_pid"])):
             return None
-        digest = hashlib.sha256(str(directory).encode("utf-8")).hexdigest()[:24]
-        sock = Path(tempfile.gettempdir()) / f"kaola-{os.getuid()}-acp" / f"{digest}.sock"
+        sock = acp_paths.socket_path(directory)
         if not sock.exists():
             return None
         return {"platform": platform, "session": session, "holder_instance_id": holder,
@@ -3914,8 +3931,7 @@ class Holder:
             if record and record.get("holder_instance_id") == holder:
                 directory = (self.record_dir.parent.parent.parent / binding["platform"]
                              / binding["session"] / self.record_dir.name)
-                digest = hashlib.sha256(str(directory).encode("utf-8")).hexdigest()[:24]
-                target = Path(tempfile.gettempdir()) / f"kaola-{os.getuid()}-acp" / f"{digest}.sock"
+                target = acp_paths.socket_path(directory)
         if target is not None:
             try:
                 connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -6220,7 +6236,13 @@ def main() -> int:
         return 2
     if args.probe:
         return run_probe(args)
-    holder = Holder(args)
+    try:
+        holder = Holder(args)
+    except acp_paths.RecordRootUnsafe as exc:
+        print(json.dumps({"result": "refused", "reason": "record-root-unsafe",
+                          "error": {"code": "record-root-unsafe", "message": str(exc)},
+                          "mutation_performed": False, "mutation_status": "not_started"}))
+        return 1
     return holder.run()
 
 

@@ -687,7 +687,7 @@ class AcpWatchContractTests(unittest.TestCase):
         session, repo, started = self.start("grok")
         directory = self.record_dir("grok", session, repo)
         sock = (
-            Path(tempfile.gettempdir())
+            Path("/tmp")
             / f"kaola-{os.getuid()}-acp"
             / f"{hashlib.sha256(str(directory).encode('utf-8')).hexdigest()[:24]}.sock"
         )

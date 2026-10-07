@@ -1,8 +1,21 @@
 # Changelog
 
 Every release section states whether running seats must restart. The operator
-test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms`
+test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
+
+## Unreleased
+
+Seats: restart required
+
+- **Caller-independent ACP discovery (Issue #278).** New record and socket
+  paths use fixed per-UID roots under `/tmp`, independent of `TMPDIR` and
+  `XDG_RUNTIME_DIR`. Runner and locator find live v0.9.1 holders across legacy
+  roots without moving records; Host uniqueness includes those roots. Locator
+  worker session presence now reads ACP records for all ten platforms.
+  A legacy-root lookup that cannot establish absence reports
+  `record-root-mismatch`. Restart at a safe boundary to load the new holder
+  path helper; existing holders remain readable in place.
 
 ## 0.9.1 — 2026-10-07 (compaction recovery, steer adaptations, launch broker, task-failure count, selection continuity)
 

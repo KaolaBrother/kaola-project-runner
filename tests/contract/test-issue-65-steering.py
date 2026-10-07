@@ -554,7 +554,7 @@ class SteeringContract(unittest.TestCase):
         directory = (self.record_root / platform / self.session
                      / hashlib.sha256(repo.encode("utf-8")).hexdigest()[:16])
         digest = hashlib.sha256(str(directory).encode("utf-8")).hexdigest()[:24]
-        sock_path = Path(tempfile.gettempdir()) / f"kaola-{os.getuid()}-acp" / f"{digest}.sock"
+        sock_path = Path("/tmp") / f"kaola-{os.getuid()}-acp" / f"{digest}.sock"
         op = message.pop("op")
         connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:

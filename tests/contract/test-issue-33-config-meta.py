@@ -183,7 +183,7 @@ class Issue33ConfigMetaTests(unittest.TestCase):
     def holder_sock(self) -> Path:
         directory = self.record_dir()
         digest = hashlib.sha256(str(directory).encode("utf-8")).hexdigest()[:24]
-        return Path(tempfile.gettempdir()) / f"kaola-{os.getuid()}-acp" / f"{digest}.sock"
+        return Path("/tmp") / f"kaola-{os.getuid()}-acp" / f"{digest}.sock"
 
     def holder_op(self, op: str, params: dict, timeout: float = 15) -> dict:
         connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

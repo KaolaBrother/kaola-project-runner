@@ -457,8 +457,9 @@ path, normalised origin, HEAD, `clean`, `revision_match`), `registration` (recei
 `present`, recorded target and accepted revision, `fingerprint_match`, `target_match`,
 `root_match`, `revision_current`), and, when given, `project` (real local path, top level,
 origin), `worker` (id, script path under the same root, `under_root`, `executable`), `session`
-(name, `present`: presence on the tmux server reachable from the locator only, not existence
-elsewhere and not ownership). A declared `--target` requires the registration receipt
+(name, `present`: with a project and worker, ACP record presence through the shared
+fixed/legacy-root resolver; `acp_holder_alive` separately reports holder PID liveness.
+Without a worker, presence on the reachable tmux server only, not existence elsewhere and not ownership). A declared `--target` requires the registration receipt
 (`locator-not-registered`, `locator-registration-unreadable`) and every recorded fact must
 match (`host-fingerprint-mismatch`, `target-mismatch`, `registration-root-mismatch`,
 `registration-stale` when HEAD is no longer the registered accepted revision), and an
@@ -694,6 +695,25 @@ children are still swept. A live holder that does not advertise `preserve-dispat
 returns `{"result":"refused","reason":"preserve-unsupported"}` with `mutation_status:
 not_started`. Without the flag a Host stop is unchanged. The successor Host then runs
 `rebind-host` per seat; a start still in flight is not covered and needs reconciliation.
+
+ACP records default to `/tmp/kaola-<uid>` and new admin sockets to
+`/tmp/kaola-<uid>-acp`; caller `TMPDIR` and `XDG_RUNTIME_DIR` do not change
+these defaults. Exact-session reads, `list`, locator worker receipts and
+Host uniqueness include bounded legacy-root discovery. Existing records and
+their applied socket paths stay readable in place. Explicit `--record-root`
+or `KAOLA_ACP_RECORD_ROOT` scope record readers; Host uniqueness still checks
+other live holder roots. Ambiguous live records or unavailable legacy-root
+visibility produce `record-root-mismatch`, never a false absence receipt.
+See [record/socket roots](architecture.md#acp-record-and-socket-roots) for
+lookup boundaries and recovery of stopped custom-root records.
+
+Runner start and holder construction create the selected record root with mode
+`0700`, verify with `lstat` that it is a directory owned by the caller, and
+reject symlinked, non-directory or foreign-owned roots as `record-root-unsafe`
+before writing session data. Owned roots with broader permissions are tightened
+to `0700` through a verified directory descriptor. Session directories are also
+created/opened without following symlinks. Legacy discovery remains read-only;
+status/list/locate do not change old root permissions.
 
 `--repo` must resolve to the exact Git top-level. A linked worktree is a valid Git top-level and
 is not a transport refusal; preferring the consuming project's canonical
