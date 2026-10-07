@@ -9,7 +9,7 @@ sha256+bytes pass, 80 Git sources byte-identical, `bad: []`).
 
 ## Accounting (against the authoritative 34 candidates)
 
-- **Candidates retired: 33** — every removed file's local sha256 re-verified
+- **Candidates retired: 33** (27 with no live consumers + 6 after entry-reference fix) — every removed file's local sha256 re-verified
   equal to its KPM mirror row (`/tmp/kpm-target-manifest.json`) before removal.
 - **Candidates dependency-retained: 1** —
   `docs/designs/ddd-component-2026-10-07/design.md`: in the authorized 34,
@@ -32,11 +32,12 @@ Method, per file: (1) local sha256 re-verified equal to the KPM mirror row;
 `kaola-workflow/` historical evidence and fellow retirees; (3) action with
 the fix named.
 
-### Retired with no live consumers (27)
+### Candidates retired with no live consumers (27 of the 33)
 
 | path (under docs/) | note |
 |---|---|
-| designs/modular-core-2026-10-07/fable-addendum.md | cited only by i270-fable-final-review.md (retiree) |
+| designs/modular-core-2026-10-07/fable-addendum.md | no external consumer |
+| research/i270-fable-ab-addendum.md | cited only by i270-fable-final-review.md (retiree) |
 | designs/modular-core-2026-10-07/fable-convergence-review.md | no consumers |
 | designs/modular-core-2026-10-07/inventory-appendix.md | no consumers |
 | designs/modular-core-2026-10-07/inventory-matrix.json | no test/runtime consumer |
@@ -62,9 +63,8 @@ the fix named.
 | research/i279-ddd-contract-tests.md | no external consumer |
 | research/i279-ddd-source-register.md | cited by retirees only |
 | research/i279-fable-review.md | cited only by i279-ddd-method.md (retiree) |
-| kpm-transfer/kpr-source-inventory.md | non-candidate; separately-authorized redirect (see accounting) |
 
-### Retired after entry-reference fix (6)
+### Candidates retired after entry-reference fix (6 of the 33)
 
 | path (under docs/) | consumer fixed |
 |---|---|
