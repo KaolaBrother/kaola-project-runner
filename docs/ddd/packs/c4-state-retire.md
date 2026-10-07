@@ -225,7 +225,7 @@ never refused.
 
 - Commits: `8b3779c9c9c76e03f6794b5bf5cf6ffb76bd27c0`, the design `kaola-ddd/1` revision 2
   followed here. `git diff 1a2f577e 8b3779c9 --stat` touches only
-  `kpm/docs/history/kpr/docs/designs/ddd-component-2026-10-07/design.md`, so the `1a2f577e` source reading carries
+  `docs/designs/ddd-component-2026-10-07/design.md`, so the `1a2f577e` source reading carries
   over unchanged. `7815e0b43c3143851631d437e7ce872697c23bb0` adds the G1, G2, G3, G4, G7 and
   G8 assertions named above. G5, G6 and G9 are unchanged and belong to #286.
 - Source read: `scripts/kaola-dispatch.py` (lines cited above); `scripts/kaola-record-contract.py:156,

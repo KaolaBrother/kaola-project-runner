@@ -26,7 +26,7 @@ introduces.
 with a `KW/` prefix and is NOT a path in this repository: it lives in the Kaola-Workflow checkout
 read read-only at `16cab12d41cd72818c40f3773068145b35f3f776`, e.g.
 `KW/scripts/kaola-workflow-claim.js:1-16`. KPR-side design records used here:
-`kpm/docs/history/kpr/docs/designs/ddd-component-2026-10-07/design.md` (the optional DDD component, `kaola-ddd/1`) and
+`docs/designs/ddd-component-2026-10-07/design.md` (the optional DDD component, `kaola-ddd/1`) and
 `kpm/docs/history/kpr/docs/designs/modular-core-2026-10-07/design.md` plus
 `kpm/docs/history/kpr/docs/designs/modular-core-2026-10-07/adr.md` (the component cut and ADR-7).
 
@@ -39,7 +39,7 @@ contexts: `kw-model/kw-run-lifecycle` (the ledger and claim records) and
 
 | Term | Meaning in this unit | Defined at |
 |---|---|---|
-| C8 / KW bridge | The KPR component that faces KW. Its one implemented form today is the control-plane Host reading KW artifacts read-only; no shared process, schema or store is created. | `kpm/docs/history/kpr/docs/designs/modular-core-2026-10-07/design.md:33`, `kpm/docs/history/kpr/docs/designs/ddd-component-2026-10-07/design.md:146-147` |
+| C8 / KW bridge | The KPR component that faces KW. Its one implemented form today is the control-plane Host reading KW artifacts read-only; no shared process, schema or store is created. | `kpm/docs/history/kpr/docs/designs/modular-core-2026-10-07/design.md:33`, `docs/designs/ddd-component-2026-10-07/design.md:146-147` |
 | "one contract with two named views" | ADR-7's rule: a shared artifact gets ONE contract with named views, not one function or two divergent implementations. Its current instance is KW's code-tree digest pair (finalize gate vs landable record). | `kpm/docs/history/kpr/docs/designs/modular-core-2026-10-07/adr.md:35-38` |
 | mission ledger | KW's run coordination record: one JSON object per line, keys `n`/`name`/`details`/`status`; the run's sole coordination record, written by the run's Main Orchestrator. | `KW/scripts/kaola-workflow-adaptive-schema.js:58-68`, `KW/docs/decisions/0027-the-mission-ledger.md:31-47` |
 | `{n,status}` projection | KPR's read of the ledger: `done` lines / total lines, plus the `failed`/`blocked` rows. It never opens `details` except to decide one mission. | `templates/orchestrator/references/issue-dispatch.md:63-69` |
@@ -83,8 +83,8 @@ contexts: `kw-model/kw-run-lifecycle` (the ledger and claim records) and
   repository identity. `templates/orchestrator/references/issue-dispatch.md:52-53`.
 - **I6 — KW is untouched.** Boundary: repository ownership. KW keeps claim, ledger, worktree and
   finalize; the seam adds no shared-schema write, no KW change, no new KW state.
-  `kpm/docs/history/kpr/docs/designs/ddd-component-2026-10-07/design.md:146-147`,
-  `kpm/docs/history/kpr/docs/designs/ddd-component-2026-10-07/design.md:197-201`.
+  `docs/designs/ddd-component-2026-10-07/design.md:146-147`,
+  `docs/designs/ddd-component-2026-10-07/design.md:197-201`.
 - **I7 — Two views keep distinct semantics until reconciled.** Boundary: KW validation. ADR-7
   aligns the code-tree digests to one contract with two named views; it does not erase the second
   function, and the digest pair stays deliberately different algorithms.
@@ -148,7 +148,7 @@ Planning information only. Legitimate work outside it is coordinated with the ow
   (`KW/scripts/kaola-workflow-adaptive-schema.js`), `workflow-state.md` fields, and ADR 0027.
   Any of these changing is a KW-owned event; this pack only refreshes citations.
 - P1 module moves (#275–#277) may relocate the KPR surfaces above; the pack's owner then refreshes
-  the citations. The pack never blocks a move (`kpm/docs/history/kpr/docs/designs/ddd-component-2026-10-07/design.md:197-201`).
+  the citations. The pack never blocks a move (`docs/designs/ddd-component-2026-10-07/design.md:197-201`).
 
 ## Evolution
 
@@ -183,7 +183,7 @@ Planning information only. Legitimate work outside it is coordinated with the ow
   `KW/scripts/kaola-workflow-install-manifest.js:1-16`,
   `KW/scripts/kaola-workflow-global-contract.js:1-16`.
 - KPR commit: `21ec9a3754aaaecd25350ae995f4704ab9ea441e` (this pack's `baseline_commit`, current
-  `origin/main`; the pack was rebased onto it). Design: `kpm/docs/history/kpr/docs/designs/ddd-component-2026-10-07/design.md`
+  `origin/main`; the pack was rebased onto it). Design: `docs/designs/ddd-component-2026-10-07/design.md`
   (§3, §7), `kpm/docs/history/kpr/docs/designs/modular-core-2026-10-07/design.md` (§2, §3 C8, §7),
   `kpm/docs/history/kpr/docs/designs/modular-core-2026-10-07/adr.md` (ADR-7). Research:
   `kpm/docs/history/kpr/docs/research/modular-architecture-and-unified-data-2026-10-07.md` §3. Phase 1:

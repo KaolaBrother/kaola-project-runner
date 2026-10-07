@@ -14,12 +14,18 @@ Every retired KPR path `docs/<rest>` is mirrored byte-identical at
 `docs/history/kpr/docs/<rest>` in the KPM repo, pinned at commit
 `a13c6d6f264cf965ca45a07670dbf46cd1eb1e5f`:
 
-- retired set (34 files, all sha256-verified equal to the mirror at
-  retirement time): `docs/designs/ddd-component-2026-10-07/design.md` (#272
-  design), the eleven `docs/designs/modular-core-2026-10-07/*` files,
-  `docs/kpm-transfer/kpr-source-inventory.md`, the `docs/research/i270-*`
-  research corpus except the two A-line audits, the `docs/research/i279-*`
-  files, and `docs/research/modular-architecture-and-unified-data-2026-10-07.md`.
+- retired set: 33 of the 34 authorized candidates — the authoritative list is
+  the `retirement_candidates` rows of the bridge verification JSON — plus one
+  separately-authorized redirect, `docs/kpm-transfer/kpr-source-inventory.md`
+  (superseded by this file; its own set arithmetic omitted
+  `docs/research/i272-loop-execution.md`, which the authoritative rows
+  include and which was retired). All removed files were sha256-verified
+  equal to the mirror at retirement time.
+- dependency-retained candidate (1 of 34):
+  `docs/designs/ddd-component-2026-10-07/design.md` — in the authorized set,
+  retained because the kept `docs/ddd` operating contract cites it nine times
+  in-repo; an initial same-day retirement of it was reverted before push.
+  Per-file audit: `RETIREMENT-RECEIPT-2026-10-07.md`.
 - Pre-retirement KPR copies stay recoverable in KPR Git history (last
   containing commit: `930236f2` lineage; retirement commit: see Git log of
   this file's addition).
