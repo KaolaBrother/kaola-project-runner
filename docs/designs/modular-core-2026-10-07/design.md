@@ -19,7 +19,7 @@ What must stay together because everything else depends on it and splitting it a
 
 ## 3. Components (cut along measured seams)
 
-Each row: current source (function clusters with line anchors). **The auditable assignment is `inventory-appendix.md` + `inventory-matrix.json` — 721 qualified-name rows from the bridge read-only original (source `7012e4d6`, per-file sha256): every row carries a keyword-assigned DRAFT primary or an explicit per-file keep-in-place hold (223 holds, none blank; P1 step-1 source review replaces keyword evidence). `recount.py` machine-verifies per-file top/nested/all + sha256 (522/199/721).** `worker_event_id` single-ownership (core) and the 5 Fable sample corrections are applied. Per-component CONTRACTS are §3b (this round), not deferred to P1.
+Each row: current source (function clusters with line anchors). **The auditable assignment is `inventory-matrix.json` — 721 rows SOURCE-REVIEWED (the devin pass walked all 223 holds and corrected 207 keyword rows with per-function reasons; patch + original archived as `matrix-source-review*.md/.json`; 18 rows remain explicit keep-in-place: shared receipt emitters, argparse plumbing, bootstrap spanners). `recount.py` machine-verifies per-file top/nested/all + sha256 (522/199/721).** Known reviewer arguable calls recorded, e.g. `parse_flat_yaml`->C5 (feeds catalog_from_files; C2 also defensible). Per-component CONTRACTS are §3b; the typed error/IO surfaces in §3b now carry the source-enumerated codes from the review (`matrix-source-review.md`).
 
 | # | Component | Current source (measured) | Why not core | Key interfaces / typed errors | Deps |
 |---|---|---|---|---|---|
