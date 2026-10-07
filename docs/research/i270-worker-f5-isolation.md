@@ -22,7 +22,7 @@ License split SOURCE_VERIFIED: root `LICENSE` Apache-2.0, appendix `Copyright 20
 
 Cloud runtime is another repo (README self-host link). `e2b-dev/runtime` `47096f195aca4a545a9079b706efb3a18f51cf3f`, tree `e43552c591f930dcce83f03cb8b7192bdb480f59`: sole `LICENSE` Apache-2.0. README_MENTIONED: one codebase for E2B Cloud, enterprise deploy, and Embed; Firecracker microVM, cgroup, netns, nftables. SOURCE_VERIFIED in the SDK only: `Sandbox.create` / `SandboxApi` REST `/sandboxes/{sandboxID}`; `ConnectionConfig` uses `E2B_API_KEY`, default `https://api.${domain}` (`e2b.app`, `e2b.dev`, `e2b.pro`, `e2b-staging.dev`); `debug` uses local envd and skips kill. `buildNetworkBody` sends allow/deny, egress proxy, `allowPublicTraffic`. `buildIamBody` sends workload tokens and omits an empty map. `getSignature` is `v1_` SHA-256 of path, op, user, `envdAccessToken`. `retries` comment excludes create and secret append. `validateApiKey` is a deprecated no-op.
 
-KPR: SDK can ship while the runtime repo is absent; network/IAM is a real boundary. No in-repo manifest. Default is a cloud API key. Root Apache vs package MIT conflicts for reuse. The VM is not in this repo.
+KPR: SDK can ship while the runtime repo is absent; network/IAM is a real boundary. No in-repo manifest. Default is a cloud API key. Root Apache vs package MIT is a license PARTITION (different terms per component), not an inherent conflict and not a prohibition of reuse. The VM is not in this repo.
 
 ## Daytona
 
