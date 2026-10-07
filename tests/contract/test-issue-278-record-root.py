@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import shlex
 import shutil
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -40,12 +41,13 @@ class AcrossCallerRoots(unittest.TestCase):
         self.env.update(KAOLA_LAUNCH_BACKEND='direct')
         self.env.pop('XDG_RUNTIME_DIR', None)
         self.command = shlex.join([sys.executable, str(MOCK)])
+        self.extra_roots = []
         self.addCleanup(self.cleanup_partial_start)
 
     def cleanup_partial_start(self):
         # Registered before any start, including a start that fails mid-handshake.
         digest = hashlib.sha256(str(self.repo).encode()).hexdigest()[:16]
-        for root in (paths.default_root(), self.a / f'kaola-{os.getuid()}'):
+        for root in (paths.default_root(), self.a / f'kaola-{os.getuid()}', *self.extra_roots):
             directory = root / 'codex' / self.session / digest
             record = paths.read_record(directory)
             if record and record.get('holder_instance_id'):
@@ -125,8 +127,100 @@ class AcrossCallerRoots(unittest.TestCase):
         digest = hashlib.sha256(str(self.repo).encode()).hexdigest()[:16]
         directory = paths.default_root() / 'codex' / self.session / digest
         self.addCleanup(self.cleanup_holder, started, directory)
+        self.assertEqual(stat.S_IMODE(paths.default_root().lstat().st_mode), 0o700)
+        self.assertEqual(paths.default_root().lstat().st_uid, os.getuid())
         self.assert_discovery(started, directory)
         self.assertEqual(paths.socket_path(directory).parent.resolve(), (Path('/tmp') / f'kaola-{os.getuid()}-acp').resolve())
+
+    def test_start_creates_private_caller_owned_root(self):
+        root = self.base / 'new-records'
+        self.extra_roots.append(root)
+        self.assertFalse(root.exists())
+        code, started = self.cli('start', env={'KAOLA_ACP_RECORD_ROOT': str(root)})
+        self.assertEqual(code, 0, started)
+        self.assertNotIn('error', started, started)
+        info = root.lstat()
+        self.assertEqual(stat.S_IMODE(info.st_mode), 0o700)
+        self.assertEqual(info.st_uid, os.getuid())
+        self.assertTrue(stat.S_ISDIR(info.st_mode))
+
+    def test_start_tightens_owned_readable_root(self):
+        root = self.base / 'readable-records'
+        root.mkdir()
+        root.chmod(0o755)
+        self.extra_roots.append(root)
+        code, started = self.cli('start', env={'KAOLA_ACP_RECORD_ROOT': str(root)})
+        self.assertEqual(code, 0, started)
+        self.assertNotIn('error', started, started)
+        self.assertEqual(stat.S_IMODE(root.lstat().st_mode), 0o700)
+        self.assertEqual(root.lstat().st_uid, os.getuid())
+
+    def test_symlink_and_non_directory_roots_refuse_without_writes(self):
+        target = self.base / 'redirected'; target.mkdir()
+        alias = self.base / 'unsafe-root'; alias.symlink_to(target)
+        regular = self.base / 'not-directory'; regular.write_text('unchanged')
+        digest = hashlib.sha256(str(self.repo).encode()).hexdigest()[:16]
+        for root in (alias, regular):
+            with self.subTest(root=root):
+                code, refused = self.cli('start', env={'KAOLA_ACP_RECORD_ROOT': str(root)})
+                self.assertEqual(code, 1, refused)
+                self.assertEqual(refused['error']['code'], 'record-root-unsafe')
+                self.assertFalse(refused['mutation_performed'])
+                # Direct holder construction must enforce the same boundary.
+                directory = root / 'codex' / self.session / digest
+                run = subprocess.run([sys.executable, str(PROJECT / 'scripts/kaola-acp-holder.py'),
+                                      '--record-dir', str(directory), '--socket', str(self.base / 'h.sock'),
+                                      '--repo', str(self.repo), '--platform', 'codex',
+                                      '--session', self.session, '--command', self.command],
+                                     capture_output=True, text=True, timeout=15, env=self.env)
+                self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+                self.assertEqual(json.loads(run.stdout)['error']['code'], 'record-root-unsafe')
+        self.assertEqual(list(target.iterdir()), [])
+        self.assertEqual(regular.read_text(), 'unchanged')
+        self.assertTrue(alias.is_symlink())
+        self.assertEqual(stat.S_IMODE(target.lstat().st_mode), 0o755)
+        self.assertFalse((self.base / 'h.sock').exists())
+
+    def test_symlinked_session_parent_cannot_redirect_private_root_writes(self):
+        root = self.base / 'private-records'; root.mkdir(mode=0o700)
+        target = self.base / 'redirected-child'; target.mkdir()
+        (root / 'codex').symlink_to(target)
+        code, refused = self.cli('start', env={'KAOLA_ACP_RECORD_ROOT': str(root)})
+        self.assertEqual(code, 1, refused)
+        self.assertEqual(refused['error']['code'], 'record-root-unsafe')
+        self.assertEqual(list(target.iterdir()), [])
+        self.assertTrue((root / 'codex').is_symlink())
+
+    def test_drain_restart_refuses_symlink_root_before_stopping_live_holder(self):
+        root = self.base / 'restart-records'
+        self.extra_roots.append(root)
+        code, started = self.cli('start', env={'KAOLA_ACP_RECORD_ROOT': str(root)})
+        self.assertEqual(code, 0, started)
+        self.assertNotIn('error', started, started)
+        alias = self.base / 'restart-alias'; alias.symlink_to(root)
+        code, refused = self.cli('drain-restart', env={'KAOLA_ACP_RECORD_ROOT': str(alias)},
+                                 extra=('--continue',))
+        self.assertEqual(code, 1, refused)
+        self.assertEqual(refused['error']['code'], 'record-root-unsafe')
+        self.assertFalse(refused['mutation_performed'])
+        # Scoped alias reads still work; this rejected restart did not stop it.
+        _, status = self.cli('status', env={'KAOLA_ACP_RECORD_ROOT': str(alias)})
+        self.assertNotIn('error', status, status)
+        self.assertEqual(status['holder_instance_id'], started['holder_instance_id'])
+        self.assertTrue(status['agent_alive'])
+
+    def test_foreign_owned_root_is_not_chmodded_or_written(self):
+        root = self.base / 'foreign-records'; root.mkdir()
+        info = list(root.lstat())
+        info[4] = os.getuid() + 1
+        with patch.object(Path, 'lstat', return_value=os.stat_result(info)), \
+             patch.object(paths.os, 'open') as opened, \
+             patch.object(paths.os, 'fchmod') as chmodded:
+            with self.assertRaises(paths.RecordRootUnsafe):
+                paths.prepare_record_directory(root / 'codex' / self.session / 'digest', root)
+            opened.assert_not_called()
+            chmodded.assert_not_called()
+        self.assertEqual(list(root.iterdir()), [])
 
     def test_running_v091_holder_in_custom_legacy_tmpdir(self):
         # Real v0.9.1 sources, not a simulation of the defective path expression.
@@ -152,7 +246,10 @@ class AcrossCallerRoots(unittest.TestCase):
         shadow.mkdir(parents=True, exist_ok=True)
         (shadow / 'record.json').write_text(json.dumps({'holder_pid': None, 'repo': str(self.repo)}))
         self.addCleanup(shutil.rmtree, shadow, ignore_errors=True)
+        legacy_mode = directory.parent.parent.parent.lstat().st_mode
         self.assert_discovery(started, directory)
+        self.assertEqual(directory.parent.parent.parent.lstat().st_mode, legacy_mode,
+                         "legacy discovery must not change root permissions")
         self.assertEqual(paths.socket_path(directory).parent.resolve(), (self.a / f'kaola-{os.getuid()}-acp').resolve())
 
     def test_unavailable_legacy_lookup_emits_typed_refusal(self):

@@ -4,6 +4,45 @@ Branch: `workflow/issue-278`. Base: `41b12e85`. Workflow owns the claim,
 main-checkout mission ledger and `.kw/worktrees/issue-278` child worktree.
 This is a review candidate: no finalization, merge, tag, publication or production install.
 
+## Host REPAIR round: record-root privacy
+
+Review target: `527ffa6fbf6c5d9decfb90e2c8374e6a38b5b336`. The Host accepted
+the path/discovery design and prior evidence, then identified a security
+regression in the predictable, unverified `0755` record root. This is one repair
+round in the same assignment/worktree, not a new claim or mission. The completed
+candidate receipt in the main ledger remains immutable; this document and the
+repair commit record the resulting engineering evidence.
+
+Choice: retain `/tmp/kaola-<uid>` and harden it. A single stable default keeps
+the accepted TMPDIR-independent lookup and socket behavior unchanged without
+adding OS-specific default-selection branches. Runner start checks the selected
+root with `lstat` before its start decision. Before any new session-data write,
+Runner and holder share the same preparation function: create with `0700`,
+reject symlink/non-directory/foreign-UID roots as `record-root-unsafe`, open with
+`O_DIRECTORY | O_NOFOLLOW`, recheck owner/type by `fstat`, and use `fchmod` only
+on our verified directory descriptor to tighten permissions to `0700`.
+Descendants are created/opened relative to those descriptors without following
+symlinks. Stale socket removal now happens after this preparation. `drain-restart`
+checks the write root before stopping a live holder; an unsafe alias therefore
+leaves the seat live and still readable through that alias. Standard
+holder record layouts check the shared root; direct custom holder layouts check
+the supplied record directory itself. Legacy lookup remains read-only.
+
+Regression coverage adds real starts for a new caller-owned `0700` root and an
+owned `0755` root tightened to `0700`; Runner and direct-holder refusal of
+symlink/non-directory roots with no writes through them; a foreign-UID root
+refused before open/chmod (mocked UID, no privileged chown); and a symlinked
+session parent refused without redirected writes; and a refused alias-root
+`drain-restart` proven to leave the same live holder answering status. The fixed-default start also
+checks ownership/mode. The genuine v0.9.1 live-root test verifies that discovery
+does not change its original permissions. Existing cross-TMPDIR and cross-root
+Host tests remain intact.
+
+Repair-round command receipts and results are recorded below. Prior 18-suite
+evidence describes the reviewed `527ffa6f` candidate; it is not claimed as a
+rerun of changed runtime bytes. The four explicitly requested affected suites
+are rerun for this repair.
+
 ## Design and compatibility
 
 One shared path helper supplies fixed per-UID `/tmp` record/socket defaults.
@@ -39,9 +78,10 @@ original-worktree worker byte inventory separately matches `expected_files` /
 `check_one` from the canonical renderer functions (pin validation was not changed). No generated product
 was edited by hand; protected original Grok Bot products remain unchanged.
 
-## Exact commands
+## Reviewed 527ffa6f commands and results
 
-From the issue worktree:
+These are the prior reviewed candidate receipts. The security repair has its
+own final verification below. From the issue worktree:
 
 ```bash
 ./scripts/render-skills.py --check
@@ -141,7 +181,7 @@ receipt again reports no residual processes. Raw receipt:
 `.kw/qa-278/validation-preflight.log`. No other runtime bytes changed after
 that integrated run.
 
-Source digests identify the final implementation independently of the QA clone's base HEAD.
+Source digests identify the reviewed `527ffa6f` implementation independently of the QA clone's base HEAD. Repair digests are recorded separately below.
 
 | Source | SHA256 |
 | --- | --- |
@@ -173,3 +213,70 @@ usable. New holder behavior requires a safe-boundary seat restart. Live records
 remain readable before that restart. Actual paid/native CLI behavior across all
 ten platforms, release pinning, installation and full lifecycle acceptance were
 not performed or claimed by this focused bug-fix review.
+
+
+## Final security-repair verification
+
+From the issue worktree, the exact final selected invocation is:
+
+```bash
+./scripts/render-skills.py --write
+./scripts/render-skills.py --check
+# each exit 1: unchanged inherited protected v0.9.1 pin-delta constraint
+.kw/qa-278/candidate/scripts/render-skills.py --write
+.kw/qa-278/candidate/scripts/render-skills.py --check
+# each exit 0: existing disposable content-stage QA setup described above
+PATH="/Users/ylmacstudio/.local/bin:$PATH" /Users/ylmacstudio/.local/bin/bash \
+  .kw/qa-278/candidate/scripts/validate.sh \
+  --suite test-issue-278-record-root.py \
+  --suite test-issue-273-list-identity.py \
+  --suite test-acp-contract.py \
+  --suite test-generated-skills.py
+python3 tests/contract/test-issue-278-record-root.py
+```
+
+**Final repair result: PASS, exit 0**, selected 4/89 suites, 95.1004 s total.
+
+| Selected suite | Exact outcome | Entry elapsed (s) |
+| --- | --- | ---: |
+| `test-issue-278-record-root.py` | PASS, 10 tests in 8.705 s | 8.762 |
+| `test-issue-273-list-identity.py` | PASS, 9 tests in 1.015 s | 1.060 |
+| `test-acp-contract.py` | PASS, 85 tests in 93.336 s | 93.391 |
+| `test-generated-skills.py` | PASS, generated Skill acceptance | 1.832 |
+
+The final direct original-worktree regression also **PASS, exit 0**, 10 tests
+in 9.739 s. The final selected invocation included content-stage render/check,
+all twelve Skill validators and Grok Bot shape verification, all PASS; cleanup
+reported `residual_pids: []`, no matched holders and no unverified groups.
+Original-worktree canonical worker byte inventories, original/QA runtime and
+regression source equality, Python syntax and `git diff --check` also PASS.
+No runtime/generated bytes changed after these checks. Docs-only outcome updates
+do not alter the exercised inputs. No full inventory or native platform run is claimed.
+
+Local raw receipts (ignored): `.kw/qa-278/validation-security-final.log`,
+`regression-security-final.log`, `render-security-content-write.log`,
+`render-security-content-check.log`, `render-security-original-write.log` and
+`render-security-original-check.log`. Original write/check both exit 1; the
+protected pin and original Grok Bot products are unchanged. The disposable
+content-stage write/check both exit 0. An earlier four-suite repair run before
+adding the pre-stop restart guard also passed (94.3035 s); the final run above
+supersedes that runtime evidence.
+
+Final repair source digests (QA and original-worktree runtime inputs match):
+
+| Source | SHA256 |
+| --- | --- |
+| `scripts/kaola-acp-paths.py` | `8a7c6864c4eb5fc1eea6e5bba547a164940b28f40f57de7054a179a6880db321` |
+| `scripts/kaola-acp.py` | `e016b255b337456253846c9b56558bbe35ac1430240f49baebbc08af5f83aee1` |
+| `scripts/kaola-acp-holder.py` | `7bc65d5d59747e2b46ded1f7e13107ed4c6588f9863e12ddfec2e0114ab6cec0` |
+| `tests/contract/test-issue-278-record-root.py` | `e0847de9c62bfec46c893882553fe420b583f1d229105a21bf771ce501adab42` |
+
+Limits: existing live legacy holders remain discoverable without a permission
+migration; read-only operations do not tighten their roots. The new write
+protection applies on new holder construction/start and requires the already
+recorded safe-boundary seat restart. It cannot retract earlier local exposure
+from a readable candidate root. Foreign-UID refusal is covered with simulated
+ownership, not a second-user integration run. Native paid CLI execution,
+production installation and a corrected release pin remain outside this repair.
+
+Final selected log SHA256: `dc818b0343a6e26113e31df54300686e4dd2db67e8794e048e2da8909cd8dbc5`.

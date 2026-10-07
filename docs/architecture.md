@@ -152,6 +152,14 @@ within macOS AF_UNIX limits. Neither default follows `TMPDIR` or
 the `holder.sock` symlink; Runner and holder-to-Sideagent calls reuse that
 applied legacy path before deriving a new socket.
 
+Runner start and holder construction create the selected record root with mode
+`0700`, verify with `lstat` that it is a directory owned by the caller, and
+reject symlinked, non-directory or foreign-owned roots as `record-root-unsafe`
+before writing session data. Owned roots with broader permissions are tightened
+to `0700` through a verified directory descriptor. Session directories are also
+created/opened without following symlinks. Legacy discovery remains read-only;
+status/list/locate do not change old root permissions.
+
 Default exact-session reads and `list` cover the fixed root, `/var/tmp`,
 `/run/user/<uid>`, the caller's legacy temp/XDG roots, the macOS native user
 temp root, and record roots named by same-UID live holder argv in one bounded

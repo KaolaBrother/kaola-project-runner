@@ -11,12 +11,68 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import tempfile
 
 
 class RecordRootMismatch(RuntimeError):
     pass
+
+
+class RecordRootUnsafe(RuntimeError):
+    """A write target cannot safely hold private session data."""
+
+
+def check_record_root(root: Path) -> None:
+    """Read-only check; legacy discovery never calls this write-target guard."""
+    try:
+        info = root.lstat()
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        raise RecordRootUnsafe(f'cannot inspect record root {root}: {exc}') from exc
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+        raise RecordRootUnsafe(f'record root {root} must be a non-symlink directory '
+                               'owned by the caller; choose a private --record-root')
+
+
+def prepare_record_directory(directory: Path, root: Path) -> None:
+    """Create/tighten our write root and descendants without following symlinks."""
+    check_record_root(root)
+    fd = None
+    try:
+        root.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            root.mkdir(mode=0o700)
+        except FileExistsError:
+            pass
+        # Recheck after mkdir; O_NOFOLLOW closes the lstat/open symlink race.
+        check_record_root(root)
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        fd = os.open(root, flags)
+        parts = directory.relative_to(root).parts
+        for name in (*parts, None):
+            info = os.fstat(fd)
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+                raise RecordRootUnsafe(f'record directory under {root} is not caller-owned')
+            if stat.S_IMODE(info.st_mode) != 0o700:
+                os.fchmod(fd, 0o700)
+            if name is None:
+                break
+            try:
+                os.mkdir(name, mode=0o700, dir_fd=fd)
+            except FileExistsError:
+                pass
+            child = os.open(name, flags, dir_fd=fd)
+            os.close(fd)
+            fd = child
+    except (OSError, ValueError) as exc:
+        raise RecordRootUnsafe(f'unsafe record write target {directory}: {exc}; '
+                               'choose a private --record-root') from exc
+    finally:
+        if fd is not None:
+            os.close(fd)
 
 
 def default_root() -> Path:

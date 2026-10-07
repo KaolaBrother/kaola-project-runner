@@ -707,6 +707,14 @@ visibility produce `record-root-mismatch`, never a false absence receipt.
 See [record/socket roots](architecture.md#acp-record-and-socket-roots) for
 lookup boundaries and recovery of stopped custom-root records.
 
+Runner start and holder construction create the selected record root with mode
+`0700`, verify with `lstat` that it is a directory owned by the caller, and
+reject symlinked, non-directory or foreign-owned roots as `record-root-unsafe`
+before writing session data. Owned roots with broader permissions are tightened
+to `0700` through a verified directory descriptor. Session directories are also
+created/opened without following symlinks. Legacy discovery remains read-only;
+status/list/locate do not change old root permissions.
+
 `--repo` must resolve to the exact Git top-level. A linked worktree is a valid Git top-level and
 is not a transport refusal; preferring the consuming project's canonical
 project root is Agent guidance, so a Workflow child worktree is not required as `--repo`.

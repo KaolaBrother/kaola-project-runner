@@ -5066,6 +5066,8 @@ def command_start(args: argparse.Namespace, repo: str,
     # A caller that already ran the pre-spawn decision, like drain-restart
     # before it stops anything, hands its result in so the installed Skill
     # roots are scanned once, not twice.
+    directory = record_dir(args, repo)
+    acp_paths.check_record_root(directory.parent.parent.parent)
     refused, facts = decided if decided is not None else pre_spawn_refusal(args, repo)
     if refused is not None:
         return refused
@@ -5097,7 +5099,6 @@ def command_start(args: argparse.Namespace, repo: str,
     # ACP config option below, so a recorded mode is never a raw None that a
     # later command has to re-derive.
     mode_value = args.mode or ACP_SKIP_MODE.get(args.platform)
-    directory = record_dir(args, repo)
     record = read_record(directory)
     # Issue #203: read before the new holder replaces it; the only source of
     # evidence a resume of the same native session may inherit.
@@ -5121,14 +5122,15 @@ def command_start(args: argparse.Namespace, repo: str,
                 return attach_binding_fact(receipt, record)
             receipt["replaced_record"] = {"holder_pid": holder_pid, "pid_reused": True,
                                           "holder_instance_id": record.get("holder_instance_id")}
-            try:
-                sock_path(args, repo).unlink()
-            except OSError:
-                pass
         if pid_alive(record.get("agent_pgid")) or pid_alive(record.get("agent_pid")):
             receipt.update(holder_lost_receipt(args, repo, record))
             return receipt
-    directory.mkdir(parents=True, exist_ok=True)
+    acp_paths.prepare_record_directory(directory, directory.parent.parent.parent)
+    if receipt.get("replaced_record"):
+        try:
+            sock_path(args, repo).unlink()
+        except OSError:
+            pass
     log_path = directory / "holder.out.log"
     # Issue #132: keep --record-dir, --socket, --repo in this order; the
     # identity anchors (HOLDER_RECORD_DIR, HOLDER_SOCKET) parse it.
@@ -5702,6 +5704,7 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
         })
         return receipt
     directory = record_dir(args, repo)
+    acp_paths.check_record_root(directory.parent.parent.parent)
     record = read_record(directory)
     if not record or (not pid_alive(record.get("holder_pid")) and record.get("state") != "stopped"):
         receipt = base_receipt(args, repo)
@@ -6205,6 +6208,11 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
+    except acp_paths.RecordRootUnsafe as exc:
+        print(json.dumps({"result": "refused", "reason": "record-root-unsafe",
+                          "error": {"code": "record-root-unsafe", "message": str(exc)},
+                          "mutation_performed": False, "mutation_status": "not_started"}))
+        raise SystemExit(1)
     except acp_paths.RecordRootMismatch as exc:
         print(json.dumps({"result": "refused", "reason": "record-root-mismatch",
                           "error": {"code": "record-root-mismatch", "message": str(exc)},

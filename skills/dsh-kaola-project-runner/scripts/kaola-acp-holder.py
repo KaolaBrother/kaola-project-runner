@@ -1820,7 +1820,13 @@ class Holder:
         self.args = args
         self.init_meta = parse_init_meta(getattr(args, "init_meta", "") or "")
         self.record_dir = Path(args.record_dir)
-        self.record_dir.mkdir(parents=True, exist_ok=True)
+        # Runner layout has a shared root; direct custom holder fixtures may
+        # instead supply the private record directory itself as their root.
+        root = self.record_dir
+        if (root.parent.name == args.session
+                and root.parent.parent.name == args.platform):
+            root = root.parent.parent.parent
+        acp_paths.prepare_record_directory(self.record_dir, root)
         self.events = EventLog(self.record_dir / "events.jsonl")
         self.record_path = self.record_dir / "record.json"
         self.socket_path = Path(args.socket) if args.socket else self.record_dir / "holder.sock"
@@ -6230,7 +6236,13 @@ def main() -> int:
         return 2
     if args.probe:
         return run_probe(args)
-    holder = Holder(args)
+    try:
+        holder = Holder(args)
+    except acp_paths.RecordRootUnsafe as exc:
+        print(json.dumps({"result": "refused", "reason": "record-root-unsafe",
+                          "error": {"code": "record-root-unsafe", "message": str(exc)},
+                          "mutation_performed": False, "mutation_status": "not_started"}))
+        return 1
     return holder.run()
 
 
