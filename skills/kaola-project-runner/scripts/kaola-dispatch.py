@@ -4548,6 +4548,130 @@ def record_recovery(args: argparse.Namespace, doc: dict[str, Any], current: dict
             "route until its proper type is established.")
 
 
+STOP_DUTIES = ("stop-unconfirmed", "old-node-live")
+RETURNED_SUMMARY = re.compile(r"\d+ maintenance input\(s\) not applied by a node")
+
+
+def input_settlement_problem(state: dict[str, Any], inputs: dict[str, Any], ident: str,
+                             evidence: Any) -> str | None:
+    """Why the named evidence does not prove one returned input handled.
+
+    The proof is the recorded node checkpoint: it settled this exact input,
+    or it is verified, its range reaches the failed batch's Host revision and
+    no returned Host change at or below that revision is still open. A
+    recovery-only checkpoint selects no new business range, so it cannot
+    reach an unsent one. A stop duty is proven by the exact stop, never here."""
+    item = inputs.get(ident)
+    if isinstance(item, dict) and item.get("why") in STOP_DUTIES:
+        return (f"{ident} is a stop duty ({item['why']}); only the exact stop of the original node "
+                "holder ends it, not a checkpoint")
+    batch = evidence[len("checkpoint:"):] if isinstance(evidence, str) and evidence.startswith("checkpoint:") else ""
+    maintenance = state.get("maintenance") if isinstance(state.get("maintenance"), dict) else {}
+    last = maintenance.get("last_checkpoint") if isinstance(maintenance.get("last_checkpoint"), dict) else {}
+    if not batch:
+        return "--evidence must name the recorded node checkpoint as checkpoint:BATCH"
+    if last.get("batch") != batch:
+        return f"checkpoint:{batch} is not the recorded node checkpoint"
+    if ident in (last.get("settled") or []):
+        return None
+    failed = item.get("host_revision_through") if isinstance(item, dict) else None
+    covered = (last.get("host_revision") or {}).get("through")
+    if (ident.startswith("batch:") and isinstance(failed, int) and not isinstance(failed, bool)
+            and last.get("verified") is True and isinstance(covered, int) and failed <= covered):
+        open_changes = sorted(other for other in inputs
+                              if (revision_of(other) or failed + 1) <= failed)
+        if not open_changes:
+            return None
+        return (f"returned Host change(s) {', '.join(open_changes)} at or below revision {failed} "
+                f"are still open, so checkpoint:{batch} does not prove {ident} handled")
+    return (f"checkpoint:{batch} did not settle {ident}"
+            + (f" or verify its Host revision range through {failed}" if failed is not None else ""))
+
+
+def settle_recovery(args: argparse.Namespace, doc: dict[str, Any], current: dict[str, Any],
+                    ident: str) -> str:
+    """The exact per-input removal, and how to reach its proof."""
+    state = doc["state"]
+    maintenance = state.get("maintenance") if isinstance(state.get("maintenance"), dict) else {}
+    last = maintenance.get("last_checkpoint") if isinstance(maintenance.get("last_checkpoint"), dict) else {}
+    span = last.get("host_revision") or {}
+    command = shlex.join([sys.executable, str(Path(__file__).resolve()), "state", "update",
+                          "--file", str(args.file), "--writer", args.writer, "--source", "ORIGINAL_SOURCE",
+                          "--kind", "alerts", "--id", args.id, "--expect-rev", str(current.get("rev")),
+                          "--evidence", f"checkpoint:{last.get('batch') or 'BATCH'}",
+                          "--set", json.dumps({"inputs": {ident: None}})])
+    others = len((current.get("inputs") or {})) - 1
+    return (f"alerts/{args.id} is at record revision {current.get('rev')}. Recorded node checkpoint: "
+            f"{last.get('batch') or 'none'} (verified {last.get('verified')}, Host revisions "
+            f"{span.get('from')}..{span.get('through')}). "
+            f"When that checkpoint settled {ident} or verified its failed range, remove only this input with: "
+            f"{command}. Otherwise keep it: reconcile the original node and stop receipts, then request a "
+            "bounded check with `state recovery-input --kind request`; that batch also carries pending Host "
+            "business changes. A stop duty stays until the exact stop is confirmed. Do not retire the whole "
+            f"alert while {others} other input(s) remain, rewrite a failed range, or write a fake business change.")
+
+
+def settle_inputs(args: argparse.Namespace, doc: dict[str, Any], current: dict[str, Any] | None,
+                  patch: dict[str, Any], caller: dict[str, str] | None) -> dict[str, Any]:
+    """Remove handled returned inputs one by one. Each removal names the
+    original proof; unrelated inputs and the alert's other facts stay."""
+    removals = [ident for ident, value in patch["inputs"].items() if value is None]
+    if set(patch) != {"inputs"} or len(removals) != len(patch["inputs"]):
+        raise StateRefusal("invalid-input", "an input removal patch is only {\"inputs\":{\"ID\":null}}; "
+                           "send other changes separately. The file was not changed",
+                           path=f"alerts.{args.id}.inputs", allowed="inputs with null values", unapplied=patch)
+    if current is None:
+        raise StateRefusal("record-missing", f"alerts/{args.id} is not current",
+                           recovery=record_recovery(args, doc, current), unapplied=patch)
+    if args.expect_rev != current.get("rev"):
+        raise StateRefusal("expect-rev-required" if args.expect_rev is None else "conflict",
+                           f"alerts/{args.id} is at rev {current.get('rev')}, not {args.expect_rev}",
+                           recovery=settle_recovery(args, doc, current, removals[0]), unapplied=patch)
+    inputs = current.get("inputs") if isinstance(current.get("inputs"), dict) else {}
+    for ident in removals:
+        if ident not in inputs:
+            raise StateRefusal(
+                "input-missing", f"alerts.{args.id}.inputs.{ident} is not a current input",
+                path=f"alerts.{args.id}.inputs.{ident}", allowed=", ".join(sorted(inputs)) or "none",
+                recovery=(f"Current inputs at record revision {current.get('rev')}: "
+                          f"{', '.join(sorted(inputs)) or 'none'}. Remove only a current input id, verbatim. "
+                          "Do not create a handled row or move its text to another field."),
+                unapplied=patch)
+        problem = input_settlement_problem(doc["state"], inputs, ident, getattr(args, "evidence", None))
+        if problem:
+            raise StateRefusal("input-unproven", problem, path=f"alerts.{args.id}.inputs.{ident}",
+                               recovery=settle_recovery(args, doc, current, ident), unapplied=patch)
+    remaining = {ident: row for ident, row in inputs.items() if ident not in removals}
+    records = doc["state"]["alerts"]
+    if args.id == "maintenance-returned" and not remaining:
+        # The returned alert is its inputs, as when a checkpoint settles the last one.
+        del records[args.id]
+        return {"kind": "alerts", "id": args.id, "removed": True, "settled_inputs": removals,
+                "evidence": args.evidence}
+    merged = {key: value for key, value in current.items() if key != "inputs"}
+    if remaining:
+        merged["inputs"] = remaining
+    # Pointers only a removed input named leave with it; no settled copy stays.
+    kept = {ref for row in remaining.values() if isinstance(row, dict)
+            for ref in (row.get("evidence"), f"checkpoint:{row.get('batch')}") if ref}
+    gone = {ref for ident in removals if isinstance(inputs[ident], dict)
+            for ref in (inputs[ident].get("evidence"), f"checkpoint:{inputs[ident].get('batch')}") if ref}
+    if isinstance(merged.get("evidence"), list):
+        merged["evidence"] = [ref for ref in merged["evidence"] if ref not in gone - kept]
+        if not merged["evidence"]:
+            merged.pop("evidence")
+    if isinstance(merged.get("summary"), str) and RETURNED_SUMMARY.match(merged["summary"]):
+        merged["summary"] = RETURNED_SUMMARY.sub(f"{len(remaining)} maintenance input(s) not applied by a node",
+                                                 merged["summary"], count=1)
+    merged["rev"] = int(current.get("rev") or 0) + 1
+    merged["updated_at"] = observed_at()
+    merged["source"] = args.source
+    merged["writer"] = writer_trace(args, caller)
+    stamp_writer(doc, merged, args, caller)
+    records[args.id] = merged
+    return {**merged, "settled_inputs": removals}
+
+
 def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: dict[str, Any],
                         caller: dict[str, str] | None) -> dict[str, Any]:
     state = doc["state"]
@@ -4563,6 +4687,9 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
     if kind == "decisions" and patch.get("status") == "settled" and current is None:
         raise StateRefusal("record-missing", "settlement removes an existing decision; it creates no row",
                            recovery=record_recovery(args, doc, current), unapplied=patch)
+    if (kind == "alerts" and isinstance(patch.get("inputs"), dict)
+            and any(value is None for value in patch["inputs"].values())):
+        return settle_inputs(args, doc, current, patch, caller)
     rejected = RECORD.reject_record_patch(kind, patch)
     if rejected:
         rejected["path"] = f"{kind}.{record_id}.{rejected['path'].removeprefix(kind + '.')}"
@@ -5582,12 +5709,13 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
         recovery_ids.add(f"recovery#{recovery['seq']}")
         current_alerts = ((state.get("alerts") or {}).get("maintenance-returned") or {}).get("inputs") or {}
         recovery_ids.update(ident for ident, value in (receipt.get("recovery_alerts") or {}).items()
-                            if current_alerts.get(ident) == value)
+                            if ident.startswith("recovery#") and current_alerts.get(ident) == value)
     selected = host_changes(doc, handled, through)
     # A batch input the Host rewrote after this batch was selected shows
     # only its later change, which is past `through` and so in the next
     # batch: superseded, not lost.
     later = {ident.rpartition("@")[0] for ident in host_changes(doc, through, current)}
+    still_returned = ((state.get("alerts") or {}).get("maintenance-returned") or {}).get("inputs") or {}
     settled: list[str] = []
     superseded: list[str] = []
     returned: dict[str, str] = {}
@@ -5602,7 +5730,10 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
             raise StateRefusal("batch-unverified", "recovery entry is not in the original selected batch")
         elif problem and not already_settled_input(state, ident):
             returned[ident] = problem
-        elif ident in selected or ident in recovery_ids or ident in events or already_settled_input(state, ident):
+        elif (ident in selected or ident in recovery_ids or already_settled_input(state, ident)
+              or (ident in events and ident not in still_returned)):
+            # A returned input was handed to the Host; only a batch that
+            # actually carried it settles it, never a self-named event.
             settled.append(ident)
         elif (revision is not None and handled < revision <= through
               and ident.rpartition("@")[0] in later):
@@ -5617,7 +5748,6 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
                 returned[ident] = "unaccounted"
     # The acknowledgment never passes an unaccounted Host change: neither
     # one of this batch nor one still in the Host's open returned alert.
-    still_returned = ((state.get("alerts") or {}).get("maintenance-returned") or {}).get("inputs") or {}
     open_revisions = [revision for ident, revision in selected.items() if ident not in settled]
     open_revisions += [revision_of(ident) for ident in still_returned if revision_of(ident) is not None]
     new_acked = min([through] + [revision - 1 for revision in open_revisions])
@@ -5648,7 +5778,9 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
     if returned:
         # Handed to the Host once, as one durable alert: never re-sent to
         # another node, never counted as applied. Already-settled inputs leave.
-        inputs.update({ident: {"why": why, "batch": args.batch} for ident, why in returned.items()})
+        # A current input this batch did not carry keeps its original facts.
+        inputs.update({ident: {"why": why, "batch": args.batch} for ident, why in returned.items()
+                       if ident not in inputs or ident in selected or ident in recovery_ids})
         alerts[alert_id] = {**prior, "level": "warn", "owner": "host",
                             "summary": f"{len(inputs)} maintenance input(s) not applied by a node; "
                                        "judge or re-dispatch them from their sources",
@@ -6210,6 +6342,7 @@ def build_parser() -> argparse.ArgumentParser:
     update.add_argument("--set", required=True, help="JSON merge patch, or @path")
     update.add_argument("--host-turn", help="the Host turn a Sideagent transcribes a decision from")
     update.add_argument("--coalesce", action="store_true", help="repeat of an existing alert")
+    update.add_argument("--evidence", help="checkpoint:BATCH that proves a removed alert input handled")
     update.set_defaults(func=command_state_update)
 
     retire = actions.add_parser("retire")

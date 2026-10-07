@@ -29,6 +29,16 @@ Seats: restart required
   help and the `$LIVE` doc name `kaola-dispatch-index/1` and
   `list --repo --include-dead` rows. This entry alone is state tooling only;
   the section restart comes from the #278 holder change.
+- **Per-input maintenance settlement (Issue #287).** `state update --kind alerts
+  --evidence checkpoint:B --set '{"inputs":{"ID":null}}'` removes one handled
+  `maintenance-returned` input when the recorded node checkpoint settled it or
+  verified its failed `batch:` range; unrelated inputs stay unchanged. Absent,
+  unproven and stale removals refuse (`input-missing`, `input-unproven`,
+  `conflict`) without a write and name the exact command. A checkpoint can no
+  longer settle a returned input its batch did not carry. The holder now sends
+  pending Host changes, including a failed batch's range, with a Host recovery
+  request, so recovery needs no fake business write. Restart Host seats at a
+  safe boundary to load the holder change.
 
 ## 0.9.1 — 2026-10-07 (compaction recovery, steer adaptations, launch broker, task-failure count, selection continuity)
 

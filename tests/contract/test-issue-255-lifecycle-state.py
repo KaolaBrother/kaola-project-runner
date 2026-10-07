@@ -2654,7 +2654,8 @@ class MaintenanceCheckpoint(StateProject):
         self.assertEqual(code, 0, out)
         return out["value"]
 
-    def recovery_receipt(self, item: dict, batch: str = "b-recovery", holder: str = "node-recovery") -> dict:
+    def recovery_receipt(self, item: dict, batch: str = "b-recovery", holder: str = "node-recovery",
+                         through: int | None = None) -> dict:
         directory, _ = self.recovery_host()
         env = self.node(holder)
         node_dir = self.records / "zcode" / self.SESSION / directory.name
@@ -2664,14 +2665,18 @@ class MaintenanceCheckpoint(StateProject):
         (node_dir / "record.json").write_text(json.dumps(record))
         alerts = ((self.doc()["state"].get("alerts") or {}).get("maintenance-returned") or {}).get("inputs") or {}
         (directory / "events.jsonl").write_text(json.dumps({"kind": "sideagent_node_batch", "batch": batch,
-            "target_holder": holder, "host_holder": "host-recovery", "host_revision_through": self.doc()["host_revision"],
+            "target_holder": holder, "host_holder": "host-recovery",
+            "host_revision_through": self.doc()["host_revision"] if through is None else through,
             "recovery_input": item, "recovery_alerts": alerts}) + "\n")
         return env
 
-    def recovery_checkpoint(self, env: dict, item: dict, entries: list, batch: str = "b-recovery") -> tuple[int, dict]:
+    def recovery_checkpoint(self, env: dict, item: dict, entries: list, batch: str = "b-recovery",
+                            through: int | None = None, events: list | None = None) -> tuple[int, dict]:
         return self.state("checkpoint", "--file", str(self.file), "--writer", "sideagent", "--source", batch,
-            "--batch", batch, "--through-host-revision", str(self.doc()["host_revision"]),
-            "--recovery-seq", str(item["seq"]), "--entries", json.dumps(entries), env=env)
+            "--batch", batch, "--through-host-revision",
+            str(self.doc()["host_revision"] if through is None else through),
+            "--recovery-seq", str(item["seq"]), "--entries", json.dumps(entries),
+            *(["--events", json.dumps(events)] if events else []), env=env)
 
     @staticmethod
     def scoped_entry(seq: int) -> dict:
@@ -2790,6 +2795,129 @@ class MaintenanceCheckpoint(StateProject):
         self.assertNotIn("recovery_input", self.doc()["state"]["maintenance"])
         inputs = self.doc()["state"]["alerts"]["maintenance-returned"]["inputs"]
         self.assertEqual(set(inputs), {"recovery#90", "recovery#91", "host:tasks/original@1"})
+
+    def mixed_alert(self) -> int:
+        """#287 field shape: one failed business batch beside four unrelated
+        current inputs in one returned alert. Returns the failed revision."""
+        self.init(); self.bind()
+        self.update("host", "tasks", "t1", {"stage": "doing", "goal": "phase1", "next": "host reads result"})
+        failed = self.doc()["host_revision"]
+        doc = self.doc()
+        doc["state"]["maintenance"] = {"handled_host_revision": failed - 1, "acked_host_revision": failed - 1}
+        doc["state"]["alerts"] = {"maintenance-returned": {
+            "owner": "host", "level": "warn", "rev": 3, "summary": "maintenance needs Host recovery",
+            "evidence": ["carrier-events#7", "carrier-events#8", "carrier-events#9", "checkpoint:b-old"],
+            "inputs": {
+                "batch:b-failed": {"why": "checkpoint-missing", "evidence": "carrier-events#7",
+                                   "next": "Host: reconcile", "host_revision_through": failed},
+                "batch:b-stop": {"why": "stop-unconfirmed", "evidence": "carrier-events#8",
+                                 "host_revision_through": failed},
+                "batch:b-norange": {"why": "binding-or-recipe-unavailable", "evidence": "carrier-events#9"},
+                "recovery#4": {"why": "recovery-originals-unavailable", "batch": "b-old"},
+                "codex/codex-KT-i1-a/idle/5": {"why": "unaccounted", "batch": "b-old"}}}}
+        self.file.write_text(json.dumps(doc))
+        return failed
+
+    def settle(self, ident: str, *extra: str, evidence: str | None = "checkpoint:b-real",
+               patch: dict | None = None) -> tuple[int, dict]:
+        return self.update("host", "alerts", "maintenance-returned", patch or {"inputs": {ident: None}},
+                           *extra, *(["--evidence", evidence] if evidence else []))
+
+    def test_one_proven_returned_input_leaves_and_unrelated_inputs_stay(self) -> None:
+        failed = self.mixed_alert()
+        # The real business recovery: a node checkpoint whose batch carried the failed range.
+        code, out = self.checkpoint(self.node("node-real"), "b-real", failed,
+                                    [{"input": f"host:tasks/t1@{failed}", "retained": "tasks/t1"}])
+        self.assertEqual(code, 0, out)
+        self.assertTrue(out["value"]["verified"], out)
+        before = self.doc()["state"]
+        others = {ident: json.dumps(row, sort_keys=True)
+                  for ident, row in before["alerts"]["maintenance-returned"]["inputs"].items()
+                  if ident != "batch:b-failed"}
+        code, out = self.settle("batch:b-failed", "--expect-rev", "3")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["value"]["settled_inputs"], ["batch:b-failed"])
+        after = self.doc()["state"]
+        alert = after["alerts"]["maintenance-returned"]
+        self.assertEqual({ident: json.dumps(row, sort_keys=True) for ident, row in alert["inputs"].items()},
+                         others, "unrelated inputs stay byte-identical")
+        self.assertEqual(alert["rev"], 4)
+        self.assertEqual(alert["evidence"], ["carrier-events#8", "carrier-events#9", "checkpoint:b-old"])
+        self.assertEqual((after["maintenance"], after["tasks"]), (before["maintenance"], before["tasks"]))
+        # Nothing settled stays behind in another routine field.
+        self.assertNotIn("b-failed", self.file.read_text())
+        self.assertNotIn("carrier-events#7", self.file.read_text())
+        self.assertFalse(after.get("retired"))
+
+    def test_absent_unproven_and_stale_input_removal_refuse_without_writes(self) -> None:
+        failed = self.mixed_alert()
+        self.checkpoint(self.node("node-real"), "b-real", failed,
+                        [{"input": f"host:tasks/t1@{failed}", "retained": "tasks/t1"}])
+        before = self.file.read_bytes()
+        code, out = self.settle("batch:absent", "--expect-rev", "3")
+        self.assertEqual((code, out["reason"]), (2, "input-missing"), out)
+        self.assertIn("batch:b-failed", out["recovery"])
+        self.assertIn("Do not create", out["recovery"])
+        self.assertEqual(self.file.read_bytes(), before)
+        for ident, evidence in (("batch:b-failed", None), ("batch:b-failed", "checkpoint:b-foreign"),
+                                ("batch:b-failed", "README.md"), ("batch:b-stop", "checkpoint:b-real"),
+                                ("batch:b-norange", "checkpoint:b-real"), ("recovery#4", "checkpoint:b-real")):
+            code, out = self.settle(ident, "--expect-rev", "3", evidence=evidence)
+            self.assertEqual((code, out["reason"]), (2, "input-unproven"), (ident, evidence, out))
+            self.assertEqual(out["path"], f"alerts.maintenance-returned.inputs.{ident}")
+            self.assertIn("state update", out["recovery"])
+            self.assertIn("--evidence checkpoint:b-real", out["recovery"])
+            self.assertIn(json.dumps({"inputs": {ident: None}}), out["recovery"])
+            self.assertIn("state recovery-input --kind request", out["recovery"])
+            self.assertIn("Do not retire the whole alert while 4 other input(s) remain", out["recovery"])
+            self.assertEqual(self.file.read_bytes(), before)
+        code, out = self.settle("batch:b-failed", "--expect-rev", "2")
+        self.assertEqual((code, out["reason"]), (3, "conflict"), out)
+        self.assertIn("--expect-rev 3", out["recovery"])
+        self.assertEqual(self.file.read_bytes(), before)
+        code, out = self.settle("batch:b-failed")
+        self.assertEqual((code, out["reason"]), (2, "expect-rev-required"), out)
+        self.assertEqual(self.file.read_bytes(), before)
+        code, out = self.settle("batch:b-failed", "--expect-rev", "3",
+                                patch={"inputs": {"batch:b-failed": None}, "summary": "handled"})
+        self.assertEqual((code, out["reason"]), (2, "invalid-input"), out)
+        self.assertEqual(self.file.read_bytes(), before)
+        # An open returned Host change at or below the failed range blocks range proof.
+        doc = self.doc()
+        doc["state"]["alerts"]["maintenance-returned"]["inputs"][f"host:tasks/t0@{failed - 1}"] = {
+            "why": "not-in-batch", "batch": "b-old"}
+        self.file.write_text(json.dumps(doc)); before = self.file.read_bytes()
+        code, out = self.settle("batch:b-failed", "--expect-rev", "3")
+        self.assertEqual((code, out["reason"]), (2, "input-unproven"), out)
+        self.assertIn(f"host:tasks/t0@{failed - 1}", out["detail"])
+        self.assertEqual(self.file.read_bytes(), before)
+
+    def test_recovery_only_checkpoint_cannot_claim_the_unsent_business_range(self) -> None:
+        failed = self.mixed_alert()
+        original = self.doc()["state"]["alerts"]["maintenance-returned"]["inputs"]["batch:b-failed"]
+        item = self.recovery_request()
+        # The carrier sent a recovery-only batch: through the handled revision, below the failed range.
+        env = self.recovery_receipt(item, through=failed - 1)
+        code, out = self.recovery_checkpoint(
+            env, item, [self.scoped_entry(item["seq"]),
+                        {"input": "batch:b-failed", "retained": "tasks/t1"},
+                        {"input": f"host:tasks/t1@{failed}", "retained": "tasks/t1"}],
+            through=failed - 1, events=["batch:b-failed"])
+        self.assertEqual(code, 0, out)
+        record = out["value"]
+        self.assertIn(f"recovery#{item['seq']}", record["settled"])
+        self.assertNotIn("batch:b-failed", record["settled"])
+        self.assertNotIn(f"host:tasks/t1@{failed}", record["settled"])
+        inputs = self.doc()["state"]["alerts"]["maintenance-returned"]["inputs"]
+        self.assertEqual(inputs["batch:b-failed"], original, "the original failed-range facts stay")
+        self.assertEqual(self.doc()["state"]["maintenance"]["handled_host_revision"], failed - 1)
+        self.assertEqual(self.sideagent_view()["pending_host_changes"], [f"host:tasks/t1@{failed}"])
+        before = self.file.read_bytes()
+        code, out = self.settle("batch:b-failed", "--expect-rev",
+                                str(self.doc()["state"]["alerts"]["maintenance-returned"]["rev"]),
+                                evidence="checkpoint:b-recovery")
+        self.assertEqual((code, out["reason"]), (2, "input-unproven"), out)
+        self.assertEqual(self.file.read_bytes(), before)
 
 
 
@@ -3186,6 +3314,51 @@ class HolderNodeMode(HolderFixture):
         self.sideagent_end(9, 1, holder="node-1")
         self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "inquiry reclaim")
         self.assertEqual(self.holder._lifecycle_state()["host_revision"], before)
+
+    def test_recovery_request_selects_the_failed_business_range_without_a_business_write(self) -> None:
+        """#287: a failed business batch is not re-sent on its own; the Host's
+        bounded recovery request carries it, and that checkpoint proves the
+        single failed input handled."""
+        self.prepare_recovery_host(); self.host_change(3)
+        path = self.repo / ".kaola/heartbeat-prompt.json"
+        doc = self.holder._lifecycle_state(); doc["state"]["sideagent"]["recipe"]["runner"] = "/absent"
+        path.write_text(json.dumps(doc)); self.boundary()
+        self.wait_for(lambda: "sideagent_maintenance_failure_recorded" in self.log_kinds(), "business failure")
+        failure = self.holder._lifecycle_state()["state"]["alerts"]["maintenance-returned"]["inputs"]["batch:3"]
+        self.assertEqual(failure["host_revision_through"], 3)
+        doc = self.holder._lifecycle_state(); doc["state"]["sideagent"]["recipe"]["runner"] = str(self.runner)
+        path.write_text(json.dumps(doc))  # fixture binding repair; the request is the real tool call
+        self.holder.node.pop("failure_reported", None)
+        self.assertIsNone(self.holder._node_host_pending(self.holder._lifecycle_state()),
+                          "the failed range is not replayed without a request")
+        receipt = self.holder._maintenance_tool(["--kind", "request", "--source", "inquiry-original",
+                                                "--evidence", f"{path}#maintenance-returned"])
+        self.assertNotIn("error", receipt)
+        request = receipt["value"]
+        self.assertEqual(self.holder._lifecycle_state()["host_revision"], 3, "no business write")
+        self.holder.turn["active"] = False; self.boundary()
+        self.wait_for(lambda: len(self.fake.prompts) == 1, "recovery batch")
+        text = self.fake.prompts[0]["params"]["text"]
+        self.assertIn("host revision 1..3", text)
+        self.assertIn(f"--recovery-seq {request['seq']}", text)
+        self.assertEqual(self.holder.node["sent_through"], 3)
+        env = dict(os.environ); env["KAOLA_ACP_RECORD_ROOT"] = str(self.records)
+        env["KAOLA_ACP_DISPATCHER"] = json.dumps({"platform": "zcode", "session": "zcode-KT-sideagent",
+            "repo": str(self.repo), "holder_instance_id": "node-1"})
+        batch = self.batch_of(0)
+        code, out = run(["state", "checkpoint", "--file", str(path), "--writer", "sideagent", "--source", batch,
+            "--batch", batch, "--through-host-revision", "3", "--recovery-seq", str(request["seq"]),
+            "--entries", json.dumps([MaintenanceCheckpoint.scoped_entry(request["seq"]),
+                                      {"input": "host:section/project@3", "retained": "section/project"}])], env)
+        self.assertEqual(code, 0, out); self.assertTrue(out["value"]["verified"], out)
+        rev = self.holder._lifecycle_state()["state"]["alerts"]["maintenance-returned"]["rev"]
+        code, out = run(["state", "update", "--file", str(path), "--writer", "host", "--source", "host-turn",
+                         "--kind", "alerts", "--id", "maintenance-returned", "--expect-rev", str(rev),
+                         "--evidence", f"checkpoint:{batch}", "--set", json.dumps({"inputs": {"batch:3": None}})])
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("maintenance-returned", self.holder._lifecycle_state()["state"].get("alerts") or {})
+        self.sideagent_end(9, 1, holder="node-1")
+        self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "recovery reclaim")
 
     def test_retirement_only_starts_no_node_and_later_work_selects_the_full_range(self) -> None:
         raw = self.retire_input(4)

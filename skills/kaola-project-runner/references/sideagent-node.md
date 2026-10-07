@@ -86,7 +86,7 @@ $S checkpoint --writer sideagent --source B --batch B --through-host-revision R 
 
 `applied` names current records this node's holder wrote.
 For an input whose record was removed, `retired:<kind>/<id>` names that
-absence; it creates no stored retirement record. `retained` names a current record with `next`, `owner` or `wait`,
+absence; it stores no retirement record. `retained` names a current record with `next`, `owner` or `wait`,
 or a Host `section/<name>`. Older or foreign evidence settles nothing. The
 result is `maintenance.last_checkpoint`; `last_verified` moves only when every
 input settled. `acked_host_revision` never passes an unsettled change; a later
@@ -104,8 +104,8 @@ Host view's attention differs both from what the Host last saw and from the
 batch's start; otherwise it stays quiet. A partial or
 missing checkpoint, one whose `through` is below the batch's range, a refused
 batch, a failed start or a lost node reaches the Host once with the unhandled
-range; the carrier then exact-stops the node by holder and starts no node for
-that range again. A failed start or refused batch starts no further node until
+range; the carrier then exact-stops the node by holder and resends that range
+only on a Host recovery request. A failed start or refused batch starts no further node until
 the binding changes. After `sideagent_node_stop_unconfirmed` no node starts
 while that holder process still runs. A Host stop in any mode also stops its
 own node, a start in flight included. A replaced node's late write is

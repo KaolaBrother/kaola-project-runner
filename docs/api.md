@@ -588,6 +588,19 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   open in the `maintenance-returned` alert, which receives each unsettled input once. A
   caller that is not the session's current node holder is `binding-superseded`; no caller
   identity is `node-identity-required`.
+- `update --kind alerts --id ID --expect-rev N --evidence checkpoint:B --set
+  '{"inputs":{"<input>":null}}'` removes one handled returned input (Issue #287). The tool
+  accepts it only when the recorded checkpoint `B` settled that exact input, or is verified,
+  reaches the `batch:` input's `host_revision_through`, and no returned Host change at or below
+  that revision stays open. A recovery-only checkpoint therefore proves no unsent business range.
+  A stop duty (`stop-unconfirmed`, `old-node-live`) ends only by its exact stop. An absent id
+  refuses `input-missing`, an unproven removal `input-unproven`, a stale revision `conflict`;
+  each changes nothing and names the exact command. Other inputs and newer duties stay;
+  evidence references that only the removed input named leave with it, and an emptied
+  `maintenance-returned` alert leaves the file. A checkpoint settles a returned input only
+  when its batch carried it, never through `--events`, and keeps an uncarried input's
+  original facts. A Host recovery request's batch also carries Host changes still pending
+  past `handled_host_revision`, including a failed batch's range.
 - With node mode, worker events are not node inputs: they reach the Host at its next idle
   boundary as without a binding. A Host holder advertising `sideagent-node/1` starts one fresh
   node per batch of Host business changes past `handled_host_revision`, selected only while the

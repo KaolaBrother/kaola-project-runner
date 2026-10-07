@@ -3451,10 +3451,12 @@ class Holder:
             return None
         return binding
 
-    def _node_host_pending(self, doc: dict[str, Any] | None) -> int | None:
+    def _node_host_pending(self, doc: dict[str, Any] | None, requested: bool = False) -> int | None:
         """The Host revision a new batch would select, when Host business
         changes are past both the last handled checkpoint and the last batch
-        this carrier already sent."""
+        this carrier already sent. A Host-requested recovery batch selects
+        every change past the handled checkpoint, so a failed batch's range
+        stays selectable without a fake business write."""
         if not doc:
             return None
         current = doc.get("host_revision")
@@ -3463,8 +3465,9 @@ class Holder:
         returned = (((doc.get("state") or {}).get("alerts") or {}).get("maintenance-returned") or {}).get("inputs") or {}
         returned_through = max([0] + [row["host_revision_through"] for row in returned.values()
                                       if isinstance(row, dict) and isinstance(row.get("host_revision_through"), int)])
-        after = max(int(handled) if isinstance(handled, int) else 0,
-                    self.node.get("sent_through") or 0, returned_through)
+        after = int(handled) if isinstance(handled, int) else 0
+        if not requested:
+            after = max(after, self.node.get("sent_through") or 0, returned_through)
         if (isinstance(current, int) and not isinstance(current, bool)
                 and current > after):
             selector = getattr(_RECORD, "host_changes", None)
@@ -3661,7 +3664,8 @@ class Holder:
             return result
         maintenance = ((doc or {}).get("state") or {}).get("maintenance") or {}
         handled = maintenance.get("handled_host_revision") or 0
-        through = through if through is not None else int(handled)
+        if through is None:
+            through = self._node_host_pending(doc, requested=True) or int(handled)
         batch = "b-" + hashlib.sha256(json.dumps([target["holder_instance_id"], through, recovery])
                                       .encode("utf-8")).hexdigest()[:12]
         receipt = self._relay_send(target, self._node_prompt(batch, handled, through, recovery))
