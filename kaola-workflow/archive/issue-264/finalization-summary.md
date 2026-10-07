@@ -12,7 +12,7 @@ drift (268). Branches `workflow/issue-259/263/265/266/267/268` are all ancestors
 267 and 268 delivered their product changes through this tree with no commits of their own.
 
 Acceptance on the exact candidate: full inventory `./scripts/validate.sh` EXIT=0 (v8 receipt
-`/tmp/kpr-final-inventory-v8.log`, 84 suites, zero failures), root/dot final technical PASS on the
+`/tmp/kpr-final-inventory-v8.log`, 85 suites, zero failures), root/dot final technical PASS on the
 integrated delta, and Fable's same-SHA final personal PASS
 (`/tmp/kpr-i264-final-fable-VERDICT-20261007.md`). Intermediate receipts preserved:
 v5 `d4de8685` EXIT=0, v6 `ff5a5383` EXIT=0, v7 `7ddfe5d5` EXIT=1 (real D3/D4 regressions, fixed in
