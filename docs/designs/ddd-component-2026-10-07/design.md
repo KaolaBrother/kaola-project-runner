@@ -1,7 +1,9 @@
 # Optional DDD component for KPR — versioned design `kaola-ddd/1`
 
-Status: DESIGN for dot review. Implementation proceeds per the phase issues below; a pushed
-design, issue or commit is not implementation acceptance.
+Status: DESIGN, revision 2 — applies dot root's five technical corrections to revision 1
+(`1a2f577e`): #283 dependency, multi-context packs, per-pack/aggregate checker results, uninstall
+keeps current documents, advisory-only matching and content ownership. Implementation proceeds per
+the phase issues below; a pushed design, issue or commit is not implementation acceptance.
 
 Baseline: [#279](https://github.com/KaolaBrother/kaola-project-runner/issues/279) research and
 optional-component contract, accepted by dot root as a documentation-design baseline at
@@ -27,10 +29,10 @@ of the component changes nothing in KPR, Kaola-Workflow or any consumer.
 
 ## 2. Artifacts and versions
 
-| Artifact | Path | Version contract | Owner (single writer) |
+| Artifact | Path | Version contract | Content owner (responsibility, not a lock) |
 |---|---|---|---|
 | Component design | this file | `kaola-ddd/1`; a breaking change adds `kaola-ddd/2` beside it | Host, reviewed by dot |
-| Candidate context map | `docs/ddd/context-map.md` | front matter `map_schema: kaola-ddd-map/1` | Host (edits via normal reviewed commits) |
+| Candidate context map | `docs/ddd/context-map.md` | front matter `map_schema: kaola-ddd-map/1` | Host |
 | Context pack | `docs/ddd/packs/<pack-id>.md` | front matter `pack_schema: kaola-ddd-pack/1` | the pack's named `owner` |
 | Checker (optional) | `scripts/kaola-ddd-pack.py` | result `schema: kaola-ddd-check/1`; supports pack schema 1 | implementing issue, then Host |
 | Checker suite | `tests/contract/test-ddd-pack.py` | in the `validate.sh` inventory, runnable via `--suite` | implementing issue |
@@ -38,14 +40,32 @@ of the component changes nothing in KPR, Kaola-Workflow or any consumer.
 Everything is a versioned Git document or repo script. Nothing is written to `.kaola/`, the
 heartbeat state, the dispatch index or any consumer project. History is Git history.
 
+An owner is responsible for keeping that content current and coherent. Ownership is not a lock,
+a single-writer mechanism or an approval step: anyone may change these documents through the
+project's normal reviewed commits, and no tool enforces who edits them.
+
 ### 2.1 Pack format `kaola-ddd-pack/1`
 
 Flat front matter (one `key: value` per line between `---` lines, the same flat style
 `parse_flat_yaml` already reads), then fixed level-2 sections.
 
-Required front matter: `pack_schema`, `id`, `status` (`draft|current|retired`), `owner`,
-`context_candidate` (a name from the context map, or `unmapped`), `baseline_commit` (the commit
-the pack was checked against). Optional: `related_issues`, `supersedes`.
+Required front matter: `pack_schema`, `id`, `status` (`draft|current|retired`), `owner`
+(content responsibility, as above), `context_primary` (a candidate name from the context map, or
+`unmapped`), `contexts_touched` (comma-separated other candidate contexts the unit crosses, or
+`none`), `baseline_commit` (the commit the pack was checked against). Optional:
+`related_issues`, `supersedes`.
+
+A work unit may span several candidate contexts. `context_primary` only says where most of the
+change lands; every other context the unit crosses is listed in `contexts_touched`, and each
+crossed boundary has its own `## Dependency contracts` bullet naming both sides. A cross-context
+unit is never collapsed into its primary context, and listing a context never forbids touching
+another one (see the expected-change surface).
+
+Phase 1 demonstrates this on a real cross-component unit: retiring a task record. The state tool
+refuses `retire-unmet` until the task's dispatch items are closed and its seats are stopped
+(`retire_record` in `scripts/kaola-dispatch.py`), so the unit crosses C4 state, C5 dispatch index
+and C1 session lifecycle. Its pack lists all three, and each of those dependencies appears as its
+own contract bullet with its suite or named gap.
 
 Forbidden front matter: any authorization, grant, seat, writer-permission or approval field.
 A pack describes design; it never carries authority. This is the pack schema's explicit
@@ -75,15 +95,32 @@ a gate.
 
 ### 2.3 Checker contract `kaola-ddd-check/1` (implemented only as the pilot justifies)
 
-`scripts/kaola-ddd-pack.py check [--repo ROOT] [PACK ...]` prints one JSON object.
+`scripts/kaola-ddd-pack.py check [--repo ROOT] [PACK ...]` prints one JSON object:
+`{"schema": "kaola-ddd-check/1", "result": ..., "packs": [...], "counts": {...}}`.
 
-| Situation | `result` | Exit |
+Every selected pack is evaluated independently and always appears in `packs[]` with its own
+`status` and findings; an `unsupported` or `invalid` pack never stops evaluation of the others.
+
+| Per-pack `status` | Meaning |
+|---|---|
+| `ok` | schema 1 readable, no errors (advisory findings allowed) |
+| `invalid` | schema 1, but at least one error finding |
+| `unsupported` | `pack_schema` is not a version this checker supports; no further checks on that pack |
+
+Aggregate `result` and exit code, decided after all packs are evaluated, by this precedence:
+
+| Aggregate condition | `result` | Exit |
 |---|---|---|
+| Bad command line (nothing evaluated) | `usage` | 2 |
 | No `docs/ddd/` or no packs | `absent` | 0 |
-| All packs readable, no errors | `ok` (advisory findings allowed) | 0 |
-| A pack violates schema 1 | `invalid` with findings | 1 |
-| Usage error | `usage` | 2 |
-| `pack_schema` not supported | `unsupported` for that pack only | 3 |
+| At least one pack `invalid` (with or without `unsupported` packs) | `invalid` | 1 |
+| No `invalid`, at least one `unsupported` | `unsupported` | 3 |
+| All packs `ok` | `ok` | 0 |
+
+So `invalid` + `unsupported` together yield `invalid` / exit 1, with both packs listed and counted;
+phase 3 tests this combination. The exit code is for whoever chose to run the checker. Nothing
+in KPR core, render, release, Host dispatch or Kaola-Workflow consumes it, so it never blocks core
+work.
 
 Candidate checks (each kept only if the pilot finds it caught a real problem or saved real
 work): required front matter and sections; forbidden authority keys; referenced repo paths exist
@@ -91,6 +128,11 @@ at HEAD; `suite:` names exist in `validate.sh --list`; `baseline_commit` resolve
 terms present in the referenced code (advisory); files changed since `baseline_commit` outside the
 expected-change surface (advisory report, never a refusal). The checker reads only; it writes
 nothing and calls no network.
+
+Vocabulary matches and path-change reports are always advisory, never errors. A clean checker run
+shows only that the pack's form and references are consistent. It does not prove that the
+vocabulary is used consistently in meaning, or that a dependency contract actually holds; that
+evidence comes from the named suites and from Agent/Host review.
 
 The checker is not wired into `render-skills.py --check`, release gates or Host dispatch. Its
 suite only tests the checker itself.
@@ -115,9 +157,12 @@ suite only tests the checker itself.
   continue.
 - A stale pack (code moved on) → advisory findings and an evidence refresh by its owner; never a
   block on unrelated work.
-- Uninstall → delete `docs/ddd/`, `scripts/kaola-ddd-pack.py`, its suite and its inventory line in
-  one reviewed commit; the pack documents remain in Git history. Nothing else depends on them;
-  phase 3 proves this with a test.
+- Default uninstall → remove only the tool and its integrations: `scripts/kaola-ddd-pack.py`, its
+  suite and inventory line, and any optional Skill pointer added in phase 4, in one reviewed
+  commit. The current `docs/ddd/` engineering documents stay in the working tree. Removing those
+  documents is a separate action taken only when the user asks for it; Git history keeping old
+  versions is not a reason to delete current documents by default. Phase 3 proves with a test that
+  core render and suites pass with the tool removed and the documents still present.
 - Simplified path for small or single-context work: a one-paragraph vocabulary + invariants +
   expected-change note, or no pack at all (baseline §6b).
 
@@ -133,14 +178,15 @@ A question that turns out to need a value choice goes to the Owner; otherwise it
 
 ## 6. Phases and issues
 
-Order follows real dependencies; phases 2/3/5/6 can run in parallel after phase 1.
+Order follows real dependencies; phases 2–6 can all start after phase 1. Only the checker
+integration sub-item of phase 4 waits for phase 3.
 
 | Phase | Issue | Responsibility | Depends on |
 |---|---|---|---|
-| 1 | #280 | Pack schema v1 + candidate context map + KPR C4 pilot pack; Q3 local | baseline only |
+| 1 | #280 | Pack schema v1 + candidate context map + KPR C4 pilot pack incl. a cross-component sample; Q3 local | baseline only |
 | 2 | #281 | Contract fixtures only for pilot-pack seams with a measured coverage gap | 1 |
 | 3 | #282 | Optional checker `kaola-ddd-pack.py` + suite, only pilot-justified checks; uninstall test | 1 |
-| 4 | #283 | Host optional usage path (orchestrator reference decision) + second KPR pack | 3 |
+| 4 | #283 | Host optional usage path (orchestrator reference decision) + second KPR pack; checker integration sub-item | 1; checker sub-item: 3 |
 | 5 | #284 | KW C8 seam pack; Q1 local, KW source read-only | 1 |
 | 6 | #285 | VRPAI/CAD analysis case; Q2 local, analysis only | 1 |
 
