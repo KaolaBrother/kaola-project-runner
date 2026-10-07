@@ -67,7 +67,9 @@ tactical = within-context mechanics (aggregate = consistency boundary ≠ contex
   scope, synchronous collaboration, eventual consistency and compensation are explicit design
   choices constrained by real invariants, not deductions from a context label.
 - **Contracts, schema, versioning.** `[SRC]` "we build services that share contracts, not types";
-  Tolerant Reader: "be conservative in what you do, be liberal in what you accept from others";
+  Tolerant Reader: "be conservative in what you do, be liberal in what you accept from others"
+  (tolerance is per schema; permission- and write-bearing fields are never tolerated when unknown —
+  [i279-ddd-contract-tests.md](i279-ddd-contract-tests.md));
   consumer-driven contracts make consumer expectations executable.
 - **Anti-corruption layer.** `[SRC]` "Isolate the different subsystems by placing an
   anti-corruption layer between them. This layer translates communication between the two
@@ -102,7 +104,7 @@ KW source was not re-opened; claims come from our in-repo design/research record
 `[ASSUMPTION]` they are production apps with their own task/authorization language; `[ASSUMPTION]`
 KPR consumes them across a consumer-bridge contract (Open Host Service / Published Language), so
 their model is upstream and is translated at that boundary rather than imported into
-orchestration-state; an in-process translator suffices, and a separate process is a deployment
+orchestration-state; an in-process translator may suffice, and a separate process is a deployment
 choice. Treat all of it as a hypothesis to verify from their bridge evidence.
 
 ## 5. Deliverable: Agent WORK-UNIT CONTEXT PACK
@@ -112,9 +114,9 @@ They do NOT map one-to-one. Decompose tasks by change coupling and acceptance su
 may touch several aggregates or contexts; name the collaboration contracts, data writers,
 invariants and integration evidence for those boundaries rather than prohibit the task.
 
-1. **Domain vocabulary** — the exact terms (this context's ubiquitous language) + dictionary/allowlist pointer; no re-coined synonyms.
+1. **Domain vocabulary** — the exact terms of the context(s) the unit touches (their ubiquitous language) + dictionary/allowlist pointer; no re-coined synonyms.
 2. **Inputs / outputs** — typed artifacts read and produced (schema + version).
-3. **Invariants** — the few rules that must hold across the unit (uniqueness, single-writer, monotonicity, authority); they define the consistency boundary.
+3. **Invariants** — the few rules that must hold across the unit (uniqueness, single-writer, monotonicity, authority); they name the consistency boundaries the unit must respect (one or several).
 4. **Dependency contracts** — allowed consumers/providers, pinned contract versions, typed errors.
 5. **Acceptance criteria** — observable outcomes, including refusal paths.
 6. **Expected-change surface** — files/APIs and interfaces anticipated for the unit. This is
@@ -200,7 +202,7 @@ is a universal DDD or KPR rule:
 5. Keep one command within one consistency cluster *where* the invariant requires it; tasks may
    still span several (§5).
 
-**Redesign patterns** `[SRC]`:
+**Redesign patterns** (`[SRC]`; Vernon quotes worker-reported, Shopify Host spot-matched):
 
 - *Giant aggregate, then split* — Vernon, Effective Aggregate Design Part I. **Illustrative
   fictional teaching case** (ProjectOvation, marked fictitious by its author): a Product
@@ -224,7 +226,7 @@ This frames DDD as an installable/uninstallable strategy component in the conver
 - **Responsibilities**: domain-modeling input to boundary decisions (vocabulary/invariant/change-rate evidence, never auto-partitioning); work-unit context-pack generation from existing records; mapping suggestions (marked ASSUMPTION where source unread); boundary-evolution recommendations with evidence. **Non-responsibilities**: no final value/architecture/acceptance judgment (Host/owner), no project management totality claim, no machine domain split.
 - **Data ownership**: reads existing project records + versioned engineering documents. Generated domain maps, contract descriptions and packs should first reuse the project's existing versioned engineering documents and original evidence references. No new canonical `.kaola/` store, history ledger or authorization copy is introduced. A runtime artifact would require a separately justified contract, ownership and retention design.
 - **Version compatibility**: an explicit version belongs to the optional pack contract. If this component cannot interpret a pack, it returns a component-scoped unsupported/unavailable result; core and unrelated authorized work continue. Optional-field tolerance is defined per contract, not globally.
-- **Failure degradation / uninstall**: absent → work proceeds exactly as today (no pack is a gate); retire → read-only export of packs; replacement is any equivalent pack producer behind the same pack schema.
+- **Failure degradation / uninstall**: absent → work proceeds exactly as today (no pack is a gate); retire → the versioned pack documents simply remain in the project's Git, nothing else is removed; replacement is any equivalent pack producer behind the same pack schema.
 - **Applicability criteria (when to install)**: multiple bounded languages or change-rates observed; invariant/consistency boundaries worth isolating; cross-context collaboration costing rework. **Simplified path**: single-context small projects use a one-paragraph vocabulary + invariants + expected-change note (the pack minus ceremony) — the counter-example rule (§6b) governs.
 - **Validation design**: pack-vs-code drift check reusing existing suites (no new gate); one cross-edge contract test per dependency named in a pack; refusal-path test; boundary-evolution decisions cite observed evidence. Reuse the #268/#273 typed-result style as a component-scoped unsupported result, never a core gate (Q4 resolution proposal).
 

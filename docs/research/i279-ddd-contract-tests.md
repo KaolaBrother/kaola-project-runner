@@ -22,9 +22,11 @@ invariant and change-coupling evidence.
 - **test-issue-274-package-closure** — Modulith `verify()` analog (C7→C6): isolated package contains the helper, runs the real recovery path; removal fails naming the dependency — no hidden fallback; `signal-unverified` typed refusals.
 - **#271 chain receipts** — live CDC chain: execute → original `dispatch_event_cursor` → collect bound to it → rotated range honestly reports `event-range-unavailable` (typed gap; "silent gap loss is forbidden", design §6) → exact-stop. Partial evidence only (correction aa1c1444): the original cursor-8 collect range was unavailable and failure/permission coverage is unknown, so this is not a PASS of the original chain.
 
-## One NEW contract test per context-edge (described fixtures — proposed, NOT executed)
+## One NEW contract test per component seam named in a pack (described fixtures — proposed, NOT executed)
 
-Neither fixture exists or has run; they are design descriptions only.
+Neither fixture exists or has run; they are design descriptions only. C4→C5 and C1→C3 are seams
+inside the i279-ddd-method.md §4 candidate groupings; they are not evidence that those groupings
+are separate contexts (Q3).
 
 - **C4→C5 dispositions**: fixture writes C4-owned `kaola-heartbeat-prompt/2` doc (grants + dispatch_links + task at rev N), runs real `execute`: expect `kaola-dispatch-index/1` rows; typed `requirement-unmet`/`resource-conflict`/`shared-occupied` on unmet links; rev conflict → `conflict`, no partial write; extra-field handling follows each schema's own stated rule (e.g. a reader may ignore unknown optional/meta fields where that schema says so), while authorization, grant, writer and other permission- or write-bearing fields are never tolerated when unknown or malformed — no blanket "unknown extra fields ignored"; `retire-unmet` propagated unchanged.
 - **C1→C3 event cursor**: fixture drives send→observe with controlled seqs: expect `dispatch_event_cursor` on the receipt; dedup by `(source_holder, source_epoch, seq)` under at-least-once replay; rotated range → typed gap/`event-range-unavailable`, never fabricated coverage; `truncated` flagged.
