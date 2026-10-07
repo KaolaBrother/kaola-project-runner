@@ -28,14 +28,12 @@ receipt), host kernel and a hashed hostname fingerprint, the resolved repo root,
 normalised origin (only explicit ``https://``, ``ssh://``, or scp ``host:path`` forms are
 accepted; a bare ``github.com/...`` or a local path is refused; never the raw URL, never
 userinfo), HEAD, clean state, and -- when attesting a dispatch -- the consumer project
-identity, the selected worker's script path under the same root, and whether the tmux server
-reachable from this environment reports a session of the exact requested name (presence on
-that server only: not proof that the session exists elsewhere, and never ownership, which the
-worker preflight proves). A ZCode Host runs as an ACP holder with no same-named tmux session,
-so for ``--worker zcode`` the receipt also carries ``session.acp_holder_alive``: whether the
-holder record that ``kaola-acp status`` reads for that platform, session, and project names a
-live holder pid (``null`` when no project checkout is named). For an ACP Host
-``session.present`` alone is never aliveness (Issue #102). Every receipt carries ``zcode_runtime`` (whether ``KAOLA_ZCODE_ENTRY`` and
+identity and the selected worker's script path under the same root. With a worker and
+project, ``session.present`` reports an ACP record for that exact identity, using the
+Runner's bounded legacy-root lookup; ``session.acp_holder_alive`` separately reports a
+live holder pid (not ownership, which the worker preflight proves). Without a worker,
+legacy tmux presence is presence on that server only: not proof that the session exists
+elsewhere, and never ownership, which the worker preflight proves. Every receipt carries ``zcode_runtime`` (whether ``KAOLA_ZCODE_ENTRY`` and
 ``KAOLA_ZCODE_NODE`` are absolute files on this host). That fact does not refuse the
 receipt. ``--intent start`` or ``--intent resume`` with ``--worker zcode`` is the
 attestation that feeds a ZCode launch: a missing pair refuses ``zcode-runtime-unset``
@@ -54,6 +52,7 @@ Git runs with ``GIT_TERMINAL_PROMPT=0`` so a missing credential can only fail, n
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import hashlib
 import json
 import os
@@ -62,8 +61,18 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
+
+# Issue #278: shared paths also ship beside every generated worker Runner.
+_paths_spec = importlib.util.spec_from_file_location(
+    "kaola_acp_paths", Path(__file__).resolve().with_name("kaola-acp-paths.py"))
+acp_paths = importlib.util.module_from_spec(_paths_spec)
+_paths_bytecode = sys.dont_write_bytecode
+sys.dont_write_bytecode = True
+try:
+    _paths_spec.loader.exec_module(acp_paths)
+finally:
+    sys.dont_write_bytecode = _paths_bytecode
 
 SCHEMA = "kaola-project-runner-locator/1"
 REGISTRATION_SCHEMA = "kaola-project-runner-locator-registration/1"
@@ -272,26 +281,10 @@ def zcode_runtime_facts() -> dict[str, object]:
 def acp_holder_alive(platform: str, session: str, repo: str) -> bool:
     """Issue #102: does the ACP holder record that ``kaola-acp status`` reads for this exact
     platform, session, and repo name a live holder pid? Same record path as kaola-acp.py
-    ``record_dir`` (root, ``<platform>/<session>/<sha256(repo)[:16]>/record.json``); one exact
-    path, never a scan, and a missing or unreadable record is simply not alive."""
-    root = os.environ.get(ACP_RECORD_ROOT_ENV)
-    base = Path(root) if root else (
-        Path(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()) / f"kaola-{os.getuid()}")
-    digest = hashlib.sha256(repo.encode("utf-8")).hexdigest()[:16]
-    try:
-        record = json.loads((base / platform / session / digest / "record.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return False
-    pid = record.get("holder_pid") if isinstance(record, dict) else None
-    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
+    ``record_dir``; bounded legacy-root lookup shared with the Runner (#278)."""
+    directory = acp_paths.find_directory(platform, session, repo)
+    record = acp_paths.read_record(directory) or {}
+    return acp_paths.live(record.get("holder_pid"))
 
 
 def registration_dir(bin_dir: str | None) -> Path:
@@ -411,12 +404,16 @@ def receipt_command(args: argparse.Namespace) -> int:
         receipt["project"] = pf
         reasons.extend(more)
     if args.session is not None:
-        session = session_facts(args.session)
-        if args.worker == "zcode":
+        session = session_facts(args.session) if args.worker is None else {
+            "name": args.session, "present": None, "acp_holder_alive": None}
+        if args.worker in WORKER_IDS:
             project = receipt.get("project")
             toplevel = project.get("toplevel") if isinstance(project, dict) else None
-            session["acp_holder_alive"] = (
-                acp_holder_alive("zcode", args.session, toplevel) if isinstance(toplevel, str) else None)
+            if isinstance(toplevel, str):
+                directory = acp_paths.find_directory(args.worker, args.session, toplevel)
+                record = acp_paths.read_record(directory)
+                session["present"] = record is not None
+                session["acp_holder_alive"] = acp_paths.live((record or {}).get("holder_pid"))
         receipt["session"] = session
     # Issue #162: every receipt reports the ZCode paths. Only an attestation
     # that feeds a zcode start or resume refuses. status/send/stop and any
@@ -544,4 +541,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except acp_paths.RecordRootMismatch as exc:
+        raise SystemExit(emit({"schema": SCHEMA, "result": "refused",
+                               "reasons": ["record-root-mismatch"], "detail": str(exc)}))

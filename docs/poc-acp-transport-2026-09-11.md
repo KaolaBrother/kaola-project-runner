@@ -1,3 +1,6 @@
+> Issue #278 updates the record/socket defaults and legacy discovery.
+> Current contract: [ACP record and socket roots](architecture.md#acp-record-and-socket-roots).
+
 # PoC report — Runner v2 ACP transport (issue #15)
 
 Date: 2026-09-11 · Branch: `workflow/bundle-15` · Design: `docs/runner-v2-dual-transport-design.md` v0.2

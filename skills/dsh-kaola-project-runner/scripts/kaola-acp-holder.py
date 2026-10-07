@@ -27,7 +27,6 @@ import socket
 import struct
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 import traceback
@@ -37,6 +36,17 @@ from typing import Any
 
 PROTOCOL_VERSION = 1
 IDLE_EXIT_SECONDS = 600
+# Issue #278: shared paths also ship beside every generated worker Runner.
+_paths_spec = importlib.util.spec_from_file_location(
+    "kaola_acp_paths", Path(__file__).resolve().with_name("kaola-acp-paths.py"))
+acp_paths = importlib.util.module_from_spec(_paths_spec)
+_paths_bytecode = sys.dont_write_bytecode
+sys.dont_write_bytecode = True
+try:
+    _paths_spec.loader.exec_module(acp_paths)
+finally:
+    sys.dont_write_bytecode = _paths_bytecode
+
 STDERR_RING = 64 * 1024
 EVENT_LOG_MAX = 10 * 1024 * 1024
 EVENT_LOG_KEEP = 3
@@ -1151,6 +1161,7 @@ COMPACT_MODULE = "kaola-compact-recovery.py"
 NATIVE_COMPACT_RECOVERY_PLATFORMS = frozenset()
 RUNNER_BUILD_FILES = (
     "kaola-acp-holder.py",
+    "kaola-acp-paths.py",
     "kaola-compact-recovery.py",
     "kaola-zcode-acp.py",
     "kaola-opencode-acp.py",
@@ -1999,6 +2010,7 @@ class Holder:
             "session": self.args.session,
             "repo": self.args.repo,
             "holder_pid": os.getpid(),
+            "socket_path": str(self.socket_path),
             "holder_instance_id": self.holder_instance_id,
             "runner_build": self.runner_identity["runner_build"],
             "accepted_revision": self.runner_identity["accepted_revision"],
@@ -3190,8 +3202,7 @@ class Holder:
                 or not isinstance(record.get("holder_pid"), int)
                 or not process_alive(record["holder_pid"])):
             return None
-        digest = hashlib.sha256(str(directory).encode("utf-8")).hexdigest()[:24]
-        sock = Path(tempfile.gettempdir()) / f"kaola-{os.getuid()}-acp" / f"{digest}.sock"
+        sock = acp_paths.socket_path(directory)
         if not sock.exists():
             return None
         return {"platform": platform, "session": session, "holder_instance_id": holder,
@@ -3914,8 +3925,7 @@ class Holder:
             if record and record.get("holder_instance_id") == holder:
                 directory = (self.record_dir.parent.parent.parent / binding["platform"]
                              / binding["session"] / self.record_dir.name)
-                digest = hashlib.sha256(str(directory).encode("utf-8")).hexdigest()[:24]
-                target = Path(tempfile.gettempdir()) / f"kaola-{os.getuid()}-acp" / f"{digest}.sock"
+                target = acp_paths.socket_path(directory)
         if target is not None:
             try:
                 connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

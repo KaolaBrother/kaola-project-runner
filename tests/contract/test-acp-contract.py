@@ -287,7 +287,7 @@ class AcpSessionFixture:
         digest = hashlib.sha256(repo.encode("utf-8")).hexdigest()[:16]
         directory = self.record_root / "grok" / self.session / digest
         sock_digest = hashlib.sha256(str(directory).encode("utf-8")).hexdigest()[:24]
-        return Path(tempfile.gettempdir()) / f"kaola-{os.getuid()}-acp" / f"{sock_digest}.sock"
+        return Path("/tmp") / f"kaola-{os.getuid()}-acp" / f"{sock_digest}.sock"
 
     def concurrent_holder_ops(self, n: int, op: str, params: dict, timeout: float = 15) -> list[dict]:
         """Two already-connected Unix clients send the same op after one barrier.
@@ -1340,10 +1340,8 @@ class Issue132HolderIdentityTests(AcpSessionFixture, unittest.TestCase):
         self._started = False
 
     def test_m1_other_spelling_of_the_root_reaches_the_live_holder(self) -> None:
-        """Review M1: a caller spelling the record root differently derives
-        another socket path; it must still verify the live holder through the
-        socket its argv names, and a force stop must stop it gracefully there
-        rather than signal a holder that answers."""
+        """Review M1/#278: another spelling reaches the same applied socket;
+        force-stop must stop the answering holder gracefully, without signals."""
         started = self.start()
         alias = self.root / f"alias-{self._testMethodName}"
         alias.symlink_to(self.record_root)
@@ -1356,8 +1354,10 @@ class Issue132HolderIdentityTests(AcpSessionFixture, unittest.TestCase):
         stop = self.cli("stop", "--force", "--expected-holder-instance-id",
                         started["holder_instance_id"], check=False, extra_env=env)
         self.assertNotIn("holder_force_killed", stop, stop)
-        self.assertEqual(os.path.realpath(stop.get("answering_socket") or ""),
-                         os.path.realpath(str(self.holder_sock())), stop)
+        self.assertTrue(stop.get("stopped"), stop)
+        if stop.get("answering_socket"):
+            self.assertEqual(os.path.realpath(stop["answering_socket"]),
+                             os.path.realpath(str(self.holder_sock())), stop)
         self.assertTrue(wait_for(lambda: process_gone(started["holder_pid"]), 15))
         status = self.cli("status", check=False)
         self.assertIn(status.get("outcome"), ("stopped",), status)

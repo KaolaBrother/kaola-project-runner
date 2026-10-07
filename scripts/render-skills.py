@@ -704,6 +704,7 @@ def expected_files(manifest: dict[str, str], main_build: bytes) -> dict[str, byt
     shared_sources = (
         (shared_root / "kaola-tmux.sh", "scripts/kaola-tmux.sh"),
         (shared_root / "kaola-acp.py", "scripts/kaola-acp.py"),
+        (shared_root / "kaola-acp-paths.py", "scripts/kaola-acp-paths.py"),
         (shared_root / "kaola-acp-holder.py", "scripts/kaola-acp-holder.py"),
         (shared_root / "kaola-launchd-broker.py", "scripts/kaola-launchd-broker.py"),
         (shared_root / "kaola-compact-recovery.py", "scripts/kaola-compact-recovery.py"),

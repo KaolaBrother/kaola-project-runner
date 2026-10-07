@@ -1342,7 +1342,7 @@ class HolderFixture(unittest.TestCase):
         self.side_dir = self.records / "zcode" / "zcode-KT-sideagent" / digest
         self.side_dir.mkdir(parents=True)
         sock_digest = hashlib.sha256(str(self.side_dir).encode()).hexdigest()[:24]
-        self.side_sock = Path(tempfile.gettempdir()) / f"kaola-{os.getuid()}-acp" / f"{sock_digest}.sock"
+        self.side_sock = Path("/tmp") / f"kaola-{os.getuid()}-acp" / f"{sock_digest}.sock"
         self.fake: FakeSideagent | None = None
 
     def tearDown(self) -> None:

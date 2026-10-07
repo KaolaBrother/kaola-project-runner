@@ -294,10 +294,12 @@ changed, or when `kaola-quota.py` changed - the holder pins that catalog at
 startup (Issue #162), so a running seat only picks up its new bytes by
 restarting. The holder also pins `scripts/kaola-record-contract.py` at startup
 (Issue #259). A running seat picks up a new projection only by restarting.
-The operator test includes that pinned module:
+The holder also loads `scripts/kaola-acp-paths.py` at startup (Issue #278),
+so a helper update requires a safe-boundary seat restart. The operator test
+includes both modules:
 
 ```bash
-git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms
+git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py
 ```
 
 `OLD` and `NEW` are the previous release tag and the commit being released.
