@@ -29,8 +29,23 @@ def main():
         print(f"{f}: top {top}, nested {nested}, all {all_}, sha256:{sha}")
         t += top; n += nested; a += all_
     print(f"TOTAL: top {t}, nested {n}, all {a}")
-    expected = (522, 199, 721)
-    sys.exit(0 if (t, n, a) == expected else 1)
+    expected_total = (522, 199, 721)
+    expected_per_file = {
+        "scripts/kaola-dispatch.py": (208, 25, 233, "64fcb90de126a684"),
+        "scripts/kaola-acp-holder.py": (51, 158, 209, "f455cd271d20b2f1"),
+        "scripts/kaola-acp.py": (195, 12, 207, "d957f86e1efc5b26"),
+        "scripts/kaola-record-contract.py": (68, 4, 72, "b5b61d8fdf4f30de"),
+    }
+    ok = (t, n, a) == expected_total
+    for f in FILES:
+        p_ = Path(f)
+        top, nested, all_ = counts(p_)
+        sha = hashlib.sha256(p_.read_bytes()).hexdigest()[:16]
+        exp = expected_per_file[f]
+        if (top, nested, all_, sha) != exp:
+            print(f"MISMATCH {f}: got ({top},{nested},{all_},{sha}) expected {exp}")
+            ok = False
+    sys.exit(0 if ok else 1)
 
 if __name__ == "__main__":
     main()

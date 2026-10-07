@@ -70,8 +70,8 @@
    "line": 222,
    "end_line": 257,
    "top_level": true,
-   "primary": "C1-lifecycle",
-   "reason": ""
+   "primary": "C5-dispatch",
+   "reason": "root decision #45: C5 owns seat_projection semantics"
   },
   {
    "file": "scripts/kaola-dispatch.py",
@@ -133,8 +133,8 @@
    "line": 406,
    "end_line": 416,
    "top_level": true,
-   "primary": "C1-lifecycle",
-   "reason": ""
+   "primary": "C5-dispatch",
+   "reason": "root decision #45: C5 owns seat_projection semantics"
   },
   {
    "file": "scripts/kaola-dispatch.py",
@@ -196,8 +196,8 @@
    "line": 589,
    "end_line": 660,
    "top_level": true,
-   "primary": "C1-lifecycle",
-   "reason": ""
+   "primary": "C5-dispatch",
+   "reason": "root decision #45: C5 owns seat_projection semantics"
   },
   {
    "file": "scripts/kaola-dispatch.py",
@@ -205,8 +205,8 @@
    "line": 663,
    "end_line": 666,
    "top_level": true,
-   "primary": "C1-lifecycle",
-   "reason": ""
+   "primary": "C5-dispatch",
+   "reason": "root decision #45: C5 owns seat_projection semantics"
   },
   {
    "file": "scripts/kaola-dispatch.py",
@@ -214,8 +214,8 @@
    "line": 669,
    "end_line": 773,
    "top_level": true,
-   "primary": "C1-lifecycle",
-   "reason": ""
+   "primary": "C5-dispatch",
+   "reason": "root decision #45: C5 owns seat_projection semantics"
   },
   {
    "file": "scripts/kaola-dispatch.py",
@@ -223,8 +223,8 @@
    "line": 776,
    "end_line": 809,
    "top_level": true,
-   "primary": "C1-lifecycle",
-   "reason": ""
+   "primary": "C5-dispatch",
+   "reason": "root decision #45: C5 owns seat_projection semantics"
   },
   {
    "file": "scripts/kaola-dispatch.py",
@@ -808,8 +808,8 @@
    "line": 2400,
    "end_line": 2408,
    "top_level": true,
-   "primary": "C1-lifecycle",
-   "reason": ""
+   "primary": "C5-dispatch",
+   "reason": "root decision #45: C5 owns seat_projection semantics"
   },
   {
    "file": "scripts/kaola-dispatch.py",

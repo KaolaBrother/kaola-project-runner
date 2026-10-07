@@ -51,7 +51,7 @@ Minimal but concrete: each component names its contract artifacts (version carri
 | C7 render/install | build hashes (`main-skill-build.json`); budgets.json; pin envelope; install-verify/1 | repo + installed roots | render --check; test-issue-264-validate-lane-integrity | tooling; uninstall flags exist |
 | C8 KW bridge | KW's own artifacts (workflow-state/ledger/chain-receipt) — referenced, not owned | KW repo | KW's suites (their side) | optional bridge; removal = no claim lifecycle |
 
-Failure/loading obligations (per component): typed refusal codes above are the complete error surface each component promises; load optionality = install-time selection (C7) + C6/C8 runtime-optional with the §5 queue/refuse contracts. These are the contracts P1 implements against; changes to them are ADR-3 additive.
+Failure/loading obligations: the refusal codes listed are the KNOWN error surface from current source — completeness is NOT claimed until the source-review matrix (P1 step 1) enumerates every raise/exit path per component. Load optionality = install-time selection (C7) + C6/C8 runtime-optional per §5 queue/refuse contracts. §3b is the P1 implementation TARGET, ADR-3 additive; interface IO payloads, version-negotiation and required-absent behavior rows are produced by that same source review (tracked in #275), not asserted complete here.
 
 ## 4. Mermaid dependency DAG
 
