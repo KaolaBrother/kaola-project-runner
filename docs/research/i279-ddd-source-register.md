@@ -1,7 +1,7 @@
 # Source register — issue #279 DDD research (fetched 2026-10-07)
 
 Every URL fetched, fetch date, and the verbatim quotes used in
-`/tmp/kpr-279-ddd-method.md`. All fetches were read-only. Quotes are exact as returned by the
+[i279-ddd-method.md](i279-ddd-method.md). All fetches were read-only. Quotes are exact as returned by the
 fetch (markdown view); ellipses `…` mark elision, quotes are otherwise contiguous.
 
 ## Successfully fetched
@@ -120,3 +120,18 @@ fetch (markdown view); ellipses `…` mark elision, quotes are otherwise contigu
 - `docs/research/modular-architecture-and-unified-data-2026-10-07.md` (KW multi-writer + resumable step-receipt workflows + dual digest; §3).
 - `kaola-project-runner` AGENTS.md (owner rules: no authorization-history/tombstone bookkeeping; no auto-adoption).
 - KW repo (`~/Workspace/kaola-workflow`): read-only, referenced only via the in-repo records above; KW source not re-opened for this note.
+
+## Complement sources (Grok `i279-ddd-counterexamples`, fetched 2026-10-07)
+
+Gathered by the complement worker; quotes as it returned them. Host spot-check 2026-10-07 by exact
+string match on the live page: 37signals ("default to create services, actions, commands, or
+interactors") and Shopify 2020 ("just be an added layer of indirection") matched; the Vernon Part I
+PDF returned HTTP 200 but its text was not extracted here, so its quotes remain worker-reported. Used in
+i279-ddd-method.md §6b.
+
+- Fowler, Microservice Premium (#9) and Monolith First (#8): "you shouldn't start a new project with microservices, even if you're sure your application will be big enough to make it worthwhile."; "even experienced architects working in familiar domains have great difficulty getting boundaries right at the beginning."
+- https://shopify.engineering/blogs/engineering/deconstructing-monolith-designing-software-maximizes-developer-productivity — Westeinde, 2019-02-21 (**engineering case**): "We chose to evolve Shopify into a modular monolith"; "no architecture is often the best architecture in the early days of a system."
+- https://shopify.engineering/shopify-monolith — Müller, 2020-09-16 (**engineering case**): "guided by the ideas of Domain Driven Design"; "components as implementations of subdomains of the domain of commerce"; a service split "increases the overall complexity considerably"; exceptions "a read-only use case with very high throughput" and data that "shouldn't flow through other parts of the system"; interfaces "turned out to just be an added layer of indirection"; "every component depended on over half of all the other components."
+- https://dev.37signals.com/vanilla-rails-is-plenty/ — Manrubia, 2022-11-08 (**engineering case**): "We don't separate application-level and domain-level artifacts."; "we don't default to create services, actions, commands, or interactors"; quoting Vernon: "Using Services overzealously will usually result in the negative consequences of creating an Anemic Domain Model".
+- https://www.dddcommunity.org/wp-content/uploads/files/pdf_articles/Vernon_2011_1.pdf and https://www.dddcommunity.org/wp-content/uploads/files/pdf_articles/Vernon_2011_3.pdf — Vernon, Effective Aggregate Design Parts I/III, 2011 (**illustrative fictional teaching case**: ProjectOvation, called fictitious by the author): "false invariants in mind, not real business rules. These false invariants are artificial constraints imposed by developers."; "the risk of leaving the true invariant unprotected, or allowing users to experience a possible stale status in the view."
+- Unreachable for this worker: https://shopify.engineering/deconstructing-monolith-designing-software-that-maximizes-developer-productivity (404); https://vaughnvernon.com/ (403 on this fetch, although #23 above was fetched earlier the same day); https://vaughnvernon.co/ (no response); no DDD Europe aggregate-redraw page found.

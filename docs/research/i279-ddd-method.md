@@ -1,7 +1,7 @@
 # DDD (Triple-D) method for issue #279 — agent context units
 
 Read-only independent research. `[SRC]` = primary-source conclusion (verbatim quotes in
-`/tmp/kpr-279-source-register.md`). `[DERIV]` = our derivation. `[ASSUMPTION]` = consumer source
+[i279-ddd-source-register.md](i279-ddd-source-register.md)). `[DERIV]` = our derivation. `[ASSUMPTION]` = consumer source
 **not read**. No implementation, no consumer writes. KPR evidence: commit `889f12bb`,
 `docs/designs/modular-core-2026-10-07/design.md`; corpus `docs/research/…2026-10-07.md`.
 
@@ -60,9 +60,12 @@ tactical = within-context mechanics (aggregate = consistency boundary ≠ contex
   case-by-case basis."
 - **Process isolation ≠ domain boundary.** `[SRC]` "services map to runtime processes, but that is
   only a first approximation." A separate process/lib is an engineering convenience; a context is
-  a language/model boundary. The two often correlate, but are not the same.- **Data ownership per context.** `[SRC]` microservices "prefer letting each service manage its
-  own database"; transaction boundary = aggregate boundary, so cross-context coordination becomes
-  eventual/compensating, not a shared transaction.
+  a language/model boundary. The two often correlate, but are not the same.
+- **Data ownership per context.** `[SRC]` microservices "prefer letting each service manage its
+  own database" describes a microservice deployment preference, not a universal DDD requirement.
+  A modular monolith may share physical storage while preserving logical ownership. Transaction
+  scope, synchronous collaboration, eventual consistency and compensation are explicit design
+  choices constrained by real invariants, not deductions from a context label.
 - **Contracts, schema, versioning.** `[SRC]` "we build services that share contracts, not types";
   Tolerant Reader: "be conservative in what you do, be liberal in what you accept from others";
   consumer-driven contracts make consumer expectations executable.
@@ -76,37 +79,48 @@ tactical = within-context mechanics (aggregate = consistency boundary ≠ contex
 ## 4. Mapping KPR + KW + consumers `[DERIV]`
 
 Components are **not** bounded contexts (design.md §3: cuts follow measured function seams). By
-**language/model**, KPR has three runtime contexts:
+**language/model**, the following are THREE CANDIDATE context groupings, not established boundaries.
+Their core/supporting/generic labels are hypotheses about product value, not classifications
+based on technical layers. Validate each against domain-expert language, invariant/consistency
+evidence and observed change coupling; orchestration may be a differentiator rather than supporting:
 
-| Context | Strategic type | Modules (design §3) | Ubiquitous-language candidates |
+| Candidate context | Candidate strategic type (hypothesis) | Modules (design §3) | Ubiquitous-language candidates |
 |---|---|---|---|
 | **KPR session-runtime** | core (differentiator: reliable ACP session lifecycle) | CORE identity/process, C1 lifecycle, C2 adapters, C3 events | holder, holder_instance_id, session, native-id, receipt, exit/residual_pids, event cursor |
 | **KPR orchestration-state** | supporting | C4 state, C5 dispatch, C6 recovery | task, hold, alert, decision, dispatch, StateRefusal, revision, lease/handoff, `signal-unverified` |
 | **KPR build/install** | generic (industry-solved tooling) | C7 render/install | manifest, `provides`/`requires`, budget, pin, install-verify |
 
-**KW = a separate bounded context** (design §3 row C8: "separate ownership & artifact model
-already"). Evidence of a genuinely different model `[SRC: in-repo research §3]`: KW artifacts are
+**KW = a candidate separate domain model, whose internal context count is UNVERIFIED**. Design §3
+row C8 records separate ownership/artifacts, which alone does not prove a single bounded context.
+Evidence suggesting a different model `[SRC: in-repo research §3]`: KW artifacts are
 multi-writer with resumable step-receipt workflows and a dual code-tree digest, unlike KPR's
-single-writer `.kaola/` state. **Relationship** = Customer-Supplier / Published Language with an
-**ACL at C8** for the dual-digest skew (design §5, ADR-7: "one contract with two named views").
+single-writer `.kaola/` state. **Candidate relationship** = Customer-Supplier / Published Language, with a possible
+**in-process translation at C8** for differing digest semantics (design §5, ADR-7: "one contract with two named views").
 KW source was not re-opened; claims come from our in-repo design/research records.
 
 **VRPAI / CAD = external contexts, source NOT read** — every statement below is `[ASSUMPTION]`:
 `[ASSUMPTION]` they are production apps with their own task/authorization language; `[ASSUMPTION]`
 KPR consumes them across a consumer-bridge contract (Open Host Service / Published Language), so
-their model is upstream and must be translated at an ACL, never imported into
-orchestration-state. Treat all of it as a hypothesis to verify from their bridge evidence.
+their model is upstream and is translated at that boundary rather than imported into
+orchestration-state; an in-process translator suffices, and a separate process is a deployment
+choice. Treat all of it as a hypothesis to verify from their bridge evidence.
 
 ## 5. Deliverable: Agent WORK-UNIT CONTEXT PACK
 
-One independent work unit = one aggregate-like change inside one context.
+An aggregate is a consistency boundary; an Agent work unit is a bounded, verifiable change.
+They do NOT map one-to-one. Decompose tasks by change coupling and acceptance surfaces. A task
+may touch several aggregates or contexts; name the collaboration contracts, data writers,
+invariants and integration evidence for those boundaries rather than prohibit the task.
 
 1. **Domain vocabulary** — the exact terms (this context's ubiquitous language) + dictionary/allowlist pointer; no re-coined synonyms.
 2. **Inputs / outputs** — typed artifacts read and produced (schema + version).
 3. **Invariants** — the few rules that must hold across the unit (uniqueness, single-writer, monotonicity, authority); they define the consistency boundary.
 4. **Dependency contracts** — allowed consumers/providers, pinned contract versions, typed errors.
 5. **Acceptance criteria** — observable outcomes, including refusal paths.
-6. **Allowed-change surface** — files/APIs the unit may touch; anything else refuses.
+6. **Expected-change surface** — files/APIs and interfaces anticipated for the unit. This is
+   planning information, not a new global refusal gate. If a legitimate dependency-contract
+   change expands the surface, coordinate affected owners and update the plan using existing
+   authorization and review rules; preserve legal cross-component work.
 
 Testing split: **independent development tests** (unit + invariant) and **integration/consumer
 contract tests** (over the real seam; consumer-driven assertions). Boundary evolution: **split**
@@ -121,8 +135,8 @@ project.
 - In/out: current-state JSON (C4-owned version) → updated current-only state.
 - Invariants: single writer under `StateLock` atomic replace; `retire-unmet` refusal when links unmet; monotonic `rev`; **no tombstone/history of handled rows** (owner rule, AGENTS.md).
 - Dependency contracts: CORE atomic access; C5 dispatch links; typed refusals named by id+version.
-- Acceptance: happy path + refusal path + reopen-safety; reader-older → typed refuse.
-- Allowed surface + evolution: C4 state functions and schema only (no C5 writes); a second meaning of "hold" → candidate split; retire = keep-data read-only export (design §5).
+- Acceptance: happy path + refusal path + reopen-safety; reader-older → typed refuse (the existing C4 state-schema contract, not a pack rule).
+- Expected-change surface + evolution (planning, not a gate): C4 state functions and schema; C5 writes are not expected, and a legitimate need for one is coordinated with its owner and the plan updated; a second meaning of "hold" → candidate split; retire = keep-data read-only export (design §5).
 
 ### Counter-example (pattern does NOT apply)
 
@@ -139,20 +153,65 @@ existing contract suites); (3) split/merge only on observed language/change-rate
 (4) define the retire/export path before any cut.
 
 **Validation checks**: unit tests for the stated invariants; one cross-edge contract test per
-dependency; a refusal-path test; a boundary test that a foreign-context write is refused.
+dependency; a refusal-path test; a boundary test that a writer without authority over a
+context's owned data is refused (the existing single-writer rule) — never a refusal of a
+legitimate cross-context task.
 **Explicit non-promises** `[DERIV]`: this does **not** eliminate agent context limits; does **not**
 auto-fit any scale; is **not** a mandate for event sourcing, CQRS, microservices, or
 one-process-per-context; does not make contexts permanent.
 
 **Cost / counter-example**: packs cost writing and maintenance and can drift from code; premature
-contexts fragment a small codebase (Microservice Premium `[SRC]`); ACLs add latency and another
-component to run `[SRC]`. Use only where an invariant or semantic gap justifies the cost.
+contexts can fragment a small codebase. Extra deployment, network latency and operations cost
+apply when translation is a separately deployed service; an in-process ACL need not introduce
+another process or network hop. Translation still has code and maintenance cost. Use only where an invariant or semantic gap justifies the cost.
 
 **Bounded open questions**: (Q1) is KW truly *one* context or several (unread at source this
 round)? (Q2) do VRPAI/CAD bridges expose a Published Language or an ad-hoc field set?
 `[ASSUMPTION]` only. (Q3) do C4/C5 share one language (one context) or two? They share one state
 store though design §3 lists them separately — resolve from source. (Q4) can the pack be validated
-without a new gate (reuse the #268/#273 refuse style)?
+without a new gate (reuse the #268/#273 typed-result style as a component-scoped result)?
+
+### 6b. Counter-examples and the low-ceremony path (complement, Grok `i279-ddd-counterexamples`)
+
+Sources and verbatim quotes are in [i279-ddd-source-register.md](i279-ddd-source-register.md)
+§ "Complement sources". Quotes were gathered by the complement worker; the Host spot-matched the
+37signals and Shopify 2020 quotes live, the Vernon quotes remain worker-reported, and unreachable
+pages are listed there.
+
+**When DDD ceremony costs more than it returns** `[SRC]`: Fowler — "don't even consider
+microservices unless you have a system that's too complex to manage as a monolith"; "even
+experienced architects working in familiar domains have great difficulty getting boundaries right
+at the beginning." Engineering cases: Shopify evolved into "a modular monolith" and Müller used
+DDD *in-process* ("components as implementations of subdomains of the domain of commerce"), with
+service splits kept for specific needs (high-throughput read-only use, data that "shouldn't flow
+through other parts of the system"). 37signals: "we don't default to create services, actions,
+commands, or interactors". These are deployment and layering choices of those teams, not DDD
+requirements either way.
+
+**Conditional low-ceremony options** `[DERIV]` — each applies only when its condition holds, none
+is a universal DDD or KPR rule:
+
+1. One codebase/process/database is a reasonable default *while* no measured scale, failure-domain
+   or sealed-data need justifies a split; it does not forbid an existing justified process.
+2. Prefer direct model operations over an added service/interactor layer *when* that layer would
+   only add indirection; a domain service with a real cross-entity operation stays legitimate.
+3. Introduce an aggregate *when* one transaction must protect a real business invariant.
+4. Treat first-cut contexts as revisable; redraw on observed language/change-coupling evidence.
+5. Keep one command within one consistency cluster *where* the invariant requires it; tasks may
+   still span several (§5).
+
+**Redesign patterns** `[SRC]`:
+
+- *Giant aggregate, then split* — Vernon, Effective Aggregate Design Part I. **Illustrative
+  fictional teaching case** (ProjectOvation, marked fictitious by its author): a Product
+  aggregate holding all backlog items, releases and sprints caused concurrent-commit failures;
+  the cause was "false invariants … artificial constraints imposed by developers".
+- *Split drawn, then withdrawn* — same series, Part III (same fictional case): moving Task out of
+  BacklogItem with eventual consistency was tried and superseded to avoid leaving "the true
+  invariant unprotected".
+- *Facades with no direction* — **engineering case**, Shopify (Müller 2020): interfaces "turned
+  out to just be an added layer of indirection" while "every component depended on over half of
+  all the other components."
 
 _Research only. No root/Fable review claim; not a reopening of the B design._
 
@@ -163,10 +222,43 @@ _Research only. No root/Fable review claim; not a reopening of the B design._
 This frames DDD as an installable/uninstallable strategy component in the converged core design — an optional extension, never a B0/migration precondition.
 
 - **Responsibilities**: domain-modeling input to boundary decisions (vocabulary/invariant/change-rate evidence, never auto-partitioning); work-unit context-pack generation from existing records; mapping suggestions (marked ASSUMPTION where source unread); boundary-evolution recommendations with evidence. **Non-responsibilities**: no final value/architecture/acceptance judgment (Host/owner), no project management totality claim, no machine domain split.
-- **Data ownership**: reads existing project records + design docs (read-only); owns ONLY its generated packs/mappings in the consuming project's `.kaola/` namespace (C4-style single-writer), never a second authority store; no authorization content enters its outputs.
-- **Version compatibility**: contract-version field on packs; unknown-version → typed refuse (ADR-3 style); optional-field tolerance stated per-pack.
+- **Data ownership**: reads existing project records + versioned engineering documents. Generated domain maps, contract descriptions and packs should first reuse the project's existing versioned engineering documents and original evidence references. No new canonical `.kaola/` store, history ledger or authorization copy is introduced. A runtime artifact would require a separately justified contract, ownership and retention design.
+- **Version compatibility**: an explicit version belongs to the optional pack contract. If this component cannot interpret a pack, it returns a component-scoped unsupported/unavailable result; core and unrelated authorized work continue. Optional-field tolerance is defined per contract, not globally.
 - **Failure degradation / uninstall**: absent → work proceeds exactly as today (no pack is a gate); retire → read-only export of packs; replacement is any equivalent pack producer behind the same pack schema.
-- **Applicability criteria (when to install)**: multiple bounded languages or change-rates observed; invariant/consistency boundaries worth isolating; cross-context collaboration costing rework. **Simplified path**: single-context small projects use a one-paragraph vocabulary + invariants + allowed-change note (the pack minus ceremony) — the counter-example rule governs.
-- **Validation design**: pack-vs-code drift check reusing existing suites (no new gate); one cross-edge contract test per dependency named in a pack; refusal-path test; boundary-evolution decisions cite observed evidence. Reuse #268/#273 refuse style (Q4 resolution proposal).
+- **Applicability criteria (when to install)**: multiple bounded languages or change-rates observed; invariant/consistency boundaries worth isolating; cross-context collaboration costing rework. **Simplified path**: single-context small projects use a one-paragraph vocabulary + invariants + expected-change note (the pack minus ceremony) — the counter-example rule (§6b) governs.
+- **Validation design**: pack-vs-code drift check reusing existing suites (no new gate); one cross-edge contract test per dependency named in a pack; refusal-path test; boundary-evolution decisions cite observed evidence. Reuse the #268/#273 typed-result style as a component-scoped unsupported result, never a core gate (Q4 resolution proposal).
 
-These are the component's own contract rows; adoption itself remains the owner's decision.
+These are proposed component contract rows. Q1–Q3 are technical evidence questions, not mandatory Owner value choices. Actual adoption or a changed deployment commitment may require an Owner decision under existing scope; the already-authorized research and optional-component design do not require a new approval.
+
+
+## Integration status — root corrections and complements (not implementation acceptance)
+
+Integrated by the Host from main research @210b712e, the root-corrected draft and the two
+complements. This records which review points the text now carries; it claims no Fable or root
+acceptance.
+
+Root technical review (six points): (1) an Agent work unit is not an aggregate (§5); (2) the three
+KPR contexts and their core/supporting/generic labels are candidates needing product-value and
+invariant evidence (§4); (3) cross-context transactions, shared/separate databases and a separate
+ACL process are deployment choices, not DDD consequences (§3, §4, §6); (4) the expected-change
+surface is planning information, not a global refusal, and an unsupported pack version degrades
+only this component (§5, §7); (5) domain maps and packs reuse versioned Git engineering documents,
+with no new `.kaola/` canonical store or authorization ledger (§7); (6) KW and VRPAI/CAD mappings
+are unverified examples, and Q1–Q3 are technical evidence questions, not mandatory Owner
+questions (§4, §6, §7).
+
+The optional strategy interface can accept existing design/evidence references, a proposed task,
+its acceptance surfaces and dependency contracts; it returns candidate boundary advice, a
+versioned context-pack proposal, evidence gaps and a collaboration/verification plan. Agent
+tasks may span domains; the Host/Owner retains value, architecture and acceptance judgments.
+No output is an automatic permission gate or automatic task-graph rewrite.
+
+Complements: [i279-ddd-contract-tests.md](i279-ddd-contract-tests.md) (per-contract tolerance;
+existing suites are component-seam evidence, not proof of the proposed contexts; new fixtures are
+described, not executed) and §6b (counter-examples as conditional options, fictional teaching
+case vs engineering cases marked).
+
+Bounded Fable review after this integration: assess the six corrected claims, remaining logical
+contradictions, and the optional-component interface/failure/data boundaries. Do not reopen B0,
+repeat source research, impose microservices, or convert technical evidence gaps into Owner
+questions. Report substantive residual differences against the exact integrated commit.
