@@ -135,6 +135,13 @@ Source: explicit owner request, 2026-10-04. Scope: the current lifecycle/state-m
 
 Completion report: answer all six items against the final integrated candidate, with mechanism, actual evidence/result, and remaining limitations. Exercise this requirement's record → relay → adoption → implementation/QA → final answer path using existing records and receipts, so progress remains aligned with the agreed goals. Reuse meaningful evidence; do not add a parallel ledger, scheduler or duplicate acceptance phase.
 
+## Project special requirements — architecture upgrade and migration continuity
+
+Source: explicit owner requirement relayed by the dot main thread, 2026-10-07; persistence/commit/push specifically confirmed in `Sentinel_e6578558c334819198e666e38a952f11` ("Yes, you should. I authorize this."). Scope: this project only; existing authorization, safety, role ownership and QA requirements remain in effect.
+
+- Keep the authorized architecture upgrade and staged migration as a continuing main line of project work. Bug fixes, downstream support and research may proceed in parallel, but a change of immediate focus must not displace or silently abandon that main line. Track actual migration progress and acceptance through the existing tasks/issues and original Git or runtime evidence. A design decision, research delivery, pushed commit or installation alone does not establish migration acceptance.
+- Report actual blockers with their evidence, responsible role and next step; continue independent authorized parts whose real dependencies allow progress. Respect existing safety, permissions, compatibility and QA boundaries; this continuity requirement creates no new authority, bypass, scheduler or installation permission.
+
 ## Host capability disclosure and table (owner requirement, 2026-10-06)
 
 Source: explicit owner request relayed through the dot main session (Sentinel_27d913395e90819199545f470d8c6421 / Sentinel_15c6ec9ed9b08191a982e2d62258f92a / Sentinel_e3b97d4346908191a717f86890655ad6; support-criterion clarification Sentinel_993c0853c4c08191843176126322f9b2). Scope: the maintained Host capability/limitation table, its pre-selection disclosure and its update convention, within existing #264/#263 scope; no new scheduler, framework or installation.
@@ -162,3 +169,10 @@ Source: owner request, 2026-10-07, `Sentinel_ba18d6bfc13081919575aef6173d2c3f`: 
 
 - Owner narrowing, 2026-10-07 (`Sentinel_55820b8a50e48191b566e72efb1c6437`, `367bf89dbe1c8191a2b55544c088a04d`, `11885a6047a48191bbf0df44be22501e`, `b9b634268b888191a71258343ed53197`): KPR operates as OUTER OBSERVATION / HOST ON DEMAND. The resident Host completes only current-only closeout maintenance and the bridge then exact-stops the idle Host; a KPR Host starts again only on owner/dot demand, resumed from existing Runner receipts (native resume provenance stays in those receipts, not in a copied grant archive). Root's :15 observation and the AI/CAD/KT original tasks continue unchanged. Any prior keep-resident inference is superseded.
 - Owner clarification, 2026-10-07, `Sentinel_89b3ae997348819193197f5bf3ae0349`: “kpr这次升级应该把记账路径都堵了，所以我们要观测好是否复发”. After actual Host business updates, use read-only current snapshots and legitimate Git engineering evidence to check for recurrence of handled rows, authorization history, tombstones or bookkeeping relocated to other fields/files. One migration cleanup does not prove permanent prevention. Report a concrete anomaly with its exact path, verified loaded version, triggering operation and the minimum necessary redacted excerpt to the original KPR Host; keep existing scope and ownership. Do not create a lasting seat-history ledger for this observation.
+
+## Delegator special requirements — architecture progress in every formal report
+
+Source: explicit owner requirement relayed by the dot main thread, 2026-10-07; persistence/commit/push specifically confirmed in `Sentinel_e6578558c334819198e666e38a952f11` ("Yes, you should. I authorize this."). Scope: this project only; existing authorization, safety, role ownership and QA requirements remain in effect.
+
+- Every formal Delegator report retains the loaded Skill's fixed five items and adds a separate architecture section. State the current stage; accepted migration work and its evidence; work in progress; next steps and their real dependencies; compatibility and rollback risks; and any unresolved user value choices (or explicitly none). Distinguish accepted migration from design, implementation, publication and consumer adoption.
+- Do not let bug, downstream or research focus omit this section. Name actual blockers and the independent parts being advanced without crossing existing safety, permission or QA boundaries. Keep requirements here in AGENTS.md; do not put them in timer text or copy them into runtime JSON. Existing grants and other rules are unchanged.
