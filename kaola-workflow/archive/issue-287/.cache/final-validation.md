@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: /tmp/287-validate.sh: worktree-only content-stage flip (templates/grok-bot/accepted-revision.json stage=content + render --write), then validate.sh --suite for the 9 affected suites (255-lifecycle-state, 286-retire-input, 259-record-contract, 244-dispatch, 244-holder-prompt-binding, 274-package-closure, 275-core-contracts, 267-rejection-count, ddd-pack; 379 tests OK, exit 0), then git checkout -- . restoring candidate 73887f7a. Inherited-failure proof: candidate tests on clean main 0657e37f fail exactly the 4 new tests, 0 others.
+validated_candidate_hash: 47241a4755cae49e00cc07448060628f0531fc46bdca855f24c58a06409910a8
