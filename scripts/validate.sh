@@ -313,6 +313,7 @@ python_suites_all=(
   "test-issue-267-rejection-count.py"
   "test-issue-268-selection-continuity.py"
   "test-issue-273-list-identity.py"
+  "test-issue-274-package-closure.py"
   "test-issue-271-dispatch-help.py"
   "test-issue-264-validate-lane-integrity.py"
 )
@@ -351,6 +352,7 @@ python_suites_a=(
   "test-issue-267-rejection-count.py"
   "test-issue-268-selection-continuity.py"
   "test-issue-273-list-identity.py"
+  "test-issue-274-package-closure.py"
   "test-issue-271-dispatch-help.py"
   "test-issue-264-validate-lane-integrity.py"
 )

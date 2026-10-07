@@ -588,6 +588,13 @@ def expected_orchestrator_files(manifests: list[dict[str, str]]) -> dict[str, by
     if not contract_script.is_file():
         raise ValueError(f"missing record contract: {contract_script}")
     result["scripts/kaola-record-contract.py"] = contract_script.read_bytes()
+    # Issue #274: kaola-dispatch.py dynamically loads the compact-recovery
+    # helper from its own directory at recovery-input time; the orchestrator
+    # package is not self-contained without it.
+    recovery_script = ROOT / "scripts" / "kaola-compact-recovery.py"
+    if not recovery_script.is_file():
+        raise ValueError(f"missing compaction recovery helper: {recovery_script}")
+    result["scripts/kaola-compact-recovery.py"] = recovery_script.read_bytes()
     return result
 
 
