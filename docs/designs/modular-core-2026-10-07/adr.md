@@ -2,10 +2,10 @@
 
 Format: Context / Decision / Consequences. Each ADR cites its evidence locator. Status: PROPOSED — root + Fable convergence pending; none is decided.
 
-## ADR-1: The core is a library + contract registry, not a daemon
-Context: Fable AB recommends B0 per-user/per-machine resident core (lifecycle+events first); root approved B direction but also demands subtraction-first and forbids preselecting daemon/DB (A/B decision).
-Decision: core = identity model + process facts + atomic state access + thin contract registry, as a library consumed in-process by components. A resident core becomes a B-line *pilot* (B0) only if staged evidence shows cross-process coordination needs it; files+locks remain the A-line substrate.
-Consequences: no new process to operate today; B0 remains possible without re-cuts (the library is what a resident core would host). Evidence: kaola-acp.py:1680-1693/1537-1546 (identity), :1166/:3556 (atomic+lock).
+## ADR-1: The resident core is the accepted target; staging starts as a shared library
+Context: owner ACCEPTED the B direction — per-user/per-machine lightweight RESIDENT core, lifecycle+events first (B0). The A/B split forbids letting the minimal-patch line constrain B; it does NOT forbid the resident form.
+Decision: the core's runtime form is the resident core (B0). Staging begins by extracting the core as a shared library so the component cut is provable and the resident pilot hosts real code, not a rewrite. The library is the resident core's implementation, not an alternative to it; "no daemon" is NOT the B default at any stage.
+Consequences: library-first is a build order, not a direction change; P5 measures the resident pilot against the nine axes as planned evidence, not as permission to re-decide the direction. Evidence: kaola-acp.py:1680-1693/1537-1546 (identity), :1166/:3556 (atomic+lock).
 
 ## ADR-2: Components are cut along measured function-family seams
 Context: owner requires actual-source cuts, no predecided count, no microservices.
@@ -22,15 +22,15 @@ Context: owner: deleting a module must not force synchronized consumer edits; da
 Decision: uninstall/retire/replace defined per component (design.md §5); data namespaces stay in `.kaola/` under core contract registry; consumers depend on contracts only.
 Consequences: a replaced component must pass the SAME cross-edge contract tests; retirement keeps data readable read-only. Evidence: #274 (package closure as a subtraction-class bug), AGENTS #255 continuous-improvement duty.
 
-## ADR-5: No un-handed-off fallback dual-write
-Context: root constraint on B fencing; #273 shows identity checks are time-bounded snapshots.
-Decision: any dual-write path (store migration, core fallback) requires an explicit handoff token (lease+epoch); without it the older writer keeps single ownership and the newer refuses.
-Consequences: brief unavailability instead of split-brain; handoff drills mandatory in staging. Evidence: root A/B decision; StateLock single-writer.
+## ADR-5: No un-handed-off fallback dual-write; fencing needs a real lease
+Context: root constraint on B fencing; #273 shows identity checks are time-bounded snapshots. ACCURACY: `holder_instance_id` is a unique identity, not an ordered epoch — today's exact-stop guard compares identity equality, not seniority.
+Decision: any dual-write path (store migration, core fallback) requires an explicit handoff token: a monotonic lease epoch with acquisition, renewal, expiry and contention arbitration specified in P1 and drilled in P5; without a valid lease the older writer keeps single ownership and the newer refuses with a typed `lease-held` error.
+Consequences: brief unavailability instead of split-brain; the lease design itself is unimplemented until P1; handoff drills mandatory before any shared store. Evidence: root A/B decision; StateLock single-writer; kaola-acp.py holder guard (identity equality).
 
 ## ADR-6: Recipes bind to stable pinned sources only
-Context: AI event-105633 — a consumer recipe pointed at a mutable dev checkout; dev render drifted its expected build and the skew check refused a legal release.
-Decision: sideagent recipe `runner`/`state_tool` must name installed Skill roots or verified accepted checkouts (guidance shipped in sideagent-node.md @93662173); binding-author tooling should verify the source build at bind time (candidate, not implemented).
-Consequences: dev checkouts never become implicit consumer dependencies. Evidence: /tmp/vrpai-kpr-cap-incident-evidence.json family; kaola-project-runner-accepted @3de9f61.
+Context: AI event 105633 — the consumer sideagent recipe's `runner`/`state_tool` named the MUTABLE DEV checkout; a dev render changed the adjacent main-skill-build the skew baseline read, so the consumer's build-skew check refused a legal release (expected 4868c8b6 vs installed 0eeb0db6; installs and the accepted checkout were verified untouched). Not a capacity-incident artifact.
+Decision: recipe sources must name installed Skill roots or verified accepted checkouts (guidance shipped in sideagent-node.md @93662173); bind-time source verification that refuses mutable-dev sources is a P3 candidate with a negative fixture, not implemented.
+Consequences: dev checkouts never become implicit consumer dependencies. Evidence: AI event 105633 (recipe readback + main-skill-build expected/installed deltas); stable accepted checkout kaola-project-runner-accepted @3de9f61 (installed build 0eeb0db6, verified).
 
 ## ADR-7: KW is an optional module sharing runtime norms, never merged repos
 Context: KPR+KW unified data management goal; distinct ownership must survive.
