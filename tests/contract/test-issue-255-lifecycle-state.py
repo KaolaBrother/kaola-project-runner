@@ -2449,7 +2449,7 @@ class ConsolidatedDispatch(StateProject):
         self.assertEqual(code, 0, out)
         rev = str(self.doc()["state"]["tasks"]["t1"]["rev"])
         live = self.repo / "stopped-live.json"
-        live.write_text(json.dumps({"rows": [{
+        live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": [{
             "session": "zcode-KT-i1-a", "state": "stopped", "holder_instance_id": holder, "repo": repo,
         }]}), encoding="utf-8")
         code, out = self.state(
