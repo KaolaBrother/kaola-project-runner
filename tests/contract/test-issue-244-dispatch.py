@@ -26,6 +26,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "scripts" / "kaola-dispatch.py"
 RECORD = REPO / "scripts" / "kaola-record-contract.py"
+PATHS = REPO / "scripts" / "kaola-acp-paths.py"
 PLATFORMS = REPO / "platforms"
 ORCHESTRATOR = REPO / "skills" / "kaola-project-runner"
 DELEGATOR = REPO / "skills" / "kaola-delegator"
@@ -915,6 +916,7 @@ class DispatchEntry(unittest.TestCase):
         skill_scripts.mkdir(parents=True)
         (skill_scripts / "kaola-dispatch.py").write_bytes(SCRIPT.read_bytes())
         (skill_scripts / "kaola-record-contract.py").write_bytes(RECORD.read_bytes())
+        (skill_scripts / "kaola-acp-paths.py").write_bytes(PATHS.read_bytes())
         worker = self.root / "skills" / "zcode-kaola-project-runner" / "scripts"
         worker.mkdir(parents=True)
         (worker / "platform.yaml").write_bytes((PLATFORMS / "zcode.yaml").read_bytes())
@@ -2919,6 +2921,7 @@ class DispatchEntry(unittest.TestCase):
         scripts.mkdir(parents=True)
         (scripts / "kaola-dispatch.py").write_bytes(SCRIPT.read_bytes())
         (scripts / "kaola-record-contract.py").write_bytes(RECORD.read_bytes())
+        (scripts / "kaola-acp-paths.py").write_bytes(PATHS.read_bytes())
         worker = self.skills / "zcode-kaola-project-runner" / "scripts"
         worker.mkdir(parents=True)
         (worker / "platform.yaml").write_bytes((PLATFORMS / "zcode.yaml").read_bytes())

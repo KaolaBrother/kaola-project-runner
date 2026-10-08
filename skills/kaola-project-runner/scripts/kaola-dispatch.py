@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import functools
 import hashlib
 import json
 import os
@@ -29,7 +30,6 @@ import re
 import shlex
 import subprocess
 import sys
-import tempfile
 import threading
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -4412,10 +4412,9 @@ def render_state(doc: dict[str, Any], path: Path, *, unchecked_live: bool = Fals
     return text, sizes
 
 
-def runner_record_root() -> Path:
-    root = os.environ.get("KAOLA_ACP_RECORD_ROOT")
-    return Path(root) if root else (
-        Path(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()) / f"kaola-{os.getuid()}")
+@functools.lru_cache(maxsize=None)
+def record_directory(platform: str, session: str, repo: str) -> Path:
+    return RECORD.record_directory(platform, session, repo)
 
 
 def carrier_replaced_by_older(carrier: dict[str, Any], path: Path) -> bool:
@@ -4426,11 +4425,11 @@ def carrier_replaced_by_older(carrier: dict[str, Any], path: Path) -> bool:
     platform, session = carrier.get("platform"), carrier.get("session")
     if not isinstance(platform, str) or not isinstance(session, str):
         return False
-    digest = hashlib.sha256(str(repo_of_state_file(path)).encode("utf-8")).hexdigest()[:16]
     try:
-        record = json.loads((runner_record_root() / platform / session / digest / "record.json")
-                            .read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        record = json.loads(
+            (record_directory(platform, session, str(repo_of_state_file(path))) / "record.json")
+            .read_text(encoding="utf-8"))
+    except (OSError, ValueError, RECORD.acp_paths.RecordRootMismatch):
         return False
     if not isinstance(record, dict) or record.get("holder_instance_id") == carrier.get("holder_instance_id"):
         return False
@@ -4502,11 +4501,11 @@ def caller_role(caller: dict[str, str] | None) -> str | None:
     when it cannot be read (no caller, a legacy record without a role)."""
     if not caller:
         return None
-    digest = hashlib.sha256(caller["repo"].encode("utf-8")).hexdigest()[:16]
     try:
-        record = json.loads((runner_record_root() / caller["platform"] / caller["session"] / digest
-                             / "record.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        record = json.loads(
+            (record_directory(caller["platform"], caller["session"], caller["repo"])
+             / "record.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError, RECORD.acp_paths.RecordRootMismatch):
         return None
     if not isinstance(record, dict) or record.get("holder_instance_id") != caller["holder_instance_id"]:
         return None
@@ -5567,11 +5566,10 @@ def already_settled_input(state: dict[str, Any], ident: str) -> bool:
 
 
 def caller_record(caller: dict[str, str]) -> tuple[Path, dict[str, Any]]:
-    digest = hashlib.sha256(caller["repo"].encode("utf-8")).hexdigest()[:16]
-    directory = runner_record_root() / caller["platform"] / caller["session"] / digest
     try:
+        directory = record_directory(caller["platform"], caller["session"], caller["repo"])
         record = json.loads((directory / "record.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RECORD.acp_paths.RecordRootMismatch) as exc:
         raise StateRefusal("identity-unavailable", f"read original holder record: {exc}")
     if record.get("holder_instance_id") != caller["holder_instance_id"]:
         raise StateRefusal("identity-mismatch", "original holder record names another holder")

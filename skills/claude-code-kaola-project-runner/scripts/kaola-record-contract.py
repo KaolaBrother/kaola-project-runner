@@ -9,13 +9,27 @@ does not decide that a sentence is finished, and it does not call Git.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import re
-import tempfile
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+
+# Issue #292: the holder pins this module at startup, so the shared #278 path
+# helper loads here at top level, not at call time.
+_paths_spec = importlib.util.spec_from_file_location(
+    "kaola_record_acp_paths", Path(__file__).resolve().with_name("kaola-acp-paths.py"))
+acp_paths = importlib.util.module_from_spec(_paths_spec)
+_paths_bytecode = sys.dont_write_bytecode
+sys.dont_write_bytecode = True
+try:
+    _paths_spec.loader.exec_module(acp_paths)
+finally:
+    sys.dont_write_bytecode = _paths_bytecode
 
 
 HOST_SCHEMA = "kaola-heartbeat-prompt/2"
@@ -1856,13 +1870,9 @@ def task_attention(task_id: str, task: dict[str, Any], holds: Any = None) -> lis
     return found
 
 
-def _record_root() -> Path:
-    """Same root as the Runner: explicit root, else ``XDG_RUNTIME_DIR``, else the process temp dir."""
-    root = os.environ.get("KAOLA_ACP_RECORD_ROOT")
-    if root:
-        return Path(root)
-    base = os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
-    return Path(base) / f"kaola-{os.getuid()}"
+def record_directory(platform: str, session: str, repo: str) -> Path:
+    """The exact session's holder record directory across the fixed root and legacy roots (#278, #292)."""
+    return acp_paths.find_directory(platform, session, repo)
 
 
 def _repo_of_state_file(path: Path) -> Path:
@@ -1910,8 +1920,10 @@ def node_is_running(binding: Any, repo: Path | None, host: dict[str, str] | None
     if repo is None:
         return None
     repo_text = str(repo)
-    digest = hashlib.sha256(repo_text.encode("utf-8")).hexdigest()[:16]
-    path = _record_root() / platform / session / digest / "record.json"
+    try:
+        path = record_directory(platform, session, repo_text) / "record.json"
+    except acp_paths.RecordRootMismatch:
+        return None
     try:
         if not path.is_file():
             return False

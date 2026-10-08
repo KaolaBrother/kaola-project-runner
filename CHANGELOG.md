@@ -4,6 +4,23 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+Seats: restart required
+
+- **State tool finds fixed-root holder records (Issue #292).** `state
+  checkpoint` and `state update` by node Sideagents whose holder record lives
+  in the fixed `/tmp/kaola-<uid>` root were refused `binding-superseded`: the
+  state tool still resolved records through the caller's `TMPDIR` /
+  `XDG_RUNTIME_DIR`, which runtimes like ZCode do not forward the same way.
+  The state tool now resolves caller, carrier and node records through the
+  shared #278 path helper across the fixed and legacy roots, and the
+  orchestrator package ships `kaola-acp-paths.py` beside it. The checkpoint
+  fix takes effect on the next state-tool call after install (the state tool
+  is a per-call CLI); restart at a safe boundary only refreshes the holder's
+  pinned record contract. An explicit `KAOLA_ACP_RECORD_ROOT` keeps its
+  scoped view.
+
 ## 0.9.2 — 2026-10-08 (list identity, package closure, fixed record roots, retire fail-closed, per-input settlement, seat preset resolution, dead-holder stop, multi-index retire)
 
 Seats: restart required

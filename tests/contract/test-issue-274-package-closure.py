@@ -54,7 +54,7 @@ class PackageClosure(unittest.TestCase):
             isolated = Path(td) / "scripts"
             isolated.mkdir()
             for name in ("kaola-dispatch.py", "kaola-record-contract.py",
-                         "kaola-compact-recovery.py"):
+                         "kaola-compact-recovery.py", "kaola-acp-paths.py"):
                 shutil.copy2(PKG / name, isolated / name)
             # caller: host-role record + completed session-bound signal
             import hashlib as hl
@@ -130,7 +130,8 @@ class PackageClosure(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             isolated = Path(td) / "scripts"
             isolated.mkdir()
-            for name in ("kaola-dispatch.py", "kaola-record-contract.py"):
+            for name in ("kaola-dispatch.py", "kaola-record-contract.py",
+                         "kaola-acp-paths.py"):
                 shutil.copy2(PKG / name, isolated / name)
             repo_dir = Path(td) / "repo"
             (repo_dir / ".kaola").mkdir(parents=True)

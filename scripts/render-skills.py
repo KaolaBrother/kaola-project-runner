@@ -595,6 +595,12 @@ def expected_orchestrator_files(manifests: list[dict[str, str]]) -> dict[str, by
     if not recovery_script.is_file():
         raise ValueError(f"missing compaction recovery helper: {recovery_script}")
     result["scripts/kaola-compact-recovery.py"] = recovery_script.read_bytes()
+    # Issue #292: kaola-record-contract.py loads the shared #278 path helper at
+    # module top level; the orchestrator package is not self-contained without it.
+    paths_script = ROOT / "scripts" / "kaola-acp-paths.py"
+    if not paths_script.is_file():
+        raise ValueError(f"missing record path helper: {paths_script}")
+    result["scripts/kaola-acp-paths.py"] = paths_script.read_bytes()
     return result
 
 

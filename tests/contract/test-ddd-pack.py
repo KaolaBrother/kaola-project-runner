@@ -527,10 +527,15 @@ class DddPackChecker(unittest.TestCase):
             (root / "scripts").mkdir()
             (root / "tests" / "contract").mkdir(parents=True)
             shutil.copy(PROJECT / "scripts" / "kaola-dispatch.py", root / "scripts" / "kaola-dispatch.py")
-            # execute --help imports the sibling record contract at load time.
+            # execute --help imports the sibling record contract at load time,
+            # and the contract loads the shared #278 path helper (#292).
             shutil.copy(
                 PROJECT / "scripts" / "kaola-record-contract.py",
                 root / "scripts" / "kaola-record-contract.py",
+            )
+            shutil.copy(
+                PROJECT / "scripts" / "kaola-acp-paths.py",
+                root / "scripts" / "kaola-acp-paths.py",
             )
             validate = VALIDATE.read_text(encoding="utf-8")
             removed = "\n".join(
