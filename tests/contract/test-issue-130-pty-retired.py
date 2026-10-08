@@ -263,8 +263,13 @@ def live_surfaces() -> list[Path]:
                 continue
             rel = path.relative_to(PROJECT).as_posix()
             # docs/evidence holds archived raw run transcripts that quote
-            # history; they are evidence, not live option surfaces.
-            if base == "docs" and (DATED.search(path.name) or "/decisions/" in f"/{rel}"
+            # history; they are evidence, not live option surfaces. A dated
+            # component (release-candidate-2026-10-08/...) marks the same
+            # archive shape when only the directory carries the date
+            # (#130: v0.9.2's archived QA logs quote gate output naming
+            # dual-transport paths).
+            dated_component = any(DATED.search(part) for part in Path(rel).parts)
+            if base == "docs" and (dated_component or "/decisions/" in f"/{rel}"
                                    or "/evidence/" in f"/{rel}"):
                 continue
             if rel.startswith("templates/grok-golden/"):
