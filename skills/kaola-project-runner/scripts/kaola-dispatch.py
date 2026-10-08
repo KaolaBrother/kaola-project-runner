@@ -543,13 +543,16 @@ def current_candidates(catalog: dict[str, Any], auth: dict[str, Any], grants: li
                        repo: str | None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Both current views use existing grant, ceiling, hold and availability facts."""
     ceiling, error = delegator_ceiling(repo) if repo else (None, None)
-    effective = apply_ceiling_to_grants(grants, ceiling) if ceiling else grants
+    if ceiling:
+        ceiling = admission_ceiling(ceiling)
+    effective = apply_ceiling_to_grants(grants, ceiling, catalog) if ceiling else grants
     candidates, withheld = eligibility(catalog, auth, effective, available)
     holds = preset_holds(document)
     kept = []
     for candidate in candidates:
         ident = candidate["id"]
-        reason = ("ceiling-unreadable" if error else ceiling_block(ceiling, ident, candidate["class"]) if ceiling else None)
+        reason = ("ceiling-unreadable" if error else ceiling_block(
+            ceiling, ident, candidate["class"], expert_grants=True) if ceiling else None)
         if ident in holds:
             reason = "on-hold"
         if reason:
@@ -1300,6 +1303,85 @@ def binding_row(binding: dict[str, Any] | None, row: dict[str, Any]) -> bool:
 _count_ok = RECORD.count_ok
 
 
+def _grant_ident_list(grant: dict[str, Any]) -> list[str]:
+    ids: list[str] = []
+    if isinstance(grant.get("preset_id"), str) and grant["preset_id"]:
+        ids.append(grant["preset_id"])
+    many = grant.get("preset_ids")
+    if isinstance(many, list) and all(isinstance(item, str) for item in many):
+        ids.extend(item for item in many if item and item not in ids)
+    return ids
+
+
+def _listed_once(rows: Any) -> set[str]:
+    counts: dict[str, int] = {}
+    if not isinstance(rows, list):
+        return set()
+    for grant in rows:
+        if not isinstance(grant, dict):
+            continue
+        for ident in _grant_ident_list(grant):
+            counts[ident] = counts.get(ident, 0) + 1
+    return {ident for ident, count in counts.items() if count == 1}
+
+
+def _expiry_state(value: Any) -> str:
+    """none, ok, expired, or unreadable. An offset instant; Z is accepted."""
+    if value is None:
+        return "none"
+    if not isinstance(value, str):
+        return "unreadable"
+    moment = parse_expiry(value)
+    if moment is None:
+        return "unreadable"
+    if moment <= datetime.now(timezone.utc):
+        return "expired"
+    return "ok"
+
+
+def _expiry_evidence(ids: list[str], field: str, expires: Any, state: str) -> dict[str, Any]:
+    return {
+        "expires": expires,
+        "presets": list(ids),
+        "source": ".kaola/delegator-heartbeat.json",
+        "field": field,
+        "path": field,
+        "allowed": "ISO-8601 instant with an offset",
+        "recovery": (
+            "Delegator: a past window is expired; keep the ended grant out of new admission"
+            if state == "expired"
+            else "Delegator: replace expires with an ISO-8601 instant that has an offset; do not infer a window"
+        ),
+        "role": "host",
+    }
+
+
+def _lifetime_evidence(ids: list[str], field: str, lifetime: Any) -> dict[str, Any]:
+    return {
+        "lifetime": lifetime,
+        "presets": list(ids),
+        "source": ".kaola/delegator-heartbeat.json",
+        "field": field,
+        "path": field,
+        "allowed": "task or standing",
+        "recovery": (
+            "Delegator: Expert permission is task or standing for this choice only; "
+            "it does not apply to the group's Elite choices"
+        ),
+        "role": "host",
+    }
+
+
+def admission_ceiling(ceiling: dict[str, Any]) -> dict[str, Any]:
+    """Expert grant facts override the same preset's Elite-row copy for admission."""
+    extra = ceiling.get("expert_by_id")
+    if not extra:
+        return ceiling
+    merged = dict(ceiling)
+    merged["by_id"] = {**(ceiling.get("by_id") or {}), **extra}
+    return merged
+
+
 def delegator_ceiling(repo: str, observations: list[dict[str, Any]] | None = None) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """Read current grants with the writer's shape check. Scope bad grants by id.
 
@@ -1327,33 +1409,53 @@ def delegator_ceiling(repo: str, observations: list[dict[str, Any]] | None = Non
     errors = RECORD.delegator_authorization_blockers(auth)
     problems: dict[str, str] = {}
     evidence: dict[str, dict[str, Any]] = {}
+    expert_problems: dict[str, str] = {}
+    expert_evidence: dict[str, dict[str, Any]] = {}
     bad_grants: set[int] = set()
-    worker_problem = elite_problem = None
+    expert_bad: set[int] = set()
+    worker_problem = elite_problem = expert_problem = None
+    # One shared group may name an Expert choice that also has its own
+    # expert_task_grants row. That overlap is the Expert permission, not a
+    # second seat and not a shape failure.
+    legal_overlap = _listed_once(auth.get("elite_grants")) & _listed_once(auth.get("expert_task_grants"))
     for error in errors:
         field = error["path"]
-        grant_match = re.match(r"authorization.elite_grants\[(\d+)\]", field)
-        if grant_match:
-            index = int(grant_match[1])
+        grant_match = re.match(r"authorization\.(elite_grants|expert_task_grants)\[(\d+)\]", field)
+        if grant_match and grant_match[1] == "elite_grants":
+            index = int(grant_match[2])
             grant = auth["elite_grants"][index]
             bad_grants.add(index)
-            ids = []
-            if isinstance(grant, dict):
-                if isinstance(grant.get("preset_id"), str) and grant["preset_id"]:
-                    ids.append(grant["preset_id"])
-                if isinstance(grant.get("preset_ids"), list):
-                    ids.extend(ident for ident in grant["preset_ids"] if isinstance(ident, str) and ident)
+            ids = _grant_ident_list(grant) if isinstance(grant, dict) else []
             if ids:
                 for ident in ids:
                     problems[ident] = "ceiling-unreadable"
                     evidence.setdefault(ident, error)
             else:
                 elite_problem = elite_problem or error
+        elif grant_match:
+            index = int(grant_match[2])
+            pool = auth.get("expert_task_grants")
+            grant = pool[index] if isinstance(pool, list) and index < len(pool) else None
+            expert_bad.add(index)
+            ids = _grant_ident_list(grant) if isinstance(grant, dict) else []
+            if ids:
+                for ident in ids:
+                    expert_problems.setdefault(ident, "ceiling-unreadable")
+                    expert_evidence.setdefault(ident, error)
+            else:
+                expert_problem = expert_problem or error
         elif field in ("authorization.worker_pool", "authorization.worker_pool_cap"):
             worker_problem = worker_problem or error
         elif field in ("authorization.elite_cap", "authorization.total_cap", "authorization.elite_grants"):
             elite_problem = elite_problem or error
+        elif field == "authorization.expert_task_grants":
+            expert_problem = expert_problem or error
         elif field in ("authorization.revoked", "authorization.paused", "authorization.exclusions"):
             return None, error
+        elif field.startswith("authorization.grants") and any(
+            f"duplicate preset {ident}" in (error.get("recovery") or "") for ident in legal_overlap
+        ):
+            continue
         # Non-dispatch fields have no new authority. Their shape errors are
         # current migration observations, not an unrelated dispatch stop.
         elif observations is not None:
@@ -1367,28 +1469,57 @@ def delegator_ceiling(repo: str, observations: list[dict[str, Any]] | None = Non
         if isinstance(grant, dict) and grant.get("state") in ("paused", "revoked", "excluded"):
             for ident in grant.get("preset_ids") or [grant.get("preset_id")]:
                 blocked.setdefault(ident, grant["state"])
+    catalog = catalog_from_files(platform_paths(Path(__file__), None))
     elite = by_id = groups = None
     if isinstance(raw, list):
         elite, by_id, groups, semantic, semantic_evidence = _parse_elite_grants(
             [grant for index, grant in enumerate(raw) if index not in bad_grants],
-            [index for index in range(len(raw)) if index not in bad_grants])
+            [index for index in range(len(raw)) if index not in bad_grants],
+            catalog, legal_overlap)
         problems.update({ident: reason for ident, reason in semantic.items() if ident not in problems})
         evidence.update({ident: item for ident, item in semantic_evidence.items() if ident not in evidence})
+    raw_expert = auth.get("expert_task_grants")
+    expert_ids = expert_by_id = None
+    expert_groups: list[dict[str, Any]] = []
+    if isinstance(raw_expert, list):
+        kept = [grant for index, grant in enumerate(raw_expert) if index not in expert_bad]
+        kept_index = [index for index in range(len(raw_expert)) if index not in expert_bad]
+        expert_ids, expert_by_id, expert_groups, expert_semantic, expert_semantic_evidence = _parse_expert_grants(
+            kept, kept_index)
+        for ident, reason in expert_semantic.items():
+            expert_problems.setdefault(ident, reason)
+        for ident, item in expert_semantic_evidence.items():
+            expert_evidence.setdefault(ident, item)
+    elif raw_expert is not None:
+        expert_problem = expert_problem or RECORD.refusal(
+            "authorization.expert_task_grants", "array of grant objects",
+            "Delegator: source the original Expert grants before admission")
     return {
         "blocked": blocked,
         "worker_ids": set(auth["worker_pool"]) if isinstance(auth.get("worker_pool"), list) and worker_problem is None else None,
         "elite_ids": elite,
-        "by_id": by_id or {}, "groups": groups or [],
+        "expert_ids": expert_ids,
+        "by_id": by_id or {}, "expert_by_id": expert_by_id or {},
+        "groups": (groups or []) + expert_groups,
         "problems": problems, "problem_evidence": evidence,
+        "expert_problems": expert_problems, "expert_problem_evidence": expert_evidence,
         "worker_problem": worker_problem, "elite_problem": elite_problem,
+        "expert_problem": expert_problem,
     }, None
 
 
-def _parse_elite_grants(raw_elite: list[dict[str, Any]], source_indices: list[int]) -> tuple[
+def _parse_elite_grants(
+    raw_elite: list[dict[str, Any]], source_indices: list[int],
+    catalog: dict[str, dict[str, Any]], expert_owned: set[str],
+) -> tuple[
     dict[str, int | None], dict[str, dict[str, Any]], list[dict[str, Any]],
     dict[str, str], dict[str, dict[str, Any]],
 ]:
-    """Interpret shape-checked grants; preserve literal owner conditions as affected duties."""
+    """Interpret shape-checked Elite grants. expires is the time window.
+
+    A shared row's Expert lifetime does not withhold the Elite choices.
+    An Expert preset that also has expert_task_grants keeps that clock.
+    """
     elite: dict[str, int | None] = {}
     by_id: dict[str, dict[str, Any]] = {}
     groups: list[dict[str, Any]] = []
@@ -1425,8 +1556,48 @@ def _parse_elite_grants(raw_elite: list[dict[str, Any]], source_indices: list[in
         stated = count if _count_ok(count) else None
         switch = grant.get("switch_authorization")
         lifetime = grant.get("lifetime")
-        if isinstance(lifetime, str) and lifetime not in GRANT_LIFETIMES:
-            literal(ids, f"authorization.elite_grants[{index}].lifetime", "lifetime", lifetime)
+        prose = isinstance(lifetime, str) and lifetime not in GRANT_LIFETIMES
+        window = _expiry_state(grant.get("expires"))
+        expires_field = f"authorization.elite_grants[{index}].expires"
+        shared = len(ids) > 1
+
+        def elite_choice(ident: str) -> bool:
+            # Expert permission owns this choice. The Elite window does not.
+            if ident in expert_owned:
+                return False
+            if shared and catalog.get(ident, {}).get("class") == "Expert":
+                return False
+            return True
+
+        if window == "expired":
+            affected = [ident for ident in ids if elite_choice(ident)]
+            if affected:
+                window_evidence = _expiry_evidence(affected, expires_field, grant.get("expires"), "expired")
+                for ident in affected:
+                    problem(ident, "expired", window_evidence)
+        elif window == "unreadable":
+            affected = [ident for ident in ids if elite_choice(ident)]
+            if affected:
+                window_evidence = _expiry_evidence(affected, expires_field, grant.get("expires"), "unreadable")
+                for ident in affected:
+                    problem(ident, "expiry-unreadable", window_evidence)
+        if prose and shared and window == "none":
+            # No Elite window. The prose lifetime is Expert permission only.
+            experts = [ident for ident in ids
+                       if ident not in expert_owned and catalog.get(ident, {}).get("class") == "Expert"]
+            if experts:
+                life_evidence = _lifetime_evidence(
+                    experts, f"authorization.elite_grants[{index}].lifetime", lifetime)
+                for ident in experts:
+                    problem(ident, "lifetime-unreadable", life_evidence)
+            lifetime = None
+        elif prose and window != "ok":
+            # A single grant with no readable window still names the literal lifetime.
+            # A readable expires is the window, so the same lifetime is not incomplete.
+            if window == "none":
+                literal(ids, f"authorization.elite_grants[{index}].lifetime", "lifetime", lifetime)
+            lifetime = None
+        elif prose:
             lifetime = None
         special = grant.get("special_requirements")
         if isinstance(special, str):
@@ -1451,13 +1622,119 @@ def _parse_elite_grants(raw_elite: list[dict[str, Any]], source_indices: list[in
             fact["count"] = elite[ident]
             choice_special = special.get(ident) if isinstance(special, dict) and special and set(special) <= set(ids) else special
             for key, value in (("switch", switch), ("lifetime", lifetime), ("special", choice_special)):
+                # Elite seats are a time window. A task/standing lifetime on the
+                # same row is Expert permission and does not attach to Elite choices.
+                # A missing Expert lifetime is task, the same default as Host grants.
+                if key == "lifetime" and catalog.get(ident, {}).get("class") != "Expert":
+                    continue
+                if key == "lifetime" and value is None and not prose:
+                    value = "task"
                 if value is None:
                     continue
                 if fact[key] is None:
                     fact[key] = value
                 elif fact[key] != value:
                     problem(ident, "ceiling-incomplete")
+            if window == "ok" and elite_choice(ident):
+                fact["expires"] = grant.get("expires")
     return elite, by_id, groups, problems, problem_evidence
+
+
+def _parse_expert_grants(raw_expert: list[dict[str, Any]], source_indices: list[int]) -> tuple[
+    dict[str, int | None], dict[str, dict[str, Any]], list[dict[str, Any]],
+    dict[str, str], dict[str, dict[str, Any]],
+]:
+    """Expert grants are per-task or standing. Absence of lifetime means task."""
+    expert: dict[str, int | None] = {}
+    by_id: dict[str, dict[str, Any]] = {}
+    groups: list[dict[str, Any]] = []
+    problems: dict[str, str] = {}
+    problem_evidence: dict[str, dict[str, Any]] = {}
+
+    def problem(ident: str, reason: str, item: dict[str, Any] | None = None) -> None:
+        problems.setdefault(ident, reason)
+        if item:
+            problem_evidence.setdefault(ident, item)
+
+    for index, grant in zip(source_indices, raw_expert):
+        if not isinstance(grant, dict):
+            continue
+        ids = _grant_ident_list(grant)
+        if not ids:
+            continue
+        field = f"authorization.expert_task_grants[{index}]"
+        if grant.get("state") in ("paused", "revoked", "excluded"):
+            for ident in ids:
+                problem(ident, grant["state"])
+            continue
+        count = grant.get("count")
+        stated = count if _count_ok(count) else None
+        special = grant.get("special_requirements")
+        if isinstance(special, str):
+            problem_evidence_row = {
+                "special_requirements": special,
+                "presets": list(ids),
+                "source": ".kaola/delegator-heartbeat.json",
+                "field": f"{field}.special_requirements",
+                "path": f"{field}.special_requirements",
+                "allowed": "typed grant supported by original owner authority",
+                "recovery": "Delegator and Host: reconcile this literal condition from its source for the affected grant; keep it current until resolved",
+                "role": "host",
+            }
+            for ident in ids:
+                problem(ident, "ceiling-incomplete", problem_evidence_row)
+            continue
+        lifetime = grant.get("lifetime")
+        lifetime = "task" if lifetime is None else lifetime.strip() if isinstance(lifetime, str) else ""
+        if lifetime not in GRANT_LIFETIMES:
+            life_evidence = _lifetime_evidence(ids, f"{field}.lifetime", grant.get("lifetime"))
+            for ident in ids:
+                problem(ident, "lifetime-unreadable", life_evidence)
+            continue
+        window = _expiry_state(grant.get("expires"))
+        if window in ("expired", "unreadable"):
+            reason = "expired" if window == "expired" else "expiry-unreadable"
+            window_evidence = _expiry_evidence(ids, f"{field}.expires", grant.get("expires"), window)
+            for ident in ids:
+                problem(ident, reason, window_evidence)
+            continue
+        if len(ids) > 1:
+            if stated is None:
+                for ident in ids:
+                    problem(ident, "ceiling-incomplete")
+            else:
+                groups.append({"ids": set(ids), "count": stated})
+        switch = grant.get("switch_authorization")
+        for ident in ids:
+            if ident in problems:
+                continue
+            if ident in expert and expert[ident] != stated:
+                problem(ident, "ceiling-unreadable")
+                expert[ident] = None
+            else:
+                expert[ident] = stated
+            fact = by_id.setdefault(ident, {
+                "count": expert[ident], "switch": None, "lifetime": None, "special": None,
+            })
+            fact["count"] = expert[ident]
+            fact["lifetime"] = lifetime
+            if window == "ok":
+                fact["expires"] = grant.get("expires")
+            if isinstance(switch, bool) and fact.get("switch") is None:
+                fact["switch"] = switch
+            choice_special = special.get(ident) if isinstance(special, dict) and special and set(special) <= set(ids) else special
+            if isinstance(choice_special, dict) and fact.get("special") is None:
+                fact["special"] = choice_special
+    return expert, by_id, groups, problems, problem_evidence
+
+
+def _shared_ceiling_member(ceiling: dict[str, Any], preset: str) -> bool:
+    """True when this preset shares one count with another preset."""
+    for group in ceiling.get("groups") or []:
+        ids = group.get("ids") or ()
+        if preset in ids and len(ids) > 1:
+            return True
+    return False
 
 
 def ceiling_group(ceiling: dict[str, Any] | None, preset: str) -> dict[str, Any] | None:
@@ -1469,10 +1746,21 @@ def ceiling_group(ceiling: dict[str, Any] | None, preset: str) -> dict[str, Any]
     return None
 
 
-def ceiling_block(ceiling: dict[str, Any], preset: str, class_name: str) -> str | None:
+def ceiling_block(ceiling: dict[str, Any], preset: str, class_name: str,
+                  expert_grants: bool = False) -> str | None:
     field_problem = ceiling.get("worker_problem" if class_name == "Worker" else "elite_problem")
     if field_problem:
         return "ceiling-unreadable"
+    # An expert_task_grants row is that choice's own permission. It is not an
+    # Elite seat, and the group's Elite window does not replace it.
+    if expert_grants and class_name == "Expert":
+        expert_problems = ceiling.get("expert_problems") or {}
+        if preset in expert_problems:
+            return expert_problems[preset]
+        if preset in (ceiling.get("expert_ids") or {}) and preset not in ceiling["blocked"]:
+            return None
+        if ceiling.get("expert_problem") is not None and preset not in (ceiling.get("elite_ids") or {}):
+            return "ceiling-unreadable"
     if preset in (ceiling.get("problems") or {}):
         return ceiling["problems"][preset]
     if preset in ceiling["blocked"]:
@@ -1483,15 +1771,28 @@ def ceiling_block(ceiling: dict[str, Any], preset: str, class_name: str) -> str 
         return None if preset in ceiling["worker_ids"] else "above-ceiling"
     if ceiling["elite_ids"] is None:
         return "ceiling-incomplete"
-    return None if preset in ceiling["elite_ids"] else "above-ceiling"
+    if preset in ceiling["elite_ids"]:
+        # A shared row may name an Expert choice. That choice is not an Elite
+        # seat: it still needs its own expert_task_grants row. A single Elite
+        # grant, including one that names an Expert preset, stays a time window.
+        if (expert_grants and class_name == "Expert"
+                and preset not in (ceiling.get("expert_ids") or {})
+                and _shared_ceiling_member(ceiling, preset)):
+            return "above-ceiling"
+        return None
+    return "above-ceiling"
 
 
 def ceiling_count(ceiling: dict[str, Any], preset: str, class_name: str) -> int | None:
     if class_name == "Worker":
         return None
-    elite = ceiling.get("elite_ids") or {}
-    count = elite.get(preset)
-    return count if _count_ok(count) else None
+    elite = (ceiling.get("elite_ids") or {}).get(preset)
+    expert = (ceiling.get("expert_ids") or {}).get(preset)
+    if class_name == "Expert" and _count_ok(expert):
+        if _count_ok(elite):
+            return min(expert, elite)
+        return expert
+    return elite if _count_ok(elite) else None
 
 
 def tighten_count(host_count: Any, shared: Any, limit: Any) -> Any:
@@ -1509,7 +1810,8 @@ def tighten_count(host_count: Any, shared: Any, limit: Any) -> Any:
     return limit
 
 
-def apply_ceiling_to_grants(grants: list[dict[str, Any]], ceiling: dict[str, Any]) -> list[dict[str, Any]]:
+def apply_ceiling_to_grants(grants: list[dict[str, Any]], ceiling: dict[str, Any],
+                            catalog: dict[str, dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Copy current Delegator limits onto the Host grants used for this decision."""
     by_id = ceiling.get("by_id") or {}
     narrowed = []
@@ -1526,6 +1828,10 @@ def apply_ceiling_to_grants(grants: list[dict[str, Any]], ceiling: dict[str, Any
             grant["model_switch"] = False
             grant["switch_authorization"] = False
         life = fact.get("lifetime")
+        # Caller passes the catalog on the admission path so an Expert lifetime
+        # is not copied onto an Elite choice. The seat summary keeps the prior copy.
+        if catalog is not None and catalog.get(grant["id"], {}).get("class") != "Expert":
+            life = None
         if life in GRANT_LIFETIMES:
             host_life = grant.get("lifetime")
             if life == "task" and host_life in (None, "standing"):
@@ -1638,13 +1944,14 @@ def command_execute(args: argparse.Namespace) -> int:
     observations: list[dict[str, Any]] = []
     ceiling, ceiling_error = delegator_ceiling(repo, observations)
     if ceiling is not None:
-        grants = apply_ceiling_to_grants(grants, ceiling)
+        ceiling = admission_ceiling(ceiling)
+        grants = apply_ceiling_to_grants(grants, ceiling, catalog)
         shared_capacities = shared_seat_capacities(grants)
         candidates, withheld = eligibility(catalog, auth, grants, available)
         kept_candidates = []
         for candidate in candidates:
             class_name = catalog[candidate["id"]]["class"]
-            reason = ceiling_block(ceiling, candidate["id"], class_name)
+            reason = ceiling_block(ceiling, candidate["id"], class_name, expert_grants=True)
             if reason:
                 withheld.append({"id": candidate["id"], "reason": reason})
                 continue
@@ -1711,6 +2018,7 @@ def command_execute(args: argparse.Namespace) -> int:
             elif withheld_reason.get(preset) in EXPERT_WITHHELD_REASONS:
                 reason = withheld_reason[preset]
             detail = ((ceiling or {}).get("problem_evidence", {}).get(preset)
+                      or (ceiling or {}).get("expert_problem_evidence", {}).get(preset)
                       or (ceiling or {}).get("worker_problem" if row["class"] == "Worker" else "elite_problem"))
             extra = {"evidence": detail} if isinstance(detail, dict) else None
             blocked.append(blank_item(item["item_id"], preset, session, "not-run", reason, extra))

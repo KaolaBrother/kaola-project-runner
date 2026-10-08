@@ -34,7 +34,9 @@ Missing counts authorize no Elite/Expert admission. Repeated legacy group
 counts or switch conflicts require source-based migration or owner recovery.
 An Expert grant may also carry `lifetime` (`task`, the default when absent, or
 `standing`) and `expires` (an ISO-8601 instant with an offset, `Z` accepted).
-Both are read for Expert presets only; Elite and Worker rows ignore them. A
+Both are read for Expert presets only; Elite and Worker rows ignore them.
+The Delegator ceiling below is separate: it reads Elite `expires` as a time
+window and reads `expert_task_grants`. A
 task grant ends with its task; a standing grant holds until the owner revokes
 it or it expires, and the tool never infers `standing`. An unknown `lifetime`
 is withheld as `lifetime-unreadable`, an unparseable `expires` as
@@ -87,9 +89,31 @@ A missing Delegator file leaves standalone Host authorization unchanged.
 An unreadable ceiling blocks new dispatch and leaves running work in place.
 No independently writable aggregate or Worker pool cap is supported.
 A stated Delegator `count` applies when the Host grant omits `count`.
-One `elite_grants` entry with several `preset_ids` and one `count` is one shared pool.
-`lifetime`, `switch_authorization`, and structured `special_requirements` stay on that decision.
-A string `special_requirements`, or a `lifetime` outside `task` and `standing`, blocks only those presets.
+One grant entry with several `preset_ids` and one `count` is one shared seat
+across every permitted tier. Occupying that seat with any tier consumes the
+one count. An Expert choice in the group still needs per-task or standing
+Expert permission (`lifetime` `task`, the default when that choice omits it,
+or `standing`). That Expert lifetime and `expires` govern only the Expert
+choice. They do not limit the group's Elite choices. Expert-only presets,
+such as `codex/astra`, are granted only in `expert_task_grants` and are not
+Elite seats. A shared-group Expert choice with no current `expert_task_grants`
+row is `above-ceiling`.
+
+Elite grants are a time window. During the window those seats may be used for
+any task, with no per-task permission. The window ends at `expires`
+(ISO-8601 with an offset; `Z` accepted). A past instant is `expired`. An
+unreadable `expires` is `expiry-unreadable`. A single grant whose `lifetime`
+is outside `task` and `standing`, and which has no readable `expires`, blocks
+only that preset as `ceiling-incomplete`. A readable `expires` is the window,
+so that `lifetime` does not by itself make the grant `ceiling-incomplete`.
+
+Expert grants are per-task or standing. A lifetime outside those two values
+is `lifetime-unreadable`. A past `expires` is `expired`, and an unreadable
+one is `expiry-unreadable`. Those refusals are not `above-ceiling`.
+`execute` reports the same reason as `not-run`.
+
+`switch_authorization` and structured `special_requirements` stay on that
+decision. A string `special_requirements` blocks only those presets.
 The row keeps the exact text, the preset names, the Delegator field, and the Host role.
 That prose is not written as `revoked` or `excluded`.
 `keep_open` and nonempty `wait` or `next` do not keep or finish a task.

@@ -314,6 +314,7 @@ python_suites_all=(
   "test-issue-278-record-root.py"
   "test-issue-292-state-record-root.py"
   "test-issue-293-node-record-roots.py"
+  "test-issue-294-expert-ceiling.py"
   "test-issue-289-dead-holder-stop.py"
   "test-issue-274-package-closure.py"
   "test-issue-271-dispatch-help.py"
@@ -418,6 +419,7 @@ python_suites_b=(
   "test-issue-278-record-root.py"
   "test-issue-292-state-record-root.py"
   "test-issue-293-node-record-roots.py"
+  "test-issue-294-expert-ceiling.py"
   "test-issue-289-dead-holder-stop.py"
 )
 

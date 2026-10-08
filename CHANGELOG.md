@@ -32,6 +32,20 @@ Seats: restart required
   an exact stop — or defers to a live node another holder dispatched until
   that holder is gone. Restart the Host at a safe boundary to load the new
   holder.
+- **Delegator ceiling admits granted Expert seats and Elite time windows
+  (Issue #294).** `delegator_ceiling` counted only `elite_grants`, so a
+  Delegator Expert grant such as `codex/astra` was refused `above-ceiling`
+  at `execute` admission. Expert grants are now part of that ceiling:
+  `task` (the default) or `standing`, with their own `expires`. A shared
+  seat group has one count across its tiers. An Expert choice in that group
+  still needs its own task or standing grant, or it is `above-ceiling`. An
+  Expert lifetime or expiry limits only that Expert choice. Elite grants are
+  a time window ending at `expires`, usable for any task until then. A
+  readable Elite window is no
+  longer `ceiling-incomplete` when `lifetime` is outside `task` and
+  `standing` (`claude-code/fable`). This entry is the dispatch CLI only.
+  Seats: restart not required. The section restart still comes from the
+  holder changes above.
 
 ## 0.9.2 — 2026-10-08 (list identity, package closure, fixed record roots, retire fail-closed, per-input settlement, seat preset resolution, dead-holder stop, multi-index retire)
 
