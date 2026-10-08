@@ -46,6 +46,19 @@ Seats: restart required
   `standing` (`claude-code/fable`). This entry is the dispatch CLI only.
   Seats: restart not required. The section restart still comes from the
   holder changes above.
+- **Delegator seat view lists Expert grants (Issue #295).** `state view
+  --role delegator`, `delegator view`, and the `project --seats` summary
+  omitted `expert_task_grants` presets such as `codex/astra`, so
+  `authorized_total` was too low and `expert_authorization` read `none`.
+  The summary now uses the same admission ceiling reading as `execute`:
+  Expert grants appear in their groups, a shared group is counted once, a
+  Delegator-granted preset the Host grants omit is listed
+  `host-grant-missing` (authorized, not available), and admissible
+  Worker-pool presets are listed in `worker_pool` without counting as
+  seats. The `delegator view` fallback no longer reports a legal
+  elite/expert grant overlap as a duplicate grant. This entry is the
+  dispatch CLI only. Seats: restart not required. The section restart
+  still comes from the holder changes above.
 
 ## 0.9.2 — 2026-10-08 (list identity, package closure, fixed record roots, retire fail-closed, per-input settlement, seat preset resolution, dead-holder stop, multi-index retire)
 

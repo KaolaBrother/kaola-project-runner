@@ -689,9 +689,11 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
         unknown_sources.append("current-task-source-unavailable")
     holds = preset_holds(document)
     ceiling, ceiling_error = delegator_ceiling(projection["repo"])
-    effective = apply_ceiling_to_grants(grants, ceiling) if ceiling else grants
+    if ceiling:
+        ceiling = admission_ceiling(ceiling)
+    effective = apply_ceiling_to_grants(grants, ceiling, catalog) if ceiling else grants
     availability = availability_map(load_object(Path(args.availability))) if getattr(args, "availability", None) else {}
-    _candidates, withheld = eligibility(catalog, auth, effective, availability)
+    candidates, withheld = eligibility(catalog, auth, effective, availability)
     reasons = {item["id"]: item["reason"] for item in withheld}
     resolved = {row["session"]: row.get("preset") for row in projection["sessions"]}
     occupied = []
@@ -720,18 +722,14 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
                          "preset": preset, "tasks": sorted(links), "state": status,
                          **({"links": "unknown"} if not links and mutation != "not_started" else {})})
     groups: dict[str, dict[str, Any]] = {}
-    for grant in effective:
-        preset = grant["id"]
-        klass = catalog.get(preset, {}).get("class")
-        if klass not in ("Elite", "Expert") or grant.get("state") == "revoked" or preset in auth.get("revoked", []):
-            continue
-        if ceiling and ceiling_block(ceiling, preset, klass) in ("above-ceiling", "revoked"):
-            continue
+
+    def add_seat(preset: str, klass: str, count: Any, shared_seat: str | None,
+                 lifetime: str | None, special: dict[str, Any] | None,
+                 reason: str | None) -> None:
         shared_limit = next((group for group in (ceiling or {}).get("groups", []) if preset in group["ids"]), None)
-        group = ("grant:" + ",".join(sorted(shared_limit["ids"]))) if shared_limit else grant.get("shared_seat") or preset
+        group = ("grant:" + ",".join(sorted(shared_limit["ids"]))) if shared_limit else shared_seat or preset
         entry = groups.setdefault(group, {"group": group, "presets": [], "authorized_count": None,
                                           "occupied": [], "unavailable": [], "idle_available": None})
-        count = grant.get("count")
         if _count_ok(count):
             entry["authorized_count"] = max(entry["authorized_count"] or 0, count)
             if shared_limit:
@@ -739,17 +737,54 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
         entry["presets"].append({"id": preset, "class": klass, "count": count,
                                   "default_model": catalog[preset]["selection"].get("model_id"),
                                   "default_effort": catalog[preset]["selection"].get("effort"),
-                                  **({"owner_overrides": grant["special_requirements"]} if grant.get("special_requirements") else {}),
-                                  **({"lifetime": grant.get("lifetime") or "task"} if klass == "Expert" else {})})
-        reason = reasons.get(preset)
-        if ceiling:
-            reason = ceiling_block(ceiling, preset, klass) or reason
+                                  **({"owner_overrides": special} if special else {}),
+                                  **({"lifetime": lifetime or "task"} if klass == "Expert" else {})})
         if preset in holds:
             reason = "held:" + ",".join(holds[preset])
         if ceiling_error:
             reason = "ceiling-unreadable"
         if reason:
             entry["unavailable"].append({"id": preset, "reason": reason})
+
+    for grant in effective:
+        preset = grant["id"]
+        klass = catalog.get(preset, {}).get("class")
+        if klass not in ("Elite", "Expert") or grant.get("state") == "revoked" or preset in auth.get("revoked", []):
+            continue
+        blocked = ceiling_block(ceiling, preset, klass, expert_grants=True) if ceiling else None
+        if blocked in ("above-ceiling", "revoked"):
+            continue
+        add_seat(preset, klass, grant.get("count"), grant.get("shared_seat"),
+                 grant.get("lifetime"), grant.get("special_requirements"),
+                 blocked or reasons.get(preset))
+    if ceiling and not ceiling_error:
+        # The Delegator's authorization is the seat source: an Elite/Expert
+        # preset it grants but the Host grants omit is still authorized,
+        # reported unavailable as host-grant-missing.
+        host_ids = {grant["id"] for grant in effective}
+        extras = ((ceiling.get("elite_ids") or {}).keys()
+                  | (ceiling.get("expert_ids") or {}).keys()) - host_ids
+        for preset in sorted(extras):
+            klass = catalog.get(preset, {}).get("class")
+            if klass not in ("Elite", "Expert"):
+                continue
+            blocked = ceiling_block(ceiling, preset, klass, expert_grants=True)
+            if blocked in ("above-ceiling", "revoked"):
+                continue
+            fact = (ceiling.get("by_id") or {}).get(preset) or {}
+            add_seat(preset, klass, ceiling_count(ceiling, preset, klass), None,
+                     fact.get("lifetime"), None,
+                     blocked or reasons.get(preset) or "host-grant-missing")
+    worker_pool = []
+    if not ceiling_error:
+        for item in candidates:
+            preset = item["id"]
+            if item["class"] != "Worker" or preset in holds:
+                continue
+            if ceiling and ceiling_block(ceiling, preset, "Worker", expert_grants=True):
+                continue
+            worker_pool.append(preset)
+        worker_pool.sort()
     observed = projection["observed_elite_expert"]
     authorized_total = (sum(group["authorized_count"] for group in groups.values())
                         if all(group["authorized_count"] is not None for group in groups.values()) else None)
@@ -772,6 +807,7 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
             "expert_authorization": "present" if any(item["class"] == "Expert" for group in groups.values()
                                                        for item in group["presets"]) else "none",
             "occupied": occupied, "authorized_total": authorized_total, "occupied_elite_expert": observed,
+            "worker_pool": worker_pool,
             "idle_available_total": sum(group["idle_available"] for group in groups.values())
                 if all(group["idle_available"] is not None for group in groups.values()) else None,
             "unknown_reasons": unknown_sources,
@@ -792,12 +828,32 @@ def delegator_seats(args: argparse.Namespace, document: dict[str, Any], path: Pa
         if document.get("schema") == RECORD.DELEGATOR_SCHEMA:
             source = document.get("authorization") or {}
             problems = RECORD.delegator_authorization_blockers(source)
+            legal_overlap = (_listed_once(source.get("elite_grants"))
+                             & _listed_once(source.get("expert_task_grants")))
+            problems = [problem for problem in problems if not (
+                problem.get("path", "").startswith("authorization.grants")
+                and any(f"duplicate preset {ident}" in (problem.get("recovery") or "")
+                        for ident in legal_overlap))]
             if problems:
                 raise ValueError(problems[0]["detail"])
             auth = {key: source[key] for key in ("exclusions", "account_token_quotas") if key in source}
             auth["grants"] = []
+            # An Expert choice named in an elite_grants row and with its own
+            # expert_task_grants row is one legal overlap, not a duplicate
+            # grant. The Expert permission is read from the ceiling file.
+            elite_listed = {ident for grant in source.get("elite_grants") or []
+                            if isinstance(grant, dict) for ident in _grant_ident_list(grant)}
             for key in ("elite_grants", "expert_task_grants"):
                 for grant in source.get(key) or []:
+                    if key == "expert_task_grants" and isinstance(grant, dict):
+                        if isinstance(grant.get("preset_id"), str) and grant["preset_id"] in elite_listed:
+                            continue
+                        ids = grant.get("preset_ids")
+                        if isinstance(ids, list):
+                            kept = [ident for ident in ids if ident not in elite_listed]
+                            if ids and not kept:
+                                continue
+                            grant = {**grant, "preset_ids": kept}
                     row = {field: grant[field] for field in ("preset_ids", "count", "state", "lifetime", "expires") if field in grant}
                     if isinstance(grant.get("special_requirements"), dict):
                         row["special_requirements"] = grant["special_requirements"]
@@ -807,13 +863,20 @@ def delegator_seats(args: argparse.Namespace, document: dict[str, Any], path: Pa
                     if "switch_authorization" in grant:
                         row["model_switch"] = grant["switch_authorization"]
                     auth["grants"].append(row)
+            listed = {ident for row in auth["grants"] for ident in _grant_ident_list(row)}
+            listed.update(row["id"] for row in auth["grants"] if isinstance(row.get("id"), str))
+            for ident in source.get("worker_pool") or []:
+                if isinstance(ident, str) and ident not in listed:
+                    listed.add(ident)
+                    auth["grants"].append({"id": ident, "state": "granted"})
             document = None
         else:
             auth = authorization_object(document)
         return seat_projection(options, auth, normalize_grants(auth), catalog,
                                bound_sideagent(document), document)["summary"]
     except (OSError, ValueError) as exc:
-        return {"unknown_reasons": [str(exc)], "expert_authorization": "unknown", "idle_available_total": None}
+        return {"unknown_reasons": [str(exc)], "expert_authorization": "unknown",
+                "idle_available_total": None, "worker_pool": None}
 
 
 def present_value(value: Any) -> Any:
@@ -1828,8 +1891,8 @@ def apply_ceiling_to_grants(grants: list[dict[str, Any]], ceiling: dict[str, Any
             grant["model_switch"] = False
             grant["switch_authorization"] = False
         life = fact.get("lifetime")
-        # Caller passes the catalog on the admission path so an Expert lifetime
-        # is not copied onto an Elite choice. The seat summary keeps the prior copy.
+        # Callers pass the catalog so an Expert lifetime is not copied onto an
+        # Elite choice. The seat summary reads the same admission ceiling.
         if catalog is not None and catalog.get(grant["id"], {}).get("class") != "Expert":
             life = None
         if life in GRANT_LIFETIMES:

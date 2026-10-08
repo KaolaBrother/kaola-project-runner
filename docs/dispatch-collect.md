@@ -227,6 +227,12 @@ Acceptance: the generated Delegator reporting guidance and its user-facing curre
 
 The existing `project --seats` output adds a derived `summary`. The Delegator
 `state view --role delegator` and `delegator view` expose it as `seats`.
+The summary reads the same Delegator ceiling as admission, so Elite and
+Expert grants from both keys appear, and a shared group appears once. A
+Delegator-granted preset the Host grants omit is listed `host-grant-missing`:
+counted as authorized, not available. Admissible Worker-pool presets are
+listed in `worker_pool`; they are not seats and not part of
+`authorized_total`.
 No seat summary is stored in either current JSON or added to Host injection.
 Use existing `--live`, `--index`, `--availability` and `--skills-root` inputs
 when an original source requires an explicit locator. Without `--live`, the
