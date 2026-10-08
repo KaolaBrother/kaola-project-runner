@@ -20,6 +20,18 @@ Seats: restart required
   is a per-call CLI); restart at a safe boundary only refreshes the holder's
   pinned record contract. An explicit `KAOLA_ACP_RECORD_ROOT` keeps its
   scoped view.
+- **Host carrier finds its node across record roots (Issue #293).** A
+  node-mode Host carrier looked up its bound Sideagent node's record only
+  under the Host's own record root, while the node start resolved across
+  all roots and could land in a legacy `TMPDIR` or the fixed root. The Host
+  then saw no live node, started it again, was refused `session-exists`,
+  marked the live node failed and left the holder orphaned and
+  unreclaimable. The carrier now resolves the node record across every
+  record root with its own root first, and a verified `session-exists`
+  refusal adopts the live holder it dispatched itself — reclaimed later by
+  an exact stop — or defers to a live node another holder dispatched until
+  that holder is gone. Restart the Host at a safe boundary to load the new
+  holder.
 
 ## 0.9.2 — 2026-10-08 (list identity, package closure, fixed record roots, retire fail-closed, per-input settlement, seat preset resolution, dead-holder stop, multi-index retire)
 

@@ -146,15 +146,18 @@ def roots(explicit: str | Path | None = None, *, all_roots: bool = False
 
 
 def directories(platform: str, session: str, repo: str,
-                explicit: str | Path | None = None) -> tuple[list[Path], bool]:
-    candidates, complete = roots(explicit)
+                explicit: str | Path | None = None,
+                *, all_roots: bool = False) -> tuple[list[Path], bool]:
+    candidates, complete = roots(explicit, all_roots=all_roots)
     digest = hashlib.sha256(repo.encode('utf-8')).hexdigest()[:16]
     return [root / platform / session / digest for root in candidates], complete
 
 
 def find_directory(platform: str, session: str, repo: str,
-                   explicit: str | Path | None = None) -> Path:
-    candidates, complete = directories(platform, session, repo, explicit)
+                   explicit: str | Path | None = None,
+                   *, all_roots: bool = False) -> Path:
+    candidates, complete = directories(platform, session, repo, explicit,
+                                       all_roots=all_roots)
     recorded, alive = [], []
     for directory in candidates:
         record = read_record(directory)

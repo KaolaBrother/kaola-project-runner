@@ -3192,7 +3192,9 @@ class Holder:
         if (not isinstance(platform, str) or not platform or not isinstance(session, str)
                 or not session or session == self.args.session):
             return None
-        directory = self.record_dir.parent.parent.parent / platform / session / self.record_dir.name
+        directory = self._node_directory(platform, session)
+        if directory is None:
+            return None
         try:
             record = json.loads((directory / "record.json").read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -3868,8 +3870,21 @@ class Holder:
                 return True
         return False
 
+    def _node_directory(self, platform: str, session: str) -> Path | None:
+        """The node session's record directory. Its holder may have written
+        under any record root (legacy TMPDIR, fixed or live-holder roots), so
+        the lookup spans every root with this Host's own root first."""
+        try:
+            return acp_paths.find_directory(platform, session, self.args.repo,
+                                            self.record_dir.parent.parent.parent,
+                                            all_roots=True)
+        except acp_paths.RecordRootMismatch:
+            return None
+
     def _node_record(self, binding: dict[str, Any]) -> dict[str, Any] | None:
-        directory = self.record_dir.parent.parent.parent / binding["platform"] / binding["session"] / self.record_dir.name
+        directory = self._node_directory(binding["platform"], binding["session"])
+        if directory is None:
+            return None
         try:
             record = json.loads((directory / "record.json").read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -3915,14 +3930,49 @@ class Holder:
                 self.events.append({"kind": "sideagent_node_started", "holder": holder,
                                     "session": binding["session"]})
             else:
-                # One failure is recorded, not retried: a later start needs a
-                # changed binding or recipe from an authorized controller.
-                self.node.update(phase="stopped", failed={"binding": fingerprint, "code": code})
-                self.events.append({"kind": "sideagent_node_start_failed", "session": binding["session"],
-                                    "code": code, "receipt": receipt if isinstance(receipt, dict) else None})
-                self._node_to_host(binding, f"sideagent node start failed (exit {code}); "
-                                            f"{self._unhandled(self._node_host_pending(self._lifecycle_state()))}; "
-                                            "no node starts until the binding or recipe changes")
+                error = receipt.get("error") if isinstance(receipt, dict) else None
+                live_holder: Any = None
+                record = self._node_record(binding) or {}
+                pid = record.get("holder_pid")
+                if (isinstance(error, dict) and error.get("code") == "session-exists"
+                        and error.get("identity") == "verified"
+                        and pid == error.get("holder_pid")
+                        and process_alive(pid)
+                        and record.get("repo") == self.args.repo
+                        and record.get("session_role") in SIDEAGENT_ROLES
+                        and isinstance(record.get("holder_instance_id"), str)
+                        and record.get("holder_instance_id")):
+                    live_holder = record["holder_instance_id"]
+                if (live_holder and (record.get("dispatcher") or {}).get("holder_instance_id")
+                        == self.holder_instance_id):
+                    # The runner refused a session this carrier dispatched:
+                    # adopt the verified live holder instead of orphaning it.
+                    self.node.update(phase="running", holder=live_holder,
+                                     batch=None, fingerprint=None)
+                    self.node.setdefault("holders", []).append(live_holder)
+                    del self.node["holders"][:-8]
+                    self.events.append({"kind": "sideagent_node_adopted", "holder": live_holder,
+                                        "session": binding["session"]})
+                elif live_holder:
+                    # A live verified node another holder dispatched: stop is
+                    # unconfirmed until that holder is gone, then a start can
+                    # proceed (the late-confirm path clears stop_unconfirmed).
+                    self.node.update(phase="stopped", stop_unconfirmed={"holder": live_holder})
+                    doc = self._lifecycle_state()
+                    self._maintenance_failure("old-node-live", self._node_host_pending(doc),
+                                              self._node_recovery_pending(doc))
+                    self.events.append({"kind": "sideagent_node_start_refused_live",
+                                        "holder": live_holder, "session": binding["session"]})
+                else:
+                    # One failure is recorded, not retried: a later start needs a
+                    # changed binding or recipe from an authorized controller.
+                    self.node.update(phase="stopped", failed={"binding": fingerprint, "code": code})
+                    self.events.append({"kind": "sideagent_node_start_failed",
+                                        "session": binding["session"], "code": code,
+                                        "receipt": receipt if isinstance(receipt, dict) else None})
+                    self._node_to_host(binding, f"sideagent node start failed (exit {code}); "
+                                                f"{self._unhandled(self._node_host_pending(self._lifecycle_state()))}; "
+                                                "no node starts until the binding or recipe changes")
         self._kick_worker_events()
 
     def _stop_node(self, holder: str, wait: float | None = None) -> None:
@@ -3933,9 +3983,8 @@ class Holder:
         if binding:
             record = self._node_record(binding)
             if record and record.get("holder_instance_id") == holder:
-                directory = (self.record_dir.parent.parent.parent / binding["platform"]
-                             / binding["session"] / self.record_dir.name)
-                target = acp_paths.socket_path(directory)
+                directory = self._node_directory(binding["platform"], binding["session"])
+                target = acp_paths.socket_path(directory) if directory is not None else None
         if target is not None:
             try:
                 connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
