@@ -793,6 +793,10 @@ header `NAME: <prefix><sender_key>` (NAME must be an RFC7230 token and not
 Host/Content-Type/Content-Length/Connection/Transfer-Encoding; the sender key is
 required, non-empty, no CR/LF/NUL). `{"style": "url"}` means the key is already in
 the URL and `sender_key` stays null.
+Owner-verified for Grok Bot (live, 2026-10-10): routine webhooks authenticate
+with `Authorization: Bearer <key>` — configure with
+`--key-header Authorization --key-prefix 'Bearer '`; a bare key without the
+prefix gets HTTP 401.
 
 CLI (`scripts/kaola-acp.py delegator-webhook <action>`, one JSON receipt on stdout,
 exit 0 on success):

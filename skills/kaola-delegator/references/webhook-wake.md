@@ -55,6 +55,10 @@ $HOOK remove --project "$PROJECT" --owner-agent "$LABEL"
    key: a named header (copy the exact header name and any value prefix,
    for example `Bearer `), or a key that is already part of the URL. Take this
    format from the routine panel only. Do not guess a header name.
+   Owner-verified for Grok Bot (live, 2026-10-10): routine webhooks
+   authenticate with `Authorization: Bearer <key>`, so configure with
+   `--key-header Authorization --key-prefix 'Bearer '`; a bare key without
+   the prefix gets HTTP 401.
 4. **Configure.** Give the values by variable name, from stdin, or from a file.
    Never put a value on a command line and never echo it.
    - Variable names: `--url-env URL_VAR [--key-env KEY_VAR]`.
@@ -63,8 +67,10 @@ $HOOK remove --project "$PROJECT" --owner-agent "$LABEL"
    - File: `--input-file PATH`, the same JSON, mode `0600`, owned by you.
      Delete the file after `configure`.
    Attachment: `--key-header NAME [--key-prefix TEXT]`, or `--key-in-url`
-   with no sender key. If the bound target cannot read the secret variables,
-   stop and report that blocker.
+   with no sender key. For a Grok Bot routine use
+   `--key-header Authorization --key-prefix 'Bearer '` (step 3). If the
+   bound target cannot read the secret variables, stop and report that
+   blocker.
 5. **Verify.** Run `test`. It sends one signal with `state` `test`. Confirm
    that YOUR webhook routine woke with that test signal. Then record
    `timer_owner.wake_mode` `webhook+heartbeat` and `webhook_routine_id` with
