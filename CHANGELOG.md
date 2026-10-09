@@ -4,7 +4,7 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.9.5 — 2026-10-10 (delegator webhook wake, shared tier seats, opencode loopback repair)
 
 Seats: restart required
 
@@ -44,7 +44,16 @@ Seats: restart required
   subcommands: `configure`, `status`, `test`, `remove`, `deliver`. The record
   contract admits `timer_owner.wake_mode` (`heartbeat`/`webhook+heartbeat`;
   absent = heartbeat-only) and `webhook_routine_id`. The Kaola-Delegator Skill
-  documents the wake pair; running Host holders need a seat restart to emit it.
+  documents the wake pair, including the owner-verified Grok Bot key form
+  (`Authorization: Bearer <key>`: `--key-header Authorization --key-prefix
+  'Bearer '`; a bare key gets HTTP 401). Restart note: running Hosts and
+  seats need a restart onto the v0.9.5 install to get the holder webhook
+  hook, and each machine needs `install-local.sh` for that install.
+- **OpenCode loopback no-proxy scoped back (repair of the #299 change).**
+  #299's IPv6 `::1` loopback host had leaked into #112's opencode ACP-child
+  `NO_PROXY` contract; `loopback_no_proxy` is back to exactly
+  `127.0.0.1,localhost` (matching `scripts/adapters/opencode.sh`), and `::1`
+  stays only in the webhook's own loopback URL classification.
 
 
 ## 0.9.4 — 2026-10-09 (counted worker seats, absent decision retire)
