@@ -358,7 +358,13 @@ def loopback_no_proxy(env: dict[str, str]) -> dict[str, str]:
     only the loopback hosts it lacks; ``*`` already excludes everything. When
     neither name is set, both are set, because clients differ on which one
     they read. ``scripts/adapters/opencode.sh`` applies the same rule to the
-    PTY child, and one contract test runs both over the same cases."""
+    PTY child, and one contract test runs both over the same cases.
+
+    #112's host set is exactly 127.0.0.1/localhost — the same list the shell
+    adapter carries and test-issue-24 asserts. #299's IPv6 ``::1`` belongs to
+    the webhook's own loopback URL classification (LOOPBACK_HOSTS), not to
+    this contract."""
+    hosts = ("127.0.0.1", "localhost")
     if not any(env.get(name) for name in FORWARD_PROXY_ENV):
         return {}
     names = [name for name in NO_PROXY_ENV if env.get(name)] or list(NO_PROXY_ENV)
@@ -368,7 +374,7 @@ def loopback_no_proxy(env: dict[str, str]) -> dict[str, str]:
         entries = {entry.strip() for entry in current.split(",")}
         if "*" in entries:
             continue
-        missing = [host for host in LOOPBACK_HOSTS if host not in entries]
+        missing = [host for host in hosts if host not in entries]
         if not missing:
             continue
         base = current.rstrip()
