@@ -90,8 +90,16 @@ authorization ([host-platforms.md](host-platforms.md#kpr-updates)).
 
 The payload is a signal, not evidence. It has `schema`
 `kaola-delegator-wake/1`, `project`, `session`, `holder_instance_id`,
-`event_seq`, `state` (`end_turn`, `blocked`, `error`, `stopped` or `test`)
-and `ts` (UTC). It has no transcript, prompt, diff or secret.
+`event_seq`, `state` (`end_turn`, `blocked`, `error`, `stopped` or `test`),
+`state_detail` and `ts` (UTC). It has no transcript, prompt, diff or secret.
+For `end_turn`, `state_detail` is the stop reason the agent reported, for
+example `end_turn`, `max_tokens`, `max_turn_requests`, `refusal` or
+`cancelled`. Otherwise it is `permission_required`, `turn_failed`,
+`agent_exit`, `boot_failure`, `holder_lost`, `exact_stop` or `test`. An
+owner question that the agent asks in its reply text arrives as `end_turn`.
+If a Host holder dies without a signal, the next `start` or `stop` of that
+session sends one `error` wake with `state_detail` `holder_lost`, the dead
+`holder_instance_id` and a new `event_seq`.
 
 On each wake: Grok Bot re-reads the bridge Accepted line and locates; then
 attest the exact session and read the authoritative `status`, `observe` and
