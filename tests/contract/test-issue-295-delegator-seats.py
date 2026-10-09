@@ -4,8 +4,9 @@
 `state view --role delegator`, `delegator view`, and `project --seats` share
 one seat summary. It lists Elite and Expert grants from the Delegator
 ceiling, a shared group once, a Delegator-granted preset the Host grants
-omit as host-grant-missing, and admissible Worker presets in worker_pool
-without counting them as seats.
+omit as host-grant-missing, and admissible Worker presets in worker_pool.
+Issue #297: a Worker-class preset with a counted owner grant is a seat; the
+uncounted default Worker pool is not.
 """
 
 from __future__ import annotations
@@ -140,20 +141,23 @@ class DelegatorSeats(unittest.TestCase):
         }), encoding="utf-8")
 
     def assert_base_seats(self, seats: dict) -> None:
-        self.assertEqual(listed_ids(seats), EXPECTED_IDS)
+        self.assertEqual(listed_ids(seats), EXPECTED_IDS | {"devin/default"})
         groups = group_index(seats)
         pair = groups["grant:cursor-cli/default,devin/fable"]
         self.assertEqual(pair["authorized_count"], 2)
         self.assertEqual(sorted(row["id"] for row in pair["presets"]),
                          ["cursor-cli/default", "devin/fable"])
-        self.assertEqual(seats["authorized_total"], 6)
-        self.assertEqual(seats["worker_pool"], ["devin/default"])
+        self.assertEqual(seats["authorized_total"], 7)
+        self.assertEqual(seats["worker_pool"], [])
         self.assertEqual(seats["expert_authorization"], "present")
+        worker = groups["devin/default"]
+        self.assertEqual(worker["authorized_count"], 1)
+        self.assertEqual(worker["presets"],
+                         [{"id": "devin/default", "class": "Worker", "count": 1,
+                           "default_model": "swe-2-max", "default_effort": ""}])
         astra = next(row for group in seats["groups"] for row in group["presets"]
                      if row["id"] == "codex/astra")
         self.assertEqual(astra["lifetime"], "standing")
-        for group in seats["groups"]:
-            self.assertNotIn("devin/default", [row["id"] for row in group["presets"]])
 
     def test_state_view_delegator_lists_expert_grants(self) -> None:
         code, out = run_dispatch([
@@ -172,8 +176,8 @@ class DelegatorSeats(unittest.TestCase):
         ])
         self.assertEqual(code, 0, out)
         summary = out["summary"]
-        self.assertEqual(summary["authorized_total"], 6)
-        self.assertEqual(summary["worker_pool"], ["devin/default"])
+        self.assertEqual(summary["authorized_total"], 7)
+        self.assertEqual(summary["worker_pool"], [])
         self.assertEqual(
             sorted((group["group"], group["authorized_count"],
                     tuple(sorted(row["id"] for row in group["presets"])))
@@ -227,7 +231,7 @@ class DelegatorSeats(unittest.TestCase):
         self.assertEqual(groups["codex/astra"]["unavailable"],
                          [{"id": "codex/astra", "reason": "host-grant-missing"}])
         self.assertEqual(groups["codex/astra"]["idle_available"], 0)
-        self.assertEqual(seats["authorized_total"], 6)
+        self.assertEqual(seats["authorized_total"], 7)
 
         code, project = run_dispatch([
             "project", "--seats", "--repo", str(self.repo),
@@ -235,9 +239,97 @@ class DelegatorSeats(unittest.TestCase):
             "--platforms", str(PLATFORMS),
         ])
         self.assertEqual(code, 0, project)
-        self.assertEqual(project["summary"]["authorized_total"], 6)
+        self.assertEqual(project["summary"]["authorized_total"], 7)
         self.assertEqual(group_index(project["summary"])["codex/astra"]["unavailable"],
                          [{"id": "codex/astra", "reason": "host-grant-missing"}])
+
+    def test_uncounted_worker_host_grant_stays_pool(self) -> None:
+        grants = [dict(grant) for grant in host_grants()]
+        for grant in grants:
+            if grant.get("id") == "devin/default":
+                grant.pop("count", None)
+        self.write_host(grants)
+        seats = self.state_view_seats()
+        self.assertNotIn("devin/default", listed_ids(seats))
+        self.assertEqual(seats["worker_pool"], ["devin/default"])
+        self.assertEqual(seats["authorized_total"], 6)
+
+    def test_excluded_worker_seat_shows_unavailable(self) -> None:
+        auth = delegator_auth()
+        auth["exclusions"] = ["devin/default"]
+        self.write_delegator(auth)
+        seats = self.state_view_seats()
+        worker = group_index(seats)["devin/default"]
+        self.assertEqual(worker["authorized_count"], 1)
+        self.assertEqual(worker["unavailable"],
+                         [{"id": "devin/default", "reason": "excluded"}])
+        self.assertEqual(worker["idle_available"], 0)
+        self.assertEqual(seats["authorized_total"], 7)
+
+    def test_worker_grant_above_empty_ceiling_pool_is_omitted(self) -> None:
+        auth = delegator_auth()
+        auth["worker_pool"] = []
+        self.write_delegator(auth)
+        seats = self.state_view_seats()
+        self.assertNotIn("devin/default", listed_ids(seats))
+        self.assertEqual(seats["worker_pool"], [])
+        self.assertEqual(seats["authorized_total"], 6)
+
+    def test_counted_delegator_worker_row_is_a_seat(self) -> None:
+        auth = delegator_auth()
+        auth["elite_grants"].append(
+            {"preset_id": "devin/default", "count": 1, "state": "granted"})
+        self.write_delegator(auth)
+        self.write_host(host_grants(drop={"devin/default"}))
+        seats = self.state_view_seats()
+        worker = group_index(seats)["devin/default"]
+        self.assertEqual(worker["authorized_count"], 1)
+        self.assertEqual(worker["presets"][0]["class"], "Worker")
+        self.assertNotIn({"id": "devin/default", "reason": "host-grant-missing"},
+                         worker["unavailable"])
+        self.assertEqual(seats["authorized_total"], 7)
+        self.assertEqual(seats["worker_pool"], [])
+
+    def test_worker_seats_match_project_grant_groups(self) -> None:
+        self.write_host([
+            {"id": "grok/default", "state": "granted", "count": 2},
+            {"id": "cursor-cli/default", "state": "granted", "count": 2},
+            {"id": "droid/default", "state": "granted", "count": 1},
+            {"id": "devin/default", "state": "granted", "count": 1},
+            {"preset_ids": ["claude-code/default", "claude-code/opus-xhigh"],
+             "state": "granted", "count": 1, "shared_seat": "claude-shared"},
+        ])
+        for auth in (None, {
+            "dispatch_enabled": True,
+            "elite_grants": [
+                {"preset_id": "grok/default", "count": 2, "state": "granted"},
+                {"preset_id": "cursor-cli/default", "count": 2, "state": "granted"},
+                {"preset_id": "droid/default", "count": 1, "state": "granted"},
+                {"preset_ids": ["claude-code/default", "claude-code/opus-xhigh"],
+                 "count": 1, "state": "granted"},
+            ],
+            "worker_pool": ["devin/default"],
+        }):
+            if auth is None:
+                self.delegator_file.unlink()
+            else:
+                self.write_delegator(auth)
+            code, project = run_dispatch([
+                "project", "--seats", "--repo", str(self.repo),
+                "--authorization", str(self.host_file), "--live", str(self.live),
+                "--platforms", str(PLATFORMS),
+            ])
+            self.assertEqual(code, 0, project)
+            groups: dict[str, int] = {}
+            for row in project["grants"]:
+                count = row.get("count")
+                if row.get("state") != "granted" or not isinstance(count, int):
+                    continue
+                key = row.get("shared_seat") or row["id"]
+                groups[key] = max(groups.get(key, 0), count)
+            self.assertEqual(sum(groups.values()), 7)
+            self.assertEqual(project["summary"]["authorized_total"], 7)
+            self.assertEqual(self.state_view_seats()["authorized_total"], 7)
 
     def test_shared_expert_choice_without_expert_row_stays_out(self) -> None:
         expert_rows = [row for row in delegator_auth()["expert_task_grants"]

@@ -230,9 +230,13 @@ The existing `project --seats` output adds a derived `summary`. The Delegator
 The summary reads the same Delegator ceiling as admission, so Elite and
 Expert grants from both keys appear, and a shared group appears once. A
 Delegator-granted preset the Host grants omit is listed `host-grant-missing`:
-counted as authorized, not available. Admissible Worker-pool presets are
-listed in `worker_pool`; they are not seats and not part of
-`authorized_total`.
+counted as authorized, not available. A Worker-class preset with a counted
+owner grant — a Host grant `count`, or a counted Delegator `elite_grants` row
+admitted by `worker_pool` — is a seat group and counts in `authorized_total`
+and `idle_available_total`; the Delegator ceiling still applies (a blocked
+grant shows `unavailable` with its reason; above-ceiling, revoked, or no
+Delegator `worker_pool` key omits it). Admissible uncounted pool presets stay
+in `worker_pool` only: they are not seats and not part of `authorized_total`.
 No seat summary is stored in either current JSON or added to Host injection.
 Use existing `--live`, `--index`, `--availability` and `--skills-root` inputs
 when an original source requires an explicit locator. Without `--live`, the

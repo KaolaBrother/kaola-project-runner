@@ -699,7 +699,7 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
     occupied = []
     for row in rows:
         preset = resolved.get(row["session"])
-        if catalog.get(preset, {}).get("class") not in ("Elite", "Expert"):
+        if catalog.get(preset, {}).get("class") not in ("Elite", "Expert", "Worker"):
             continue
         links = []
         for ident, task in tasks.items():
@@ -722,6 +722,7 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
                          "preset": preset, "tasks": sorted(links), "state": status,
                          **({"links": "unknown"} if not links and mutation != "not_started" else {})})
     groups: dict[str, dict[str, Any]] = {}
+    worker_seats: set[str] = set()
 
     def add_seat(preset: str, klass: str, count: Any, shared_seat: str | None,
                  lifetime: str | None, special: dict[str, Any] | None,
@@ -749,42 +750,59 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
     for grant in effective:
         preset = grant["id"]
         klass = catalog.get(preset, {}).get("class")
-        if klass not in ("Elite", "Expert") or grant.get("state") == "revoked" or preset in auth.get("revoked", []):
+        if klass not in ("Elite", "Expert", "Worker") or grant.get("state") == "revoked" or preset in auth.get("revoked", []):
+            continue
+        if klass == "Worker" and not _count_ok(grant.get("count")):
+            # A counted Worker grant is a seat; the uncounted default pool is not.
             continue
         blocked = ceiling_block(ceiling, preset, klass, expert_grants=True) if ceiling else None
-        if blocked in ("above-ceiling", "revoked"):
+        if blocked in ("above-ceiling", "revoked") or (klass == "Worker" and blocked == "ceiling-incomplete"):
             continue
+        if klass == "Worker":
+            worker_seats.add(preset)
         add_seat(preset, klass, grant.get("count"), grant.get("shared_seat"),
                  grant.get("lifetime"), grant.get("special_requirements"),
                  blocked or reasons.get(preset))
     if ceiling and not ceiling_error:
         # The Delegator's authorization is the seat source: an Elite/Expert
         # preset it grants but the Host grants omit is still authorized,
-        # reported unavailable as host-grant-missing.
+        # reported unavailable as host-grant-missing. A counted Worker row is
+        # a seat the same way, but the pool needs no Host grant.
         host_ids = {grant["id"] for grant in effective}
         extras = ((ceiling.get("elite_ids") or {}).keys()
                   | (ceiling.get("expert_ids") or {}).keys()) - host_ids
         for preset in sorted(extras):
             klass = catalog.get(preset, {}).get("class")
-            if klass not in ("Elite", "Expert"):
+            if klass not in ("Elite", "Expert", "Worker"):
+                continue
+            count = ceiling_count(ceiling, preset, klass)
+            if klass == "Worker" and not _count_ok(count):
                 continue
             blocked = ceiling_block(ceiling, preset, klass, expert_grants=True)
-            if blocked in ("above-ceiling", "revoked"):
+            if blocked in ("above-ceiling", "revoked") or (klass == "Worker" and blocked == "ceiling-incomplete"):
                 continue
+            if klass == "Worker":
+                worker_seats.add(preset)
             fact = (ceiling.get("by_id") or {}).get(preset) or {}
-            add_seat(preset, klass, ceiling_count(ceiling, preset, klass), None,
+            reason = blocked or reasons.get(preset)
+            add_seat(preset, klass, count, None,
                      fact.get("lifetime"), None,
-                     blocked or reasons.get(preset) or "host-grant-missing")
+                     reason if klass == "Worker" else reason or "host-grant-missing")
     worker_pool = []
     if not ceiling_error:
         for item in candidates:
             preset = item["id"]
-            if item["class"] != "Worker" or preset in holds:
+            if item["class"] != "Worker" or preset in holds or preset in worker_seats:
                 continue
             if ceiling and ceiling_block(ceiling, preset, "Worker", expert_grants=True):
                 continue
             worker_pool.append(preset)
         worker_pool.sort()
+    # Occupancy rows were computed for Worker presets too; only counted Worker
+    # seat presets stay listed. Uncounted pool rows report nowhere.
+    occupied = [row for row in occupied
+                if row["preset"] in worker_seats
+                or catalog.get(row["preset"], {}).get("class") in ("Elite", "Expert")]
     observed = projection["observed_elite_expert"]
     authorized_total = (sum(group["authorized_count"] for group in groups.values())
                         if all(group["authorized_count"] is not None for group in groups.values()) else None)
@@ -1847,9 +1865,9 @@ def ceiling_block(ceiling: dict[str, Any], preset: str, class_name: str,
 
 
 def ceiling_count(ceiling: dict[str, Any], preset: str, class_name: str) -> int | None:
-    if class_name == "Worker":
-        return None
     elite = (ceiling.get("elite_ids") or {}).get(preset)
+    if class_name == "Worker":
+        return elite if _count_ok(elite) else None
     expert = (ceiling.get("expert_ids") or {}).get(preset)
     if class_name == "Expert" and _count_ok(expert):
         if _count_ok(elite):

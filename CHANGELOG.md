@@ -4,6 +4,24 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+Seats: restart not required
+
+- **Delegator seat summary counts counted Worker grants (Issue #297).** A
+  Worker-class preset with a counted owner grant — a Host grant `count`, or a
+  counted Delegator `elite_grants` row admitted by `worker_pool` — is now a
+  seat group in `state view --role delegator`, `delegator view` and
+  `project --seats` `summary`, counting toward `authorized_total` and
+  `idle_available_total`; the uncounted default Worker pool is still not a
+  seat and stays in `worker_pool`. The Delegator ceiling still applies: a
+  blocked Worker grant shows `unavailable` with its reason, and
+  above-ceiling, revoked, or a missing `worker_pool` key omits it.
+  `authorized_total` now matches the `project --seats` grant groups, and a
+  Delegator-stated Worker count also narrows that Worker's admission count
+  through `ceiling_count`. Dispatch CLI only; no template, adapter or holder
+  change.
+
 ## 0.9.3 — 2026-10-08 (state record roots, node record roots, expert ceiling, delegator seats)
 
 Seats: restart required
