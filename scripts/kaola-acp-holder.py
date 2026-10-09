@@ -2538,7 +2538,7 @@ class Holder:
             self.turn_cond.notify_all()
         # Issue #299: an unrequested agent exit outside the boot window is an
         # error wake; the boot failure branch and op_stop carry their own.
-        if not self.stop_requested and self.state not in ("starting",):
+        if not self.stop_requested and self.state not in ("starting", "error"):
             self._delegator_wake("error")
 
     # -- ops ---------------------------------------------------------------------

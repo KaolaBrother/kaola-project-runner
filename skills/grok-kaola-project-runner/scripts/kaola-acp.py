@@ -10,6 +10,7 @@ receipt as ``error: {code, message}``; usage errors also return JSON and exit no
 from __future__ import annotations
 
 import argparse
+import contextlib
 import ctypes
 import getpass
 import hashlib
@@ -5947,6 +5948,11 @@ DELEGATOR_WEBHOOK_BACKOFF = (1.0, 2.0, 4.0)
 DELEGATOR_WEBHOOK_MAX_ATTEMPTS = 1 + len(DELEGATOR_WEBHOOK_BACKOFF)
 DELEGATOR_WEBHOOK_RETRY_STATUS = frozenset({408, 429})
 DELEGATOR_WEBHOOK_USER_AGENT = "kaola-delegator-wake/1"
+DELEGATOR_WEBHOOK_PAYLOAD_SCHEMA = "kaola-delegator-wake/1"
+DELEGATOR_WEBHOOK_PAYLOAD_KEYS = frozenset(
+    {"schema", "project", "session", "holder_instance_id", "event_seq", "state", "ts"})
+DELEGATOR_WEBHOOK_PAYLOAD_STATES = frozenset(
+    {"end_turn", "blocked", "error", "stopped", "test"})
 DELEGATOR_WEBHOOK_HEADER_NAME = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 DELEGATOR_WEBHOOK_FORBIDDEN_HEADERS = frozenset(
     {"host", "content-type", "content-length", "connection", "transfer-encoding"})
@@ -5990,28 +5996,36 @@ def _webhook_read_config(path: Path) -> tuple[dict[str, Any] | None, str | None,
     return doc, None, config_mode
 
 
-def _webhook_locked_write(path: Path, doc: dict[str, Any]) -> None:
-    """Atomic 0600 replace under an exclusive flock on ``<path>.lock``."""
+@contextlib.contextmanager
+def _webhook_config_lock(path: Path):
+    """Exclusive flock on ``<path>.lock``. configure/remove hold it across the
+    whole read -> ownership check -> modify -> write so concurrent configures
+    of different projects cannot lose each other's entries."""
     import fcntl
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     lock_path = path.with_name(path.name + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     with open(lock_path, "a+b") as lock_file:
         fcntl.flock(lock_file, fcntl.LOCK_EX)
-        data = (json.dumps(doc, ensure_ascii=False, sort_keys=True, indent=1) + "\n").encode("utf-8")
-        temp_name = str(path.with_name(f"{path.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp"))
-        fd = os.open(temp_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        yield lock_file
+
+
+def _webhook_atomic_write(path: Path, doc: dict[str, Any]) -> None:
+    """Atomic 0600 temp+fsync+replace. Callers hold ``_webhook_config_lock``."""
+    data = (json.dumps(doc, ensure_ascii=False, sort_keys=True, indent=1) + "\n").encode("utf-8")
+    temp_name = str(path.with_name(f"{path.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp"))
+    fd = os.open(temp_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as temp:
+            temp.write(data)
+            temp.flush()
+            os.fsync(temp.fileno())
+        os.replace(temp_name, path)
+    except BaseException:
         try:
-            with os.fdopen(fd, "wb") as temp:
-                temp.write(data)
-                temp.flush()
-                os.fsync(temp.fileno())
-            os.replace(temp_name, path)
-        except BaseException:
-            try:
-                os.unlink(temp_name)
-            except OSError:
-                pass
-            raise
+            os.unlink(temp_name)
+        except OSError:
+            pass
+        raise
 
 
 def _webhook_url_error(url: Any) -> str | None:
@@ -6180,12 +6194,19 @@ def _webhook_append_receipts(project_root: str, receipts: list[dict[str, Any]]) 
                    "limit": DELEGATOR_WEBHOOK_RECEIPTS_LIMIT, "receipts": merged}
             data = json.dumps(doc, ensure_ascii=False, sort_keys=True, indent=1).encode("utf-8") + b"\n"
             temp_name = str(path.with_name(f"receipts.{os.getpid()}.{secrets.token_hex(4)}.tmp"))
-            fd = os.open(temp_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(fd, "wb") as temp:
-                temp.write(data)
-                temp.flush()
-                os.fsync(temp.fileno())
-            os.replace(temp_name, path)
+            try:
+                fd = os.open(temp_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                with os.fdopen(fd, "wb") as temp:
+                    temp.write(data)
+                    temp.flush()
+                    os.fsync(temp.fileno())
+                os.replace(temp_name, path)
+            except BaseException:
+                try:
+                    os.unlink(temp_name)
+                except OSError:
+                    pass
+                raise
     except Exception:
         pass
 
@@ -6199,6 +6220,16 @@ def _webhook_read_receipts(project_root: str) -> list[dict[str, Any]]:
     if not isinstance(doc, dict) or not isinstance(doc.get("receipts"), list):
         return []
     return [item for item in doc["receipts"] if isinstance(item, dict)]
+
+
+def _webhook_payload_ok(payload: Any) -> bool:
+    """True only for the exact wake signal shape — nothing else may be POSTed."""
+    event_seq = payload.get("event_seq") if isinstance(payload, dict) else None
+    return (isinstance(payload, dict)
+            and set(payload) == DELEGATOR_WEBHOOK_PAYLOAD_KEYS
+            and payload.get("schema") == DELEGATOR_WEBHOOK_PAYLOAD_SCHEMA
+            and payload.get("state") in DELEGATOR_WEBHOOK_PAYLOAD_STATES
+            and isinstance(event_seq, int) and not isinstance(event_seq, bool))
 
 
 def _webhook_deliver(project_root: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -6233,13 +6264,16 @@ def _webhook_deliver(project_root: str, payload: dict[str, Any]) -> list[dict[st
         result = "delivered" if error is None else "failed"
         final = error is None or not _webhook_retryable(http_status, error) \
             or attempt == DELEGATOR_WEBHOOK_MAX_ATTEMPTS
+        # Each attempt's receipt lands before its backoff sleep, so a slow or
+        # dead endpoint leaves evidence immediately and a killed child still
+        # records every attempt it made.
         receipts.append(_webhook_attempt_receipt(
             payload, attempt, result, http_status, error, None,
             int(round((time.monotonic() - attempt_started) * 1000)), final))
+        _webhook_append_receipts(project_root, receipts[-1:])
         if final:
             break
         time.sleep(DELEGATOR_WEBHOOK_BACKOFF[attempt - 1])
-    _webhook_append_receipts(project_root, receipts)
     return receipts
 
 
@@ -6325,10 +6359,19 @@ def command_delegator_webhook(argv: list[str]) -> int:
         try:
             payload = json.loads(sys.stdin.read())
         except ValueError:
+            payload = None
+        # Signal-only enforcement at the sender: a payload that is not exactly
+        # the wake shape records an invalid-payload receipt (when its project
+        # resolves) and is never POSTed.
+        if not _webhook_payload_ok(payload):
+            project_root = _webhook_realpath_project(
+                payload.get("project") if isinstance(payload, dict) else None)
+            if project_root is not None:
+                given = payload if isinstance(payload, dict) else {}
+                _webhook_append_receipts(project_root, [_webhook_attempt_receipt(
+                    given, 0, "failed", None, "invalid-payload", None, 0, True)])
             return 1
-        if not isinstance(payload, dict):
-            return 1
-        project_root = _webhook_realpath_project(payload.get("project"))
+        project_root = _webhook_realpath_project(payload["project"])
         if project_root is None:
             return 1
         receipts = _webhook_deliver(project_root, payload)
@@ -6340,12 +6383,6 @@ def command_delegator_webhook(argv: list[str]) -> int:
                                 "--project must be an existing directory")[0]
 
     config_path = delegator_webhook_config_path()
-    doc, config_error, _mode = _webhook_read_config(config_path)
-    if args.action in ("configure", "remove") and config_error is not None:
-        return _webhook_refusal(
-            config_error, f"webhook config at {config_path} is unusable")[0]
-    projects = (doc or {}).get("projects", {})
-    existing = projects.get(project_root)
 
     if args.action == "status":
         print(json.dumps(_webhook_status_receipt(project_root),
@@ -6371,18 +6408,25 @@ def command_delegator_webhook(argv: list[str]) -> int:
         return 0 if receipts[-1]["result"] == "delivered" else 1
 
     if args.action == "remove":
-        if existing is None:
-            print(json.dumps({"result": "absent", "project": project_root},
-                             ensure_ascii=False, sort_keys=True))
-            return 0
-        if existing.get("owner_agent") != args.owner_agent:
-            return _webhook_refusal(
-                "entry-owned-by-other-agent",
-                "the configured entry belongs to another agent label",
-                owner_agent=existing.get("owner_agent"))[0]
-        del projects[project_root]
-        assert doc is not None
-        _webhook_locked_write(config_path, doc)
+        with _webhook_config_lock(config_path):
+            doc, config_error, _mode = _webhook_read_config(config_path)
+            if config_error is not None:
+                return _webhook_refusal(
+                    config_error, f"webhook config at {config_path} is unusable")[0]
+            projects = (doc or {}).get("projects", {})
+            existing = projects.get(project_root)
+            if existing is None:
+                print(json.dumps({"result": "absent", "project": project_root},
+                                 ensure_ascii=False, sort_keys=True))
+                return 0
+            if existing.get("owner_agent") != args.owner_agent:
+                return _webhook_refusal(
+                    "entry-owned-by-other-agent",
+                    "the configured entry belongs to another agent label",
+                    owner_agent=existing.get("owner_agent"))[0]
+            del projects[project_root]
+            assert doc is not None
+            _webhook_atomic_write(config_path, doc)
         print(json.dumps({"result": "removed", "project": project_root},
                          ensure_ascii=False, sort_keys=True))
         return 0
@@ -6457,30 +6501,40 @@ def command_delegator_webhook(argv: list[str]) -> int:
     if attach_error:
         return _webhook_refusal("invalid-input", attach_error)[0]
 
-    if isinstance(existing, dict) and existing.get("owner_agent") != args.owner_agent:
-        if args.replace_owner != existing.get("owner_agent"):
+    with _webhook_config_lock(config_path):
+        # Re-read inside the flock: the ownership decision and the merged
+        # projects map must come from the state under the lock, otherwise two
+        # concurrent configures can read the same old file and one entry is
+        # lost on write.
+        doc, config_error, _mode = _webhook_read_config(config_path)
+        if config_error is not None:
             return _webhook_refusal(
-                "entry-owned-by-other-agent",
-                "the configured entry belongs to another agent label; pass "
-                "--replace-owner with that exact label after its routines retired",
-                owner_agent=existing.get("owner_agent"))[0]
+                config_error, f"webhook config at {config_path} is unusable")[0]
+        projects = (doc or {}).setdefault("projects", {})
+        existing = projects.get(project_root)
+        if isinstance(existing, dict) and existing.get("owner_agent") != args.owner_agent:
+            if args.replace_owner != existing.get("owner_agent"):
+                return _webhook_refusal(
+                    "entry-owned-by-other-agent",
+                    "the configured entry belongs to another agent label; pass "
+                    "--replace-owner with that exact label after its routines retired",
+                    owner_agent=existing.get("owner_agent"))[0]
 
-    projects[project_root] = {
-        "url": url,
-        "sender_key": sender_key,
-        "sender_key_attachment": attachment,
-        "enabled": True,
-        "owner_agent": args.owner_agent,
-        "updated_at": _utc_stamp(),
-    }
-    doc = doc or {"schema": DELEGATOR_WEBHOOK_SCHEMA, "projects": {}}
-    doc["schema"] = DELEGATOR_WEBHOOK_SCHEMA
-    doc["projects"] = projects
-    try:
-        _webhook_locked_write(config_path, doc)
-    except OSError as exc:
-        return _webhook_refusal("invalid-input",
-                                f"config write failed: {type(exc).__name__}")[0]
+        projects[project_root] = {
+            "url": url,
+            "sender_key": sender_key,
+            "sender_key_attachment": attachment,
+            "enabled": True,
+            "owner_agent": args.owner_agent,
+            "updated_at": _utc_stamp(),
+        }
+        doc = doc or {"schema": DELEGATOR_WEBHOOK_SCHEMA, "projects": projects}
+        doc["schema"] = DELEGATOR_WEBHOOK_SCHEMA
+        try:
+            _webhook_atomic_write(config_path, doc)
+        except OSError as exc:
+            return _webhook_refusal("invalid-input",
+                                    f"config write failed: {type(exc).__name__}")[0]
     receipt = _webhook_status_receipt(project_root)
     receipt["result"] = "configured"
     print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))

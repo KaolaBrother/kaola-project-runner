@@ -725,7 +725,10 @@ backoff 1 s, 2 s, 4 s); only timeouts, connection errors, HTTP 5xx, 408 and 429
 retry; any other non-2xx is final. A 2xx is `delivered`. Not configured or
 `enabled: false` writes one `skipped`/`not-configured` receipt with no network;
 invalid config or mode writes one `failed`/`invalid-config`/`config-mode` receipt
-with no network.
+with no network. The sender enforces the signal shape: a payload whose keys are
+not exactly the seven above, with schema `kaola-delegator-wake/1`, `state` in
+`{end_turn, blocked, error, stopped, test}` and an integer `event_seq`, is refused
+— exit 1, and one `failed`/`invalid-payload` receipt when the project resolves.
 
 Per-attempt receipt (closed shape; `reason` present only on `skipped`; `error` is a
 classified code, never an exception message — urllib errors can embed the URL):
@@ -737,7 +740,7 @@ classified code, never an exception message — urllib errors can embed the URL)
 ```
 
 `error` is one of `timeout`, `connection`, `http-status`, `redirect-refused`,
-`invalid-config`, `config-mode`, or null. Receipts land in
+`invalid-config`, `config-mode`, `invalid-payload`, or null. Receipts land in
 `<repo>/.kaola/delegator-webhook-receipts.json`
 (`{"schema": "kaola-delegator-webhook-receipts/1", "limit": 32, "receipts": [...]}`,
 last 32 attempts oldest-first, mode 0600, atomic replace under a sidecar flock).

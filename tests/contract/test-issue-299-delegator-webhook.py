@@ -411,6 +411,34 @@ class ConfigureAndStatus(WebhookCase):
         self.assertNotIn(self.project, self.config_doc()["projects"])
         self.assertIn(other_root, self.config_doc()["projects"])
 
+    def test_concurrent_configure_loses_no_entry(self) -> None:
+        # Eight configures for eight projects, each a different owner: the
+        # sidecar flock is held across read -> ownership check -> write, so
+        # every entry survives.
+        count = 8
+        jobs = []
+        for index in range(count):
+            proj = self.root / f"proj-{index}"
+            proj.mkdir()
+            owner = f"agent-{index}"
+            jobs.append((proj, owner, subprocess.Popen(
+                [sys.executable, str(CLI), "delegator-webhook", "configure",
+                 "--project", str(proj), "--owner-agent", owner,
+                 "--stdin", "--key-in-url"],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, env=self.env(), text=True)))
+        for proj, owner, proc in jobs:
+            out, err = proc.communicate(
+                json.dumps({"url": "https://hooks.example.invalid/wake",
+                            "sender_key": None}), timeout=30)
+            self.assertEqual(proc.returncode, 0, f"{owner}: {err}")
+            self.assertEqual(json.loads(out)["result"], "configured", out)
+        stored = self.config_doc()["projects"]
+        for proj, owner, _ in jobs:
+            root = os.path.realpath(str(proj))
+            self.assertIn(root, stored)
+            self.assertEqual(stored[root]["owner_agent"], owner)
+
 
 class DeliveryCli(WebhookCase):
     def test_delivered_header_and_url_forms(self) -> None:
@@ -528,6 +556,44 @@ class DeliveryCli(WebhookCase):
         last = self.receipts()[-4:]
         self.assertTrue(all(r["error"] == "connection" for r in last))
 
+    def test_deliver_refuses_non_signal_payload(self) -> None:
+        self.endpoint = Endpoint()
+        self.write_config({self.project: {
+            "url": self.endpoint.url, "sender_key": None,
+            "sender_key_attachment": {"style": "url"},
+            "enabled": True, "owner_agent": "agent-A",
+            "updated_at": "2026-01-01T00:00:00Z"}})
+        base = {"schema": "kaola-delegator-wake/1", "project": self.project,
+                "session": "s1", "holder_instance_id": "h1", "event_seq": 1,
+                "state": "end_turn", "ts": "2026-01-01T00:00:00Z"}
+        bad_payloads = []
+        for mutate in (lambda p: p.update(extra="x"),
+                       lambda p: p.pop("ts"),
+                       lambda p: p.update(schema="kaola-delegator-wake/2"),
+                       lambda p: p.update(state="ping"),
+                       lambda p: p.update(event_seq=True),
+                       lambda p: p.update(event_seq="1")):
+            payload = dict(base)
+            mutate(payload)
+            bad_payloads.append(payload)
+        for payload in bad_payloads + [[], "x"]:
+            proc = self.deliver(payload)
+            self.assertEqual(proc.returncode, 1)
+        self.assertFalse(self.endpoint.posts)
+        invalid = [r for r in self.receipts()
+                   if r.get("error") == "invalid-payload"]
+        self.assertEqual(len(invalid), len(bad_payloads))
+        self.assertTrue(all(r["result"] == "failed" and r["final"]
+                            for r in invalid))
+        # a payload whose project does not resolve records nothing
+        proc = self.deliver({"project": str(self.root / "no-such-dir")})
+        self.assertEqual(proc.returncode, 1)
+        self.assertFalse((self.root / "no-such-dir" / ".kaola").exists())
+        # the valid shape still delivers
+        proc = self.deliver(dict(base))
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(self.endpoint.posts[-1]["body"], base)
+
     def test_receipt_ring_bound_and_deliver_argv(self) -> None:
         self.endpoint = Endpoint(sleep_seconds=4.0)
         url = f"{self.endpoint.url}?k={SENTINEL_URL_MARK}"
@@ -584,6 +650,9 @@ class DeliveryCli(WebhookCase):
         self.assertEqual(len(receipts), 32)
         self.assertEqual(receipts[0]["event_seq"], 4)
         self.assertEqual(receipts[-1]["event_seq"], 35)
+        # receipt atomic writes leave no stray temp files in .kaola
+        kaola_dir = self.repo / ".kaola"
+        self.assertFalse(list(kaola_dir.glob("*.tmp")))
 
 
 def socket_probe_closed_port() -> int:
@@ -649,12 +718,16 @@ class HolderWakes(WebhookCase):
         elapsed = time.monotonic() - started
         self.assertEqual(sent.get("outcome"), "turn_completed", sent)
         self.assertLess(elapsed, 2.5, "send was held by webhook delivery")
-        wait_for(lambda: any(r.get("state") == "end_turn"
-                             and r.get("result") == "failed"
-                             for r in self.receipts()),
-                 15, "failed connection receipt")
-        self.assertTrue(any(r.get("error") == "connection"
-                            for r in self.receipts()))
+        # the first attempt's receipt lands promptly, long before the retry
+        # chain ends — a killed child still records the attempts it made
+        first = wait_for(
+            lambda: next((r for r in self.receipts()
+                          if r.get("state") == "end_turn"
+                          and r.get("result") == "failed"), None),
+            6, "first failed attempt receipt")
+        self.assertEqual(first["attempt"], 1)
+        self.assertIs(first["final"], False)
+        self.assertEqual(first["error"], "connection")
         # a slow endpoint: same non-blocking shape, timeout classification
         self.endpoint = Endpoint(sleep_seconds=4.0)
         self.write_config({self.project: {
@@ -667,8 +740,12 @@ class HolderWakes(WebhookCase):
         elapsed = time.monotonic() - started
         self.assertEqual(sent.get("outcome"), "turn_completed", sent)
         self.assertLess(elapsed, 3.0, "send was held by webhook delivery")
-        wait_for(lambda: any(r.get("error") == "timeout" for r in self.receipts()),
-                 20, "timeout receipt")
+        first = wait_for(
+            lambda: next((r for r in self.receipts()
+                          if r.get("error") == "timeout"), None),
+            8, "first timeout receipt")
+        self.assertEqual(first["attempt"], 1)
+        self.assertIs(first["final"], False)
 
     def test_no_secret_leaks_into_records_or_output(self) -> None:
         self.endpoint = Endpoint()

@@ -11,7 +11,7 @@ Codex, and generic hosts, not Project Runner or a worker.
 {{RUNNER_DISPLAY}} (`{{RUNNER_SKILL}}`) is the inner control-plane Skill. One
 CLI Host loads it and owns planning, worker dispatch, path binding,
 heartbeat, acceptance, and Workflow close-out. Do not copy that engine; one
-project runs one Agent.
+project runs one Agent for it.
 
 ## Extract once
 
@@ -24,7 +24,7 @@ priority; delivery/stop boundary; project path; optional `project.user_language`
 text; unset keeps the preference.
 On a live Host, apply only the user's latest change; batch nonurgent
 corrections; urgent owner stops go now. Relay owner model/seat choices
-unchanged; the Host allocates. Invent no assignments/constraints. On a new Host, missing,
+unchanged; Host allocates. Invent no assignments/constraints. On a new Host, missing,
 conflicting, or expired key values must be confirmed before `start`. A quota
 unit the user never gave is not a missing key value — carry it as unspecified
 and start; a quota whose unit is unclear is, so ask. Do not open a blank Host.
@@ -34,7 +34,7 @@ quota as unlimited, reuse a stale quota, or expand authorization.
 ## One Host
 
 Select any supported Host platform
-([host-platforms.md](references/host-platforms.md)) and use its own Runner
+([host-platforms.md](references/host-platforms.md)) and use its Runner
 `<platform>-{{RUNNER_SKILL}}`, entry line, native resume id. A missing Runner is
 not executable; claim no Host.
 
@@ -46,11 +46,11 @@ Host `stop` and live attach use the receipt's
 
 ## After the handoff
 
-Relay user changes to the same Host: idle `send`; busy `steer` or wait
+Relay user changes to that Host: idle `send`; busy `steer` or wait
 (no queue). `--no-wait` admission and Host `end_turn` are not delivery. After
-the first Host beat, verify work-product evidence and the first dispatch
+the first beat, verify work-product evidence and the first dispatch
 receipt against plan and authorization; do not trust the Host's self-description.
-Correct mismatches; do not accept completion. At cadence or [webhook wake](references/webhook-wake.md), read the [snapshot (`sweep=` line)](references/snapshot.md), observe/capture and [report](references/inquiry-report.md). Relay pacing; escalate unresolved decisions. Do not dispatch workers, copy a mission ledger, write the Host heartbeat, create a Routine beyond that wake pair, touch inner sessions, or stop before close-out. Changing the outer Agent does not stop it.
+Correct mismatches; do not accept completion. At cadence or [wake](references/webhook-wake.md), read the [snapshot (`sweep=` line)](references/snapshot.md), observe/capture and [report](references/inquiry-report.md). Relay pacing if warranted; escalate unresolved decisions. Do not dispatch workers, copy a mission ledger, write the Host heartbeat, create a Routine beyond that wake pair, touch inner sessions, or stop before close-out. Changing the outer Agent does not stop it.
 
 Write in accordance with ASD-STE100.
 
