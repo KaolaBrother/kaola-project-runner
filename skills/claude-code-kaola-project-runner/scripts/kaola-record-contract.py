@@ -164,7 +164,10 @@ DELEGATOR_PROJECT_KEYS = frozenset({
 DELEGATOR_CADENCE_KEYS = frozenset({"timezone", "start_local", "end_local", "interval_minutes"})
 DELEGATOR_STOP_KEYS = frozenset({"boundary", "state", "evidence"})
 DELEGATOR_ENTRY_KEYS = frozenset({"skill", "target", "timer_template"})
-DELEGATOR_TIMER_KEYS = frozenset({"platform", "native_timer_id", "state"})
+DELEGATOR_TIMER_KEYS = frozenset({
+    "platform", "native_timer_id", "state", "wake_mode", "webhook_routine_id",
+})
+DELEGATOR_WAKE_MODES = frozenset({"heartbeat", "webhook+heartbeat"})
 DELEGATOR_SIDEAGENT_KEYS = frozenset({"preset", "scope", "source"})
 GRANT_STATES = frozenset({"granted", "paused", "revoked", "excluded"})
 TASK_STAGES = frozenset({"todo", "doing", "review", "closeout", "done"})
@@ -1564,6 +1567,14 @@ def _delegator_nest_problems(doc: dict[str, Any], dropped: list[str]) -> list[di
     for key, allowed in (("entry", DELEGATOR_ENTRY_KEYS), ("timer_owner", DELEGATOR_TIMER_KEYS)):
         if doc.get(key) is not None:
             found.extend(_closed_strings(key, doc[key], allowed))
+    timer_owner = doc.get("timer_owner")
+    if (isinstance(timer_owner, dict) and timer_owner.get("wake_mode") is not None
+            and timer_owner["wake_mode"] not in DELEGATOR_WAKE_MODES):
+        # Issue #299: absent wake_mode is heartbeat-only; anything else names
+        # a wake the contract does not define.
+        found.append(refusal("timer_owner.wake_mode",
+                             '"heartbeat" or "webhook+heartbeat"',
+                             "keep the verified wake mode; the file was not written"))
     for key in ("source", "updated_at"):
         if doc.get(key) is not None and not isinstance(doc[key], str):
             found.append(refusal(key, "string", "keep a source locator; the file was not written"))

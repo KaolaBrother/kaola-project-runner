@@ -318,6 +318,7 @@ python_suites_all=(
   "test-issue-295-delegator-seats.py"
   "test-issue-296-shared-tier-seats.py"
   "test-issue-298-absent-decision-retire.py"
+  "test-issue-299-delegator-webhook.py"
   "test-issue-289-dead-holder-stop.py"
   "test-issue-274-package-closure.py"
   "test-issue-271-dispatch-help.py"
@@ -426,6 +427,7 @@ python_suites_b=(
   "test-issue-295-delegator-seats.py"
   "test-issue-296-shared-tier-seats.py"
   "test-issue-298-absent-decision-retire.py"
+  "test-issue-299-delegator-webhook.py"
   "test-issue-289-dead-holder-stop.py"
 )
 

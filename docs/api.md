@@ -693,6 +693,107 @@ limit (`carrier-limit`). `state migrate` without `--live` uses the 1 MiB bound: 
 live rows are not an old holder. `carrier-limit` applies when `--live` is supplied and that
 holder does not advertise `heartbeat-state/2`. The tool refuses rather than truncating a record.
 
+## Delegator webhook wake (#299)
+
+A Host holder (and only a `session_role: host` holder) fires a wake signal to the
+Delegator's webhook routine at turn/permission/stop boundaries, so a webhook-armed
+Delegator does not wait for its next cron heartbeat. The holder spawns a detached
+child — `python3 kaola-acp.py delegator-webhook deliver` with the payload on stdin —
+that never blocks the holder, survives holder exit, and does the network and retry
+work itself. The child argv carries no secret and never contains the string
+`kaola-acp-holder` (process scans match that name).
+
+Trigger points: `end_turn` on `turn_completed` (and on `turn_canceled` when no
+stop was requested), `error` on `turn_failed`, an unrequested agent exit outside
+the boot window, or a failed boot; `blocked` on a new `session/request_permission`;
+`stopped` from `op_stop` after the stopped record is written (spawned inline because
+the holder exits with its reply).
+
+Payload (signal only, no transcript, prompt, diff or secret):
+
+```json
+{"schema": "kaola-delegator-wake/1", "project": "<repo realpath>", "session": "<--session>",
+ "holder_instance_id": "<holder instance>", "event_seq": <events cursor>, "state": "end_turn",
+ "ts": "YYYY-MM-DDTHH:MM:SSZ"}
+```
+
+Delivery: POST the payload as the JSON body with `Content-Type: application/json`
+and `User-Agent: kaola-delegator-wake/1`, plus the configured key header for a
+`header` attachment. Redirects are refused (`redirect-refused`, no retry). Each
+attempt times out at 3 s. One initial attempt plus up to 3 retries (4 attempts,
+backoff 1 s, 2 s, 4 s); only timeouts, connection errors, HTTP 5xx, 408 and 429
+retry; any other non-2xx is final. A 2xx is `delivered`. Not configured or
+`enabled: false` writes one `skipped`/`not-configured` receipt with no network;
+invalid config or mode writes one `failed`/`invalid-config`/`config-mode` receipt
+with no network.
+
+Per-attempt receipt (closed shape; `reason` present only on `skipped`; `error` is a
+classified code, never an exception message — urllib errors can embed the URL):
+
+```json
+{"ts": "...", "state": "end_turn", "session": "...", "holder_instance_id": "...",
+ "event_seq": 7, "result": "delivered|failed|skipped", "attempt": 1, "max_attempts": 4,
+ "http_status": 200, "error": null, "elapsed_ms": 12, "final": true}
+```
+
+`error` is one of `timeout`, `connection`, `http-status`, `redirect-refused`,
+`invalid-config`, `config-mode`, or null. Receipts land in
+`<repo>/.kaola/delegator-webhook-receipts.json`
+(`{"schema": "kaola-delegator-webhook-receipts/1", "limit": 32, "receipts": [...]}`,
+last 32 attempts oldest-first, mode 0600, atomic replace under a sidecar flock).
+Receipt-write failures are swallowed.
+
+Config lives at `~/.config/kaola/delegator-webhook.json` (override with
+`KAOLA_DELEGATOR_WEBHOOK_CONFIG`, for tests). The directory is created 0700 and the
+file 0600 atomically under `<config>.lock`; a config readable by group/other or not
+owned by the uid is refused as `config-mode`. Keys are `os.path.realpath(--project)`:
+
+```json
+{"schema": "kaola-delegator-webhook/1", "projects": {"<realpath>": {"url": "https://...",
+ "sender_key": "...", "sender_key_attachment": {...}, "enabled": true,
+ "owner_agent": "<label>", "updated_at": "<UTC Z>"}}}
+```
+
+`url` requires `https://`; `http://` is accepted only for a loopback host
+(127.0.0.1, ::1, localhost). `sender_key_attachment` is owner-verified configured
+data: take the exact format from the Grok Bot routine panel — no header name is
+hard-coded. `{"style": "header", "name": NAME, "prefix": TEXT}` sends the request
+header `NAME: <prefix><sender_key>` (NAME must be an RFC7230 token and not
+Host/Content-Type/Content-Length/Connection/Transfer-Encoding; the sender key is
+required, non-empty, no CR/LF/NUL). `{"style": "url"}` means the key is already in
+the URL and `sender_key` stays null.
+
+CLI (`scripts/kaola-acp.py delegator-webhook <action>`, one JSON receipt on stdout,
+exit 0 on success):
+
+- `configure --project ROOT --owner-agent LABEL` plus exactly one secret input —
+  `--url-env NAME [--key-env NAME]` (values read from the named variables, never
+  argv), `--stdin` or `--input-file PATH` (one `{"url","sender_key"}` object; the
+  file must be a regular file owned by the caller with no group/other bits) or,
+  on a TTY with no source, masked `getpass` prompts — plus exactly one attachment
+  flag, `--key-header NAME [--key-prefix TEXT]` or `--key-in-url`. An existing
+  entry owned by another label is refused (`entry-owned-by-other-agent`) unless
+  `--replace-owner OLD` names it exactly; the same owner reconfigures freely, and
+  other projects' entries are preserved. No input source on a non-TTY is
+  `input-required`.
+- `status --project ROOT` prints `kaola-delegator-webhook-status/1`: project,
+  config_path, config_mode, configured, enabled, owner_agent,
+  sender_key_attachment (style/name/prefix), sender_key_present, a 12-hex
+  `fingerprint` of url+key, last_receipt, last_test, receipts_path. Never the URL
+  or key.
+- `test --project ROOT` sends one `state: "test"` payload through the same
+  delivery path and prints `kaola-delegator-webhook-test/1` with the attempt
+  receipts; exit 0 only on `delivered`.
+- `remove --project ROOT --owner-agent LABEL` deletes only the caller's own
+  entry; an absent entry is `result: "absent"` (exit 0).
+- `deliver` is the holder's internal entry: one payload object on stdin, config
+  lookup by `realpath(payload.project)`, deliver, write receipts, exit.
+
+The Delegator records the wake pair in `timer_owner`: `wake_mode` is `heartbeat`
+or `webhook+heartbeat` (absent means heartbeat-only) and `webhook_routine_id`
+names the webhook routine. Running Host holders need a seat restart to pick up
+the hook.
+
 ## Runner entrypoint (`kaola-tmux.sh`)
 
 The file keeps its historical name; it drives ACP only and starts no tmux session.

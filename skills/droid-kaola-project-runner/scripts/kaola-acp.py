@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import getpass
 import hashlib
 import importlib.util
 import json
@@ -25,6 +26,9 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -5926,6 +5930,563 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
     return started
 
 
+# ---------------------------------------------------------------------------
+# Issue #299: Delegator webhook wake. A Host holder spawns the ``deliver``
+# subcommand detached at turn/permission/stop boundaries; this CLI owns the
+# config, validation, POST, retries and receipts. No receipt ever carries the
+# URL, the sender key, or an exception message (urllib errors can embed the
+# URL); only the classified error code travels.
+# ---------------------------------------------------------------------------
+
+DELEGATOR_WEBHOOK_CONFIG_ENV = "KAOLA_DELEGATOR_WEBHOOK_CONFIG"
+DELEGATOR_WEBHOOK_SCHEMA = "kaola-delegator-webhook/1"
+DELEGATOR_WEBHOOK_RECEIPTS_SCHEMA = "kaola-delegator-webhook-receipts/1"
+DELEGATOR_WEBHOOK_RECEIPTS_LIMIT = 32
+DELEGATOR_WEBHOOK_TIMEOUT = 3.0
+DELEGATOR_WEBHOOK_BACKOFF = (1.0, 2.0, 4.0)
+DELEGATOR_WEBHOOK_MAX_ATTEMPTS = 1 + len(DELEGATOR_WEBHOOK_BACKOFF)
+DELEGATOR_WEBHOOK_RETRY_STATUS = frozenset({408, 429})
+DELEGATOR_WEBHOOK_USER_AGENT = "kaola-delegator-wake/1"
+DELEGATOR_WEBHOOK_HEADER_NAME = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
+DELEGATOR_WEBHOOK_FORBIDDEN_HEADERS = frozenset(
+    {"host", "content-type", "content-length", "connection", "transfer-encoding"})
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
+def _utc_stamp() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def delegator_webhook_config_path() -> Path:
+    override = os.environ.get(DELEGATOR_WEBHOOK_CONFIG_ENV)
+    if override:
+        return Path(override)
+    return Path.home() / ".config" / "kaola" / "delegator-webhook.json"
+
+
+def delegator_webhook_receipts_path(project_root: str) -> Path:
+    return Path(project_root) / ".kaola" / "delegator-webhook-receipts.json"
+
+
+def _webhook_read_config(path: Path) -> tuple[dict[str, Any] | None, str | None, str | None]:
+    """(config, error, config_mode). error is None, ``config-mode`` or
+    ``invalid-config``; config_mode is the octal string or None."""
+    try:
+        stat_result = path.stat()
+    except FileNotFoundError:
+        return None, None, None
+    except OSError:
+        return None, "invalid-config", None
+    config_mode = oct(stat_result.st_mode & 0o777)[2:].zfill(4)
+    if stat_result.st_uid != os.getuid() or (stat_result.st_mode & 0o077):
+        return None, "config-mode", config_mode
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None, "invalid-config", config_mode
+    if (not isinstance(doc, dict) or doc.get("schema") != DELEGATOR_WEBHOOK_SCHEMA
+            or not isinstance(doc.get("projects"), dict)):
+        return None, "invalid-config", config_mode
+    return doc, None, config_mode
+
+
+def _webhook_locked_write(path: Path, doc: dict[str, Any]) -> None:
+    """Atomic 0600 replace under an exclusive flock on ``<path>.lock``."""
+    import fcntl
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    lock_path = path.with_name(path.name + ".lock")
+    with open(lock_path, "a+b") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        data = (json.dumps(doc, ensure_ascii=False, sort_keys=True, indent=1) + "\n").encode("utf-8")
+        temp_name = str(path.with_name(f"{path.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp"))
+        fd = os.open(temp_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            with os.fdopen(fd, "wb") as temp:
+                temp.write(data)
+                temp.flush()
+                os.fsync(temp.fileno())
+            os.replace(temp_name, path)
+        except BaseException:
+            try:
+                os.unlink(temp_name)
+            except OSError:
+                pass
+            raise
+
+
+def _webhook_url_error(url: Any) -> str | None:
+    """None when the URL is deliverable, else a short validation detail."""
+    if not isinstance(url, str) or not url:
+        return "url is required"
+    if any(ch in url for ch in ("\r", "\n", " ")):
+        return "url must not contain CR, LF or space"
+    try:
+        parts = urllib.parse.urlsplit(url)
+    except ValueError:
+        return "url does not parse"
+    if parts.scheme == "https":
+        pass
+    elif parts.scheme == "http" and (parts.hostname or "") in LOOPBACK_HOSTS:
+        pass
+    else:
+        return "url must be https (http only for a loopback test endpoint)"
+    return None
+
+
+def _webhook_sender_key_error(sender_key: Any) -> str | None:
+    if not isinstance(sender_key, str) or not sender_key:
+        return "sender_key is required for a header attachment"
+    if any(ch in sender_key for ch in ("\r", "\n", "\x00")):
+        return "sender_key must not contain CR, LF or NUL"
+    return None
+
+
+def _webhook_attachment_error(attachment: Any, sender_key: Any) -> str | None:
+    if not isinstance(attachment, dict):
+        return "sender_key_attachment is required"
+    style = attachment.get("style")
+    if style == "header":
+        name = attachment.get("name")
+        if not isinstance(name, str) or not DELEGATOR_WEBHOOK_HEADER_NAME.match(name):
+            return "header name is not an RFC7230 token"
+        if name.lower() in DELEGATOR_WEBHOOK_FORBIDDEN_HEADERS:
+            return f"header {name} is reserved for the transport"
+        prefix = attachment.get("prefix", "")
+        if not isinstance(prefix, str) or any(ord(ch) < 0x20 or ord(ch) > 0x7e for ch in prefix):
+            return "header prefix must be printable ASCII without CR/LF"
+        return _webhook_sender_key_error(sender_key)
+    if style == "url":
+        if sender_key not in (None, ""):
+            return "sender_key must be absent when the key is already in the url"
+        extra = set(attachment) - {"style"}
+        if extra:
+            return f"url attachment takes no {sorted(extra)}"
+        return None
+    return 'sender_key_attachment.style must be "header" or "url"'
+
+
+def _webhook_entry_error(entry: Any) -> str | None:
+    if not isinstance(entry, dict):
+        return "entry is not an object"
+    error = _webhook_url_error(entry.get("url"))
+    if error:
+        return error
+    error = _webhook_attachment_error(
+        entry.get("sender_key_attachment"), entry.get("sender_key"))
+    if error:
+        return error
+    if not isinstance(entry.get("enabled"), bool):
+        return "enabled must be boolean"
+    if not isinstance(entry.get("owner_agent"), str) or not entry["owner_agent"]:
+        return "owner_agent is required"
+    return None
+
+
+class _WebhookRedirectRefused(Exception):
+    def __init__(self, status: int):
+        super().__init__()
+        self.status = status
+
+
+class _WebhookNoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise _WebhookRedirectRefused(code)
+
+
+_WEBHOOK_OPENER = urllib.request.build_opener(_WebhookNoRedirect)
+
+
+def _webhook_post(url: str, attachment: dict[str, Any], sender_key: str | None,
+                  body: bytes) -> tuple[int | None, str | None]:
+    """One POST attempt. Returns (http_status, error): error None on 2xx."""
+    headers = {"Content-Type": "application/json", "User-Agent": DELEGATOR_WEBHOOK_USER_AGENT}
+    if attachment.get("style") == "header":
+        headers[attachment["name"]] = attachment.get("prefix", "") + (sender_key or "")
+    request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with _WEBHOOK_OPENER.open(request, timeout=DELEGATOR_WEBHOOK_TIMEOUT) as response:
+            status = response.getcode() or 0
+    except _WebhookRedirectRefused as exc:
+        return exc.status, "redirect-refused"
+    except urllib.error.HTTPError as exc:
+        return exc.code, "http-status"
+    except urllib.error.URLError as exc:
+        reason = exc.reason
+        if isinstance(reason, (socket.timeout, TimeoutError)):
+            return None, "timeout"
+        return None, "connection"
+    except (socket.timeout, TimeoutError):
+        return None, "timeout"
+    except OSError:
+        return None, "connection"
+    if 200 <= status < 300:
+        return status, None
+    return status, "http-status"
+
+
+def _webhook_retryable(http_status: int | None, error: str | None) -> bool:
+    if error in ("timeout", "connection"):
+        return True
+    if error == "http-status" and isinstance(http_status, int):
+        return http_status >= 500 or http_status in DELEGATOR_WEBHOOK_RETRY_STATUS
+    return False
+
+
+def _webhook_attempt_receipt(payload: dict[str, Any], attempt: int, result: str,
+                             http_status: int | None, error: str | None,
+                             reason: str | None, elapsed_ms: int, final: bool) -> dict[str, Any]:
+    receipt: dict[str, Any] = {
+        "ts": _utc_stamp(),
+        "state": payload.get("state"),
+        "session": payload.get("session"),
+        "holder_instance_id": payload.get("holder_instance_id"),
+        "event_seq": payload.get("event_seq"),
+        "result": result,
+        "attempt": attempt,
+        "max_attempts": DELEGATOR_WEBHOOK_MAX_ATTEMPTS,
+        "http_status": http_status,
+        "error": error,
+        "elapsed_ms": elapsed_ms,
+        "final": final,
+    }
+    if reason is not None:
+        receipt["reason"] = reason
+    return receipt
+
+
+def _webhook_append_receipts(project_root: str, receipts: list[dict[str, Any]]) -> None:
+    """Append to the bounded receipts file; every write failure is swallowed
+    (deliver must never crash the detached child over bookkeeping)."""
+    try:
+        import fcntl
+        kaola_dir = Path(project_root) / ".kaola"
+        kaola_dir.mkdir(exist_ok=True)
+        path = delegator_webhook_receipts_path(project_root)
+        lock_path = kaola_dir / "delegator-webhook-receipts.lock"
+        with open(lock_path, "a+b") as lock_file:
+            fcntl.flock(lock_file, fcntl.LOCK_EX)
+            old: list[dict[str, Any]] = []
+            if path.is_file():
+                try:
+                    existing = json.loads(path.read_text(encoding="utf-8"))
+                    if (isinstance(existing, dict)
+                            and existing.get("schema") == DELEGATOR_WEBHOOK_RECEIPTS_SCHEMA
+                            and isinstance(existing.get("receipts"), list)):
+                        old = [item for item in existing["receipts"] if isinstance(item, dict)]
+                except (OSError, ValueError):
+                    old = []
+            merged = (old + receipts)[-DELEGATOR_WEBHOOK_RECEIPTS_LIMIT:]
+            doc = {"schema": DELEGATOR_WEBHOOK_RECEIPTS_SCHEMA,
+                   "limit": DELEGATOR_WEBHOOK_RECEIPTS_LIMIT, "receipts": merged}
+            data = json.dumps(doc, ensure_ascii=False, sort_keys=True, indent=1).encode("utf-8") + b"\n"
+            temp_name = str(path.with_name(f"receipts.{os.getpid()}.{secrets.token_hex(4)}.tmp"))
+            fd = os.open(temp_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as temp:
+                temp.write(data)
+                temp.flush()
+                os.fsync(temp.fileno())
+            os.replace(temp_name, path)
+    except Exception:
+        pass
+
+
+def _webhook_read_receipts(project_root: str) -> list[dict[str, Any]]:
+    path = delegator_webhook_receipts_path(project_root)
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(doc, dict) or not isinstance(doc.get("receipts"), list):
+        return []
+    return [item for item in doc["receipts"] if isinstance(item, dict)]
+
+
+def _webhook_deliver(project_root: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """The whole delivery policy for one payload: config lookup, the skipped /
+    invalid-config short receipts, and the attempt loop. Writes the receipts
+    file best-effort and returns the attempt receipts of this call."""
+    config_path = delegator_webhook_config_path()
+    doc, config_error, _mode = _webhook_read_config(config_path)
+    started = time.monotonic()
+
+    def one(result: str, error: str | None, reason: str | None) -> list[dict[str, Any]]:
+        receipt = _webhook_attempt_receipt(
+            payload, 0, result, None, error, reason,
+            int(round((time.monotonic() - started) * 1000)), True)
+        _webhook_append_receipts(project_root, [receipt])
+        return [receipt]
+
+    if config_error is not None:
+        return one("failed", config_error, None)
+    entry = (doc or {}).get("projects", {}).get(project_root)
+    if not isinstance(entry, dict) or entry.get("enabled") is not True:
+        return one("skipped", None, "not-configured")
+    if _webhook_entry_error(entry) is not None:
+        return one("failed", "invalid-config", None)
+
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    receipts: list[dict[str, Any]] = []
+    for attempt in range(1, DELEGATOR_WEBHOOK_MAX_ATTEMPTS + 1):
+        attempt_started = time.monotonic()
+        http_status, error = _webhook_post(
+            entry["url"], entry["sender_key_attachment"], entry.get("sender_key"), body)
+        result = "delivered" if error is None else "failed"
+        final = error is None or not _webhook_retryable(http_status, error) \
+            or attempt == DELEGATOR_WEBHOOK_MAX_ATTEMPTS
+        receipts.append(_webhook_attempt_receipt(
+            payload, attempt, result, http_status, error, None,
+            int(round((time.monotonic() - attempt_started) * 1000)), final))
+        if final:
+            break
+        time.sleep(DELEGATOR_WEBHOOK_BACKOFF[attempt - 1])
+    _webhook_append_receipts(project_root, receipts)
+    return receipts
+
+
+def _webhook_fingerprint(url: str, sender_key: str | None) -> str:
+    return hashlib.sha256((url + "\n" + (sender_key or "")).encode("utf-8")).hexdigest()[:12]
+
+
+def _webhook_status_receipt(project_root: str) -> dict[str, Any]:
+    config_path = delegator_webhook_config_path()
+    doc, config_error, config_mode = _webhook_read_config(config_path)
+    entry = (doc or {}).get("projects", {}).get(project_root)
+    attachment = entry.get("sender_key_attachment") if isinstance(entry, dict) else None
+    attachment_view = None
+    if isinstance(attachment, dict):
+        attachment_view = {"style": attachment.get("style")}
+        if attachment.get("style") == "header":
+            attachment_view["name"] = attachment.get("name")
+            attachment_view["prefix"] = attachment.get("prefix", "")
+            attachment_view["prefix_set"] = bool(attachment.get("prefix"))
+    receipts = _webhook_read_receipts(project_root)
+    last_test = next((item for item in reversed(receipts) if item.get("state") == "test"), None)
+    valid = isinstance(entry, dict) and _webhook_entry_error(entry) is None
+    sender_key = entry.get("sender_key") if isinstance(entry, dict) else None
+    url = entry.get("url") if isinstance(entry, dict) else None
+    receipt: dict[str, Any] = {
+        "schema": "kaola-delegator-webhook-status/1",
+        "project": project_root,
+        "config_path": str(config_path),
+        "config_mode": config_mode,
+        "configured": bool(valid and entry.get("enabled") is not None),
+        "enabled": entry.get("enabled") if valid else None,
+        "owner_agent": entry.get("owner_agent") if isinstance(entry, dict) else None,
+        "sender_key_attachment": attachment_view if valid else None,
+        "sender_key_present": isinstance(sender_key, str) and bool(sender_key) if valid else False,
+        "fingerprint": (_webhook_fingerprint(url, sender_key)
+                        if valid and isinstance(url, str) else None),
+        "last_receipt": receipts[-1] if receipts else None,
+        "last_test": last_test,
+        "receipts_path": str(delegator_webhook_receipts_path(project_root)),
+    }
+    if config_error is not None:
+        receipt["error"] = config_error
+    return receipt
+
+
+def _webhook_refusal(reason: str, detail: str, **extra: Any) -> tuple[int, dict[str, Any]]:
+    receipt = {"result": "refused", "reason": reason, "detail": detail, **extra}
+    print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
+    return 2, receipt
+
+
+def _webhook_realpath_project(raw: Any) -> str | None:
+    if not isinstance(raw, str) or not raw:
+        return None
+    path = Path(raw)
+    if not path.is_dir():
+        return None
+    return os.path.realpath(str(path))
+
+
+def command_delegator_webhook(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="kaola-acp.py delegator-webhook")
+    sub = parser.add_subparsers(dest="action", required=True)
+    for name in ("configure", "status", "test", "remove"):
+        p = sub.add_parser(name)
+        p.add_argument("--project", required=True)
+        if name == "configure":
+            p.add_argument("--owner-agent", required=True)
+            p.add_argument("--url-env")
+            p.add_argument("--key-env")
+            p.add_argument("--stdin", action="store_true")
+            p.add_argument("--input-file")
+            p.add_argument("--key-header")
+            p.add_argument("--key-prefix")
+            p.add_argument("--key-in-url", action="store_true")
+            p.add_argument("--replace-owner")
+        if name == "remove":
+            p.add_argument("--owner-agent", required=True)
+    sub.add_parser("deliver")
+    args = parser.parse_args(argv)
+
+    if args.action == "deliver":
+        try:
+            payload = json.loads(sys.stdin.read())
+        except ValueError:
+            return 1
+        if not isinstance(payload, dict):
+            return 1
+        project_root = _webhook_realpath_project(payload.get("project"))
+        if project_root is None:
+            return 1
+        receipts = _webhook_deliver(project_root, payload)
+        return 0 if receipts[-1]["result"] in ("delivered", "skipped") else 1
+
+    project_root = _webhook_realpath_project(args.project)
+    if project_root is None:
+        return _webhook_refusal("invalid-input",
+                                "--project must be an existing directory")[0]
+
+    config_path = delegator_webhook_config_path()
+    doc, config_error, _mode = _webhook_read_config(config_path)
+    if args.action in ("configure", "remove") and config_error is not None:
+        return _webhook_refusal(
+            config_error, f"webhook config at {config_path} is unusable")[0]
+    projects = (doc or {}).get("projects", {})
+    existing = projects.get(project_root)
+
+    if args.action == "status":
+        print(json.dumps(_webhook_status_receipt(project_root),
+                         ensure_ascii=False, sort_keys=True))
+        return 0
+
+    if args.action == "test":
+        payload = {
+            "schema": "kaola-delegator-wake/1",
+            "project": project_root,
+            "session": None,
+            "holder_instance_id": "test-" + secrets.token_hex(8),
+            "event_seq": 0,
+            "state": "test",
+            "ts": _utc_stamp(),
+        }
+        receipts = _webhook_deliver(project_root, payload)
+        print(json.dumps({"schema": "kaola-delegator-webhook-test/1",
+                          "project": project_root,
+                          "result": receipts[-1]["result"],
+                          "receipts": receipts},
+                         ensure_ascii=False, sort_keys=True))
+        return 0 if receipts[-1]["result"] == "delivered" else 1
+
+    if args.action == "remove":
+        if existing is None:
+            print(json.dumps({"result": "absent", "project": project_root},
+                             ensure_ascii=False, sort_keys=True))
+            return 0
+        if existing.get("owner_agent") != args.owner_agent:
+            return _webhook_refusal(
+                "entry-owned-by-other-agent",
+                "the configured entry belongs to another agent label",
+                owner_agent=existing.get("owner_agent"))[0]
+        del projects[project_root]
+        assert doc is not None
+        _webhook_locked_write(config_path, doc)
+        print(json.dumps({"result": "removed", "project": project_root},
+                         ensure_ascii=False, sort_keys=True))
+        return 0
+
+    # configure
+    sources = sum(1 for given in (args.url_env, args.stdin, args.input_file) if given)
+    if sources > 1:
+        return _webhook_refusal("invalid-input",
+                                "give exactly one of --url-env, --stdin or --input-file")[0]
+    attachments = sum(1 for given in (args.key_header, args.key_in_url) if given)
+    if attachments != 1:
+        return _webhook_refusal(
+            "invalid-input", "give exactly one of --key-header NAME or --key-in-url")[0]
+    if args.key_prefix is not None and not args.key_header:
+        return _webhook_refusal("invalid-input", "--key-prefix needs --key-header")[0]
+    if args.key_env and not args.url_env:
+        return _webhook_refusal("invalid-input", "--key-env needs --url-env")[0]
+
+    url: str | None = None
+    sender_key: str | None = None
+    if args.url_env:
+        url = os.environ.get(args.url_env)
+        sender_key = os.environ.get(args.key_env) if args.key_env else None
+        if url is None or (args.key_env and sender_key is None):
+            return _webhook_refusal("input-required",
+                                    "a named environment variable is unset")[0]
+    elif args.stdin or args.input_file:
+        if args.stdin:
+            try:
+                given = json.loads(sys.stdin.read())
+            except ValueError:
+                given = None
+        else:
+            input_path = Path(args.input_file)
+            try:
+                stat_result = input_path.stat()
+            except OSError:
+                stat_result = None
+            if (stat_result is None or not input_path.is_file()
+                    or stat_result.st_uid != os.getuid()
+                    or (stat_result.st_mode & 0o077)):
+                return _webhook_refusal(
+                    "invalid-input",
+                    "--input-file must be a regular file owned by you with mode 0600")[0]
+            try:
+                given = json.loads(input_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                given = None
+        if not isinstance(given, dict):
+            return _webhook_refusal("invalid-input",
+                                    "the input must be one JSON object")[0]
+        url = given.get("url")
+        sender_key = given.get("sender_key")
+    else:
+        if not sys.stdin.isatty():
+            return _webhook_refusal(
+                "input-required",
+                "no input source: use --url-env, --stdin, --input-file, or a terminal")[0]
+        url = getpass.getpass("webhook URL: ")
+        sender_key = getpass.getpass("sender key (empty when the key is in the URL): ")
+        sender_key = sender_key or None
+
+    url_error = _webhook_url_error(url)
+    if url_error:
+        return _webhook_refusal("invalid-input", url_error)[0]
+    if args.key_header:
+        attachment = {"style": "header", "name": args.key_header,
+                      "prefix": args.key_prefix or ""}
+    else:
+        attachment = {"style": "url"}
+    attach_error = _webhook_attachment_error(attachment, sender_key)
+    if attach_error:
+        return _webhook_refusal("invalid-input", attach_error)[0]
+
+    if isinstance(existing, dict) and existing.get("owner_agent") != args.owner_agent:
+        if args.replace_owner != existing.get("owner_agent"):
+            return _webhook_refusal(
+                "entry-owned-by-other-agent",
+                "the configured entry belongs to another agent label; pass "
+                "--replace-owner with that exact label after its routines retired",
+                owner_agent=existing.get("owner_agent"))[0]
+
+    projects[project_root] = {
+        "url": url,
+        "sender_key": sender_key,
+        "sender_key_attachment": attachment,
+        "enabled": True,
+        "owner_agent": args.owner_agent,
+        "updated_at": _utc_stamp(),
+    }
+    doc = doc or {"schema": DELEGATOR_WEBHOOK_SCHEMA, "projects": {}}
+    doc["schema"] = DELEGATOR_WEBHOOK_SCHEMA
+    doc["projects"] = projects
+    try:
+        _webhook_locked_write(config_path, doc)
+    except OSError as exc:
+        return _webhook_refusal("invalid-input",
+                                f"config write failed: {type(exc).__name__}")[0]
+    receipt = _webhook_status_receipt(project_root)
+    receipt["result"] = "configured"
+    print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
 def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "list":
         payload = command_list(parse_list_args(sys.argv[2:]))
@@ -5943,6 +6504,8 @@ def main() -> int:
         payload = command_model_package(parse_model_package_args(sys.argv[2:]))
         print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
         return 0
+    if len(sys.argv) > 1 and sys.argv[1] == "delegator-webhook":
+        return command_delegator_webhook(sys.argv[2:])
 
     parser = ReceiptArgumentParser(prog="kaola-acp.py")
     parser.add_argument("platform", choices=PLATFORMS)

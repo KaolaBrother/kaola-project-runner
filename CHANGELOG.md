@@ -24,6 +24,22 @@ Seats: restart required
   admits against this field without a seat restart. Seats still restart:
   the holder pins `kaola-record-contract.py`, and `extra_seats` is a new
   field on that contract.
+- **Delegator webhook wake (Issue #299).** A Host holder now fires a detached
+  `kaola-acp.py delegator-webhook deliver` child at turn end, a new pending
+  permission, an unrequested agent exit or boot failure, and stop — a signal
+  only (`kaola-delegator-wake/1`: project, session, holder_instance_id,
+  event_seq, state, ts). The child owns a `~/.config/kaola/delegator-webhook.json`
+  config (0600, env-overridable path, `config-mode` refused), validates the
+  https URL and the owner-configured `sender_key_attachment` (header form or
+  key-in-url; no header name is hard-coded), POSTs with a 3 s timeout, up to 3
+  retries (1/2/4 s) on timeout/connection/5xx/408/429 only, refuses redirects,
+  and appends bounded per-attempt receipts (last 32, 0600) to
+  `.kaola/delegator-webhook-receipts.json`. New `delegator-webhook`
+  subcommands: `configure`, `status`, `test`, `remove`, `deliver`. The record
+  contract admits `timer_owner.wake_mode` (`heartbeat`/`webhook+heartbeat`;
+  absent = heartbeat-only) and `webhook_routine_id`. The Kaola-Delegator Skill
+  documents the wake pair; running Host holders need a seat restart to emit it.
+
 
 ## 0.9.4 — 2026-10-09 (counted worker seats, absent decision retire)
 

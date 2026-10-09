@@ -16,7 +16,8 @@ Both files hold current facts only:
   source pointers); `stop`.
 - `cadence`: `timezone`, `start_local`, `end_local`, `interval_minutes`
   (e.g. `Asia/Shanghai`, `08:00`, `22:00`, `120`).
-- `timer_owner`: current outer `platform` and its `native_timer_id`.
+- `timer_owner`: outer `platform`, `native_timer_id`; with a webhook also
+  `webhook_routine_id` and `wake_mode` ([webhook-wake.md](webhook-wake.md)).
 - `day_start`: `action` `reconcile_then_open_intake`, `state`
   `pending|confirmed`, `evidence` pointer or null.
 - `day_end`: `action` `pause_new_claims_keep_inflight`, `state`
@@ -57,7 +58,7 @@ or sufficient unchanged evidence, or assigns its authorized Sideagent per
 With an open mandate and no work in flight, check the Host body for a blocked
 duty missing its next action or reopening condition; include that specific gap
 in the one correction. Do not choose a worker, implementation route or retry.
-A justified unchanged wait is not failure and gets no repeated reminder.
+A justified unchanged wait is not failure and gets no reminder.
 
 ## Inquiry commands
 
@@ -120,7 +121,7 @@ effects; do not roll them back automatically.
 
 ## Timer handoff
 
-The outer platform sets its existing native timer from `cadence` on this target. On handoff read `timer_owner`, retire the previous
+The outer platform sets its native timer from `cadence` on this target. On handoff read `timer_owner`, retire the previous
 timer before the new one takes over (never two live Delegators), then update
 `timer_owner` once verified. If the old timer cannot be controlled, report that
 instead of polling twice. Update this file and its timer together.
