@@ -99,6 +99,29 @@ such as `codex/astra`, are granted only in `expert_task_grants` and are not
 Elite seats. A shared-group Expert choice with no current `expert_task_grants`
 row is `above-ceiling`.
 
+`count` on that grouped grant stays the shared pool: `count` 2 means any mix
+of two seats from the group, including two of one tier. A tier-specific seat
+is `extra_seats`, an object of preset id to a positive integer, on that one
+row. The per-runtime total is `count` plus those extras. Claude Code example:
+`preset_ids` `claude-code/default`, `claude-code/sonnet`, `claude-code/fable`,
+`count` 1, `extra_seats` `{"claude-code/default": 1}` is 2 seats total.
+Default may use 2. Sonnet and fable stay at the shared contribution of 1, so
+two sonnets, or a sonnet and a fable, do not fit. A second row for a preset
+already in the group is still a duplicate. Host `state update` and
+`delegator update` both accept this row. A preset may also appear once in
+`expert_task_grants`; that overlap is the Expert permission, not another seat.
+
+`idle_available` for the group is remaining seats in that per-runtime total.
+A tier still cannot exceed its own cap (the pool plus that tier's extra).
+Host grants may omit an extra the Delegator ceiling states. They cannot keep
+an extra the ceiling omits. An Expert preset's extra also needs that
+preset's `expert_task_grants` count raised, or the expert count clamps it.
+
+A `shared-occupied` refusal names the occupying seats in `evidence.occupants`
+(`session`, `holder_instance_id`, `preset`). `holder_instance_id` is null
+when that seat has no holder yet. `evidence.limit` is `shared-pool` or
+`runtime-total` when the extra-seat policy produced the refusal.
+
 Elite grants are a time window. During the window those seats may be used for
 any task, with no per-task permission. The window ends at `expires`
 (ISO-8601 with an offset; `Z` accepted). A past instant is `expired`. An

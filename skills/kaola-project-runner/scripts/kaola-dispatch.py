@@ -334,6 +334,12 @@ def normalize_grants(auth: dict[str, Any]) -> list[dict[str, Any]]:
             grant["lifetime"] = lifetime
         if expires is not None:
             grant["expires"] = expires
+        extra = item.get("extra_seats")
+        if isinstance(extra, dict) and extra:
+            grant["extra_seats"] = {key: value for key, value in extra.items() if isinstance(key, str)}
+        shared_count = item.get("shared_count")
+        if isinstance(shared_count, int) and not isinstance(shared_count, bool) and shared_count >= 0:
+            grant["shared_count"] = shared_count
         grants.append(grant)
     return grants
 
@@ -378,6 +384,7 @@ def current_authorization(auth: dict[str, Any]) -> dict[str, Any]:
                 special = grant.get("special_requirements")
                 if isinstance(special, dict) and set(special) <= set(ids):
                     grant["special_requirements"] = {key: value for key, value in special.items() if key in current}
+                RECORD.retain_extra_seats(grant, current)
             kept.append(grant)
     if "grants" in auth:
         auth["grants"] = kept
@@ -406,9 +413,35 @@ def grant_index(grants: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return {item["id"]: item for item in grants}
 
 
+def _positive_extra(extra: Any) -> dict[str, int] | None:
+    if not isinstance(extra, dict) or not extra:
+        return None
+    parsed: dict[str, int] = {}
+    for key, value in extra.items():
+        if not isinstance(key, str) or not _count_ok(value) or value <= 0:
+            return None
+        parsed[key] = value
+    return parsed
+
+
+def _runtime_total(grant: dict[str, Any]) -> int | None:
+    """Shared pool plus every tier-specific extra. None when this grant has no extra."""
+    extra = _positive_extra(grant.get("extra_seats"))
+    shared = grant.get("shared_count")
+    if extra is None or not _count_ok(shared):
+        return None
+    return shared + sum(extra.values())
+
+
 def shared_seat_capacities(grants: list[dict[str, Any]]) -> dict[str, int]:
-    """One capacity per shared label, without adding the same pool per grant."""
+    """One capacity per shared label, without adding the same pool per grant.
+
+    A grouped grant with extra_seats reports the runtime total, not the
+    largest single tier cap. Tiers that share the pool can still be refused
+    by that pool even when the total has room.
+    """
     capacities: dict[str, int] = {}
+    totals: dict[str, int] = {}
     for grant in grants:
         seat = grant.get("shared_seat")
         if grant.get("state") != "granted" or not isinstance(seat, str) or not seat:
@@ -416,6 +449,11 @@ def shared_seat_capacities(grants: list[dict[str, Any]]) -> dict[str, int]:
         count = grant.get("count")
         capacity = count if isinstance(count, int) and not isinstance(count, bool) else 1
         capacities[seat] = max(capacities.get(seat, capacity), capacity)
+        total = _runtime_total(grant)
+        if total is not None:
+            totals[seat] = total
+    for seat, total in totals.items():
+        capacities[seat] = total
     return capacities
 
 
@@ -726,15 +764,28 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
 
     def add_seat(preset: str, klass: str, count: Any, shared_seat: str | None,
                  lifetime: str | None, special: dict[str, Any] | None,
-                 reason: str | None) -> None:
+                 reason: str | None, runtime_total: int | None = None) -> None:
         shared_limit = next((group for group in (ceiling or {}).get("groups", []) if preset in group["ids"]), None)
         group = ("grant:" + ",".join(sorted(shared_limit["ids"]))) if shared_limit else shared_seat or preset
         entry = groups.setdefault(group, {"group": group, "presets": [], "authorized_count": None,
                                           "occupied": [], "unavailable": [], "idle_available": None})
-        if _count_ok(count):
+        # A tier extra is one per-runtime total. The ceiling total may narrow
+        # it. A host grant with no extra stays on the shared pool count, so a
+        # ceiling extra the host omitted does not enlarge the summary.
+        if runtime_total is not None and _count_ok(runtime_total):
+            if entry.get("_runtime") and _count_ok(entry["authorized_count"]):
+                entry["authorized_count"] = min(entry["authorized_count"], runtime_total)
+            else:
+                entry["authorized_count"] = runtime_total
+            entry["_runtime"] = True
+            ceiling_total = shared_limit.get("total") if shared_limit else None
+            if _count_ok(ceiling_total):
+                entry["authorized_count"] = min(entry["authorized_count"], ceiling_total)
+        elif _count_ok(count) and not entry.get("_runtime"):
             entry["authorized_count"] = max(entry["authorized_count"] or 0, count)
-            if shared_limit:
-                entry["authorized_count"] = min(entry["authorized_count"], shared_limit["count"])
+            pool = shared_limit.get("count") if shared_limit else None
+            if _count_ok(pool):
+                entry["authorized_count"] = min(entry["authorized_count"], pool)
         entry["presets"].append({"id": preset, "class": klass, "count": count,
                                   "default_model": catalog[preset]["selection"].get("model_id"),
                                   "default_effort": catalog[preset]["selection"].get("effort"),
@@ -762,7 +813,7 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
             worker_seats.add(preset)
         add_seat(preset, klass, grant.get("count"), grant.get("shared_seat"),
                  grant.get("lifetime"), grant.get("special_requirements"),
-                 blocked or reasons.get(preset))
+                 blocked or reasons.get(preset), _runtime_total(grant))
     if ceiling and not ceiling_error:
         # The Delegator's authorization is the seat source: an Elite/Expert
         # preset it grants but the Host grants omit is still authorized,
@@ -807,6 +858,7 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
     authorized_total = (sum(group["authorized_count"] for group in groups.values())
                         if all(group["authorized_count"] is not None for group in groups.values()) else None)
     for entry in groups.values():
+        entry.pop("_runtime", None)
         ids = {item["id"] for item in entry["presets"]}
         entry["occupied"] = [row for row in occupied if row["preset"] in ids]
         blocked = {item["id"] for item in entry["unavailable"]}
@@ -872,7 +924,10 @@ def delegator_seats(args: argparse.Namespace, document: dict[str, Any], path: Pa
                             if ids and not kept:
                                 continue
                             grant = {**grant, "preset_ids": kept}
+                            RECORD.retain_extra_seats(grant, kept)
                     row = {field: grant[field] for field in ("preset_ids", "count", "state", "lifetime", "expires") if field in grant}
+                    if isinstance(grant.get("extra_seats"), dict) and grant["extra_seats"]:
+                        row["extra_seats"] = grant["extra_seats"]
                     if isinstance(grant.get("special_requirements"), dict):
                         row["special_requirements"] = grant["special_requirements"]
                     if grant.get("preset_id"):
@@ -1384,6 +1439,20 @@ def binding_row(binding: dict[str, Any] | None, row: dict[str, Any]) -> bool:
 _count_ok = RECORD.count_ok
 
 
+def _extra_map(grant: dict[str, Any], ids: list[str]) -> dict[str, int]:
+    """Tier extras on a shared row. An empty or invalid map leaves count as the pool."""
+    extra = grant.get("extra_seats")
+    if not isinstance(extra, dict) or not extra or len(ids) <= 1:
+        return {}
+    parsed: dict[str, int] = {}
+    members = set(ids)
+    for key, value in extra.items():
+        if not isinstance(key, str) or key not in members or not _count_ok(value) or value <= 0:
+            return {}
+        parsed[key] = value
+    return parsed
+
+
 def _grant_ident_list(grant: dict[str, Any]) -> list[str]:
     ids: list[str] = []
     if isinstance(grant.get("preset_id"), str) and grant["preset_id"]:
@@ -1635,6 +1704,7 @@ def _parse_elite_grants(
             ids.extend(item for item in many if item not in ids)
         count = grant.get("count")
         stated = count if _count_ok(count) else None
+        extra = _extra_map(grant, ids)
         switch = grant.get("switch_authorization")
         lifetime = grant.get("lifetime")
         prose = isinstance(lifetime, str) and lifetime not in GRANT_LIFETIMES
@@ -1690,13 +1760,21 @@ def _parse_elite_grants(
                 for ident in ids:
                     problem(ident, "ceiling-incomplete")
             else:
-                groups.append({"ids": set(ids), "count": stated})
+                # count stays the shared pool. extra is the tier-specific addition.
+                # total is the per-runtime cap. A row with no extra keeps total == count.
+                groups.append({
+                    "ids": set(ids),
+                    "count": stated,
+                    "extra": extra,
+                    "total": stated + sum(extra.values()),
+                })
         for ident in ids:
-            if ident in elite and elite[ident] != stated:
+            tier = None if stated is None else stated + extra.get(ident, 0)
+            if ident in elite and elite[ident] != tier:
                 problem(ident, "ceiling-unreadable")
                 elite[ident] = None
             else:
-                elite[ident] = stated
+                elite[ident] = tier
             fact = by_id.setdefault(ident, {
                 "count": elite[ident], "switch": None, "lifetime": None, "special": None,
             })
@@ -1750,6 +1828,7 @@ def _parse_expert_grants(raw_expert: list[dict[str, Any]], source_indices: list[
             continue
         count = grant.get("count")
         stated = count if _count_ok(count) else None
+        extra = _extra_map(grant, ids)
         special = grant.get("special_requirements")
         if isinstance(special, str):
             problem_evidence_row = {
@@ -1784,16 +1863,22 @@ def _parse_expert_grants(raw_expert: list[dict[str, Any]], source_indices: list[
                 for ident in ids:
                     problem(ident, "ceiling-incomplete")
             else:
-                groups.append({"ids": set(ids), "count": stated})
+                groups.append({
+                    "ids": set(ids),
+                    "count": stated,
+                    "extra": extra,
+                    "total": stated + sum(extra.values()),
+                })
         switch = grant.get("switch_authorization")
         for ident in ids:
             if ident in problems:
                 continue
-            if ident in expert and expert[ident] != stated:
+            tier = None if stated is None else stated + extra.get(ident, 0)
+            if ident in expert and expert[ident] != tier:
                 problem(ident, "ceiling-unreadable")
                 expert[ident] = None
             else:
-                expert[ident] = stated
+                expert[ident] = tier
             fact = by_id.setdefault(ident, {
                 "count": expert[ident], "switch": None, "lifetime": None, "special": None,
             })
@@ -1891,6 +1976,51 @@ def tighten_count(host_count: Any, shared: Any, limit: Any) -> Any:
     return limit
 
 
+def _narrow_grant_extra(grant: dict[str, Any], ceiling: dict[str, Any],
+                        catalog: dict[str, dict[str, Any]] | None) -> None:
+    """Host extra seats may fall to the ceiling. They do not rise, and they do not survive a ceiling with no extra.
+
+    The same map is written on every expanded row. An Expert grant count still
+    clamps that preset: an elite extra the expert row does not cover is dropped.
+    """
+    extra = grant.get("extra_seats")
+    if not isinstance(extra, dict) or not extra:
+        return
+    group = ceiling_group(ceiling, grant["id"])
+    ceiling_extra = group.get("extra") if isinstance(group, dict) and isinstance(group.get("extra"), dict) else None
+    if not ceiling_extra:
+        grant.pop("extra_seats", None)
+        grant.pop("shared_count", None)
+        return
+    shared_pool = group.get("count") if _count_ok(group.get("count")) else grant.get("shared_count")
+    narrowed: dict[str, int] = {}
+    for ident, value in extra.items():
+        if not isinstance(ident, str) or not _count_ok(value) or value <= 0:
+            continue
+        cap = ceiling_extra.get(ident, 0)
+        kept = min(value, cap) if _count_ok(cap) else 0
+        if catalog is not None and _count_ok(shared_pool):
+            klass = catalog.get(ident, {}).get("class")
+            tier_cap = ceiling_count(ceiling, ident, klass) if isinstance(klass, str) else None
+            if _count_ok(tier_cap):
+                kept = min(kept, max(0, tier_cap - shared_pool))
+        if kept > 0:
+            narrowed[ident] = kept
+    if not narrowed:
+        grant.pop("extra_seats", None)
+        grant.pop("shared_count", None)
+        return
+    grant["extra_seats"] = narrowed
+    if _count_ok(grant.get("shared_count")) and _count_ok(shared_pool):
+        grant["shared_count"] = min(grant["shared_count"], shared_pool)
+    if _count_ok(grant.get("shared_count")):
+        rebuilt = grant["shared_count"] + narrowed.get(grant["id"], 0)
+        if _count_ok(grant.get("count")):
+            grant["count"] = min(grant["count"], rebuilt)
+        else:
+            grant["count"] = rebuilt
+
+
 def apply_ceiling_to_grants(grants: list[dict[str, Any]], ceiling: dict[str, Any],
                             catalog: dict[str, dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Copy current Delegator limits onto the Host grants used for this decision."""
@@ -1900,11 +2030,13 @@ def apply_ceiling_to_grants(grants: list[dict[str, Any]], ceiling: dict[str, Any
         grant = dict(grant)
         fact = by_id.get(grant["id"])
         if not fact or grant["id"] in (ceiling.get("problems") or {}):
+            _narrow_grant_extra(grant, ceiling, catalog)
             narrowed.append(grant)
             continue
         new_count = tighten_count(grant.get("count"), grant.get("shared_seat"), fact.get("count"))
         if new_count is not None:
             grant["count"] = new_count
+        _narrow_grant_extra(grant, ceiling, catalog)
         if fact.get("switch") is False:
             grant["model_switch"] = False
             grant["switch_authorization"] = False
@@ -2317,7 +2449,11 @@ def command_execute(args: argparse.Namespace) -> int:
                 others, repo, catalog, grants, resolved, exempt=binding)
             reason = held_refusal(item, o_count, o_shared, o_unnamed, grants, catalog)
             if reason:
-                blocked.append(blank_item(item["item_id"], item["preset"], item["session"], "not-run", reason))
+                if reason == "shared-occupied":
+                    blocked.append(occupied_refusal(
+                        item, refusal_presets(item, grants), others, resolved, ready, repo, binding))
+                else:
+                    blocked.append(blank_item(item["item_id"], item["preset"], item["session"], "not-run", reason))
                 continue
             ready.append(item)
             continue
@@ -2327,32 +2463,53 @@ def command_execute(args: argparse.Namespace) -> int:
             ))
             continue
         seat_name = item.get("_shared_seat")
-        if (isinstance(seat_name, str) and seat_name
-                and occupied_shared.get(seat_name, 0) >= item.get("_shared_capacity", 1)):
-            blocked.append(blank_item(item["item_id"], item["preset"], item["session"], "not-run", "shared-occupied"))
-            continue
-        if isinstance(seat_name, str) and seat_name and shared_seat_unknown(seat_name, grants, catalog, unnamed_platforms):
-            blocked.append(blank_item(
-                item["item_id"], item["preset"], item["session"], "not-run", "occupancy-unknown",
-            ))
-            continue
-        group = ceiling_group(ceiling, item["preset"])
-        if group is not None:
+        policy = tier_extra_policy(grants, item["preset"])
+        if policy is not None:
+            # The runtime total replaces the blunt shared-seat and ceiling-pool
+            # checks. Those counts would refuse a legal extra seat or admit a
+            # second shared-pool tier.
             platforms = {
-                catalog[ident]["platform"] for ident in group["ids"]
+                catalog[ident]["platform"] for ident in policy["ids"]
                 if ident in catalog and isinstance(catalog[ident].get("platform"), str)
             }
-            if occupancy != "known" or unnamed_platforms & platforms:
+            if item.get("_platform") in unnamed_platforms or unnamed_platforms & platforms:
                 blocked.append(blank_item(
                     item["item_id"], item["preset"], item["session"], "not-run", "occupancy-unknown",
                 ))
                 continue
-            occupied = sum(used_count.get(ident, 0) for ident in group["ids"])
-            if occupied >= group["count"]:
+            limit_name = policy_blocks(
+                policy, item["preset"], reserved_counts(used_count, kept_items, live_sessions))
+            if limit_name:
+                blocked.append(occupied_refusal(
+                    item, set(policy["ids"]), live_rows, resolved, ready, repo, binding, limit_name))
+                continue
+        else:
+            if (isinstance(seat_name, str) and seat_name
+                    and occupied_shared.get(seat_name, 0) >= item.get("_shared_capacity", 1)):
+                blocked.append(occupied_refusal(
+                    item, refusal_presets(item, grants), live_rows, resolved, ready, repo, binding))
+                continue
+            if isinstance(seat_name, str) and seat_name and shared_seat_unknown(seat_name, grants, catalog, unnamed_platforms):
                 blocked.append(blank_item(
-                    item["item_id"], item["preset"], item["session"], "not-run", "shared-occupied",
+                    item["item_id"], item["preset"], item["session"], "not-run", "occupancy-unknown",
                 ))
                 continue
+            group = ceiling_group(ceiling, item["preset"])
+            if group is not None:
+                platforms = {
+                    catalog[ident]["platform"] for ident in group["ids"]
+                    if ident in catalog and isinstance(catalog[ident].get("platform"), str)
+                }
+                if occupancy != "known" or unnamed_platforms & platforms:
+                    blocked.append(blank_item(
+                        item["item_id"], item["preset"], item["session"], "not-run", "occupancy-unknown",
+                    ))
+                    continue
+                occupied = sum(used_count.get(ident, 0) for ident in group["ids"])
+                if occupied >= group["count"]:
+                    blocked.append(occupied_refusal(
+                        item, set(group["ids"]), live_rows, resolved, ready, repo, binding))
+                    continue
         limit = item.get("_count")
         if isinstance(limit, int) and item.get("_platform") in unnamed_platforms and used_count.get(item["preset"], 0) < limit:
             blocked.append(blank_item(
@@ -2891,16 +3048,142 @@ def held_seat(item: dict[str, Any], rows: list[dict[str, Any]], repo: str,
     return row
 
 
+def tier_extra_policy(grants: list[dict[str, Any]], preset: str) -> dict[str, Any] | None:
+    """Shared pool plus tier extras for this preset, or None when the grant has no extra."""
+    grant = grant_index(grants).get(preset)
+    if not grant or grant.get("state") != "granted":
+        return None
+    extra = _positive_extra(grant.get("extra_seats"))
+    shared = grant.get("shared_count")
+    seat = grant.get("shared_seat")
+    if extra is None or not _count_ok(shared) or not isinstance(seat, str) or not seat:
+        return None
+    ids = {row["id"] for row in grants
+           if row.get("state") == "granted" and row.get("shared_seat") == seat and isinstance(row.get("id"), str)}
+    if not ids or not set(extra) <= ids:
+        return None
+    return {"ids": ids, "seat": seat, "shared_count": shared, "extra": extra,
+            "total": shared + sum(extra.values())}
+
+
+def reserved_counts(used_count: dict[str, int], kept: list[dict[str, Any]],
+                    live_sessions: set[Any]) -> dict[str, int]:
+    """Live occupancy plus kept plan rows that are not already a live seat.
+
+    Fresh admits are already in used_count. Counting them again would shrink the pool.
+    """
+    counts = dict(used_count)
+    for item in kept:
+        if item.get("_exempt") or not isinstance(item.get("preset"), str):
+            continue
+        session = item.get("session")
+        if isinstance(session, str) and session in live_sessions:
+            continue
+        preset = item["preset"]
+        counts[preset] = counts.get(preset, 0) + 1
+    return counts
+
+
+def policy_blocks(policy: dict[str, Any], preset: str, used_count: dict[str, int]) -> str | None:
+    """shared-pool when tier extras cannot cover the mix; runtime-total when the sum exceeds the cap."""
+    proposed = {ident: used_count.get(ident, 0) for ident in policy["ids"]}
+    proposed[preset] = proposed.get(preset, 0) + 1
+    if sum(proposed.values()) > policy["total"]:
+        return "runtime-total"
+    demand = 0
+    for ident, count in proposed.items():
+        demand += max(0, count - policy["extra"].get(ident, 0))
+    if demand > policy["shared_count"]:
+        return "shared-pool"
+    return None
+
+
+def seat_grant_presets(seat: str, grants: list[dict[str, Any]]) -> set[str]:
+    return {grant["id"] for grant in grants
+            if grant.get("state") == "granted" and grant.get("shared_seat") == seat
+            and isinstance(grant.get("id"), str)}
+
+
+def refusal_presets(item: dict[str, Any], grants: list[dict[str, Any]]) -> set[str]:
+    policy = tier_extra_policy(grants, item["preset"]) if isinstance(item.get("preset"), str) else None
+    if policy is not None:
+        return set(policy["ids"])
+    seat = item.get("_shared_seat")
+    presets = seat_grant_presets(seat, grants) if isinstance(seat, str) and seat else set()
+    if not presets and isinstance(item.get("preset"), str):
+        presets = {item["preset"]}
+    return presets
+
+
+def seat_occupants(presets: set[str], live_rows: list[dict[str, Any]], resolved: dict[str, str],
+                   admitted: list[dict[str, Any]], repo: str,
+                   exempt: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Live seats and already-admitted plan items in this group. holder_instance_id is null when unknown."""
+    found: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def add(session: Any, holder: Any, preset: Any) -> None:
+        if not isinstance(session, str) or not session or session in seen:
+            return
+        seen.add(session)
+        found.append({
+            "session": session,
+            "holder_instance_id": holder if isinstance(holder, str) and holder else None,
+            "preset": preset if isinstance(preset, str) and preset else None,
+        })
+
+    for row in live_rows:
+        if row.get("state") == "stopped" or row.get("host_class") is True or binding_row(exempt, row):
+            continue
+        row_repo = row.get("repo")
+        if isinstance(row_repo, str) and row_repo and not same_repo(row_repo, repo):
+            continue
+        session = row.get("session") if isinstance(row.get("session"), str) else None
+        preset = row.get("preset") if isinstance(row.get("preset"), str) else None
+        if preset is None and session:
+            resolved_preset = resolved.get(session)
+            preset = resolved_preset if isinstance(resolved_preset, str) else None
+        if preset not in presets:
+            continue
+        add(session, row.get("holder_instance_id"), preset)
+    for item in admitted:
+        if item.get("_exempt") or item.get("preset") not in presets:
+            continue
+        holder = item.get("holder_instance_id") or item.get("expected_holder_instance_id") or item.get("_holder")
+        add(item.get("session"), holder, item.get("preset"))
+    return found
+
+
+def occupied_refusal(item: dict[str, Any], presets: set[str], live_rows: list[dict[str, Any]],
+                     resolved: dict[str, str], admitted: list[dict[str, Any]], repo: str,
+                     exempt: dict[str, Any] | None = None, limit: str | None = None) -> dict[str, Any]:
+    evidence: dict[str, Any] = {
+        "occupants": seat_occupants(presets, live_rows, resolved, admitted, repo, exempt),
+    }
+    if isinstance(limit, str) and limit:
+        evidence["limit"] = limit
+    return blank_item(item["item_id"], item["preset"], item["session"], "not-run", "shared-occupied",
+                      {"evidence": evidence})
+
+
 def held_refusal(item: dict[str, Any], used_count: dict[str, int],
                  occupied: dict[str, int], unnamed: set[str],
                  grants: list[dict[str, Any]], catalog: dict[str, dict[str, Any]]) -> str | None:
     """The admission checks for a held seat, against every other live row."""
-    seat = item.get("_shared_seat")
-    if (isinstance(seat, str) and seat
-            and occupied.get(seat, 0) >= item.get("_shared_capacity", 1)):
-        return "shared-occupied"
-    if isinstance(seat, str) and seat and shared_seat_unknown(seat, grants, catalog, unnamed):
-        return "occupancy-unknown"
+    preset = item.get("preset") if isinstance(item.get("preset"), str) else ""
+    policy = tier_extra_policy(grants, preset)
+    if policy is not None:
+        if item.get("_platform") in unnamed:
+            return "occupancy-unknown"
+        if policy_blocks(policy, preset, used_count):
+            return "shared-occupied"
+    else:
+        seat = item.get("_shared_seat")
+        if (isinstance(seat, str) and seat
+                and occupied.get(seat, 0) >= item.get("_shared_capacity", 1)):
+            return "shared-occupied"
+        if isinstance(seat, str) and seat and shared_seat_unknown(seat, grants, catalog, unnamed):
+            return "occupancy-unknown"
     limit = item.get("_count")
     if isinstance(limit, int):
         if used_count.get(item["preset"], 0) >= limit:

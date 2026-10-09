@@ -4,6 +4,27 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+Seats: restart required
+
+- **Shared tier group plus a tier-specific extra seat (Issue #296).** One
+  grouped grant can now say `count` (the shared pool for every tier in the
+  group) and `extra_seats` (extra seats for named member presets only). The
+  per-runtime total is `count` plus those extras. Claude Code example:
+  `claude-code/default`, `claude-code/sonnet`, and `claude-code/fable` with
+  `count` 1 and `extra_seats` `{"claude-code/default": 1}` is 2 live seats.
+  Default may use 2. Sonnet and fable stay at 1. Host `state update` and
+  `delegator update` both accept that one row. A preset listed once in
+  `elite_grants` and once in `expert_task_grants` is the Expert permission,
+  not a duplicate seat; two rows in one list are still refused. Raising the
+  shared `count` to 2 still grants any mix of two, including two sonnets.
+  A `shared-occupied` refusal names each occupying `session` and
+  `holder_instance_id`. The dispatch CLI is per-call, so the next `execute`
+  admits against this field without a seat restart. Seats still restart:
+  the holder pins `kaola-record-contract.py`, and `extra_seats` is a new
+  field on that contract.
+
 ## 0.9.4 — 2026-10-09 (counted worker seats, absent decision retire)
 
 Seats: restart not required

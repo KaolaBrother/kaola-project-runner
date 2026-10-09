@@ -43,7 +43,7 @@ PROJECT_KEYS = frozenset({
 })
 GRANT_KEYS = frozenset({
     "id", "preset_ids", "state", "count", "shared_seat", "model_switch", "special_requirements",
-    "lifetime", "expires",
+    "lifetime", "expires", "extra_seats",
 })
 AUTH_KEYS = frozenset({
     "grants", "exclusions", "account_token_quotas",
@@ -149,7 +149,7 @@ HOLD_TEXT_KEYS = frozenset({
 })
 DELEGATOR_GRANT_KEYS = frozenset({
     "preset_id", "preset_ids", "count", "switch_authorization",
-    "state", "lifetime", "expires", "special_requirements",
+    "state", "lifetime", "expires", "special_requirements", "extra_seats",
 })
 DAY_START_KEYS = frozenset({"action", "state", "evidence"})
 DAY_END_KEYS = frozenset({"action", "state", "host_ack", "claim_check", "evidence"})
@@ -470,7 +470,9 @@ def migrate_authorization_limits(auth: Any, delegator: bool = False, expert_ids:
     for key in keys:
         blockers.extend(duplicate_preset_blockers(auth.get(key), f"authorization.{key}", "preset_id" if delegator else "id"))
     if delegator:
-        blockers.extend(duplicate_preset_blockers([row for key in keys for row in (auth.get(key) if isinstance(auth.get(key), list) else [])], "authorization.grants", "preset_id"))
+        blockers.extend(duplicate_preset_blockers(
+            [row for key in keys for row in (auth.get(key) if isinstance(auth.get(key), list) else [])],
+            "authorization.grants", "preset_id", legal_expert_overlap(auth)))
     if not delegator:
         for key in ("classes", "capability_summary"):
             if key in out:
@@ -542,7 +544,7 @@ def migrate_authorization_limits(auth: Any, delegator: bool = False, expert_ids:
                     blockers.append(refusal(f"authorization.grants.{group}", "one authoritative grouped row",
                                             "Host: reconcile original overlapping choice/restriction rows before migration; do not infer or discard per-choice authority"))
                     continue
-                keys = ("count", "state", "model_switch", "lifetime", "expires")
+                keys = ("count", "state", "model_switch", "lifetime", "expires", "extra_seats")
                 if any(any(row.get(key) != first.get(key) for key in keys) for row in members[1:]):
                     blockers.append(refusal(f"authorization.grants.{group}", "one consistent shared count/state/switch/lifetime",
                                             "Host: resolve competing group authority from original grants; active work stays"))
@@ -554,6 +556,7 @@ def migrate_authorization_limits(auth: Any, delegator: bool = False, expert_ids:
                            if row.get("id") and row.get("special_requirements")}
                 if special:
                     combined["special_requirements"] = special
+                retain_extra_seats(combined, combined.get("preset_ids") or [])
                 canonical.append(combined)
                 removed.append(f"authorization.grants.{group} repeated rows -> one group")
             if not blockers:
@@ -622,6 +625,7 @@ def migrate_authorization_limits(auth: Any, delegator: bool = False, expert_ids:
                             row["state"] = "paused"
                     if "preset_ids" in row:
                         row["preset_ids"] = current
+                    retain_extra_seats(row, current)
                     kept.append(row)
                 if key in out:
                     out[key] = kept
@@ -649,11 +653,41 @@ def migrate_authorization_limits(auth: Any, delegator: bool = False, expert_ids:
     return out, blockers, removed
 
 
-def duplicate_preset_blockers(rows: Any, path: str, id_key: str) -> list[dict[str, str]]:
+def _listed_once_rows(rows: Any, id_key: str) -> set[str]:
+    counts: dict[str, int] = {}
+    if not isinstance(rows, list):
+        return set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        ids = row.get("preset_ids") or [row.get(id_key)]
+        if not _string_list_ok(ids):
+            continue
+        for ident in ids:
+            if isinstance(ident, str) and ident:
+                counts[ident] = counts.get(ident, 0) + 1
+    return {ident for ident, count in counts.items() if count == 1}
+
+
+def legal_expert_overlap(auth: Any) -> set[str]:
+    """A preset named once in elite_grants and once in expert_task_grants.
+
+    That pair is the Expert permission for a shared-group choice, not a second
+    seat. A preset twice in one list is still a duplicate.
+    """
+    if not isinstance(auth, dict):
+        return set()
+    return (_listed_once_rows(auth.get("elite_grants"), "preset_id")
+            & _listed_once_rows(auth.get("expert_task_grants"), "preset_id"))
+
+
+def duplicate_preset_blockers(rows: Any, path: str, id_key: str,
+                              paired_once: set[str] | None = None) -> list[dict[str, str]]:
     if not isinstance(rows, list):
         return []
-    seen = set()
+    seen: dict[str, int] = {}
     found = []
+    paired = paired_once or set()
     for index, row in enumerate(rows):
         if not isinstance(row, dict):
             continue
@@ -661,15 +695,93 @@ def duplicate_preset_blockers(rows: Any, path: str, id_key: str) -> list[dict[st
         if not _string_list_ok(ids):
             continue
         for ident in ids:
-            if ident in seen:
+            seen[ident] = seen.get(ident, 0) + 1
+            # Once in elite_grants and once in expert_task_grants is the legal
+            # overlap. A third sighting, or two rows in one list, still refuses.
+            if seen[ident] > 1 and not (ident in paired and seen[ident] == 2):
                 found.append(refusal(f"{path}[{index}]", "one authoritative row per preset",
                                      f"Owner: reconcile duplicate preset {ident} from original grants; retain its restrictions and exact count"))
-            seen.add(ident)
     return found
 
 
+def extra_seat_blockers(grant: Any, path: str) -> list[dict[str, str]]:
+    """Tier-specific seats on one shared group. Absent or {} leaves the shared pool alone."""
+    if not isinstance(grant, dict) or "extra_seats" not in grant:
+        return []
+    extra = grant.get("extra_seats")
+    if extra == {}:
+        return []
+    ids = grant.get("preset_ids")
+    grouped = _string_list_ok(ids) and len(ids) > 1 and len(ids) == len(set(ids))
+    if not isinstance(extra, dict) or not extra:
+        return [refusal(f"{path}.extra_seats",
+                        "object mapping a grouped preset id to a positive integer",
+                        "Owner: state each extra seat on the one grouped grant; the file was not written")]
+    if not grouped:
+        return [refusal(
+            f"{path}.extra_seats",
+            "extra seats only on one grouped grant whose preset_ids length is greater than 1",
+            "Owner: put the shared group and its extra seats on one row; a second row per preset is a duplicate. The file was not written")]
+    found = []
+    members = set(ids)
+    for key, value in extra.items():
+        if not isinstance(key, str) or key not in members:
+            found.append(refusal(
+                f"{path}.extra_seats",
+                "keys that are members of this grant's preset_ids",
+                f"Owner: reconcile extra seat {key!r}; it is not in this group. The file was not written"))
+        elif not count_ok(value) or value <= 0:
+            found.append(refusal(
+                f"{path}.extra_seats.{key}",
+                "positive integer, excluding boolean",
+                "Owner: source the exact extra seat count; the file was not written"))
+    return found
+
+
+def retain_extra_seats(grant: dict[str, Any], current: list[str]) -> None:
+    """Keep extra seats that still belong to the remaining group.
+
+    count stays the shared pool while more than one preset remains. A group
+    that shrinks to one preset folds that preset's extra into count.
+    """
+    extra = grant.get("extra_seats")
+    if not isinstance(extra, dict):
+        return
+    kept = {key: value for key, value in extra.items()
+            if isinstance(key, str) and key in current and count_ok(value) and value > 0}
+    if len(current) <= 1:
+        only = current[0] if current else None
+        if only and only in kept and count_ok(grant.get("count")):
+            grant["count"] = grant["count"] + kept[only]
+        grant.pop("extra_seats", None)
+        return
+    if kept:
+        grant["extra_seats"] = kept
+    else:
+        grant.pop("extra_seats", None)
+
+
+def _extra_applicable(grant: dict[str, Any], ids: list[str]) -> dict[str, int] | None:
+    extra = grant.get("extra_seats")
+    shared = grant.get("count")
+    if not isinstance(extra, dict) or not extra or not count_ok(shared) or len(ids) <= 1:
+        return None
+    members = set(ids)
+    parsed: dict[str, int] = {}
+    for key, value in extra.items():
+        if not isinstance(key, str) or key not in members or not count_ok(value) or value <= 0:
+            return None
+        parsed[key] = value
+    return parsed
+
+
 def expanded_grants(grants: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Mechanical compatibility rows; grouped records alone own count and switch permission."""
+    """Mechanical compatibility rows; grouped records alone own count and switch permission.
+
+    count on the grouped record stays the shared pool. extra_seats adds a
+    tier-specific seat. Each compatibility row's count is that preset's own
+    cap (pool plus its extra). shared_count is the pool and is not stored.
+    """
     out = []
     for grant in grants:
         if not isinstance(grant, dict):
@@ -682,10 +794,19 @@ def expanded_grants(grants: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not _string_list_ok(ids) or not ids:
             raise ValueError("grants.preset_ids needs exact owner-approved choices")
         special = grant.get("special_requirements")
+        parsed_extra = _extra_applicable(grant, ids)
+        shared = grant.get("count")
         for ident in ids:
             row = {key: value for key, value in grant.items() if key != "preset_ids"}
             row["id"] = ident
             row["shared_seat"] = grant.get("shared_seat") or ",".join(sorted(ids))
+            if parsed_extra is not None and count_ok(shared):
+                row["count"] = shared + parsed_extra.get(ident, 0)
+                row["shared_count"] = shared
+                row["extra_seats"] = dict(parsed_extra)
+            else:
+                row.pop("extra_seats", None)
+                row.pop("shared_count", None)
             if isinstance(special, dict) and _string_list_ok(ids) and set(special) <= set(ids):
                 row.pop("special_requirements", None)
                 if ident in special:
@@ -705,9 +826,10 @@ def delegator_authorization_blockers(auth: Any) -> list[dict[str, str]]:
     if not isinstance(auth, dict):
         return [refusal("authorization", "object", "rehome the current grants and limits; the file was not written")]
     found = aggregate_limit_blockers(auth, delegator=True)
-    found.extend(duplicate_preset_blockers([row for key in ("elite_grants", "expert_task_grants")
-                                           for row in (auth.get(key) if isinstance(auth.get(key), list) else [])],
-                                          "authorization.grants", "preset_id"))
+    found.extend(duplicate_preset_blockers(
+        [row for key in ("elite_grants", "expert_task_grants")
+         for row in (auth.get(key) if isinstance(auth.get(key), list) else [])],
+        "authorization.grants", "preset_id", legal_expert_overlap(auth)))
 
     def bad(path: str, allowed: str, recovery: str = "rehome this fact from its source; the file was not written") -> None:
         found.append(refusal(path, allowed, recovery))
@@ -781,6 +903,7 @@ def delegator_authorization_blockers(auth: Any) -> list[dict[str, str]]:
                 else:
                     found.extend(_closed_strings(f"{path}.special_requirements", special,
                                                  frozenset({"model", "effort", "task_scope"})))
+            found.extend(extra_seat_blockers(grant, path))
     return found
 
 
@@ -860,6 +983,7 @@ def authorization_blockers(auth: Any, prefix: str = "authorization") -> list[dic
                 else:
                     found.extend(_closed_strings(f"{prefix}.grants[{index}].special_requirements", special,
                                                  frozenset({"model", "effort", "task_scope"})))
+            found.extend(extra_seat_blockers(grant, f"{prefix}.grants[{index}]"))
     shared = [grant.get("shared_seat") for grant in grants if isinstance(grant, dict) and isinstance(grant.get("shared_seat"), str)]
     if len(shared) != len(set(shared)):
         found.append(refusal(f"{prefix}.grants", "one authoritative row per shared group",
@@ -989,7 +1113,12 @@ def capability_from_grants(auth: Any) -> dict[str, Any]:
             row = shared.setdefault(seat, {"seat": seat, "ids": [], "count": grant.get("count")})
             if ident not in row["ids"]:
                 row["ids"].append(ident)
-            if grant.get("count") is not None:
+            # A tier extra makes compatibility counts differ. The shared seat's
+            # displayed pool stays the grouped count, not the last tier cap.
+            if (isinstance(grant.get("extra_seats"), dict) and grant["extra_seats"]
+                    and count_ok(grant.get("shared_count"))):
+                row["count"] = grant["shared_count"]
+            elif grant.get("count") is not None:
                 row["count"] = grant.get("count")
     return {
         "presets": [item for item in presets if item not in blocked],
@@ -1999,6 +2128,9 @@ def delegator_file_view(doc: dict[str, Any]) -> dict[str, Any]:
                                if field in DELEGATOR_GRANT_KEYS and (
                                    isinstance(item, (str, int, bool))
                                    or (field == "preset_ids" and _string_list_ok(item))
+                                   or (field == "extra_seats" and isinstance(item, dict) and bool(item)
+                                       and all(isinstance(key, str) and count_ok(val) and val > 0
+                                               for key, val in item.items()))
                                    or (field == "special_requirements" and isinstance(item, dict)
                                        and (not _closed_strings("special_requirements", item,
                                                                frozenset({"model", "effort", "task_scope"}))

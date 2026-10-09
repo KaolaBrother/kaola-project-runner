@@ -648,6 +648,10 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   Host view derives capability from current grants, default Worker pool, exclusions, holds
   and actual availability. Class definitions/defaults come from matched catalog/templates.
   Grouped grants own one count, choice set and switch permission; compatibility rows are generated.
+  `count` on a grouped grant is the shared pool. `extra_seats` maps a member preset id to a positive
+  extra seat count for that tier only. The per-runtime total is the pool plus those extras. A preset
+  may appear once in `elite_grants` and once in `expert_task_grants`; that overlap is the Expert
+  permission, not a second seat. Two rows in one list stay duplicates.
   Stored authorization contains no Class copies, capability list, aggregate cap or second switch/pause list.
   Legacy ambiguity blocks migration with original-source owner recovery; active duties remain.
   `delivery-open` content is the task `goal`, `next`, and verdict value.
@@ -673,7 +677,8 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   recovery; refusal leaves the bytes unchanged. Updates write the normalized
   closed form. Pending text in legacy bags must move to typed watch duties
   before those bags can leave. Views omit historical bags. One authorization
-  shape check serves writes, migration, and the dispatch ceiling. A malformed
+  shape check serves writes, migration, and the dispatch ceiling. `delegator update` accepts one
+  grouped `elite_grants` row with `extra_seats` plus that preset once in `expert_task_grants`. A malformed
   grant with known preset ids refuses those ids; malformed pool authorization
   refuses that class. Legacy aggregate limits require original owner reconciliation. Owner conditions remain literal until mapped
   from original authority. An untyped old file produces an actionable
