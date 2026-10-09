@@ -20,8 +20,7 @@ goal; progress; the Host platform; authorized worker platforms by class;
 Elite grants/counts; Expert grants/lifetime; bound-target local choices
 separate from authorization (host-platforms.md); Worker pool rules;
 exclusions; the quota the user actually gave, each figure in its own unit;
-priority; delivery/stop boundary; project path; optional `project.user_language` for user-facing
-text; unset keeps the preference.
+priority; delivery/stop boundary; project path; optional `project.user_language`; unset keeps the preference.
 On a live Host, apply only the user's latest change; batch nonurgent
 corrections; urgent owner stops go now. Relay owner model/seat choices
 unchanged; Host allocates. Invent no assignments/constraints. On a new Host, missing,
@@ -38,7 +37,7 @@ Select any supported Host platform
 `<platform>-{{RUNNER_SKILL}}`, entry line, native resume id. A missing Runner is
 not executable; claim no Host.
 
-One live Host per repo. Recover at canonical root: `<platform>-<PROJECT_CODE>-orchestrator-<purpose>` and Runner receipts; A Git worktree is not an ACP id. Attach exact verified identity even if its recorded name is not the new form. `host-exists` means attach its `existing_host`; never rename and retry. Missing standard name permits no second Host. Failed identity is exact-stopped, proven gone (`residual_pids: []`) before replacement. Resume with attested native id; authorize before start. Never restart in-flight work; interrupt only an urgent scoped owner stop. [Bricked or quota-exhausted Host](references/host-brick.md); never log in. Grok Bot account bridge attests via locator; Codex/generic don't. Start/resume/replace/attach: [handoff.md](references/handoff.md).
+One live Host per repo, whatever its platform. Recover at canonical root: `<platform>-<PROJECT_CODE>-orchestrator-<purpose>` and Runner receipts; A Git worktree is not an ACP id. Attach exact verified identity even if its recorded name is not the new form. `host-exists` means attach its `existing_host`; never rename and retry. Missing standard name permits no second Host. Failed identity is exact-stopped, proven gone (`residual_pids: []`) before replacement. Resume with attested native id; authorize before start. Never restart in-flight work; interrupt only an urgent scoped owner stop. [Bricked or quota-exhausted Host](references/host-brick.md); never log in. Grok Bot account bridge attests via locator; Codex/generic don't. Start/resume/replace/attach: [handoff.md](references/handoff.md).
 
 Pass no per-worker `--repo`, scheduling, or heartbeat instructions.
 Host `stop` and live attach use the receipt's
@@ -50,7 +49,7 @@ Relay user changes to that Host: idle `send`; busy `steer` or wait
 (no queue). `--no-wait` admission and Host `end_turn` are not delivery. After
 the first beat, verify work-product evidence and the first dispatch
 receipt against plan and authorization; do not trust the Host's self-description.
-Correct mismatches; do not accept completion. At cadence or [wake](references/webhook-wake.md), read the [snapshot (`sweep=` line)](references/snapshot.md), observe/capture and [report](references/inquiry-report.md). Relay pacing if warranted; escalate unresolved decisions. Do not dispatch workers, copy a mission ledger, write the Host heartbeat, create a Routine beyond that wake pair, touch inner sessions, or stop before close-out. Changing the outer Agent does not stop it.
+Correct mismatches; do not accept completion. At cadence or [wake](references/webhook-wake.md), read [snapshot (`sweep=` line)](references/snapshot.md), observe/capture and [report](references/inquiry-report.md). Relay pacing if warranted; escalate unresolved decisions. Do not dispatch workers, copy a mission ledger, write the Host heartbeat, create a Routine beyond that wake pair, touch inner sessions, or stop before close-out. An outer Agent change does not stop it.
 
 Write in accordance with ASD-STE100.
 
