@@ -21,6 +21,18 @@ Seats: restart not required
   Delegator-stated Worker count also narrows that Worker's admission count
   through `ceiling_count`. Dispatch CLI only; no template, adapter or holder
   change.
+- **Host `state retire --absent` closes a decision that was never a row (Issue #298).**
+  `state retire --kind decisions --id ID --absent --evidence E [--outcome R]`
+  is a Host-only receipt for an id with no current decision row:
+  `{kind, id, outcome, absent_at_retire: true, evidence, at, host_revision}`.
+  `host_revision` rises like any Host business write, so the caller can cite
+  it. The file stores no row, stone, or tombstone. `--absent` on a current
+  decision is refused and names the normal retire. Without `--absent`, an
+  absent id stays `record-missing` and the file is unchanged. Holds, alerts,
+  and tasks take no `--absent`. `retired:decisions/ID` on a node checkpoint
+  is unchanged. This is the dispatch CLI plus the shipped reference copy.
+  Seats: restart not required. The state tool is a per-call CLI, and the
+  operator-test paths (holder, bridge, quota, protocol) are untouched.
 
 ## 0.9.3 — 2026-10-08 (state record roots, node record roots, expert ceiling, delegator seats)
 

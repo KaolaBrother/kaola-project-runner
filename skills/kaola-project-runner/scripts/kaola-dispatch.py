@@ -4935,10 +4935,21 @@ def record_recovery(args: argparse.Namespace, doc: dict[str, Any], current: dict
     """Name the existing operation. The Agent decides whether the duty is handled."""
     target = f"{args.kind}/{args.id}"
     if current is None:
-        return (f"{target} is absent at file revision {doc['revision']}. Do not create a handled or "
-                "inapplicable row or move its text to another field. If the matter is unresolved, "
-                "retain its original evidence and use the current decision/reconciliation route "
-                "until its proper type is established. Unknown is not resolved.")
+        text = (f"{target} is absent at file revision {doc['revision']}. Do not create a handled or "
+                "inapplicable row or move its text to another field. ")
+        if args.kind == "decisions":
+            # An owner closure that was never written as a decision row has no
+            # current record to retire. The Host records that with --absent.
+            command = shlex.join([sys.executable, str(Path(__file__).resolve()), "state", "retire",
+                                  "--file", str(args.file), "--writer", "host", "--source", "ORIGINAL_SOURCE",
+                                  "--kind", "decisions", "--id", args.id, "--absent",
+                                  "--evidence", "ORIGINAL_OWNER_EVIDENCE"])
+            text += ("An owner closure that never had a decision row is recorded by the Host "
+                     f"with: {command}. That returns a receipt and stores no row. ")
+        text += ("If the matter is unresolved, retain its original evidence and use the current "
+                 "decision/reconciliation route until its proper type is established. "
+                 "Unknown is not resolved.")
+        return text
     command = shlex.join([sys.executable, str(Path(__file__).resolve()), "state", "retire",
                           "--file", str(args.file), "--writer", args.writer, "--source", "ORIGINAL_SOURCE",
                           "--kind", args.kind, "--id", args.id, "--expect-rev", str(current.get('rev')),
@@ -5595,15 +5606,57 @@ def handoff_seats(receiver: dict[str, Any], task: dict[str, Any], task_id: str,
     return {"seats": sorted(seats), "dispatch": refs}
 
 
+def retire_absent_decision(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, Any]:
+    """Host receipt for a decision id that was never a row.
+
+    The file stores no row, stone, or tombstone. ``state_mutation`` has already
+    raised ``host_revision`` for this Host write; that revision is the cite.
+    """
+    kind, record_id = args.kind, args.id
+    if kind != "decisions":
+        raise StateRefusal("invalid-input", "--absent applies only to decisions",
+                           recovery="retire a current hold, alert, or task without --absent")
+    if args.writer != "host":
+        raise StateRefusal("host-only", "--absent is a Host write",
+                           recovery="the Host runs state retire --kind decisions --id ID --absent "
+                                    "--evidence ORIGINAL_OWNER_EVIDENCE")
+    if not isinstance(record_id, str) or not re.fullmatch(r"[A-Za-z0-9#][A-Za-z0-9_.:#/-]{0,79}", record_id):
+        raise StateRefusal("invalid-input", "id must be a stable short identifier")
+    current = doc["state"].get(kind, {}).get(record_id)
+    if current is not None:
+        raise StateRefusal("invalid-input", f"decisions/{record_id} is current; --absent records only an id "
+                           "with no decision row", current=current, recovery=record_recovery(args, doc, current))
+    extras = [flag for flag, present in (
+        ("--expect-rev", args.expect_rev is not None),
+        ("--handoff", bool(getattr(args, "handoff", None))),
+        ("--cite", bool(getattr(args, "cite", None))),
+        ("--index", bool(getattr(args, "index", None))),
+        ("--live", bool(getattr(args, "live", None))),
+    ) if present]
+    if extras:
+        raise StateRefusal("invalid-input", "--absent takes --evidence and optional --outcome only",
+                           recovery="omit " + ", ".join(extras))
+    if not args.evidence:
+        raise StateRefusal("evidence-required", "retirement names the evidence that ends the duty",
+                           recovery=record_recovery(args, doc, None))
+    return {"kind": "decisions", "id": record_id, "outcome": args.outcome or "resolved",
+            "absent_at_retire": True, "evidence": args.evidence, "at": observed_at(),
+            "host_revision": doc["host_revision"]}
+
+
 def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, Any]:
     state = doc["state"]
     kind, record_id = args.kind, args.id
     if kind not in RECORD_KINDS:
         raise StateRefusal("invalid-input", f"kind must be one of {', '.join(RECORD_KINDS)}")
+    if getattr(args, "absent", False):
+        return retire_absent_decision(args, doc)
     current = state.get(kind, {}).get(record_id)
     if current is None:
         raise StateRefusal("record-missing", f"{kind}/{record_id} is not current",
                            recovery=record_recovery(args, doc, current))
+    if args.expect_rev is None:
+        raise StateRefusal("expect-rev-required", "retire needs --expect-rev of the current record")
     if args.expect_rev != current.get("rev"):
         raise StateRefusal("conflict", f"{kind}/{record_id} is at rev {current.get('rev')}, not "
                            f"{args.expect_rev}", current=current)
@@ -6804,7 +6857,10 @@ def build_parser() -> argparse.ArgumentParser:
     writer_args(retire)
     retire.add_argument("--kind", required=True, choices=RECORD_KINDS)
     retire.add_argument("--id", required=True)
-    retire.add_argument("--expect-rev", type=int, required=True)
+    retire.add_argument("--expect-rev", type=int,
+                        help="record revision of the current row; required unless --absent")
+    retire.add_argument("--absent", action="store_true",
+                        help="Host only: a decision id with no current row; return a receipt and store nothing")
     retire.add_argument("--evidence", required=True)
     retire.add_argument("--cite", help="JSON {commit, path} for a completed outcome that must survive")
     retire.add_argument("--outcome")

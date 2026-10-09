@@ -62,7 +62,7 @@ The Host gets outcomes, capacity and pending decisions.
 - `decisions` (`owner` `host|delegator|user`, `question`): open owner answers.
   Host settles with `update --set status/evidence ORIGINAL` or, judged
   handled, `retire --evidence ORIGINAL`. A Sideagent copy needs
-  `--host-turn`, stays pending Host adoption, never judges currentness.
+  `--host-turn`, stays pending Host adoption, never judges currentness. No row: Host `retire --kind decisions --id ID --absent --evidence E` (receipt; stores nothing).
 
 Views and injected bodies use the stored current collection. Keep no
 handled row or retrospective text in another field. Unfinished effects remain
@@ -139,5 +139,4 @@ locators. A critical mapping writes nothing. Do not write
 those copies. Hash-named copies are not deleted or trusted. An unknown schema
 is refused. A clean repeat reports `current`. Migration grants nothing.
 
-Live on Codex and ZCode only: preserve stop, `rebind-host`. Unproven: relay
-across holder death, timer read-back, real state size.
+Live: Codex and ZCode, `rebind-host`.

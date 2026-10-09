@@ -540,7 +540,16 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   `host` is `writer-mismatch`. `retire` needs `--evidence` and a done or cancelled task, a
   settled decision, or any hold or alert. The record leaves the file. An update
   with its old revision is `record-retired`; a new sourced record uses the normal
-  creation path. No settled tombstone is stored. A
+  creation path. No settled tombstone is stored.
+  `retire --kind decisions --id ID --absent --evidence E [--outcome R]` is Host-only, and only
+  for a decision id with no current row (an owner closure that was never written as a row).
+  The result is a receipt `{kind, id, outcome, absent_at_retire: true, evidence, at, host_revision}`
+  and nothing else: no decision row, stone, or tombstone is stored. `host_revision` rises as on
+  any Host business write, so the caller can cite that revision. `--absent` when `decisions/ID`
+  is current is refused and names the normal retire. Without `--absent`, an absent id stays
+  `record-missing` and the file is unchanged. A sideagent or any other writer is refused.
+  Holds, alerts, and tasks take no `--absent`. A node checkpoint may still apply
+  `retired:decisions/ID` when that row is absent. A
   task's `dispatch` items must be closed in `--index`, and every seat it names (`assignments`,
   `sessions`, `session`, including migrated ones with no index match) must show its session
   `stopped` in `--live` under the holder the task recorded. A string that is not a session
