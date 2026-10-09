@@ -28,7 +28,13 @@ Seats: restart required
   `kaola-acp.py delegator-webhook deliver` child at turn end, a new pending
   permission, an unrequested agent exit or boot failure, and stop — a signal
   only (`kaola-delegator-wake/1`: project, session, holder_instance_id,
-  event_seq, state, ts). The child owns a `~/.config/kaola/delegator-webhook.json`
+  event_seq, state, state_detail, ts; `state_detail` carries the agent's ACP
+  `stopReason` verbatim for `end_turn`, or `permission_required`/`exact_stop`/
+  `turn_failed`/`agent_exit`/`boot_failure`/`holder_lost`/`test`). A Host holder
+  killed without signalling gets exactly one `error`/`holder_lost` wake from the
+  CLI on the next `start` replacing its record or on a dead-holder `stop`,
+  deduplicated by a `delegator_death_wake` event in the record dir. The child
+  owns a `~/.config/kaola/delegator-webhook.json`
   config (0600, env-overridable path, `config-mode` refused), validates the
   https URL and the owner-configured `sender_key_attachment` (header form or
   key-in-url; no header name is hard-coded), POSTs with a 3 s timeout, up to 3

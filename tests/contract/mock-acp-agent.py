@@ -844,6 +844,12 @@ class MockAgent:
             log_event({"event": "follow_flood_emitted"})
             self.finish_turn(request_id)
             return
+        if scenario == "stop_reason":
+            # Issue #299: the prompt text is the stopReason to report, so a
+            # test can drive end_turn/max_tokens/refusal/cancelled or an
+            # arbitrary invalid string.
+            self.finish_turn(request_id, text or "end_turn")
+            return
         if scenario == "tool_call_only":
             session_update(
                 session_id,

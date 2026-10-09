@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import signal
 import subprocess
 import sys
 import tempfile
@@ -40,9 +41,10 @@ HEADER_NAME = "X-Kaola-Wake-Key"
 HEADER_PREFIX = "WAKE "
 
 PAYLOAD_KEYS = {"schema", "project", "session", "holder_instance_id",
-                "event_seq", "state", "ts"}
-ATTEMPT_RECEIPT_KEYS = {"ts", "state", "session", "holder_instance_id",
-                        "event_seq", "result", "attempt", "max_attempts",
+                "event_seq", "state", "state_detail", "ts"}
+ATTEMPT_RECEIPT_KEYS = {"ts", "state", "state_detail", "session",
+                        "holder_instance_id", "event_seq", "result",
+                        "attempt", "max_attempts",
                         "http_status", "error", "elapsed_ms", "final"}
 
 
@@ -243,6 +245,40 @@ class WebhookCase(unittest.TestCase):
         return wait_for(
             lambda: [r for r in self.receipts() if r.get("state") == state],
             timeout, f"receipt state={state}")
+
+    def holder_record(self) -> dict:
+        base = self.record_root / "grok" / self.session
+        return json.loads(
+            next(base.rglob("record.json")).read_text(encoding="utf-8"))
+
+    def pid_dead(self, pid) -> bool:
+        if not isinstance(pid, int) or pid <= 0:
+            return True
+        try:
+            os.kill(pid, 0)
+            return False
+        except ProcessLookupError:
+            return True
+        except PermissionError:
+            return False
+
+    def sigkill_session(self) -> dict:
+        """SIGKILL the recorded holder and agent; returns the dead record."""
+        record = self.holder_record()
+        for pid in (record.get("holder_pid"), record.get("agent_pid")):
+            if isinstance(pid, int) and pid > 0:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    pass
+        wait_for(lambda: self.pid_dead(record.get("holder_pid"))
+                 and self.pid_dead(record.get("agent_pid")),
+                 5, "session processes dead")
+        return record
+
+    def posts_with_detail(self, detail: str) -> list[dict]:
+        return [p for p in (self.endpoint.posts if self.endpoint else [])
+                if (p["body"] or {}).get("state_detail") == detail]
 
 
 class ConfigureAndStatus(WebhookCase):
@@ -484,7 +520,7 @@ class DeliveryCli(WebhookCase):
         self.endpoint = Endpoint()
         payload = {"schema": "kaola-delegator-wake/1", "project": self.project,
                    "session": "s1", "holder_instance_id": "h1",
-                   "event_seq": 3, "state": "end_turn",
+                   "event_seq": 3, "state": "end_turn", "state_detail": None,
                    "ts": "2026-01-01T00:00:00Z"}
         proc = self.deliver(payload)
         self.assertEqual(proc.returncode, 0)
@@ -524,7 +560,8 @@ class DeliveryCli(WebhookCase):
             "updated_at": "2026-01-01T00:00:00Z"}})
         payload = {"schema": "kaola-delegator-wake/1", "project": self.project,
                    "session": "s1", "holder_instance_id": "h1",
-                   "event_seq": 1, "state": "test", "ts": "2026-01-01T00:00:00Z"}
+                   "event_seq": 1, "state": "test", "state_detail": "test",
+                   "ts": "2026-01-01T00:00:00Z"}
         code, out = self.hook_json("test", "--project", str(self.repo))
         self.assertNotEqual(code, 0)
         self.assertEqual(len(out["receipts"]), 4)
@@ -551,7 +588,8 @@ class DeliveryCli(WebhookCase):
         proc = self.deliver({"schema": "kaola-delegator-wake/1",
                              "project": self.project, "session": "s1",
                              "holder_instance_id": "h1", "event_seq": 2,
-                             "state": "end_turn", "ts": "2026-01-01T00:00:00Z"})
+                             "state": "end_turn", "state_detail": None,
+                             "ts": "2026-01-01T00:00:00Z"})
         self.assertNotEqual(proc.returncode, 0)
         last = self.receipts()[-4:]
         self.assertTrue(all(r["error"] == "connection" for r in last))
@@ -565,14 +603,18 @@ class DeliveryCli(WebhookCase):
             "updated_at": "2026-01-01T00:00:00Z"}})
         base = {"schema": "kaola-delegator-wake/1", "project": self.project,
                 "session": "s1", "holder_instance_id": "h1", "event_seq": 1,
-                "state": "end_turn", "ts": "2026-01-01T00:00:00Z"}
+                "state": "end_turn", "state_detail": "end_turn",
+                "ts": "2026-01-01T00:00:00Z"}
         bad_payloads = []
         for mutate in (lambda p: p.update(extra="x"),
                        lambda p: p.pop("ts"),
+                       lambda p: p.pop("state_detail"),
                        lambda p: p.update(schema="kaola-delegator-wake/2"),
                        lambda p: p.update(state="ping"),
                        lambda p: p.update(event_seq=True),
-                       lambda p: p.update(event_seq="1")):
+                       lambda p: p.update(event_seq="1"),
+                       lambda p: p.update(state_detail=123),
+                       lambda p: p.update(state_detail="with space")):
             payload = dict(base)
             mutate(payload)
             bad_payloads.append(payload)
@@ -614,7 +656,7 @@ class DeliveryCli(WebhookCase):
         proc.stdin.write(json.dumps({"schema": "kaola-delegator-wake/1",
                                      "project": self.project, "session": "s1",
                                      "holder_instance_id": "h1",
-                                     "event_seq": 0, "state": "test",
+                                     "event_seq": 0, "state": "test", "state_detail": "test",
                                      "ts": "2026-01-01T00:00:00Z"}).encode())
         try:
             argv = subprocess.run(["ps", "-o", "command=", "-p", str(proc.pid)],
@@ -643,7 +685,7 @@ class DeliveryCli(WebhookCase):
             proc = self.deliver({"schema": "kaola-delegator-wake/1",
                                  "project": self.project, "session": "s1",
                                  "holder_instance_id": "h1", "event_seq": seq,
-                                 "state": "end_turn",
+                                 "state": "end_turn", "state_detail": None,
                                  "ts": "2026-01-01T00:00:00Z"})
             self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         receipts = self.receipts()
@@ -687,6 +729,7 @@ class HolderWakes(WebhookCase):
         self.assertEqual(body["schema"], "kaola-delegator-wake/1")
         self.assertEqual(body["project"], self.project)
         self.assertEqual(body["session"], self.session)
+        self.assertEqual(body["state_detail"], "end_turn")
         self.assertIsInstance(body["event_seq"], int)
         self.assertIsInstance(body["holder_instance_id"], str)
         self.assertRegex(body["ts"], r"^\d{4}-\d{2}-\d{2}T")
@@ -791,6 +834,7 @@ class HolderWakes(WebhookCase):
                           if r.get("state") == "blocked"), None),
             15, "blocked receipt")
         self.assertEqual(blocked["result"], "delivered")
+        self.assertEqual(blocked["state_detail"], "permission_required")
         # resolve the pending permission so the turn can end
         _, obs = self.acp("observe", scenario="permission_gate")
         pending = obs.get("pending_permissions") or []
@@ -806,11 +850,123 @@ class HolderWakes(WebhookCase):
         code, stopped = self.acp("stop", scenario="permission_gate")
         self.assertTrue(stopped.get("stopped"), stopped)
         self.session = None  # already stopped
-        wait_for(lambda: any(r.get("state") == "stopped" for r in self.receipts()),
-                 15, "stopped receipt")
+        stopped_receipt = wait_for(
+            lambda: next((r for r in self.receipts()
+                          if r.get("state") == "stopped"), None),
+            15, "stopped receipt")
+        self.assertEqual(stopped_receipt["state_detail"], "exact_stop")
         states = {(p["body"] or {}).get("state") for p in self.endpoint.posts}
         self.assertIn("blocked", states)
         self.assertIn("stopped", states)
+        details = {(p["body"] or {}).get("state"): (p["body"] or {}).get("state_detail")
+                   for p in self.endpoint.posts}
+        self.assertEqual(details["blocked"], "permission_required")
+        self.assertEqual(details["stopped"], "exact_stop")
+
+    def test_sigkilled_host_holder_recovered_on_next_start(self) -> None:
+        self.endpoint = Endpoint()
+        code, out = self.configure(self.endpoint.url)
+        self.assertEqual(code, 0, out)
+        self.start_host("killstart")
+        code, sent = self.send("--wait")
+        self.assertEqual(sent.get("outcome"), "turn_completed", sent)
+        first = wait_for(
+            lambda: next((p for p in self.endpoint.posts
+                          if (p["body"] or {}).get("state") == "end_turn"), None),
+            10, "end_turn POST")
+        dead = self.sigkill_session()
+        dead_id = dead["holder_instance_id"]
+        # the next start replaces the dead record: one holder_lost wake
+        code, receipt = self.acp("start")
+        self.assertEqual(receipt.get("session_role"), "host", receipt)
+        wake = receipt.get("delegator_death_wake")
+        self.assertIsNotNone(wake, receipt)
+        self.assertTrue(wake["sent"], wake)
+        self.assertEqual(wake["holder_instance_id"], dead_id)
+        post = wait_for(
+            lambda: (self.posts_with_detail("holder_lost") or [None])[-1],
+            15, "holder_lost POST")
+        body = post["body"]
+        self.assertEqual(body["state"], "error")
+        self.assertEqual(body["holder_instance_id"], dead_id)
+        self.assertEqual(set(body), PAYLOAD_KEYS)
+        self.assertGreater(body["event_seq"], first["body"]["event_seq"])
+        # a clean stop sends the new holder's own "stopped"; a later start
+        # recovers nothing further for the dead id (exactly once)
+        code, stopped = self.acp("stop")
+        self.assertTrue(stopped.get("stopped"), stopped)
+        wait_for(lambda: any((p["body"] or {}).get("state") == "stopped"
+                             for p in self.endpoint.posts),
+                 15, "stopped POST")
+        code, receipt = self.acp("start")
+        self.assertNotIn("delegator_death_wake", receipt)
+        self.assertEqual(len(self.posts_with_detail("holder_lost")), 1)
+
+    def test_sigkilled_host_holder_recovered_on_dead_stop(self) -> None:
+        self.endpoint = Endpoint()
+        code, out = self.configure(self.endpoint.url)
+        self.assertEqual(code, 0, out)
+        self.start_host("killstop")
+        dead = self.sigkill_session()
+        dead_id = dead["holder_instance_id"]
+        # dead-holder stop: force_kill_from_record fires the recovery before
+        # the record is rewritten to stopped
+        code, receipt = self.acp("stop")
+        self.assertTrue(receipt.get("stopped"), receipt)
+        wake = receipt.get("delegator_death_wake")
+        self.assertIsNotNone(wake, receipt)
+        self.assertTrue(wake["sent"], wake)
+        wait_for(lambda: self.posts_with_detail("holder_lost"),
+                 15, "holder_lost POST")
+        # a second stop sees the stopped record — no second wake, no key
+        code, receipt = self.acp("stop", check=False)
+        self.assertNotIn("delegator_death_wake", receipt)
+        # and a later start recovers nothing either
+        code, receipt = self.acp("start")
+        self.assertNotIn("delegator_death_wake", receipt)
+        time.sleep(0.5)
+        self.assertEqual(len(self.posts_with_detail("holder_lost")), 1)
+        self.assertTrue(all((p["body"] or {}).get("holder_instance_id") == dead_id
+                            for p in self.posts_with_detail("holder_lost")))
+
+    def test_non_host_or_clean_stop_not_recovered(self) -> None:
+        self.endpoint = Endpoint()
+        code, out = self.configure(self.endpoint.url)
+        self.assertEqual(code, 0, out)
+        # a cleanly stopped Host holder signalled itself — no holder_lost
+        self.start_host("cleanstop")
+        code, stopped = self.acp("stop")
+        self.assertTrue(stopped.get("stopped"), stopped)
+        self.assertNotIn("delegator_death_wake", stopped)
+        # a non-Host (worker-named) dead holder gets no recovery wake either
+        self.session = "grok-i299-worker-dead"
+        code, receipt = self.acp("start", check=False)
+        self.assertEqual(receipt.get("session_role"), "elite", receipt)
+        self.sigkill_session()
+        code, receipt = self.acp("stop", check=False)
+        self.assertNotIn("delegator_death_wake", receipt)
+        time.sleep(0.5)
+        self.assertFalse(self.posts_with_detail("holder_lost"))
+
+    def test_stop_reason_detail_carried(self) -> None:
+        self.endpoint = Endpoint()
+        code, out = self.configure(self.endpoint.url)
+        self.assertEqual(code, 0, out)
+        self.start_host("reason", scenario="stop_reason")
+        for text, detail in (("end_turn", "end_turn"),
+                             ("max_tokens", "max_tokens"),
+                             ("refusal", "refusal"),
+                             ("cancelled", "cancelled"),
+                             ("not a token", "other")):
+            before = len(self.endpoint.posts)
+            code, sent = self.acp("send", "--text", text, "--wait",
+                                  scenario="stop_reason")
+            post = wait_for(
+                lambda: self.endpoint.posts[before]
+                if len(self.endpoint.posts) > before else None,
+                10, f"wake POST for {text!r}")
+            self.assertEqual(post["body"]["state"], "end_turn")
+            self.assertEqual(post["body"]["state_detail"], detail)
 
 
 class RecordContractWakeMode(WebhookCase):

@@ -266,6 +266,9 @@ NODE_STOP_CONFIRM_SECONDS = 30.0
 # node stop, inside the Runner's 30 s stop request.
 NODE_RECLAIM_SECONDS = 8.0
 SIDEAGENT_ROLES = ("sideagent", "sidekick")
+# Issue #299: a wake state_detail carries the agent's stopReason verbatim only
+# when it is one clean token; anything else reads "other".
+DELEGATOR_WAKE_DETAIL_RE = re.compile(r"[A-Za-z0-9_.:-]{1,64}")
 RELAY_SCHEMA = "kaola-sideagent-relay/1"
 OVERFLOW_FULL_CHECK_MARK = "kaola-host-notify/overflow-full-check"
 # Issue #94: every turn-opening prompt to a ZCode Host opens with the native
@@ -2339,7 +2342,7 @@ class Holder:
                 self._notify_heartbeat_host_now(
                     "permission_required", "session/request_permission pending",
                     extra={"request_id": key})
-                self._delegator_wake("blocked")
+                self._delegator_wake("blocked", "permission_required")
             return
         self.agent.send_message(
             {"jsonrpc": "2.0", "id": request_id,
@@ -2479,10 +2482,18 @@ class Holder:
         # Issue #299: the webhook wake mirrors the turn verdict. A canceled
         # turn under a requested stop is covered by op_stop's own "stopped".
         if outcome == "turn_failed":
-            self._delegator_wake("error")
+            self._delegator_wake("error", "turn_failed")
         elif outcome == "turn_completed" or (
                 outcome == "turn_canceled" and not self.stop_requested):
-            self._delegator_wake("end_turn")
+            # The agent's own stopReason, verbatim when it is a clean token;
+            # an absent reason on a cancel reads "cancelled".
+            stop = turn.get("stop_reason")
+            if isinstance(stop, str):
+                detail = (stop if DELEGATOR_WAKE_DETAIL_RE.fullmatch(stop)
+                          else "other")
+            else:
+                detail = "cancelled" if outcome == "turn_canceled" else None
+            self._delegator_wake("end_turn", detail)
 
     def on_agent_exit(self, code: int) -> None:
         reason = (f"exit_code={self.agent.exit_code}"
@@ -2539,7 +2550,7 @@ class Holder:
         # Issue #299: an unrequested agent exit outside the boot window is an
         # error wake; the boot failure branch and op_stop carry their own.
         if not self.stop_requested and self.state not in ("starting", "error"):
-            self._delegator_wake("error")
+            self._delegator_wake("error", "agent_exit")
 
     # -- ops ---------------------------------------------------------------------
 
@@ -2851,14 +2862,15 @@ class Holder:
             with self.undelivered_wakes_lock:
                 self.undelivered_wakes.pop(IDLE_WAKE_KEY, None)
 
-    def _delegator_wake(self, state: str, inline: bool = False) -> None:
+    def _delegator_wake(self, state: str, detail: str | None = None,
+                        inline: bool = False) -> None:
         """Issue #299: fire the Delegator webhook signal for a Host holder.
 
-        The payload is a signal only (identity + event_seq + state + ts). The
-        detached ``kaola-acp.py delegator-webhook deliver`` child reads the
-        config, validates, POSTs and writes receipts, so the holder never
-        blocks on the network and the delivery survives holder exit. A spawn
-        failure is one event-log line with the exception class name only.
+        The payload is a signal only (identity + event_seq + state + detail +
+        ts). The detached ``kaola-acp.py delegator-webhook deliver`` child
+        reads the config, validates, POSTs and writes receipts, so the holder
+        never blocks on the network and the delivery survives holder exit. A
+        spawn failure is one event-log line with the exception class name only.
         ``inline`` spawns without a thread or a wait for the op_stop path that
         exits right after its reply.
         """
@@ -2871,6 +2883,7 @@ class Holder:
             "holder_instance_id": self.holder_instance_id,
             "event_seq": self.events.cursor,
             "state": state,
+            "state_detail": detail,
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
         argv = [sys.executable,
@@ -5722,7 +5735,7 @@ class Holder:
         self.write_record()
         # Issue #299: inline spawn — this op exits right after its reply, so the
         # detached child must already hold its payload before we answer.
-        self._delegator_wake("stopped", inline=True)
+        self._delegator_wake("stopped", "exact_stop", inline=True)
         result = {"stopped": True, "residual_pids": residual,
                   "swept_child_pgids": self.swept_child_pgids,
                   **({"spared_child_pgids": self.spared_child_pgids}
@@ -6134,7 +6147,7 @@ class Holder:
             self.fatal_error = self.start_failure_facts(result["error"])
             self.state = "error"
             self.write_record()
-            self._delegator_wake("error")
+            self._delegator_wake("error", "boot_failure")
             if result["error"].get("code") == "acp-protocol-version-unsupported":
                 self._terminate_group(force=True)
             elif self.agent.proc and not self.agent.exited.is_set():

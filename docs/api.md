@@ -707,15 +707,41 @@ Trigger points: `end_turn` on `turn_completed` (and on `turn_canceled` when no
 stop was requested), `error` on `turn_failed`, an unrequested agent exit outside
 the boot window, or a failed boot; `blocked` on a new `session/request_permission`;
 `stopped` from `op_stop` after the stopped record is written (spawned inline because
-the holder exits with its reply).
+the holder exits with its reply). A Host holder that dies without signalling
+(SIGKILL, crash) is covered by the CLI, not the holder: `start` replacing a dead
+or pid-reused record and a dead-holder `stop` (`force_kill_from_record`, the
+pid-reused branch of `force_stop_unreachable`) emit exactly one
+`error`/`holder_lost` wake on the dead instance's behalf before the record is
+rewritten or retired. Exactly-once is a `delegator_death_wake` event appended
+under an flock on `delegator-death-wake.lock` in the record dir; the event's
+cursor is the wake's `event_seq` (the EventLog cursor continues across holders
+in one record dir). The start/stop receipt names the outcome under
+`delegator_death_wake` (`sent`, `holder_instance_id`, `event_seq`, or a
+`reason` of `already-recovered`/`spawn-failed`).
 
 Payload (signal only, no transcript, prompt, diff or secret):
 
 ```json
 {"schema": "kaola-delegator-wake/1", "project": "<repo realpath>", "session": "<--session>",
  "holder_instance_id": "<holder instance>", "event_seq": <events cursor>, "state": "end_turn",
- "ts": "YYYY-MM-DDTHH:MM:SSZ"}
+ "state_detail": "end_turn", "ts": "YYYY-MM-DDTHH:MM:SSZ"}
 ```
+
+`state_detail` is always present (a string matching `^[A-Za-z0-9_.:-]{1,64}$`,
+or null):
+
+| state | state_detail |
+| --- | --- |
+| `end_turn` | the agent's ACP `stopReason` verbatim (`end_turn`, `max_tokens`, `max_turn_requests`, `refusal`, `cancelled`, …) when it is a clean token, else `"other"`; `"cancelled"`/`null` when the agent reported none |
+| `blocked` | `permission_required` |
+| `stopped` | `exact_stop` |
+| `error` | `turn_failed`, `agent_exit`, `boot_failure`, or `holder_lost` (death recovery above) |
+| `test` | `test` |
+
+Only `session/request_permission` produces `blocked`; an owner question asked in
+reply text is an ordinary `end_turn`. The stop reason is whatever the agent
+reports: codex-acp maps a failed turn to `end_turn`, which #173's systemError
+detection turns into `error`/`turn_failed`.
 
 Delivery: POST the payload as the JSON body with `Content-Type: application/json`
 and `User-Agent: kaola-delegator-wake/1`, plus the configured key header for a
@@ -726,16 +752,18 @@ retry; any other non-2xx is final. A 2xx is `delivered`. Not configured or
 `enabled: false` writes one `skipped`/`not-configured` receipt with no network;
 invalid config or mode writes one `failed`/`invalid-config`/`config-mode` receipt
 with no network. The sender enforces the signal shape: a payload whose keys are
-not exactly the seven above, with schema `kaola-delegator-wake/1`, `state` in
-`{end_turn, blocked, error, stopped, test}` and an integer `event_seq`, is refused
+not exactly the eight above, with schema `kaola-delegator-wake/1`, `state` in
+`{end_turn, blocked, error, stopped, test}`, an integer `event_seq`, and a
+`state_detail` that is null or a token string, is refused
 — exit 1, and one `failed`/`invalid-payload` receipt when the project resolves.
 
 Per-attempt receipt (closed shape; `reason` present only on `skipped`; `error` is a
 classified code, never an exception message — urllib errors can embed the URL):
 
 ```json
-{"ts": "...", "state": "end_turn", "session": "...", "holder_instance_id": "...",
- "event_seq": 7, "result": "delivered|failed|skipped", "attempt": 1, "max_attempts": 4,
+{"ts": "...", "state": "end_turn", "state_detail": "end_turn", "session": "...",
+ "holder_instance_id": "...", "event_seq": 7, "result": "delivered|failed|skipped",
+ "attempt": 1, "max_attempts": 4,
  "http_status": 200, "error": null, "elapsed_ms": 12, "final": true}
 ```
 

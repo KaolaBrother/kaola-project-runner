@@ -1906,6 +1906,72 @@ def append_holder_instance_mismatch(directory: Path | None, op: str,
         pass
 
 
+def recover_host_death_wake(directory: Path | None,
+                            record: dict[str, Any]) -> dict[str, Any] | None:
+    """Issue #299: one durable ``error``/``holder_lost`` Delegator wake for a
+    Host holder that died without signalling (SIGKILL, crash).
+
+    Called only where the caller is about to replace or retire the dead
+    holder's record: ``command_start`` on a dead or pid-reused holder, and the
+    dead-holder ``stop`` paths. A clean ``op_stop`` writes ``stopped`` (with
+    its own inline wake) before the record can look dead, so the state check
+    plus the exactly-once ``delegator_death_wake`` event guard keep this to
+    genuinely unsignalled deaths. The event cursor doubles as ``event_seq``:
+    ``EventLog`` seeds a fresh instance's cursor from the max over live and
+    rotated files in this record dir, so it is strictly newer than anything
+    the dead holder sent.
+    """
+    holder_instance_id = record.get("holder_instance_id")
+    if (directory is None or record.get("session_role") != "host"
+            or not isinstance(holder_instance_id, str)
+            or not holder_instance_id
+            or record.get("state") == "stopped"):
+        return None
+    import fcntl
+    try:
+        with open(directory / "delegator-death-wake.lock", "a+b") as lock_file:
+            fcntl.flock(lock_file, fcntl.LOCK_EX)
+            log = _holder_event_log(directory / "events.jsonl")
+            for entry in log._iter_entries():
+                if (entry.get("kind") == "delegator_death_wake"
+                        and entry.get("holder_instance_id") == holder_instance_id):
+                    return {"sent": False, "reason": "already-recovered",
+                            "event_seq": entry.get("cursor")}
+            event_seq = log.append({
+                "kind": "delegator_death_wake",
+                "holder_instance_id": holder_instance_id,
+                "state": "error",
+                "state_detail": "holder_lost",
+            })
+    except OSError:
+        return None
+    payload = {
+        "schema": "kaola-delegator-wake/1",
+        "project": record.get("repo"),
+        "session": record.get("session"),
+        "holder_instance_id": holder_instance_id,
+        "event_seq": event_seq,
+        "state": "error",
+        "state_detail": "holder_lost",
+        "ts": _utc_stamp(),
+    }
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, str(Path(__file__).resolve()),
+             "delegator-webhook", "deliver"],
+            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, start_new_session=True,
+            close_fds=True, cwd=record.get("repo") or None)
+        assert proc.stdin is not None
+        proc.stdin.write(json.dumps(payload).encode("utf-8"))
+        proc.stdin.close()
+    except Exception as exc:
+        return {"sent": False, "reason": "spawn-failed",
+                "error": type(exc).__name__}
+    return {"sent": True, "holder_instance_id": holder_instance_id,
+            "event_seq": event_seq}
+
+
 def holder_instance_mismatch_receipt(args: argparse.Namespace, repo: str,
                                      directory: Path | None,
                                      record: dict[str, Any], params: dict[str, Any],
@@ -2346,6 +2412,11 @@ def force_kill_from_record(args: argparse.Namespace, repo: str,
     # its recorded groups is left, say so in the record so a later `status`
     # proves the session gone (`stopped`, `residual_pids: []`).
     directory = spawn_record_dir(args, repo)
+    # Issue #299: before this record is retired or rewritten to `stopped`, a
+    # dead Host holder that never signalled gets its one holder_lost wake.
+    death_wake = recover_host_death_wake(directory, record)
+    if death_wake is not None:
+        receipt["delegator_death_wake"] = death_wake
     if unverified is not None:
         # Issue #191: a group this record cannot prove its own is someone
         # else's to stop. Only this seat's record is cleared.
@@ -2413,6 +2484,11 @@ def force_stop_unreachable(args: argparse.Namespace, repo: str, directory: Path,
         if groups:
             time.sleep(0.1)
             leftover = [pid for pid in live_group_members(groups) if pid != holder_pid]
+        # Issue #299: the reused PID proves the holder died unsignalled; emit
+        # its holder_lost wake before the record is retired.
+        death_wake = recover_host_death_wake(directory, record)
+        if death_wake is not None:
+            receipt["delegator_death_wake"] = death_wake
         retired = retire_record(directory, record, "pid-reused") if not leftover else None
         try:
             sock_path(args, repo).unlink()
@@ -5200,6 +5276,11 @@ def command_start(args: argparse.Namespace, repo: str,
         if pid_alive(record.get("agent_pgid")) or pid_alive(record.get("agent_pid")):
             receipt.update(holder_lost_receipt(args, repo, record))
             return receipt
+        # Issue #299: this start replaces a dead (or proven pid-reused)
+        # holder that never signalled — emit its holder_lost wake first.
+        death_wake = recover_host_death_wake(directory, record)
+        if death_wake is not None:
+            receipt["delegator_death_wake"] = death_wake
     acp_paths.prepare_record_directory(directory, directory.parent.parent.parent)
     if receipt.get("replaced_record"):
         try:
@@ -5950,7 +6031,9 @@ DELEGATOR_WEBHOOK_RETRY_STATUS = frozenset({408, 429})
 DELEGATOR_WEBHOOK_USER_AGENT = "kaola-delegator-wake/1"
 DELEGATOR_WEBHOOK_PAYLOAD_SCHEMA = "kaola-delegator-wake/1"
 DELEGATOR_WEBHOOK_PAYLOAD_KEYS = frozenset(
-    {"schema", "project", "session", "holder_instance_id", "event_seq", "state", "ts"})
+    {"schema", "project", "session", "holder_instance_id", "event_seq",
+     "state", "state_detail", "ts"})
+DELEGATOR_WEBHOOK_DETAIL_RE = re.compile(r"[A-Za-z0-9_.:-]{1,64}")
 DELEGATOR_WEBHOOK_PAYLOAD_STATES = frozenset(
     {"end_turn", "blocked", "error", "stopped", "test"})
 DELEGATOR_WEBHOOK_HEADER_NAME = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
@@ -6152,6 +6235,7 @@ def _webhook_attempt_receipt(payload: dict[str, Any], attempt: int, result: str,
     receipt: dict[str, Any] = {
         "ts": _utc_stamp(),
         "state": payload.get("state"),
+        "state_detail": payload.get("state_detail"),
         "session": payload.get("session"),
         "holder_instance_id": payload.get("holder_instance_id"),
         "event_seq": payload.get("event_seq"),
@@ -6225,11 +6309,14 @@ def _webhook_read_receipts(project_root: str) -> list[dict[str, Any]]:
 def _webhook_payload_ok(payload: Any) -> bool:
     """True only for the exact wake signal shape — nothing else may be POSTed."""
     event_seq = payload.get("event_seq") if isinstance(payload, dict) else None
+    detail = payload.get("state_detail") if isinstance(payload, dict) else False
     return (isinstance(payload, dict)
             and set(payload) == DELEGATOR_WEBHOOK_PAYLOAD_KEYS
             and payload.get("schema") == DELEGATOR_WEBHOOK_PAYLOAD_SCHEMA
             and payload.get("state") in DELEGATOR_WEBHOOK_PAYLOAD_STATES
-            and isinstance(event_seq, int) and not isinstance(event_seq, bool))
+            and isinstance(event_seq, int) and not isinstance(event_seq, bool)
+            and (detail is None or (isinstance(detail, str)
+                 and DELEGATOR_WEBHOOK_DETAIL_RE.fullmatch(detail) is not None)))
 
 
 def _webhook_deliver(project_root: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -6397,6 +6484,7 @@ def command_delegator_webhook(argv: list[str]) -> int:
             "holder_instance_id": "test-" + secrets.token_hex(8),
             "event_seq": 0,
             "state": "test",
+            "state_detail": "test",
             "ts": _utc_stamp(),
         }
         receipts = _webhook_deliver(project_root, payload)
