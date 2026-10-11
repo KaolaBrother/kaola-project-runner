@@ -4,9 +4,14 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.9.8 — 2026-10-12 (seat exemption, wake receipts + all-idle re-check, install payload bytecode)
 
-Seats: restart not required
+Seats: restart required — the holder and its pinned record contract changed
+(#303, #305); adapters and render-skills changed (#306). Per-call CLIs
+(kaola-acp.py, kaola-dispatch.py) need no restart, but running Hosts and
+seats go stale on the holder/record-contract/manifest bytes: restart at a
+safe point to load the fixes. New installs need no manual __pycache__
+delete (#306).
 
 - **Install no longer treats git-ignored Python bytecode as payload (Issue #306).**
   `render-skills.py --check` and `--verify-install` ignore `__pycache__/`
