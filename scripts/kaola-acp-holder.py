@@ -3009,10 +3009,19 @@ class Holder:
         staged, rows = self._delegator_pending_facts()
         # Outside the holder locks: this scans ps and other holders' records.
         live_seats = bool(holders_dispatched_by(self.holder_instance_id))
-        with self.lock:
-            # ``self.turn`` may already be the next admitted beat. The ended
-            # turn is ``turn``. A queued steer counts until its follow-up returns.
-            self_continuing = bool(self.turn.get("active") or self._delegator_followups)
+        # Issue #302 deadlock repair: never take ``self.lock`` here. This runs
+        # inside ``on_prompt_response``, and ``cancel_turn`` holds ``self.lock``
+        # across the wait for the turn to settle — a steer/cancel settling the
+        # turn under that lock would self-deadlock (and in production the
+        # reader thread would block on the lock the cancelling op holds, so the
+        # turn could never settle). The unguarded read is safe for this
+        # advisory predicate: ``on_prompt_response`` has already matched the
+        # response to the CURRENT turn by request id (a next-beat admission
+        # returns early), so ``self.turn`` here is the ending turn, and a
+        # momentarily racing ``_delegator_followups`` can at worst delay one
+        # gated wake to the next turn end; the error/stop/death wakes never
+        # pass through this lock.
+        self_continuing = bool(self.turn.get("active") or self._delegator_followups)
         return delegator_turn_wake_reason(
             outcome=turn.get("outcome"),
             stop_reason=turn.get("stop_reason"),
