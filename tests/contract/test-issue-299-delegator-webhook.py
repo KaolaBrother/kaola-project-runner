@@ -736,17 +736,19 @@ def socket_probe_closed_port() -> int:
 
 class HolderWakes(WebhookCase):
     def test_turn_end_delivers_one_signal(self) -> None:
-        # A Delegator send is not a wake. Exact stop still is, and it carries
-        # the signal shape including reason.
+        # No worker is live, so the Delegator's own send wakes all-idle.
+        # Exact stop still wakes, and it carries the signal shape.
         self.endpoint = Endpoint()
         code, out = self.configure(self.endpoint.url)
         self.assertEqual(code, 0, out)
         self.start_host("turn")
         code, sent = self.send("--wait")
         self.assertEqual(sent.get("outcome"), "turn_completed", sent)
-        time.sleep(0.4)
-        self.assertFalse(self.endpoint.posts, self.endpoint.posts)
-        self.assertFalse(self.receipts())
+        idle = wait_for(
+            lambda: next((p for p in self.endpoint.posts
+                          if (p["body"] or {}).get("reason") == "all-idle"), None),
+            10, "all-idle POST")
+        self.assertEqual(idle["body"]["state"], "end_turn")
         code, stopped = self.acp("stop")
         self.assertTrue(stopped.get("stopped"), stopped)
         self.session = None
@@ -887,8 +889,8 @@ class HolderWakes(WebhookCase):
                           if (p["body"] or {}).get("state") == "blocked"), None),
             5, "blocked POST")
         self.assertEqual(blocked_post["body"]["reason"], "permission_required")
-        # resolve the pending permission so the turn can end. That completing
-        # turn is the Delegator's own send, so it does not wake again.
+        # The completing turn has no live seat, so it wakes all-idle. Exact
+        # stop still wakes on its own.
         _, obs = self.acp("observe", scenario="permission_gate")
         pending = obs.get("pending_permissions") or []
         self.assertTrue(pending, obs)
@@ -898,8 +900,11 @@ class HolderWakes(WebhookCase):
                              scenario="permission_gate")
         wait_for(lambda: self.acp("status", scenario="permission_gate")[1].get(
             "turn_active") is False, 15, "turn ended after permit")
-        time.sleep(0.4)
-        self.assertFalse(any(r.get("state") == "end_turn" for r in self.receipts()))
+        idle = wait_for(
+            lambda: next((p for p in self.endpoint.posts
+                          if (p["body"] or {}).get("reason") == "all-idle"), None),
+            10, "all-idle POST")
+        self.assertEqual(idle["body"]["state_detail"], "end_turn")
         # stop: the inline spawn hands the payload off before the reply
         code, stopped = self.acp("stop", scenario="permission_gate")
         self.assertTrue(stopped.get("stopped"), stopped)
@@ -924,8 +929,9 @@ class HolderWakes(WebhookCase):
         self.start_host("killstart")
         code, sent = self.send("--wait")
         self.assertEqual(sent.get("outcome"), "turn_completed", sent)
-        time.sleep(0.4)
-        self.assertFalse(self.endpoint.posts)
+        wait_for(lambda: any((p["body"] or {}).get("reason") == "all-idle"
+                             for p in self.endpoint.posts),
+                 10, "all-idle before kill")
         dead = self.sigkill_session()
         dead_id = dead["holder_instance_id"]
         # the next start replaces the dead record: one holder_lost wake
@@ -1004,16 +1010,20 @@ class HolderWakes(WebhookCase):
         self.assertFalse(self.posts_with_detail("holder_lost"))
 
     def test_stop_reason_detail_carried(self) -> None:
-        # A Delegator send reports the stop reason on its own receipt and does
-        # not wake. Exact stop still wakes. Self-sourced detail is #302.
+        # No seat is live, so each Delegator send wakes all-idle whatever the
+        # stop reason was. Exact stop still wakes on its own.
         self.endpoint = Endpoint()
         code, out = self.configure(self.endpoint.url)
         self.assertEqual(code, 0, out)
         self.start_host("reason", scenario="stop_reason")
-        for text in ("end_turn", "max_tokens", "refusal", "cancelled", "not a token"):
+        texts = ("end_turn", "max_tokens", "refusal", "cancelled", "not a token")
+        for text in texts:
             self.acp("send", "--text", text, "--wait", scenario="stop_reason")
-        time.sleep(0.4)
-        self.assertFalse(self.endpoint.posts)
+        wait_for(lambda: len(self.endpoint.posts) >= len(texts) or None,
+                 10, "all-idle posts")
+        self.assertEqual(
+            [p["body"]["reason"] for p in self.endpoint.posts],
+            ["all-idle"] * len(texts))
         code, stopped = self.acp("stop", scenario="stop_reason")
         self.assertTrue(stopped.get("stopped"), stopped)
         self.session = None

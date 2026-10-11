@@ -51,6 +51,7 @@ class Predicate(unittest.TestCase):
             stop_requested=False,
             attention_rows=None,
             staged_undelivered=False,
+            live_seats=True,
         )
         base.update(kwargs)
         return holder.delegator_turn_wake_reason(**base)
@@ -81,6 +82,18 @@ class Predicate(unittest.TestCase):
             ({"outcome": "turn_canceled", "stop_requested": True}, None),
             ({"outcome": "turn_failed"}, None),
             ({"prompt_source": "delegator", "stop_reason": "max_tokens"}, None),
+            # Owner rule 2026-10-11 16:49: nobody left working wakes all-idle
+            # even when pending attention is recorded or the turn was the
+            # Delegator's. A live seat with nothing owed stays quiet. A Host
+            # that already continued does not wake.
+            ({"live_seats": False}, "all-idle"),
+            ({"live_seats": False, "prompt_source": "delegator"}, "all-idle"),
+            ({"live_seats": False, "attention_rows": question,
+              "prompt_source": "delegator"}, "all-idle"),
+            ({"live_seats": False, "stop_reason": "max_tokens"}, "all-idle"),
+            ({"live_seats": False, "self_continuing": True}, None),
+            ({"live_seats": False, "outcome": "turn_canceled",
+              "stop_requested": True}, None),
         ]
         for kwargs, expected in cases:
             self.assertEqual(self.reason(**kwargs), expected, kwargs)
@@ -134,12 +147,29 @@ class WakeGate(issue299.WebhookCase):
     def start_worker(self, suffix: str, scenario: str = "normal") -> str:
         self.worker = f"grok-i302-worker-{suffix}"
         host = self.session
+        _, status = self.acp("status")
+        holder_id = status.get("holder_instance_id")
+        self.assertIsInstance(holder_id, str, status)
         self.session = self.worker
+        # The Host counts a live seat from holders whose record names it as
+        # dispatcher. The heartbeat target and the dispatcher must name the
+        # same Host or start refuses the binding.
         _, receipt = self.acp("start", scenario=scenario, extra_env={
             "KAOLA_ACP_HEARTBEAT_HOST": json.dumps({
                 "platform": "grok", "session": host, "repo": str(self.repo),
-            })})
+            }),
+            "KAOLA_ACP_DISPATCHER": json.dumps({
+                "holder_instance_id": holder_id,
+                "platform": "grok",
+                "session": host,
+                "repo": str(self.repo),
+            }),
+        })
         self.assertNotEqual(receipt.get("session_role"), "host", receipt)
+        record = self.holder_record()
+        self.assertEqual(
+            (record.get("dispatcher") or {}).get("holder_instance_id"), holder_id,
+            record.get("dispatcher"))
         self.session = host
         return self.worker
 
@@ -288,16 +318,37 @@ class WakeGate(issue299.WebhookCase):
         self.assertEqual(len(self.endpoint.posts), 1)
 
     def test_delegator_send_does_not_wake(self) -> None:
+        # A live dispatched seat is still running, and these turns are the
+        # Delegator's own sends. Nothing else needs the Delegator, so the
+        # recorded question does not wake either.
         self.endpoint = Endpoint()
         code, out = self.configure(self.endpoint.url)
         self.assertEqual(code, 0, out)
         self.write_heartbeat(host_view([{"kind": "decisions", "why": "host-decision"}]))
         self.start_host("delegator", scenario="stop_reason")
+        self.start_worker("delegator")
+        self.session = self.host_session
         for text in ("end_turn", "max_tokens", "refusal"):
             self.acp("send", "--text", text, "--wait", scenario="stop_reason")
         time.sleep(0.5)
         self.assertFalse(self.endpoint.posts)
         self.assertFalse(self.receipts())
+
+    def test_zero_live_seats_wakes_all_idle(self) -> None:
+        # No dispatched holder is live. The turn is the Delegator's and a
+        # question is recorded; the wake is still all-idle.
+        self.endpoint = Endpoint()
+        code, out = self.configure(self.endpoint.url)
+        self.assertEqual(code, 0, out)
+        self.write_heartbeat(host_view([{"kind": "decisions", "why": "host-decision"}]))
+        self.start_host("alone", scenario="normal")
+        self.acp("send", "--text", "idle", "--wait")
+        post = wait_for(lambda: (self.posts_with_reason("all-idle") or [None])[-1],
+                        15, "all-idle wake")
+        self.assertEqual(post["body"]["state"], "end_turn")
+        self.assertEqual(post["body"]["state_detail"], "end_turn")
+        self.assertEqual(set(post["body"]), PAYLOAD_KEYS)
+        self.assertEqual(len(self.posts_with_reason("all-idle")), 1)
 
     def test_self_continuing_turn_does_not_wake_until_the_host_stops(self) -> None:
         self.endpoint = Endpoint()

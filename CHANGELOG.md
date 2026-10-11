@@ -20,9 +20,12 @@ Seats: restart required
   or `needs_decision`; staged work or a length stop is
   `host_stopped_pending`; a refusal or unrequested cancel is
   `needs_decision`. It does not wake when the Host continues by itself (the
-  next beat is already admitted, or a Delegator after-turn steer is queued)
-  or when the turn was the Delegator's own send or steer. A clean idle
-  `end_turn` does not wake. There is no time throttle.
+  next beat is already admitted, or a Delegator after-turn steer is queued).
+  It does not wake when the turn was the Delegator's own send or steer and a
+  dispatched seat is still live. A clean idle `end_turn` with a seat still
+  live does not wake. When the Host goes idle and no dispatched holder names
+  it as dispatcher, the wake is `all-idle` whether or not pending work is
+  recorded (owner rule, Yanlei 2026-10-11 16:49). There is no time throttle.
   The sender timeout is 12 s. A client timeout is not retried. The retryable
   set is connection errors, HTTP 5xx, 408 and 429. The sender dedupes on
   `holder_instance_id` + `event_seq`. A death-recovery wake uses a new

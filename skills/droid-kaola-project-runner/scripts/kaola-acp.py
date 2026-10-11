@@ -6065,6 +6065,7 @@ DELEGATOR_WEBHOOK_REASONS = frozenset({
     "boot_failure",
     "holder_lost",
     "exact_stop",
+    "all-idle",
     "test",
 })
 DELEGATOR_WEBHOOK_DETAIL_RE = re.compile(r"[A-Za-z0-9_.:-]{1,64}")

@@ -282,6 +282,7 @@ DELEGATOR_WAKE_REASONS = frozenset({
     "boot_failure",
     "holder_lost",
     "exact_stop",
+    "all-idle",
     "test",
 })
 # A length stop means the Host stopped with work still pending.
@@ -299,6 +300,7 @@ def delegator_turn_wake_reason(
         stop_requested: bool,
         attention_rows: list | None,
         staged_undelivered: bool,
+        live_seats: bool = True,
 ) -> str | None:
     """Issue #302: why a completed or canceled Host turn wakes the Delegator.
 
@@ -309,9 +311,16 @@ def delegator_turn_wake_reason(
     The holder only uses facts it can see:
 
     * ``self_continuing`` — the next beat is already admitted (``turn.active``)
-      or a Delegator after-turn steer is queued. No wake.
+      or a Delegator after-turn steer is queued. The Host has not gone idle.
+      No wake.
+    * ``live_seats`` is false — no live holder names this Host as its
+      dispatcher (``holders_dispatched_by``). The Host is idle and nobody is
+      working, so the wake is ``all-idle`` whether or not attention or other
+      pending work is recorded, and whether or not this turn was the
+      Delegator's. Owner rule, Yanlei 2026-10-11 16:49.
     * ``prompt_source == "delegator"`` — this turn was admitted by a socket
-      prompt or by steer. The Delegator is already there. No wake.
+      prompt or by steer, and a seat is still live. The Delegator is already
+      there. No wake.
     * undelivered Host attention (heartbeat body is a host view whose
       fingerprint is not ``host_attention_seen``), classified from the rows:
       a ``decisions``/``host-decision`` row is ``question_waiting``; a
@@ -322,7 +331,8 @@ def delegator_turn_wake_reason(
       overflow, or a length stop (``max_tokens``, ``max_turn_requests``,
       ``length``) is ``host_stopped_pending``.
     * ``refusal``, or an unrequested cancel, is ``needs_decision``.
-    * a clean ``end_turn`` with nothing pending is idle. No wake.
+    * a clean ``end_turn`` with nothing pending, while a seat is still live,
+      is idle. No wake.
 
     There is no time throttle. A canceled turn under a requested stop is
     covered by the exact-stop wake.
@@ -333,6 +343,11 @@ def delegator_turn_wake_reason(
         return None
     if self_continuing:
         return None
+    # Zero live seats: the project would otherwise sit stalled. Pending
+    # attention does not pick a different reason, and a Delegator-caused
+    # turn does not suppress this wake.
+    if not live_seats:
+        return "all-idle"
     if (prompt_source or "delegator") == "delegator":
         return None
     rows = attention_rows or []
@@ -2992,6 +3007,8 @@ class Holder:
     def _delegator_turn_end_reason(self, turn: dict[str, Any]) -> str | None:
         """Issue #302 predicate for one ended turn. See ``delegator_turn_wake_reason``."""
         staged, rows = self._delegator_pending_facts()
+        # Outside the holder locks: this scans ps and other holders' records.
+        live_seats = bool(holders_dispatched_by(self.holder_instance_id))
         with self.lock:
             # ``self.turn`` may already be the next admitted beat. The ended
             # turn is ``turn``. A queued steer counts until its follow-up returns.
@@ -3004,6 +3021,7 @@ class Holder:
             stop_requested=self.stop_requested,
             attention_rows=rows,
             staged_undelivered=staged,
+            live_seats=live_seats,
         )
 
     def _delegator_wake(self, state: str, detail: str | None = None,

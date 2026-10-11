@@ -101,18 +101,22 @@ has `schema` `kaola-delegator-wake/1`, `project`, `session`,
 `stopped` or `test`), `state_detail`, `reason` and `ts` (UTC). It has no
 transcript, prompt, diff or secret. `reason` names why you were woken:
 `permission_required`, `turn_failed`, `agent_exited`, `boot_failure`,
-`exact_stop`, `holder_lost`, `question_waiting`, `delivery_review`,
-`needs_decision`, `host_stopped_pending`, or `test`. `state_detail` is
-separate: for `end_turn` it is the stop reason the agent reported
+`exact_stop`, `holder_lost`, `all-idle`, `question_waiting`,
+`delivery_review`, `needs_decision`, `host_stopped_pending`, or `test`.
+`state_detail` is separate: for `end_turn` it is the stop reason the agent reported
 (`end_turn`, `max_tokens`, `max_turn_requests`, `refusal`, `cancelled`, or
 `other`); otherwise it is `permission_required`, `turn_failed`,
 `agent_exit`, `boot_failure`, `holder_lost`, `exact_stop` or `test`.
 
-You are not woken when the Host ends a turn and continues by itself, or when
-the turn end is your own send or steer. You are woken for a permission, a
-failure, an agent exit, a failed boot, an exact stop, a recovered holder
-death, a waiting question, a delivery that needs review, a decision, or a
-Host that stopped with pending work. A clean idle turn does not wake you.
+You are not woken when the Host ends a turn and continues by itself. You are
+not woken when the turn end is your own send or steer and a worker seat is
+still live. You are woken with `all-idle` when the Host goes idle and no
+dispatched seat is still live, whether or not pending work is recorded. You
+are also woken for a permission, a failure, an agent exit, a failed boot, an
+exact stop, a recovered holder death, a waiting question, a delivery that
+needs review, a decision, or a Host that stopped with pending work while a
+seat is still live. A clean idle turn with a seat still live does not wake
+you.
 If a Host holder dies without a signal, the next `start` or `stop` of that
 session sends one `error` wake with `reason` `holder_lost`, the dead
 `holder_instance_id` and a new `event_seq`. That recovered wake is not a

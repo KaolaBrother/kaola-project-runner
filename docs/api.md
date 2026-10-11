@@ -733,19 +733,26 @@ Delegator is not already there and the Host did not continue by itself:
 | what the holder saw | reason |
 | --- | --- |
 | next beat already admitted, or a Delegator after-turn steer is queued | no wake |
-| prompt source `delegator` (this send or steer) | no wake |
+| no live dispatched seat (`holders_dispatched_by` is empty) | `all-idle` |
+| prompt source `delegator` (this send or steer) and a seat is still live | no wake |
 | undelivered host-view row `kind=decisions`, `why=host-decision` | `question_waiting` |
 | undelivered host-view row `kind=tasks` and `why` one of `awaiting-verdict`, `delivery-open`, `verdict-missing` | `delivery_review` |
 | any other undelivered host-view attention row | `needs_decision` |
 | staged worker event with no prompt fingerprint, unconfirmed overflow, or stop `max_tokens` / `max_turn_requests` / `length` | `host_stopped_pending` |
 | stop `refusal`, or an unrequested cancel with nothing above | `needs_decision` |
-| clean `end_turn` with nothing pending | no wake |
+| clean `end_turn` with nothing pending, while a seat is still live | no wake |
 
 Undelivered attention means the heartbeat body is a host view (`view` `host`,
 `attention` a list) whose fingerprint is not the one last delivered on a
-worker-event prompt. Checked in that order, so a waiting question wins over a
-delivery review, and self-continuation or a Delegator-caused turn wins over
-attention (no wake). `state` for these rows is `end_turn`. `state_detail` stays
+worker-event prompt. Checked in that order. Self-continuation wins over
+everything below it (no wake): the Host has not gone idle. A live seat is a
+running holder whose record names this Host instance as `dispatcher`. When
+that scan is empty, the wake is `all-idle` even if attention or other pending
+work is recorded, and even if the turn was the Delegator's own send or steer
+(owner rule, Yanlei 2026-10-11 16:49). A `ps` failure looks like no seats and
+wakes `all-idle`. With a seat still live, a Delegator-caused turn does not
+wake, and a waiting question wins over a delivery review. `state` for these
+rows is `end_turn`. `state_detail` stays
 the agent's ACP `stopReason` when it is a clean token, otherwise `"other"`,
 `"cancelled"`, or null, as in the table below.
 
