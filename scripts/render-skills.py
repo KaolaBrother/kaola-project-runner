@@ -725,9 +725,13 @@ def expected_files(manifest: dict[str, str], main_build: bytes) -> dict[str, byt
         if not source.is_file():
             raise ValueError(f"required runtime source missing: {source}")
         result[target] = source.read_bytes()
+    # Issue #306: the skill entry must not write __pycache__ beside the
+    # scripts it executes. kaola-tmux.sh sets the same variable again so a
+    # direct call of that shell is covered too.
     wrapper = (
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
+        "export PYTHONDONTWRITEBYTECODE=1\n"
         "script_dir=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd -P)\"\n"
         + ("export KAOLA_CLAUDE_PROFILE_REQUIRED=true\n" if manifest["id"] == "claude-code" else "")
         + f"exec \"$script_dir/kaola-tmux.sh\" {manifest['id']} \"$@\"\n"
@@ -766,13 +770,43 @@ def hash_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def inventory(root: Path) -> dict[str, bytes]:
+def bytecode_byproduct(relative: Path) -> bool:
+    """True when ``relative`` is Python bytecode, not generated payload.
+
+    Issue #306. ``__pycache__/`` directories and ``*.pyc``/``*.pyo`` files are
+    runtime byproducts. A regular file whose own name is ``__pycache__`` is
+    not one of them and stays visible to the gate. This is the same exclusion
+    as ``install-local.sh`` ``tree_digest`` (do not descend into
+    ``__pycache__``) and the bytecode names ``stage_copy`` leaves behind.
+    """
+    if relative.suffix in (".pyc", ".pyo"):
+        return True
+    return "__pycache__" in relative.parent.parts
+
+
+def _payload_files(root: Path) -> dict[str, bytes]:
     if not root.is_dir():
         return {}
-    return {
-        path.relative_to(root).as_posix(): path.read_bytes()
-        for path in sorted(root.rglob("*")) if path.is_file()
-    }
+    payload: dict[str, bytes] = {}
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(root)
+        if bytecode_byproduct(relative):
+            continue
+        payload[relative.as_posix()] = path.read_bytes()
+    return payload
+
+
+def inventory(root: Path) -> dict[str, bytes]:
+    """Checkout payload bytes for ``--check``.
+
+    Python may write ``__pycache__`` and ``.pyc``/``.pyo`` under a generated
+    Skill when a Host runs a helper from that directory. Those files are
+    gitignored and are not payload (Issue #306). Any other extra file is
+    still unexpected.
+    """
+    return _payload_files(root)
 
 
 def check_one(target: Path, expected: dict[str, bytes]) -> list[str]:
@@ -804,20 +838,13 @@ VERIFY_RECEIPT = "kaola-project-runner-install-verify/1"
 
 
 def installed_inventory(root: Path) -> dict[str, bytes]:
-    """A Skill directory's payload bytes. Python may write ``__pycache__`` and
-    ``.pyc``/``.pyo`` byproducts into an installed Skill at runtime; the
-    installer's ``tree_digest`` already excludes them and so does this."""
-    if not root.is_dir():
-        return {}
-    payload: dict[str, bytes] = {}
-    for path in sorted(root.rglob("*")):
-        if not path.is_file():
-            continue
-        relative = path.relative_to(root)
-        if "__pycache__" in relative.parts or path.suffix in (".pyc", ".pyo"):
-            continue
-        payload[relative.as_posix()] = path.read_bytes()
-    return payload
+    """A Skill directory's payload bytes for ``--verify-install``.
+
+    The same bytecode exclusion as ``inventory`` and the installer's
+    ``tree_digest`` (Issue #306). A file whose own name is ``__pycache__``
+    remains an unexpected payload file.
+    """
+    return _payload_files(root)
 
 
 def installed_skill_skew(skill: str, target: Path,

@@ -8,6 +8,27 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 Seats: restart not required
 
+- **Install no longer treats git-ignored Python bytecode as payload (Issue #306).**
+  `render-skills.py --check` and `--verify-install` ignore `__pycache__/`
+  directories and `*.pyc`/`*.pyo` files. A regular file whose name is
+  `__pycache__`, and any other extra file, is still unexpected. The host-bundle
+  verifier uses the same exclusion. `install-local.sh` `tree_digest` and
+  `stage_copy` already ignored those names; no other installer walk enumerates
+  payload files. `validate-skill.py` reads only `SKILL.md`.
+  `runtime-tmux.sh` (and `grok-tmux.sh`) and `scripts/kaola-tmux.sh` export
+  `PYTHONDONTWRITEBYTECODE=1`, so a seat started through the wrapper does not
+  write bytecode beside Skill scripts. `kaola-dispatch.py`'s recovery import of
+  `kaola-compact-recovery.py` — the writer behind the v0.9.3–v0.9.7 install
+  failures — sets `sys.dont_write_bytecode` for that import. The Host runs
+  dispatch with Python directly, not through the wrapper.
+  Restart judgment: `scripts/kaola-acp.py` is unchanged. Its per-call CLI
+  semantics are unchanged. The operator restart set (holder, ZCode bridge,
+  quota catalog, adapters, platform manifests, record-path helper) is
+  unchanged. `runtime-tmux.sh` and `kaola-tmux.sh` are read on each command;
+  a running holder does not keep that shell. `kaola-dispatch.py` is per-call.
+  A symlink install uses the new files on the next command. A copy install
+  uses them only after that copy is replaced. No seat restart is required.
+
 - **Webhook receipts record the wake reason, and a previous holder's payload still delivers (Issue #304).**
   A `delivered` or `failed` row in `.kaola/delegator-webhook-receipts.json`
   records the payload's wake `reason`. The value is JSON null when that

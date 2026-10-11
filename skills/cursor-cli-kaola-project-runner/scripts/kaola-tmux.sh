@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Issue #306: do not write __pycache__/*.pyc beside the Skill scripts this
+# shell executes. runtime-tmux.sh sets the same variable before exec; this
+# covers a direct call of kaola-tmux.sh. Child Python inherits it.
+export PYTHONDONTWRITEBYTECODE=1
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 MODEL_POLICY_HELPER="$script_dir/kaola-model-policy.py"

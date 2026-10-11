@@ -6339,7 +6339,15 @@ def command_state_recovery_input(args: argparse.Namespace) -> int:
             spec = importlib.util.spec_from_file_location("kpr_recovery_signal", Path(__file__).with_name("kaola-compact-recovery.py"))
             module = importlib.util.module_from_spec(spec)
             sys.modules[spec.name] = module
-            spec.loader.exec_module(module)
+            # Issue #306: the Host runs this file with python directly from the
+            # orchestrator Skill, not through runtime-tmux.sh. This import is
+            # what wrote scripts/__pycache__/kaola-compact-recovery.*.pyc.
+            previous_bytecode = sys.dont_write_bytecode
+            sys.dont_write_bytecode = True
+            try:
+                spec.loader.exec_module(module)
+            finally:
+                sys.dont_write_bytecode = previous_bytecode
             signal = module.classify(event.get("signal") or {}, caller["platform"])
             if (signal is None or event.get("role") != "host"
                     or not module.is_same_session(signal, record.get("acp_session_id"))):

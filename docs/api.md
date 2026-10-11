@@ -31,7 +31,11 @@ line; a label that looks like a release tag or begins with "release" is refused)
 `templates/budgets.json` first; an over-budget Skill, reference, description, bridge, or guide
 is reported as `budget: <surface> is N B > M B (<key>)` and nothing is written (an unverifiable
 pin is likewise never written). `--check` returns nonzero for any missing, stale,
-or unexpected file, Skill directory, or host bundle file. Manifest values are JSON strings in a
+or unexpected file, Skill directory, or host bundle file. Python `__pycache__/`
+directories and `*.pyc`/`*.pyo` files are runtime byproducts, not payload:
+`--check`, `--verify-install`, and the host-bundle verifier ignore them the
+same way the installer digest and copy do. Any other extra file is still
+unexpected. Manifest values are JSON strings in a
 flat YAML subset parsed without an external dependency. Transport fields are `acp_command`,
 `acp_env_allowlist`, `acp_login_requires_pty`, `acp_init_meta`, `acp_model_config_id`,
 `acp_effort_config_id`, `acp_mode_config_id`, `acp_fast_config_id`, `acp_fast_values`, `acp_model_map`, and

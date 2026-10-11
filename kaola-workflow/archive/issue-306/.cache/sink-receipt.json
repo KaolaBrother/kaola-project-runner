@@ -1,0 +1,30 @@
+{
+  "project": "issue-306",
+  "branch": "workflow/issue-306",
+  "issue_number": 306,
+  "issue_numbers": [
+    306
+  ],
+  "resolved_default_branch": "main",
+  "branch_head": "10f8a77b77d0bd89586f65a34d9136577c154c15",
+  "keep_open_requested": false,
+  "claim_ts": "2026-10-11T14:28:28.138Z",
+  "started_at": "2026-10-11T14:51:39.909Z",
+  "updated_at": "2026-10-11T14:51:44.199Z",
+  "removed_duplicates": [],
+  "archived_paths": [],
+  "invalidated_evidence": [],
+  "steps": {
+    "preflight": "done",
+    "push_upstream": "done",
+    "merge": "pending",
+    "finalize": "pending",
+    "stash_restore": "pending",
+    "archive_commit": "pending",
+    "push_main": "pending",
+    "closure": "pending"
+  },
+  "integration_worktree": ".kw/integrate/issue-306",
+  "integrated_from": "10f8a77b77d0bd89586f65a34d9136577c154c15",
+  "candidate_base": "9c544984d60c799ba9e70a21c9260f82589c1d10"
+}

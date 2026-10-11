@@ -292,6 +292,19 @@ def guide_findings(bundle: Path, budgets: dict[str, int]) -> list[str]:
     return findings
 
 
+def bytecode_byproduct(path: Path) -> bool:
+    """True for a ``__pycache__`` directory or a ``*.pyc``/``*.pyo`` file.
+
+    Issue #306. A regular file whose own name is ``__pycache__`` is payload
+    and stays visible. Same rule as ``render-skills.py`` ``--check``.
+    """
+    if path.suffix in {".pyc", ".pyo"}:
+        return True
+    if "__pycache__" in path.parts[:-1]:
+        return True
+    return path.name == "__pycache__" and path.is_dir()
+
+
 def generated_state_findings(bundle: Path, repo: Path, require_pinned: bool) -> list[str]:
     renderer_path = repo / RENDERER
     if not renderer_path.is_file():
@@ -312,7 +325,11 @@ def generated_state_findings(bundle: Path, repo: Path, require_pinned: bool) -> 
             findings.append(f"{bundle}: stage is content; --require-pinned demands a pinned, verified bridge")
     except (OSError, ValueError) as exc:
         return [f"{bundle}: cannot re-render from {repo}: {exc}"]
-    actual = {p.relative_to(bundle).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(bundle.rglob("*")) if p.is_file()}
+    actual = {
+        p.relative_to(bundle).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+        for p in sorted(bundle.rglob("*"))
+        if p.is_file() and not bytecode_byproduct(p)
+    }
     for name in sorted(expected.keys() | actual.keys()):
         if name not in actual:
             findings.append(f"{bundle}: missing generated file {name}")
@@ -336,11 +353,16 @@ def validate(bundle: Path, repo: Path | None, require_pinned: bool = False) -> l
         findings.append(f"{bundle}: missing {MARKER}")
     elif marker.read_text(encoding="utf-8") != HOST_MARKER:
         findings.append(f"{bundle}: {MARKER} must contain grok-bot")
-    entries = sorted(path.name for path in bundle.iterdir() if path.name != MARKER)
+    entries = sorted(
+        path.name for path in bundle.iterdir()
+        if path.name != MARKER and not bytecode_byproduct(path)
+    )
     expected_entries = sorted([BRIDGE_FILE, BRIDGE_MANIFEST, INSTALL_GUIDE])
     if entries != expected_entries:
         findings.append(f"{bundle}: bundle must contain exactly {expected_entries} (one bridge Skill, its manifest, the guide), got {entries}")
     for path in bundle.rglob("*"):
+        if bytecode_byproduct(path):
+            continue
         if path.is_symlink():
             findings.append(f"{bundle}: symlink {path.name} is not part of a generated bundle")
         elif path.is_file() and path.stat().st_mode & 0o111:
@@ -349,7 +371,7 @@ def validate(bundle: Path, repo: Path | None, require_pinned: bool = False) -> l
     findings.extend(manifest_findings(bundle))
     findings.extend(guide_findings(bundle, budgets))
     for path in sorted(bundle.rglob("*")):
-        if path.is_file():
+        if path.is_file() and not bytecode_byproduct(path):
             text = path.read_text(encoding="utf-8", errors="replace")
             for token in UNOFFICIAL:
                 if token in text:
