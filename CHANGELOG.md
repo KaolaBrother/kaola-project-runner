@@ -6,7 +6,7 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
-Seats: restart not required
+Seats: restart required
 
 - **Luna computer-use only, Sonnet profile trim, Claude Haiku Worker tier (Issue #301).**
   `platforms/codex.yaml` `luna_model_profile` is now exactly: "Computer-use
@@ -41,7 +41,11 @@ Seats: restart not required
   use that catalog, so they see Haiku and the new profile texts without a
   seat restart. A running seat keeps the model and effort stored in
   `start_evidence` at start. Profile text is selection guidance and is not
-  reapplied to a live session. This change does not edit the holder,
+  reapplied to a live session. Seats still restart: the holder pins
+  `platform.yaml` and the adapter mirrors the tier list, and both are in the
+  operator test's restart set, so after install a running codex or
+  claude-code seat reports stale on its pinned manifest; drain-restart at
+  idle is the supported refresh. This change does not edit the holder,
   `kaola-quota.py`, `kaola-record-contract.py`, or `kaola-acp-paths.py`.
   ACP launch does not source the adapter shell.
   The operator diff of `platforms/` and `scripts/adapters/claude-code.sh` is
