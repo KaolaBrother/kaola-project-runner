@@ -4,7 +4,7 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.9.7 — 2026-10-11 (delegator wake gate: real work only, once per event)
 
 Seats: restart required
 
@@ -33,6 +33,10 @@ Seats: restart required
   Restart judgment: `scripts/kaola-acp-holder.py` changed, so running Hosts
   and seats must restart to pick up the new gating. The holder is in the
   operator restart set.
+  Pre-release repair: the turn-end wake predicate no longer takes the
+  holder state lock (a composite steer settling a turn under
+  `cancel_turn` deadlocked; found by the full-inventory watchdog).
+
 
 ## 0.9.6 — 2026-10-11 (luna computer-use only, sonnet trim, claude haiku worker tier)
 
