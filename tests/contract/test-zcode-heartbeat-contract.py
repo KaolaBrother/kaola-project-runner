@@ -1212,6 +1212,17 @@ def bare_holder(module, entries: list[dict] | None = None, *,
     # have set from --role.
     holder.session_role = "host"
     holder.stop_requested = False
+    # Issue #305: the worker-event and turn-end paths also touch the
+    # all-idle episode latch and, via _note_terminated_seat ->
+    # _node_directory, the holder's record_dir. Set what the constructor
+    # would have set; the nonexistent path makes node lookups find nothing,
+    # which these tests never assert on.
+    holder.record_dir = Path(tempfile.gettempdir()) / "bare-holder-records"
+    holder.state = "ready"
+    holder._delegator_followups = {}
+    holder._all_idle_woken = False
+    holder._all_idle_lock = threading.Lock()
+    holder.holder_instance_id = "bare-holder-instance"
     return holder
 
 

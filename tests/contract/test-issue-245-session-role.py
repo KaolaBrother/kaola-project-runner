@@ -576,7 +576,10 @@ class SessionRoleDispatch(unittest.TestCase):
                 "host_class": False,
             }]},
         )
-        self.assertEqual(blocked["items"][0]["reason"], "count")
+        # Issue #303 (owner rule): a live sideagent-role record is
+        # seat_exempt and no longer consumes the class count, so the new
+        # item is admitted within count 1. Pre-#303 this was "count".
+        self.assertEqual(blocked["items"][0]["reason"], "admitted")
         self.log.write_text("", encoding="utf-8")
         admitted = self.execute(
             {"scope": "research", "repo": repo, "items": [item]},
