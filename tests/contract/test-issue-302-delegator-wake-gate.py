@@ -7,6 +7,8 @@ KAOLA_DELEGATOR_WEBHOOK_CONFIG and HOME stay on temp paths.
 
 from __future__ import annotations
 
+import argparse
+import hashlib
 import importlib.util
 import json
 import os
@@ -14,6 +16,7 @@ import subprocess
 import sys
 import time
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -127,13 +130,22 @@ class WakeGate(issue299.WebhookCase):
         return proc.returncode, receipt
 
     def tearDown(self) -> None:
+        names: list[str] = []
+        for name in list(getattr(self, "extra_sessions", []) or []):
+            if name and name not in names:
+                names.append(name)
         worker = getattr(self, "worker", None)
-        if worker and worker != self.session:
-            current = self.session
-            self.session = worker
+        if worker and worker not in names:
+            names.append(worker)
+        current = self.session
+        for name in names:
+            if name == current:
+                continue
+            self.session = name
             self.acp("stop", "--force", check=False, timeout=30)
-            self.session = current
-            self.worker = None
+        self.session = current
+        self.worker = None
+        self.extra_sessions = []
         super().tearDown()
 
     def start_host(self, suffix: str, scenario: str = "normal",
@@ -172,6 +184,119 @@ class WakeGate(issue299.WebhookCase):
             record.get("dispatcher"))
         self.session = host
         return self.worker
+
+    def start_sideagent(self, suffix: str) -> str:
+        """A live Sideagent whose record names the current Host as dispatcher.
+
+        The session name is not a Host name. ``--role sideagent`` is what
+        keeps it out of the live-seat scan.
+        """
+        node = f"grok-i305-node-{suffix}"
+        self.worker = node
+        host = self.session
+        _, status = self.acp("status")
+        holder_id = status.get("holder_instance_id")
+        self.assertIsInstance(holder_id, str, status)
+        self.session = node
+        _, receipt = self.acp("start", "--role", "sideagent", extra_env={
+            "KAOLA_ACP_HEARTBEAT_HOST": json.dumps({
+                "platform": "grok", "session": host, "repo": str(self.repo),
+            }),
+            "KAOLA_ACP_DISPATCHER": json.dumps({
+                "holder_instance_id": holder_id,
+                "platform": "grok",
+                "session": host,
+                "repo": str(self.repo),
+            }),
+        })
+        self.assertEqual(receipt.get("session_role"), "sideagent", receipt)
+        record = self.holder_record()
+        self.assertEqual(record.get("session_role"), "sideagent", record)
+        self.assertEqual(
+            (record.get("dispatcher") or {}).get("holder_instance_id"), holder_id,
+            record.get("dispatcher"))
+        self.session = host
+        return node
+
+    @contextmanager
+    def webhook_process_env(self):
+        """The in-process holder spawns deliver with the test process environment."""
+        keys = ("KAOLA_DELEGATOR_WEBHOOK_CONFIG", "HOME", "KAOLA_ACP_RECORD_ROOT",
+                "KAOLA_ACP_HEARTBEAT_HOST", "KAOLA_ACP_DISPATCHER",
+                "KAOLA_ACP_HEARTBEAT_HOST_SOCKET")
+        saved = {key: os.environ.get(key) for key in keys}
+        os.environ["KAOLA_DELEGATOR_WEBHOOK_CONFIG"] = str(self.config)
+        os.environ["HOME"] = str(self.home)
+        os.environ["KAOLA_ACP_RECORD_ROOT"] = str(self.record_root)
+        for key in ("KAOLA_ACP_HEARTBEAT_HOST", "KAOLA_ACP_DISPATCHER",
+                    "KAOLA_ACP_HEARTBEAT_HOST_SOCKET"):
+            os.environ.pop(key, None)
+        try:
+            yield
+        finally:
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+    def idle_host(self, suffix: str):
+        """A Host holder whose last turn already ended, with no all-idle sent."""
+        digest = hashlib.sha256(self.project.encode()).hexdigest()[:16]
+        session = f"grok-w305-orchestrator-{suffix}"
+        record_dir = self.record_root / "grok" / session / digest
+        record_dir.mkdir(parents=True)
+        args = argparse.Namespace(
+            record_dir=str(record_dir), socket=str(self.root / f"{suffix}.sock"),
+            platform="grok", session=session, repo=self.project, init_meta="",
+            command="stub", session_role="host",
+            host_entry="/kaola-project-runner")
+        host = holder.Holder(args)
+        host.session_role = "host"
+        host.state = "ready"
+        host.stop_requested = False
+        host.turn["active"] = False
+        host.turn["outcome"] = "turn_completed"
+        host.turn["stop_reason"] = "end_turn"
+        host._delegator_followups = 0
+        host._all_idle_woken = False
+        return host
+
+    def event_rows(self, host) -> list[dict]:
+        path = Path(host.record_dir) / "events.jsonl"
+        rows = []
+        if not path.exists():
+            return rows
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                rows.append(json.loads(line))
+        return rows
+
+    def posts_for(self, holder_id: str, reason: str = "all-idle") -> list[dict]:
+        return [post for post in (self.endpoint.posts if self.endpoint else [])
+                if (post["body"] or {}).get("reason") == reason
+                and (post["body"] or {}).get("holder_instance_id") == holder_id]
+
+    def spawn_seat(self, session: str, role: str, state: str, dispatcher_id: str):
+        """A live process whose argv matches the holder scan, plus its record."""
+        digest = hashlib.sha256(self.project.encode()).hexdigest()[:16]
+        record_dir = self.record_root / "grok" / session / digest
+        record_dir.mkdir(parents=True)
+        sock = self.root / f"{session}.sock"
+        proc = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(60)",
+             "kaola-acp-holder", "--record-dir", str(record_dir),
+             "--socket", str(sock)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        record = {
+            "holder_pid": proc.pid,
+            "session": session,
+            "session_role": role,
+            "state": state,
+            "dispatcher": {"holder_instance_id": dispatcher_id},
+        }
+        (record_dir / "record.json").write_text(json.dumps(record), encoding="utf-8")
+        return proc, record_dir
 
     def write_heartbeat(self, body: str) -> None:
         path = self.repo / ".kaola" / "heartbeat-prompt.json"
@@ -513,6 +638,243 @@ class WakeGate(issue299.WebhookCase):
         self.assertNotIn("delegator_death_wake", again)
         time.sleep(0.4)
         self.assertEqual(len(self.posts_with_reason("holder_lost")), 1)
+
+    def test_turn_end_all_idle_while_sideagent_node_stays_alive(self) -> None:
+        # (a) The Host's last turn ends with no working seat. The live
+        # Sideagent node is not counted, so the wake is at this turn end.
+        self.endpoint = Endpoint()
+        code, out = self.configure(self.endpoint.url)
+        self.assertEqual(code, 0, out)
+        self.start_host("node-idle")
+        node = self.start_sideagent("node-idle")
+        self.session = self.host_session
+        self.acp("send", "--text", "idle", "--wait")
+        post = wait_for(lambda: (self.posts_with_reason("all-idle") or [None])[-1],
+                        15, "all-idle at turn end")
+        self.assertEqual(post["body"]["state"], "end_turn")
+        self.assertEqual(post["body"]["state_detail"], "end_turn")
+        self.assertEqual(post["body"]["reason"], "all-idle")
+        self.assertEqual(set(post["body"]), PAYLOAD_KEYS)
+        time.sleep(0.4)
+        self.assertEqual(len(self.posts_with_reason("all-idle")), 1)
+        self.session = node
+        record = self.holder_record()
+        self.assertEqual(record.get("session_role"), "sideagent")
+        os.kill(int(record["holder_pid"]), 0)
+        self.session = self.host_session
+
+    def test_node_stop_after_idle_turn_sends_one_all_idle(self) -> None:
+        # (b) The 20:33 shape. The Host's last turn already ended and this
+        # episode has not woken. The confirmed node stop is the first time
+        # the condition holds, so the one all-idle is at that stop.
+        self.endpoint = Endpoint()
+        self.configure_endpoint()
+        with self.webhook_process_env():
+            host = self.idle_host("node-stop")
+            host._stop_node("node-holder")
+            post = wait_for(
+                lambda: (self.posts_for(host.holder_instance_id) or [None])[-1],
+                15, "all-idle at node stop")
+            self.assertEqual(post["body"]["state"], "end_turn")
+            self.assertEqual(post["body"]["state_detail"], "end_turn")
+            self.assertEqual(post["body"]["reason"], "all-idle")
+            self.assertEqual(set(post["body"]), PAYLOAD_KEYS)
+            stopped = [row for row in self.event_rows(host)
+                       if row.get("kind") == "sideagent_node_stopped"]
+            self.assertEqual(len(stopped), 1)
+            self.assertEqual(post["body"]["event_seq"], stopped[0]["cursor"])
+            host._stop_node("node-holder")
+            time.sleep(0.6)
+            self.assertEqual(len(self.posts_for(host.holder_instance_id)), 1)
+
+    def test_node_stop_skips_when_the_host_is_not_idle(self) -> None:
+        self.endpoint = Endpoint()
+        self.configure_endpoint()
+        with self.webhook_process_env():
+            active = self.idle_host("active")
+            active.turn["active"] = True
+            active._stop_node("node-holder")
+            follow = self.idle_host("follow")
+            follow._delegator_followups = 1
+            follow._stop_node("node-holder")
+            stopping = self.idle_host("stopping")
+            stopping.stop_requested = True
+            stopping.state = "stopping"
+            stopping._stop_node("node-holder")
+            startup = self.idle_host("startup")
+            startup.turn["outcome"] = None
+            startup._stop_node("node-holder")
+            failed = self.idle_host("failed")
+            failed.turn["outcome"] = "turn_failed"
+            failed._stop_node("node-holder")
+            time.sleep(0.8)
+            self.assertFalse(self.endpoint.posts, self.endpoint.posts)
+
+    def test_last_worker_stop_after_turn_wakes_all_idle_once(self) -> None:
+        # (c) The Delegator's send does not wake while the worker is live.
+        # Stopping that worker after the turn sends exactly one all-idle.
+        self.endpoint = Endpoint()
+        code, out = self.configure(self.endpoint.url)
+        self.assertEqual(code, 0, out)
+        self.start_host("last-seat")
+        worker = self.start_worker("last-seat")
+        self.session = self.host_session
+        self.acp("send", "--text", "work", "--wait")
+        time.sleep(0.5)
+        self.assertFalse(self.posts_with_reason("all-idle"), self.endpoint.posts)
+        self.session = worker
+        self.acp("stop", "--force")
+        self.worker = None
+        self.session = self.host_session
+        post = wait_for(lambda: (self.posts_with_reason("all-idle") or [None])[-1],
+                        20, "all-idle after last worker")
+        self.assertEqual(post["body"]["state"], "end_turn")
+        self.assertEqual(post["body"]["state_detail"], "end_turn")
+        self.assertEqual(post["body"]["reason"], "all-idle")
+        time.sleep(0.6)
+        self.assertEqual(len(self.posts_with_reason("all-idle")), 1)
+
+    def test_a_live_worker_blocks_all_idle_until_the_last_stops(self) -> None:
+        # (d) One remaining worker blocks the wake at the send and at the
+        # first stop. The second stop is the one all-idle.
+        self.endpoint = Endpoint()
+        code, out = self.configure(self.endpoint.url)
+        self.assertEqual(code, 0, out)
+        self.start_host("two")
+        first = self.start_worker("two-a")
+        self.extra_sessions = [first]
+        second = self.start_worker("two-b")
+        self.session = self.host_session
+        self.acp("send", "--text", "work", "--wait")
+        time.sleep(0.4)
+        self.assertFalse(self.posts_with_reason("all-idle"), self.endpoint.posts)
+        self.session = first
+        self.acp("stop", "--force")
+        self.extra_sessions = []
+        self.session = self.host_session
+        wait_for(lambda: self.acp("status")[1].get("turn_active") is False,
+                 20, "host idle after the first stop")
+        time.sleep(0.6)
+        self.assertFalse(self.posts_with_reason("all-idle"), self.endpoint.posts)
+        self.session = second
+        self.acp("stop", "--force")
+        self.worker = None
+        self.session = self.host_session
+        post = wait_for(lambda: (self.posts_with_reason("all-idle") or [None])[-1],
+                        20, "all-idle after the second stop")
+        self.assertEqual(post["body"]["state"], "end_turn")
+        self.assertEqual(post["body"]["state_detail"], "end_turn")
+        time.sleep(0.6)
+        self.assertEqual(len(self.posts_with_reason("all-idle")), 1)
+
+    def test_node_stop_skips_while_a_worker_seat_is_working(self) -> None:
+        # (d) in-process: a ready worker blocks the node-stop re-check.
+        # stopping still counts for preservation and does not count as working.
+        self.endpoint = Endpoint()
+        self.configure_endpoint()
+        proc = None
+        with self.webhook_process_env():
+            host = self.idle_host("seat")
+            try:
+                proc, record_dir = self.spawn_seat(
+                    "grok-i305-worker-seat", "expert", "ready", host.holder_instance_id)
+                found = wait_for(
+                    lambda: holder.holders_dispatched_by(host.holder_instance_id) or None,
+                    5, "spawned seat visible")
+                self.assertEqual(found, [proc.pid])
+                self.assertEqual(
+                    holder.holders_dispatched_by(host.holder_instance_id, working=True),
+                    [proc.pid])
+                host._stop_node("node-holder")
+                time.sleep(0.6)
+                self.assertFalse(self.endpoint.posts, self.endpoint.posts)
+                record = json.loads((record_dir / "record.json").read_text(encoding="utf-8"))
+                record["state"] = "stopping"
+                (record_dir / "record.json").write_text(json.dumps(record), encoding="utf-8")
+                self.assertEqual(
+                    holder.holders_dispatched_by(host.holder_instance_id), [proc.pid])
+                self.assertEqual(
+                    holder.holders_dispatched_by(host.holder_instance_id, working=True), [])
+                record["state"] = "ready"
+                record["session_role"] = "sideagent"
+                (record_dir / "record.json").write_text(json.dumps(record), encoding="utf-8")
+                self.assertEqual(holder.holders_dispatched_by(host.holder_instance_id), [])
+                self.assertEqual(
+                    holder.holders_dispatched_by(host.holder_instance_id, working=True), [])
+            finally:
+                if proc is not None and proc.poll() is None:
+                    proc.kill()
+                    proc.wait(timeout=5)
+
+    def test_same_event_posts_once_and_the_episode_latch_holds(self) -> None:
+        # (e) The webhook claim still posts one wake for one event_seq.
+        # The latch holds a second stop in the same episode. Clearing it and
+        # appending a new event may wake again: there is no time throttle.
+        self.endpoint = Endpoint()
+        self.configure_endpoint()
+        with self.webhook_process_env():
+            host = self.idle_host("dedupe")
+            host._delegator_wake("end_turn", "end_turn", "all-idle")
+            host._all_idle_woken = False
+            host._delegator_wake("end_turn", "end_turn", "all-idle")
+            wait_for(lambda: self.posts_for(host.holder_instance_id) or None,
+                     15, "first all-idle")
+            time.sleep(0.6)
+            self.assertEqual(len(self.posts_for(host.holder_instance_id)), 1)
+            skipped = [item for item in self.receipts()
+                       if item.get("skip_reason") == "duplicate"
+                       and item.get("holder_instance_id") == host.holder_instance_id]
+            self.assertEqual(len(skipped), 1)
+            self.assertNotIn("reason", skipped[0])
+
+            other = self.idle_host("episode")
+            other._maybe_delegator_all_idle()
+            wait_for(lambda: self.posts_for(other.holder_instance_id) or None,
+                     15, "episode all-idle")
+            other._maybe_delegator_all_idle()
+            time.sleep(0.6)
+            self.assertEqual(len(self.posts_for(other.holder_instance_id)), 1)
+            other._note_delegator_working_again()
+            other.events.append({"kind": "later_worker_stopped"})
+            other._maybe_delegator_all_idle()
+            wait_for(lambda: len(self.posts_for(other.holder_instance_id)) >= 2,
+                     15, "new episode all-idle")
+            time.sleep(0.4)
+            posts = self.posts_for(other.holder_instance_id)
+            self.assertEqual(len(posts), 2)
+            self.assertNotEqual(posts[0]["body"]["event_seq"], posts[1]["body"]["event_seq"])
+
+    def test_exact_stop_does_not_also_send_all_idle(self) -> None:
+        # (f) Exact stop keeps its own stopped wake. The live worker, and
+        # stop_requested before the node reclaim, send no all-idle.
+        self.endpoint = Endpoint()
+        code, out = self.configure(self.endpoint.url)
+        self.assertEqual(code, 0, out)
+        self.start_host("exact")
+        self.start_worker("exact")
+        self.session = self.host_session
+        self.acp("send", "--text", "work", "--wait")
+        time.sleep(0.4)
+        self.assertFalse(self.posts_with_reason("all-idle"), self.endpoint.posts)
+        self.acp("stop", "--force")
+        self.session = None
+        post = wait_for(lambda: (self.posts_with_reason("exact_stop") or [None])[-1],
+                        15, "exact stop wake")
+        self.assertEqual(post["body"]["state"], "stopped")
+        self.assertEqual(post["body"]["state_detail"], "exact_stop")
+        self.assertEqual(post["body"]["reason"], "exact_stop")
+        time.sleep(0.8)
+        self.assertEqual(len(self.posts_with_reason("exact_stop")), 1)
+        self.assertFalse(self.posts_with_reason("all-idle"), self.endpoint.posts)
+
+        self.endpoint.posts.clear()
+        with self.webhook_process_env():
+            host = self.idle_host("exact-node")
+            host.stop_requested = True
+            host.state = "stopping"
+            host._stop_node("node-holder")
+            time.sleep(0.6)
+            self.assertFalse(self.posts_for(host.holder_instance_id), self.endpoint.posts)
 
 
 if __name__ == "__main__":

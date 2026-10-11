@@ -2062,7 +2062,10 @@ def seat_exempt_record(record: Any) -> bool:
 
     A genuine worker record has ``session_role`` ``expert``, ``elite``,
     ``worker``, or no role. Those still occupy their seats. Issue #305 reuses
-    this predicate for the live-seat set; it does not decide stop-time wakes.
+    this predicate for the live-seat set at turn end and at the stop-time
+    all-idle re-check. The predicate only answers the role question. The
+    re-check also requires an idle Host, and it skips a record whose
+    ``state`` is ``agent_exited``, ``stopping``, or ``stopped``.
     """
     if not isinstance(record, dict):
         return False

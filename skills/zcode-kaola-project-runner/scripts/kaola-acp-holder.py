@@ -313,13 +313,14 @@ def delegator_turn_wake_reason(
     * ``self_continuing`` — the next beat is already admitted (``turn.active``)
       or a Delegator after-turn steer is queued. The Host has not gone idle.
       No wake.
-    * ``live_seats`` is false — no live worker holder names this Host as its
-      dispatcher (``holders_dispatched_by``). A seat-exempt record
+    * ``live_seats`` is false — the caller found no working dispatched holder.
+      ``holders_dispatched_by(..., working=True)`` skips a seat-exempt record
       (``session_role`` ``sideagent`` or legacy ``sidekick``, including the
-      bound Sideagent node) is not a live seat. The Host is idle and nobody
-      is working, so the wake is ``all-idle`` whether or not attention or
-      other pending work is recorded, and whether or not this turn was the
-      Delegator's. Owner rule, Yanlei 2026-10-11 16:49.
+      bound Sideagent node) and a record whose ``state`` is ``agent_exited``,
+      ``stopping``, or ``stopped``. The Host is idle and nobody is working,
+      so the wake is ``all-idle`` whether or not attention or other pending
+      work is recorded, and whether or not this turn was the Delegator's.
+      Owner rule, Yanlei 2026-10-11 16:49.
     * ``prompt_source == "delegator"`` — this turn was admitted by a socket
       prompt or by steer, and a seat is still live. The Delegator is already
       there. No wake.
@@ -603,6 +604,9 @@ def compact_spawn_record(path: Path) -> None:
 
 
 HOLDER_RECORD_DIR_ARG = re.compile(r" --record-dir (.+?) --socket ")
+# Issue #305: these records are no longer working. Stop preservation still
+# counts them (the default scan). The all-idle scan does not.
+_HOLDER_NOT_WORKING_STATES = frozenset({"agent_exited", "stopping", "stopped"})
 
 
 def own_holder_record(pid: int) -> dict[str, Any] | None:
@@ -667,7 +671,9 @@ def _seat_exempt_record(record: Any) -> bool:
     return bool(predicate(record)) if predicate is not None else False
 
 
-def holders_dispatched_by(holder_instance_id: Any) -> list[int]:
+def holders_dispatched_by(holder_instance_id: Any, *, working: bool = False,
+                          ignore_sessions: set[str] | frozenset[str] | None = None,
+                          ) -> list[int]:
     """Live Runner holders whose own record (under the ``--record-dir`` of
     their own argv, naming them as ``holder_pid``) names this holder instance
     as their ``dispatcher``. That record field comes from the
@@ -680,6 +686,14 @@ def holders_dispatched_by(holder_instance_id: Any) -> list[int]:
     those: ``_start_node`` stamps the Host as dispatcher and the child
     persists that role. A worker record (``expert``, ``elite``, ``worker``,
     or no role) stays in the set, so preserving its process tree is unchanged.
+
+    ``working=True`` is the all-idle scan (Issue #305). It also skips a record
+    whose ``state`` is ``agent_exited``, ``stopping``, or ``stopped``: ``stop``
+    writes ``stopping`` before the process exits, and a crash notifies
+    ``terminated`` before it writes ``agent_exited``. The default stays
+    inclusive so ``dispatched_worker_groups`` still preserves those trees.
+    ``ignore_sessions`` drops named sessions for this one call. The
+    just-terminated worker uses it while its record still says ``ready``.
     """
     if not isinstance(holder_instance_id, str) or not holder_instance_id:
         return []
@@ -700,6 +714,10 @@ def holders_dispatched_by(holder_instance_id: Any) -> list[int]:
         except (OSError, ValueError):
             continue
         if not isinstance(record, dict) or _seat_exempt_record(record):
+            continue
+        if working and record.get("state") in _HOLDER_NOT_WORKING_STATES:
+            continue
+        if ignore_sessions and record.get("session") in ignore_sessions:
             continue
         dispatcher = record.get("dispatcher")
         if (record.get("holder_pid") == int(fields[0]) and isinstance(dispatcher, dict)
@@ -1974,6 +1992,10 @@ class Holder:
         # Issue #302: Delegator after-turn steers already queued. A turn end
         # while this is non-zero is self-continuation: the Delegator is injecting.
         self._delegator_followups = 0
+        # Issue #305: one all-idle wake per idle episode. Not a timer. A new
+        # Host turn, or a later non-exempt worker termination, clears it.
+        self._all_idle_woken = False
+        self._all_idle_lock = threading.Lock()
         try:
             previous_record = json.loads(self.record_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -2617,7 +2639,11 @@ class Holder:
                               else "other")
                 else:
                     detail = "cancelled" if outcome == "turn_canceled" else None
-                self._delegator_wake("end_turn", detail, reason)
+                if reason == "all-idle":
+                    # Shares the idle-episode latch with the stop-time re-check.
+                    self._emit_delegator_all_idle("end_turn", detail)
+                else:
+                    self._delegator_wake("end_turn", detail, reason)
 
     def on_agent_exit(self, code: int) -> None:
         reason = (f"exit_code={self.agent.exit_code}"
@@ -2868,6 +2894,8 @@ class Holder:
                 # Only holder-internal admissions pass "self".
                 "prompt_source": "self" if source == "self" else "delegator",
             })
+            # Issue #305: a new turn opens a new idle episode. Not a timer.
+            self._note_delegator_working_again()
             duplicate = None
             if previous.get("fingerprint") == fingerprint:
                 duplicate = {
@@ -3024,8 +3052,9 @@ class Holder:
         """Issue #302 predicate for one ended turn. See ``delegator_turn_wake_reason``."""
         staged, rows = self._delegator_pending_facts()
         # Outside the holder locks: this scans ps and other holders' records.
-        # Seat-exempt Sideagent records are already absent from this set (#303).
-        live_seats = bool(holders_dispatched_by(self.holder_instance_id))
+        # Working seats only (#305): agent_exited / stopping / stopped are not
+        # live. Seat-exempt Sideagent records are already absent (#303).
+        live_seats = bool(holders_dispatched_by(self.holder_instance_id, working=True))
         # Issue #302 deadlock repair: never take ``self.lock`` here. This runs
         # inside ``on_prompt_response``, and ``cancel_turn`` holds ``self.lock``
         # across the wait for the turn to settle — a steer/cancel settling the
@@ -3108,6 +3137,80 @@ class Holder:
             spawn(wait=False)
         else:
             threading.Thread(target=spawn, args=(True,), daemon=True).start()
+
+    def _note_delegator_working_again(self) -> None:
+        """The idle episode ended. The next all-idle may wake. Not a timer."""
+        with self._all_idle_lock:
+            self._all_idle_woken = False
+
+    def _emit_delegator_all_idle(self, state: str, detail: str | None) -> bool:
+        """Send one ``all-idle`` for this idle episode, or nothing if it already went.
+
+        The claim is taken before the detached deliver spawn, so a turn-end
+        wake and a stop re-check in the same episode POST once. Dedupe on
+        ``holder_instance_id`` + ``event_seq`` still applies to a replay of
+        the same event. A later episode (a new turn, or a non-exempt worker
+        termination) clears the latch and may wake again. There is no time
+        throttle.
+        """
+        with self._all_idle_lock:
+            if self._all_idle_woken:
+                return False
+            self._all_idle_woken = True
+        self._delegator_wake(state, detail, "all-idle")
+        return True
+
+    def _maybe_delegator_all_idle(self,
+                                  ignore_sessions: set[str] | frozenset[str] | None = None,
+                                  ) -> None:
+        """Issue #305: re-check all-idle after a stop that no turn end will see.
+
+        Send only when the Host is already idle and nobody is working. The
+        payload reuses the turn-end all-idle shape: ``state`` ``end_turn``,
+        ``state_detail`` ``end_turn``, ``reason`` ``all-idle``. This stop is
+        not a new Host turn, and it is not an exact Host stop, so ``stopped``
+        / ``exact_stop`` stay reserved for ``op_stop``. Non-blocking, same as
+        every wake except exact stop.
+        """
+        if self.session_role != "host":
+            return
+        if self.stop_requested or self.state in ("stopping", "stopped"):
+            return
+        if self.turn.get("active") or self._delegator_followups:
+            return
+        if self.turn.get("outcome") not in ("turn_completed", "turn_canceled"):
+            return
+        if holders_dispatched_by(self.holder_instance_id, working=True,
+                                 ignore_sessions=ignore_sessions):
+            self._note_delegator_working_again()
+            return
+        self._emit_delegator_all_idle("end_turn", "end_turn")
+
+    def _terminated_seat_exempt(self, platform: str, session: str) -> bool:
+        """True when this terminated session is a Sideagent record.
+
+        An unreadable record counts as a worker, so its stop can still open a
+        new idle episode.
+        """
+        directory = self._node_directory(platform, session)
+        if directory is None:
+            return False
+        try:
+            record = json.loads((directory / "record.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        return _seat_exempt_record(record)
+
+    def _note_terminated_seat(self, platform: str, session: str) -> None:
+        """A dispatched worker stopping opens a new idle episode.
+
+        The bound Sideagent node is seat-exempt. Its termination does not
+        clear the episode, so a node stop after all-idle does not wake again.
+        """
+        if self.session_role != "host":
+            return
+        if not self._terminated_seat_exempt(platform, session):
+            self._note_delegator_working_again()
 
     def _carrier_send(self, target: dict[str, str], params: dict[str, Any],
                       still_owed: Any = None) -> dict[str, Any]:
@@ -4280,19 +4383,28 @@ class Holder:
         while alive and time.monotonic() < deadline:
             time.sleep(0.5)
             alive = self._node_holder_alive(binding, holder)
+        confirmed = False
         with self.worker_events_lock:
             if alive:
+                # The node is still alive. This is not the idle moment.
                 self.node.update(phase="stopped", stop_unconfirmed={"holder": holder})
                 self.events.append({"kind": "sideagent_node_stop_unconfirmed", "holder": holder,
                                     "receipt": receipt})
                 self._maintenance_failure("stop-unconfirmed", self.node.get("sent_through"),
                                           self.node.get("recovery_input"))
             else:
+                confirmed = True
                 self.node.update(phase="stopped")
                 self.events.append({"kind": "sideagent_node_stopped", "holder": holder,
                                     "receipt": {key: receipt.get(key) for key in ("stopped", "error")
                                                 if key in receipt}})
         self._kick_worker_events()
+        # Issue #305: the node can stop after the Host's last turn end, and a
+        # quieted node ``terminated`` does not start a turn that would check.
+        # Kick first, so a turn the kick admitted is visible here and suppresses
+        # this wake. Exact stop sets ``stop_requested`` before it gets here.
+        if confirmed:
+            self._maybe_delegator_all_idle()
 
     def _reclaim_node(self) -> None:
         """A node is this carrier's own per-batch session, not a dispatched
@@ -4810,6 +4922,12 @@ class Holder:
                 queue_full = False
                 self.pending_worker_events.append(event)
                 pending = len(self.pending_worker_events)
+        # Issue #305: a non-exempt worker stopping opens a new idle episode
+        # before delivery. A retry of an event already confirmed returned
+        # above and must not clear the episode. The node is exempt, so its
+        # termination does not.
+        if kind == "terminated":
+            self._note_terminated_seat(platform, session)
         if queue_full:
             generation = self._record_overflow_full_check()
             receipt = {"error": {"code": "worker-event-queue-full",
@@ -4822,19 +4940,25 @@ class Holder:
             if (not self.turn["active"] and self.agent.proc is not None
                     and not self.agent.exited.is_set()):
                 receipt.update(self._deliver_worker_events())
-            return receipt
-        self.events.append({"kind": "worker_event", "event": event})
-        receipt: dict[str, Any] = {"event_id": event["event_id"], "staged": True,
-                                   "pending": pending}
-        if (not self.turn["active"] and self.agent.proc is not None
-                and not self.agent.exited.is_set()):
-            receipt.update(self._deliver_worker_events())
-        elif self.turn["active"]:
-            # A busy Host does not hold up routine events its Sideagent owns.
-            with self.worker_events_lock:
-                relay = self._relay_pass()
-            if relay.get("receipt"):
-                receipt["relay"] = relay["receipt"]
+        else:
+            self.events.append({"kind": "worker_event", "event": event})
+            receipt = {"event_id": event["event_id"], "staged": True,
+                       "pending": pending}
+            if (not self.turn["active"] and self.agent.proc is not None
+                    and not self.agent.exited.is_set()):
+                receipt.update(self._deliver_worker_events())
+            elif self.turn["active"]:
+                # A busy Host does not hold up routine events its Sideagent owns.
+                with self.worker_events_lock:
+                    relay = self._relay_pass()
+                if relay.get("receipt"):
+                    receipt["relay"] = relay["receipt"]
+        # The last worker can stop after the Host's last turn. Delivery may
+        # have admitted the notification turn; that turn's end sends the one
+        # all-idle. When it admitted nothing, this re-check sends it. The
+        # session is ignored once: its record can still say ``ready``.
+        if kind == "terminated":
+            self._maybe_delegator_all_idle(ignore_sessions=frozenset({session}))
         return receipt
 
     @staticmethod

@@ -103,37 +103,40 @@ transcript, prompt, diff or secret. `reason` names why you were woken:
 `permission_required`, `turn_failed`, `agent_exited`, `boot_failure`,
 `exact_stop`, `holder_lost`, `all-idle`, `question_waiting`,
 `delivery_review`, `needs_decision`, `host_stopped_pending`, or `test`.
-`state_detail` is separate: for `end_turn` it is the stop reason the agent reported
-(`end_turn`, `max_tokens`, `max_turn_requests`, `refusal`, `cancelled`, or
-`other`); otherwise it is `permission_required`, `turn_failed`,
-`agent_exit`, `boot_failure`, `holder_lost`, `exact_stop` or `test`.
+`state_detail` is separate from `reason`: the agent's stop reason on
+`end_turn`, else `permission_required`, `turn_failed`, `agent_exit`,
+`boot_failure`, `holder_lost`, `exact_stop`, or `test`.
 
 You are not woken when the Host ends a turn and continues by itself. You are
 not woken when the turn end is your own send or steer and a worker seat is
-still live. You are woken with `all-idle` when the Host goes idle and no
-dispatched seat is still live, whether or not pending work is recorded. You
+still working. You are woken with `all-idle` when the Host goes idle and no
+dispatched seat is still working, whether or not pending work is recorded. You
 are also woken for a permission, a failure, an agent exit, a failed boot, an
 exact stop, a recovered holder death, a waiting question, a delivery that
 needs review, a decision, or a Host that stopped with pending work while a
-seat is still live. A clean idle turn with a seat still live does not wake
-you.
+seat is still working. A clean idle turn with a seat still working does not wake
+you. A Sideagent node is not a seat, and a holder in `agent_exited`,
+`stopping`, or `stopped` is not working.
+After the Host's last turn, confirmed `sideagent_node_stopped` or the last
+worker's `terminated` re-checks one non-blocking `all-idle` (`state`
+`end_turn`, `state_detail` `end_turn`) when the Host is idle and no seat is
+working. A live seat, an active turn, a follow-up, an unconfirmed node stop,
+or exact stop does not. One episode, one wake. No time throttle.
+
 If a Host holder dies without a signal, the next `start` or `stop` of that
 session sends one `error` wake with `reason` `holder_lost`, the dead
 `holder_instance_id` and a new `event_seq`. That recovered wake is not a
 duplicate.
 
-On each wake: Grok Bot re-reads the bridge Accepted line and locates; then
-attest the exact session and read the authoritative `status`, `observe` and
-`capture` receipts. The payload does not prove those facts. Then run the
-standard inquiry. If the payload `project` or `session` is not your recorded
-`host`, it is not your Host: report it and do not act on it.
+On each wake: re-read the Accepted line, locate, attest the session, and
+read `status`, `observe`, and `capture`. The payload does not prove those
+facts. Then run the standard inquiry. If `project` or `session` is not your
+recorded `host`, report it and do not act on it.
 
-Dedupe on `holder_instance_id` + `event_seq` against the receipt cursor. The
-sender also drops a second POST of that same pair. A wake that is not newer
-than the receipts you already handled causes no action. Duplicate and
-out-of-order wakes are harmless; the existing `watch` rules prevent a second
-relay. `blocked` means the Host waits on a permission: handle it as one owned
-permission event. The cron fallback finds a lost delivery. One attempt waits
-12 s. A timeout is not retried. Connection errors, HTTP 5xx, 408 and 429 are
-retried. Delivery receipts are in
-`<repo>/.kaola/delegator-webhook-receipts.json` (the last 32 attempts).
+Dedupe on `holder_instance_id` + `event_seq`. The sender drops a second POST
+of that pair. A wake you already handled causes no action. Duplicate and
+out-of-order wakes are harmless; `watch` rules prevent a second relay.
+`blocked` is one owned permission. The cron fallback finds a lost delivery.
+One attempt waits 12 s. A timeout is not
+retried. Connection errors, HTTP 5xx, 408 and 429 are retried. Receipts are
+in `<repo>/.kaola/delegator-webhook-receipts.json` (the last 32).

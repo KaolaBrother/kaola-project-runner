@@ -71,6 +71,24 @@ Seats: restart required
   `scripts/kaola-record-contract.py` changed. Both are in the operator
   restart set, so running seats must restart.
 
+- **The all-idle wake is re-checked when the node or the last worker stops (Issue #305).**
+  After the Host's last turn has ended, a confirmed `sideagent_node_stopped`
+  and a dispatched worker `terminated` event re-check the #302 all-idle
+  condition. The wake is sent when the Host is idle, the last turn completed
+  or was canceled without a requested stop, and no working dispatched seat
+  remains. A working seat has `session_role` other than `sideagent` or
+  `sidekick`, and `state` other than `agent_exited`, `stopping`, or
+  `stopped`. An unconfirmed node stop does not re-check. Exact stop still
+  sends only `exact_stop`. The stop-time payload is `state` `end_turn`,
+  `state_detail` `end_turn`, `reason` `all-idle`. The Host is already idle,
+  and `stopped` / `exact_stop` stay reserved for `op_stop`. The send is
+  non-blocking. There is no time throttle. One idle episode sends one
+  `all-idle`. A new Host turn, or a later non-exempt worker termination, can
+  wake again. Dedupe on `holder_instance_id` + `event_seq` is unchanged.
+  Restart judgment: `scripts/kaola-acp-holder.py` changed, and the
+  `seat_exempt_record` note in `scripts/kaola-record-contract.py` changed.
+  Both files are in the operator restart set, so running seats must restart.
+
 
 ## 0.9.7 — 2026-10-11 (delegator wake gate: real work only, once per event)
 

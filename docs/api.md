@@ -737,7 +737,7 @@ Delegator is not already there and the Host did not continue by itself:
 | what the holder saw | reason |
 | --- | --- |
 | next beat already admitted, or a Delegator after-turn steer is queued | no wake |
-| no live dispatched seat (`holders_dispatched_by` is empty) | `all-idle` |
+| no working dispatched seat | `all-idle` |
 | prompt source `delegator` (this send or steer) and a seat is still live | no wake |
 | undelivered host-view row `kind=decisions`, `why=host-decision` | `question_waiting` |
 | undelivered host-view row `kind=tasks` and `why` one of `awaiting-verdict`, `delivery-open`, `verdict-missing` | `delivery_review` |
@@ -749,16 +749,39 @@ Delegator is not already there and the Host did not continue by itself:
 Undelivered attention means the heartbeat body is a host view (`view` `host`,
 `attention` a list) whose fingerprint is not the one last delivered on a
 worker-event prompt. Checked in that order. Self-continuation wins over
-everything below it (no wake): the Host has not gone idle. A live seat is a
-running holder whose record names this Host instance as `dispatcher`. When
-that scan is empty, the wake is `all-idle` even if attention or other pending
-work is recorded, and even if the turn was the Delegator's own send or steer
-(owner rule, Yanlei 2026-10-11 16:49). A `ps` failure looks like no seats and
-wakes `all-idle`. With a seat still live, a Delegator-caused turn does not
-wake, and a waiting question wins over a delivery review. `state` for these
-rows is `end_turn`. `state_detail` stays
+everything below it (no wake): the Host has not gone idle. A working seat is
+a running holder whose record names this Host instance as `dispatcher`, whose
+`session_role` is not `sideagent` or legacy `sidekick`, and whose `state` is
+not `agent_exited`, `stopping`, or `stopped`. The bound Sideagent node is not
+a seat. When that scan is empty, the wake is `all-idle` even if attention or
+other pending work is recorded, and even if the turn was the Delegator's own
+send or steer (owner rule, Yanlei 2026-10-11 16:49). A `ps` failure looks
+like no seats and wakes `all-idle`. With a seat still working, a
+Delegator-caused turn does not wake, and a waiting question wins over a
+delivery review. `state` for these rows is `end_turn`. `state_detail` stays
 the agent's ACP `stopReason` when it is a clean token, otherwise `"other"`,
 `"cancelled"`, or null, as in the table below.
+
+The same condition is checked again when a stop lands after the Host's last
+turn has already ended. Two points re-check it. A confirmed
+`sideagent_node_stopped` (the node process is gone; an unconfirmed stop does
+not) re-checks after the holder kicks worker events. A dispatched worker
+`terminated` event re-checks after that event is staged, which is also when
+`stop` of the last worker reaches the Host. The wake is sent only when every
+one of these is true: this holder is the Host; stop was not requested and the
+holder is not `stopping` or `stopped` (exact stop owns that wake); the Host
+turn is not active and no Delegator follow-up is queued; the last turn
+outcome is `turn_completed` or `turn_canceled`; and no working dispatched
+seat remains. The check is non-blocking, the same detached deliver child as
+every other wake, and there is no time throttle. One idle episode sends one
+`all-idle`. A new Host turn, or a later non-exempt worker termination, opens
+another episode and may wake again. The stop-time payload is `state`
+`end_turn`, `state_detail` `end_turn`, `reason` `all-idle`. The Host is
+already idle, and this stop is not a new turn and not an exact Host stop, so
+`stopped` / `exact_stop` stay reserved for `op_stop`. A turn-end `all-idle`
+whose agent stop reason was `end_turn` has the same shape. Dedupe is still
+`holder_instance_id` + `event_seq`. A second deliver of that pair does not
+POST, and a later stop in the same idle episode does not POST again.
 
 A Host holder that dies without signalling (SIGKILL, crash) is covered by the
 CLI, not the holder: `start` replacing a dead or pid-reused record and a
