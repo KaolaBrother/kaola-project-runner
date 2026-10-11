@@ -29,6 +29,27 @@ Seats: restart not required
   the checkout; a copy install uses the new file only after that copy is
   replaced. A holder still running the pre-v0.9.7 payload builder does not
   need a restart for its next wake to be delivered.
+Seats: restart required
+
+- **A bound Sideagent node does not occupy a shared seat (Issue #303).**
+  Dispatch refused `claude-code/default` as `shared-occupied` because the
+  only occupant it counted was the Host's bound Sideagent node
+  (`session_role: sideagent`). `seat_exempt_record` in
+  `scripts/kaola-record-contract.py` is true when `session_role` is
+  `sideagent` or legacy `sidekick`. The record has no separate node flag.
+  `dispatcher` is not the marker: a worker record names the Host the same
+  way. `execute` skips those live rows in shared occupancy, in the occupant
+  list, and in the live-seat session set. `holders_dispatched_by` (the
+  holder and `kaola-acp.py`) skips them, so the node's pid is not a live
+  seat. A live worker (`expert`, `elite`, `worker`, or no role) still
+  occupies, and a `shared-occupied` refusal still names that worker. A plan
+  item with role `sideagent` that is not the bound session is still counted
+  as a worker when it is admitted. This does not add the stop-time all-idle
+  re-check (Issue #305); that issue can reuse `seat_exempt_record`.
+  Restart judgment: `scripts/kaola-acp-holder.py` and
+  `scripts/kaola-record-contract.py` changed. Both are in the operator
+  restart set, so running seats must restart.
+
 
 ## 0.9.7 — 2026-10-11 (delegator wake gate: real work only, once per event)
 

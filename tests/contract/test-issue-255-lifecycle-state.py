@@ -1971,6 +1971,45 @@ class NestedWorkerTopology(WorkerTree):
         self.unrelated.wait(timeout=5)
         self.assertFalse(self.alive(self.unrelated.pid))
 
+    def set_session_role(self, role: str | None) -> None:
+        record = json.loads((self.worker_dir / "record.json").read_text(encoding="utf-8"))
+        if role is None:
+            record.pop("session_role", None)
+        else:
+            record["session_role"] = role
+        (self.worker_dir / "record.json").write_text(json.dumps(record), encoding="utf-8")
+
+    def test_a_sideagent_node_record_is_not_a_live_seat_and_a_worker_still_is(self) -> None:
+        contract = holder_module._RECORD
+        self.assertTrue(contract.seat_exempt_record({"session_role": "sideagent"}))
+        self.assertTrue(contract.seat_exempt_record({"session_role": "sidekick"}))
+        self.assertFalse(contract.seat_exempt_record({"session_role": "expert"}))
+        self.assertFalse(contract.seat_exempt_record({"session_role": "elite"}))
+        self.assertFalse(contract.seat_exempt_record({"session_role": "worker"}))
+        self.assertFalse(contract.seat_exempt_record({"session_role": "host"}))
+        self.assertFalse(contract.seat_exempt_record({}))
+        self.assertFalse(contract.seat_exempt_record(None))
+        self.assertFalse(contract.seat_exempt_record({
+            "session_role": "expert",
+            "holder_features": ["sideagent-node/1"],
+            "dispatcher": {"holder_instance_id": "host-1"},
+        }), "holder_features and dispatcher do not mark a node")
+
+        (self.side_dir / "children.jsonl").write_text("", encoding="utf-8")
+        self.name_dispatcher("side-1")
+        live = {pgid: [pgid] for pgid in self.groups}
+        tree = {self.holder.pid, self.native, self.tool, self.orphan.pid}
+        self.set_session_role("sideagent")
+        self.assertEqual(holder_module.holders_dispatched_by("side-1"), [])
+        self.assertEqual(acp_module.holders_dispatched_by("side-1"), [])
+        self.assertEqual(holder_module.dispatched_worker_groups(
+            self.side_dir / "children.jsonl", live, holder_instance_id="side-1"), set())
+        self.set_session_role("expert")
+        self.assertEqual(holder_module.holders_dispatched_by("side-1"), [self.holder.pid])
+        self.assertEqual(acp_module.holders_dispatched_by("side-1"), [self.holder.pid])
+        self.assertEqual(holder_module.dispatched_worker_groups(
+            self.side_dir / "children.jsonl", live, holder_instance_id="side-1"), tree)
+
 
 class CarrierAnchor(unittest.TestCase):
     def setUp(self) -> None:

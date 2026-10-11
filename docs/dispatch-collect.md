@@ -162,9 +162,15 @@ on that item's Runner `start`. Apart from the legacy alias below, other values s
 metadata. It does not authorize that role, relabel a holder, or refuse an
 otherwise valid item. The seat's identity still comes from the Host name,
 that explicit sideagent flag, or the preset this start actually selected.
-Only the maintenance Sideagent bound in lifecycle state is outside worker
-preset `count` (`seat_exempt: true`); a shared seat it uses stays occupied. Any other
-`sideagent` item is a counted worker (`evidence.seat_note`). On recovery of a live session, the
+A live holder whose `session_role` is `sideagent` or legacy `sidekick` does not
+occupy a worker seat or a shared seat group. That is how the bound Sideagent
+node is recognized: `_start_node` passes `--role sideagent` and the child
+persists `session_role`. The record has no separate node flag, and `dispatcher`
+is not the marker, because a worker record names the Host the same way. A live
+worker (`expert`, `elite`, `worker`, or no role) still occupies, and a
+`shared-occupied` refusal names that occupant. The bound maintenance session's
+plan item is `seat_exempt: true`. Any other `sideagent` plan item is a counted
+worker when it is admitted (`evidence.seat_note`). On recovery of a live session, the
 entry does not start again and does not change that session's
 `session_role`. When a requested `sideagent` is not the persisted role, the
 item gains `evidence.role_note` and keeps the status it already had. Legacy

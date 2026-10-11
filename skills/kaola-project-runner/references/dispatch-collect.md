@@ -82,7 +82,7 @@ Each item uses a seat. Full pools return `shared-occupied`; other conflicts are 
 `count` and shared counts are the capacity. Totals derive from them and current
 occupancy; no standalone authorization or plan cap is accepted. Legacy limits
 need source-based owner reconciliation before removal; a redundant integer
-no smaller than all explicit counts can migrate safely. Worker pool is unchanged. Host rows (`host_class: true`) and the bound Sideagent (`seat_exempt`) are not worker seats. Resolve a row's preset from the row, identity-bound index
+no smaller than all explicit counts can migrate safely. Worker pool is unchanged. Host rows (`host_class: true`) and live sideagent/sidekick session_role are not worker seats. Resolve a row's preset from the row, identity-bound index
 (repo/session/holder/preset), or applied start/status model+effort. Platform
 name is no Class. Unresolved occupancy is unknown where a count/shared
 seat depends on it, unless known rows already fill the limit. Shared labels

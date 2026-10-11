@@ -313,10 +313,12 @@ def delegator_turn_wake_reason(
     * ``self_continuing`` — the next beat is already admitted (``turn.active``)
       or a Delegator after-turn steer is queued. The Host has not gone idle.
       No wake.
-    * ``live_seats`` is false — no live holder names this Host as its
-      dispatcher (``holders_dispatched_by``). The Host is idle and nobody is
-      working, so the wake is ``all-idle`` whether or not attention or other
-      pending work is recorded, and whether or not this turn was the
+    * ``live_seats`` is false — no live worker holder names this Host as its
+      dispatcher (``holders_dispatched_by``). A seat-exempt record
+      (``session_role`` ``sideagent`` or legacy ``sidekick``, including the
+      bound Sideagent node) is not a live seat. The Host is idle and nobody
+      is working, so the wake is ``all-idle`` whether or not attention or
+      other pending work is recorded, and whether or not this turn was the
       Delegator's. Owner rule, Yanlei 2026-10-11 16:49.
     * ``prompt_source == "delegator"`` — this turn was admitted by a socket
       prompt or by steer, and a seat is still live. The Delegator is already
@@ -658,13 +660,27 @@ def is_turn_end(event: dict[str, Any]) -> bool:
                 and event.get("turn_fingerprint"))
 
 
+def _seat_exempt_record(record: Any) -> bool:
+    """Issue #303 predicate from the record contract. False when it is absent."""
+    module = _RECORD if _RECORD not in (None, False) else None
+    predicate = getattr(module, "seat_exempt_record", None) if module is not None else None
+    return bool(predicate(record)) if predicate is not None else False
+
+
 def holders_dispatched_by(holder_instance_id: Any) -> list[int]:
     """Live Runner holders whose own record (under the ``--record-dir`` of
     their own argv, naming them as ``holder_pid``) names this holder instance
     as their ``dispatcher``. That record field comes from the
     ``KAOLA_ACP_DISPATCHER`` the start inherited, which reaches a worker even
     where ``KAOLA_ACP_CHILD_RECORD`` does not (the ZCode bridge forwards only
-    its allowlist)."""
+    its allowlist).
+
+    A seat-exempt record (``session_role`` ``sideagent`` or legacy
+    ``sidekick``) is not a live seat. The bound Sideagent node is one of
+    those: ``_start_node`` stamps the Host as dispatcher and the child
+    persists that role. A worker record (``expert``, ``elite``, ``worker``,
+    or no role) stays in the set, so preserving its process tree is unchanged.
+    """
     if not isinstance(holder_instance_id, str) or not holder_instance_id:
         return []
     try:
@@ -683,7 +699,7 @@ def holders_dispatched_by(holder_instance_id: Any) -> list[int]:
             record = json.loads((Path(match.group(1)) / "record.json").read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        if not isinstance(record, dict):
+        if not isinstance(record, dict) or _seat_exempt_record(record):
             continue
         dispatcher = record.get("dispatcher")
         if (record.get("holder_pid") == int(fields[0]) and isinstance(dispatcher, dict)
@@ -3008,6 +3024,7 @@ class Holder:
         """Issue #302 predicate for one ended turn. See ``delegator_turn_wake_reason``."""
         staged, rows = self._delegator_pending_facts()
         # Outside the holder locks: this scans ps and other holders' records.
+        # Seat-exempt Sideagent records are already absent from this set (#303).
         live_seats = bool(holders_dispatched_by(self.holder_instance_id))
         # Issue #302 deadlock repair: never take ``self.lock`` here. This runs
         # inside ``on_prompt_response``, and ``cancel_turn`` holds ``self.lock``

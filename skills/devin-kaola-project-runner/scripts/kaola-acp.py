@@ -2213,12 +2213,49 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None,
     return groups
 
 
+_RECORD_CONTRACT: Any = None
+
+
+def _record_contract() -> Any:
+    """Sibling record contract, or None when this copy does not ship it."""
+    global _RECORD_CONTRACT
+    if _RECORD_CONTRACT is False:
+        return None
+    if _RECORD_CONTRACT is None:
+        path = SCRIPT_DIR / "kaola-record-contract.py"
+        spec = importlib.util.spec_from_file_location("kaola_record_contract_acp", path)
+        if not path.is_file() or spec is None or spec.loader is None:
+            _RECORD_CONTRACT = False
+            return None
+        module = importlib.util.module_from_spec(spec)
+        previous = sys.dont_write_bytecode
+        sys.dont_write_bytecode = True
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.dont_write_bytecode = previous
+        _RECORD_CONTRACT = module
+    return _RECORD_CONTRACT
+
+
+def _seat_exempt_record(record: Any) -> bool:
+    """Issue #303 predicate. False when the sibling contract is absent."""
+    module = _record_contract()
+    predicate = getattr(module, "seat_exempt_record", None) if module is not None else None
+    return bool(predicate(record)) if predicate is not None else False
+
+
 def holders_dispatched_by(holder_instance_id: Any) -> list[int]:
     """Live Runner holders whose own record (under their own argv
     ``--record-dir``, naming them as ``holder_pid``) names this holder
     instance as ``dispatcher``. ``KAOLA_ACP_DISPATCHER`` reaches a worker
     start where the spawn-record variable does not (the ZCode bridge
-    forwards only its allowlist), so this needs no spawn line."""
+    forwards only its allowlist), so this needs no spawn line.
+
+    A seat-exempt record (``session_role`` ``sideagent`` or legacy
+    ``sidekick``) is not a live seat. A worker record (``expert``,
+    ``elite``, ``worker``, or no role) stays in the set.
+    """
     if not isinstance(holder_instance_id, str) or not holder_instance_id:
         return []
     found = []
@@ -2233,7 +2270,7 @@ def holders_dispatched_by(holder_instance_id: Any) -> list[int]:
             worker = json.loads((Path(match.group(1)) / "record.json").read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        if not isinstance(worker, dict):
+        if not isinstance(worker, dict) or _seat_exempt_record(worker):
             continue
         dispatcher = worker.get("dispatcher")
         if (worker.get("holder_pid") == int(fields[0]) and isinstance(dispatcher, dict)

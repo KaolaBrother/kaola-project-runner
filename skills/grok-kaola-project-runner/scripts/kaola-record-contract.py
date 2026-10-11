@@ -2043,6 +2043,32 @@ def _host_of(doc: dict[str, Any]) -> dict[str, str] | None:
     return {"platform": platform, "session": session, "holder_instance_id": holder}
 
 
+# Issue #303: a Host Sideagent session does not occupy a worker seat.
+# ``_start_node`` passes ``--role sideagent``; the child persists that role.
+# Legacy records may still say ``sidekick``. There is no separate node flag.
+SEAT_EXEMPT_ROLES = ("sideagent", "sidekick")
+
+
+def seat_exempt_record(record: Any) -> bool:
+    """True when this holder record must not occupy a worker or shared seat.
+
+    The marker is ``session_role``. ``_start_node`` does not write a node
+    boolean: it sets ``KAOLA_ACP_DISPATCHER`` to the Host and starts with
+    ``--role sideagent``, and the child holder persists ``session_role``.
+    ``list`` rows carry that role. ``dispatcher`` is not the marker, because
+    a worker the Host dispatched names the Host the same way.
+    ``holder_features`` includes ``sideagent-node/1`` on every holder of this
+    build, workers included, so it is not a node marker either.
+
+    A genuine worker record has ``session_role`` ``expert``, ``elite``,
+    ``worker``, or no role. Those still occupy their seats. Issue #305 reuses
+    this predicate for the live-seat set; it does not decide stop-time wakes.
+    """
+    if not isinstance(record, dict):
+        return False
+    return record.get("session_role") in SEAT_EXEMPT_ROLES
+
+
 def node_is_running(binding: Any, repo: Path | None, host: dict[str, str] | None) -> bool | None:
     """True only for this repo's ready Sideagent record dispatched by this Host.
 
@@ -2074,7 +2100,7 @@ def node_is_running(binding: Any, repo: Path | None, host: dict[str, str] | None
         return False
     if not isinstance(record, dict):
         return False
-    if record.get("session_role") not in ("sideagent", "sidekick"):
+    if record.get("session_role") not in SEAT_EXEMPT_ROLES:
         return False
     if record.get("platform") != platform or record.get("session") != session:
         return False

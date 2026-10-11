@@ -2152,6 +2152,10 @@ def command_execute(args: argparse.Namespace) -> int:
         lifecycle = load_object(Path(args.state)) if getattr(args, "state", None) else None
     except ValueError as exc:
         return fail("invalid-input", str(exc))
+    # Issue #303: production passes grants-only auth.json plus --state. The
+    # Sideagent binding lives on the heartbeat, not on that authorization object.
+    if binding is None:
+        binding = bound_sideagent(lifecycle)
     holds = preset_holds(lifecycle if lifecycle is not None else auth_doc)
     known_tasks = state_task_ids(lifecycle)
     observations: list[dict[str, Any]] = []
@@ -2414,6 +2418,7 @@ def command_execute(args: argparse.Namespace) -> int:
         row.get("session") for row in live_rows
         if row.get("state") != "stopped" and row.get("host_class") is not True
         and not binding_row(binding, row)
+        and not RECORD.seat_exempt_record(row)
         and not (isinstance(row.get("repo"), str) and row.get("repo")
                  and not same_repo(row["repo"], repo))
     }
@@ -2986,10 +2991,11 @@ def live_occupancy(rows: list[dict[str, Any]], repo: str, catalog: dict[str, dic
     for row in rows:
         if row.get("state") == "stopped":
             continue
-        if binding_row(exempt, row):
-            # The bound maintenance Sideagent is independent of worker seats,
-            # shared-preset seats included. A real service limit is evidence
-            # (availability or a hold), not a seat it takes from workers.
+        if binding_row(exempt, row) or RECORD.seat_exempt_record(row):
+            # The bound maintenance Sideagent, and any live holder whose
+            # session_role is sideagent or sidekick, is independent of worker
+            # seats, shared-preset seats included. A real service limit is
+            # evidence (availability or a hold), not a seat it takes from workers.
             continue
         row_repo = row.get("repo")
         if isinstance(row_repo, str) and row_repo and not same_repo(row_repo, repo):
@@ -3133,7 +3139,8 @@ def seat_occupants(presets: set[str], live_rows: list[dict[str, Any]], resolved:
         })
 
     for row in live_rows:
-        if row.get("state") == "stopped" or row.get("host_class") is True or binding_row(exempt, row):
+        if (row.get("state") == "stopped" or row.get("host_class") is True
+                or binding_row(exempt, row) or RECORD.seat_exempt_record(row)):
             continue
         row_repo = row.get("repo")
         if isinstance(row_repo, str) and row_repo and not same_repo(row_repo, repo):
@@ -6733,7 +6740,8 @@ def state_problems(doc: dict[str, Any], path: Path, index: dict[str, Any] | None
         for row in live:
             if row.get("session_role") in SIDEAGENT_ROLES and not binding_row(binding, row):
                 note("sideagent-helper", "watch", f"{row.get('session')} has the Sideagent role but is not "
-                     "the bound one; it is counted as a worker", "live", row.get("session"))
+                     "the bound maintenance session; a live Sideagent does not occupy a worker seat",
+                     "live", row.get("session"))
         carrier = doc.get("carrier") if isinstance(doc.get("carrier"), dict) else None
         hosts = live_host_rows(rows, repo)
         if carrier and hosts and all(row.get("holder_instance_id") != carrier.get("holder_instance_id")
