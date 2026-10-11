@@ -1,9 +1,10 @@
 # Webhook wake
 
-A webhook wakes you when the Host turn ends, so you do not wait for the next
-heartbeat. The Host holder sends the signal. A model or a prompt never sends
-it. Configure it yourself with this procedure. The only owner action is to
-paste the URL and the sender key into the masked secret input one time.
+A webhook wakes you when the Host holder decides you must act, so you do not
+wait for the next heartbeat. It does not wake on every turn end. The Host
+holder sends the signal. A model or a prompt never sends it. Configure it
+yourself with this procedure. The only owner action is to paste the URL and
+the sender key into the masked secret input one time.
 
 ## One Delegator timer
 
@@ -94,29 +95,41 @@ authorization ([host-platforms.md](host-platforms.md#kpr-updates)).
 
 ## On a wake
 
-The payload is a signal, not evidence. It has `schema`
-`kaola-delegator-wake/1`, `project`, `session`, `holder_instance_id`,
-`event_seq`, `state` (`end_turn`, `blocked`, `error`, `stopped` or `test`),
-`state_detail` and `ts` (UTC). It has no transcript, prompt, diff or secret.
-For `end_turn`, `state_detail` is the stop reason the agent reported, for
-example `end_turn`, `max_tokens`, `max_turn_requests`, `refusal` or
-`cancelled`. Otherwise it is `permission_required`, `turn_failed`,
-`agent_exit`, `boot_failure`, `holder_lost`, `exact_stop` or `test`. An
-owner question that the agent asks in its reply text arrives as `end_turn`.
+The payload is a signal, not evidence. Re-read receipts before you act. It
+has `schema` `kaola-delegator-wake/1`, `project`, `session`,
+`holder_instance_id`, `event_seq`, `state` (`end_turn`, `blocked`, `error`,
+`stopped` or `test`), `state_detail`, `reason` and `ts` (UTC). It has no
+transcript, prompt, diff or secret. `reason` names why you were woken:
+`permission_required`, `turn_failed`, `agent_exited`, `boot_failure`,
+`exact_stop`, `holder_lost`, `question_waiting`, `delivery_review`,
+`needs_decision`, `host_stopped_pending`, or `test`. `state_detail` is
+separate: for `end_turn` it is the stop reason the agent reported
+(`end_turn`, `max_tokens`, `max_turn_requests`, `refusal`, `cancelled`, or
+`other`); otherwise it is `permission_required`, `turn_failed`,
+`agent_exit`, `boot_failure`, `holder_lost`, `exact_stop` or `test`.
+
+You are not woken when the Host ends a turn and continues by itself, or when
+the turn end is your own send or steer. You are woken for a permission, a
+failure, an agent exit, a failed boot, an exact stop, a recovered holder
+death, a waiting question, a delivery that needs review, a decision, or a
+Host that stopped with pending work. A clean idle turn does not wake you.
 If a Host holder dies without a signal, the next `start` or `stop` of that
-session sends one `error` wake with `state_detail` `holder_lost`, the dead
-`holder_instance_id` and a new `event_seq`.
+session sends one `error` wake with `reason` `holder_lost`, the dead
+`holder_instance_id` and a new `event_seq`. That recovered wake is not a
+duplicate.
 
 On each wake: Grok Bot re-reads the bridge Accepted line and locates; then
 attest the exact session and read the authoritative `status`, `observe` and
-`capture` receipts. Then run the standard inquiry. If the payload `project`
-or `session` is not your recorded `host`, it is not your Host: report it and
-do not act on it.
+`capture` receipts. The payload does not prove those facts. Then run the
+standard inquiry. If the payload `project` or `session` is not your recorded
+`host`, it is not your Host: report it and do not act on it.
 
-Dedupe on `holder_instance_id` + `event_seq` against the receipt cursor. A
-wake that is not newer than the receipts you already handled causes no
-action. Duplicate and out-of-order wakes are harmless; the existing `watch`
-rules prevent a second relay. `blocked` means the Host waits on a permission:
-handle it as one owned permission event. The cron fallback finds a lost
-delivery. Delivery receipts are in `<repo>/.kaola/delegator-webhook-receipts.json`
-(the last 32 attempts).
+Dedupe on `holder_instance_id` + `event_seq` against the receipt cursor. The
+sender also drops a second POST of that same pair. A wake that is not newer
+than the receipts you already handled causes no action. Duplicate and
+out-of-order wakes are harmless; the existing `watch` rules prevent a second
+relay. `blocked` means the Host waits on a permission: handle it as one owned
+permission event. The cron fallback finds a lost delivery. One attempt waits
+12 s. A timeout is not retried. Connection errors, HTTP 5xx, 408 and 429 are
+retried. Delivery receipts are in
+`<repo>/.kaola/delegator-webhook-receipts.json` (the last 32 attempts).

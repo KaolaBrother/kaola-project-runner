@@ -850,6 +850,27 @@ class MockAgent:
             # arbitrary invalid string.
             self.finish_turn(request_id, text or "end_turn")
             return
+        if scenario == "stop_marker":
+            # Issue #302: a line KAOLA_STOP_REASON:<token> in the prompt
+            # (including a heartbeat body the holder injected) is the
+            # stopReason. Anything else is end_turn.
+            stop = "end_turn"
+            for line in (text or "").splitlines():
+                if line.startswith("KAOLA_STOP_REASON:"):
+                    stop = line.split(":", 1)[1].strip() or "end_turn"
+                    break
+            if self.turn_ms:
+                time.sleep(self.turn_ms / 1000.0)
+            self.finish_turn(request_id, stop)
+            return
+        if scenario == "prompt_error":
+            respond(request_id, error={"code": -32000, "message": "mock prompt failed"})
+            with self.lock:
+                self.active_turn = None
+            return
+        if scenario == "die_on_prompt":
+            log_event({"event": "die_on_prompt"})
+            os._exit(3)
         if scenario == "tool_call_only":
             session_update(
                 session_id,

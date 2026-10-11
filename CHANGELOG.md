@@ -4,6 +4,33 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+Seats: restart required
+
+- **Delegator webhook wakes only when the Delegator must act (Issue #302).**
+  The Host holder no longer wakes on every turn end. A wake payload
+  (`kaola-delegator-wake/1`) now includes `reason`. The holder still wakes
+  for a new permission (`permission_required`), a failed turn
+  (`turn_failed`), an unexpected agent exit (`agent_exited`), a failed boot
+  (`boot_failure`), an exact stop (`exact_stop`), and a holder death
+  recovered by the next start or a dead-holder stop (`holder_lost`). A
+  completed or unrequested-cancel turn wakes only when the Delegator must
+  act: undelivered host attention is `question_waiting`, `delivery_review`
+  or `needs_decision`; staged work or a length stop is
+  `host_stopped_pending`; a refusal or unrequested cancel is
+  `needs_decision`. It does not wake when the Host continues by itself (the
+  next beat is already admitted, or a Delegator after-turn steer is queued)
+  or when the turn was the Delegator's own send or steer. A clean idle
+  `end_turn` does not wake. There is no time throttle.
+  The sender timeout is 12 s. A client timeout is not retried. The retryable
+  set is connection errors, HTTP 5xx, 408 and 429. The sender dedupes on
+  `holder_instance_id` + `event_seq`. A death-recovery wake uses a new
+  `event_seq` and is not a duplicate.
+  Restart judgment: `scripts/kaola-acp-holder.py` changed, so running Hosts
+  and seats must restart to pick up the new gating. The holder is in the
+  operator restart set.
+
 ## 0.9.6 — 2026-10-11 (luna computer-use only, sonnet trim, claude haiku worker tier)
 
 Seats: restart required

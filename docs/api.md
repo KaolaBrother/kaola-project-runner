@@ -695,40 +695,84 @@ holder does not advertise `heartbeat-state/2`. The tool refuses rather than trun
 
 ## Delegator webhook wake (#299)
 
-A Host holder (and only a `session_role: host` holder) fires a wake signal to the
-Delegator's webhook routine at turn/permission/stop boundaries, so a webhook-armed
-Delegator does not wait for its next cron heartbeat. The holder spawns a detached
-child — `python3 kaola-acp.py delegator-webhook deliver` with the payload on stdin —
-that never blocks the holder, survives holder exit, and does the network and retry
-work itself. The child argv carries no secret and never contains the string
-`kaola-acp-holder` (process scans match that name).
+A Host holder (and only a `session_role: host` holder) fires a wake signal when
+the Delegator must act, so a webhook-armed Delegator does not wait for its next
+cron heartbeat. The line is "does the Delegator need to act", not "fewer wakes".
+There is no time throttle, minimum interval, or coalescing. The holder spawns a
+detached child — `python3 kaola-acp.py delegator-webhook deliver` with the payload
+on stdin — that never blocks the holder, survives holder exit, and does the
+network and retry work itself. The child argv carries no secret and never contains
+the string `kaola-acp-holder` (process scans match that name).
 
-Trigger points: `end_turn` on `turn_completed` (and on `turn_canceled` when no
-stop was requested), `error` on `turn_failed`, an unrequested agent exit outside
-the boot window, or a failed boot; `blocked` on a new `session/request_permission`;
-`stopped` from `op_stop` after the stopped record is written (spawned inline because
-the holder exits with its reply). A Host holder that dies without signalling
-(SIGKILL, crash) is covered by the CLI, not the holder: `start` replacing a dead
-or pid-reused record and a dead-holder `stop` (`force_kill_from_record`, the
-pid-reused branch of `force_stop_unreachable`) emit exactly one
-`error`/`holder_lost` wake on the dead instance's behalf before the record is
-rewritten or retired. Exactly-once is a `delegator_death_wake` event appended
-under an flock on `delegator-death-wake.lock` in the record dir; the event's
-cursor is the wake's `event_seq` (the EventLog cursor continues across holders
-in one record dir). The start/stop receipt names the outcome under
+The holder decides from facts it can see: the ended turn's prompt source, whether
+the next beat is already admitted or a Delegator after-turn steer is queued,
+undelivered Host attention in `.kaola/heartbeat-prompt.json`, staged worker events,
+and the turn's stop or exit state. Prompt source is `delegator` for a socket
+prompt or a steer, and `self` for a worker-event delivery, a compact reload, or
+a compact notice. A socket client cannot set that source.
+
+Always wake (a real stop must not end silently):
+
+| what the holder saw | state | state_detail | reason |
+| --- | --- | --- | --- |
+| new `session/request_permission` | `blocked` | `permission_required` | `permission_required` |
+| `turn_failed` | `error` | `turn_failed` | `turn_failed` |
+| unrequested agent exit outside the boot window | `error` | `agent_exit` | `agent_exited` |
+| failed boot | `error` | `boot_failure` | `boot_failure` |
+| `op_stop` after the stopped record is written | `stopped` | `exact_stop` | `exact_stop` |
+| dead holder recovered by the next `start` or a dead-holder `stop` | `error` | `holder_lost` | `holder_lost` |
+
+`turn_failed`, permission, agent exit, boot failure and exact stop wake even when
+the prompt source was the Delegator. Exact stop is spawned inline because the
+holder exits with its reply. A canceled turn under a requested stop does not
+send its own wake; exact stop covers it.
+
+A completed turn, or a cancel that was not requested, wakes only when the
+Delegator is not already there and the Host did not continue by itself:
+
+| what the holder saw | reason |
+| --- | --- |
+| next beat already admitted, or a Delegator after-turn steer is queued | no wake |
+| prompt source `delegator` (this send or steer) | no wake |
+| undelivered host-view row `kind=decisions`, `why=host-decision` | `question_waiting` |
+| undelivered host-view row `kind=tasks` and `why` one of `awaiting-verdict`, `delivery-open`, `verdict-missing` | `delivery_review` |
+| any other undelivered host-view attention row | `needs_decision` |
+| staged worker event with no prompt fingerprint, unconfirmed overflow, or stop `max_tokens` / `max_turn_requests` / `length` | `host_stopped_pending` |
+| stop `refusal`, or an unrequested cancel with nothing above | `needs_decision` |
+| clean `end_turn` with nothing pending | no wake |
+
+Undelivered attention means the heartbeat body is a host view (`view` `host`,
+`attention` a list) whose fingerprint is not the one last delivered on a
+worker-event prompt. Checked in that order, so a waiting question wins over a
+delivery review, and self-continuation or a Delegator-caused turn wins over
+attention (no wake). `state` for these rows is `end_turn`. `state_detail` stays
+the agent's ACP `stopReason` when it is a clean token, otherwise `"other"`,
+`"cancelled"`, or null, as in the table below.
+
+A Host holder that dies without signalling (SIGKILL, crash) is covered by the
+CLI, not the holder: `start` replacing a dead or pid-reused record and a
+dead-holder `stop` (`force_kill_from_record`, the pid-reused branch of
+`force_stop_unreachable`) emit exactly one `error`/`holder_lost` wake on the
+dead instance's behalf before the record is rewritten or retired. Exactly-once
+across process death is a `delegator_death_wake` event appended under an flock
+on `delegator-death-wake.lock` in the record dir; the event's cursor is the
+wake's `event_seq` (the EventLog cursor continues across holders in one record
+dir), so the recovered wake is a new event and not a duplicate of an earlier
+wake from that holder. The start/stop receipt names the outcome under
 `delegator_death_wake` (`sent`, `holder_instance_id`, `event_seq`, or a
 `reason` of `already-recovered`/`spawn-failed`).
 
-Payload (signal only, no transcript, prompt, diff or secret):
+Payload (signal only, no transcript, prompt, diff or secret). `reason` is
+required and is one of the tokens in the tables above, or `test`:
 
 ```json
 {"schema": "kaola-delegator-wake/1", "project": "<repo realpath>", "session": "<--session>",
  "holder_instance_id": "<holder instance>", "event_seq": <events cursor>, "state": "end_turn",
- "state_detail": "end_turn", "ts": "YYYY-MM-DDTHH:MM:SSZ"}
+ "state_detail": "max_tokens", "reason": "host_stopped_pending", "ts": "YYYY-MM-DDTHH:MM:SSZ"}
 ```
 
 `state_detail` is always present (a string matching `^[A-Za-z0-9_.:-]{1,64}$`,
-or null):
+or null). It is not the wake reason:
 
 | state | state_detail |
 | --- | --- |
@@ -738,24 +782,35 @@ or null):
 | `error` | `turn_failed`, `agent_exit`, `boot_failure`, or `holder_lost` (death recovery above) |
 | `test` | `test` |
 
-Only `session/request_permission` produces `blocked`; an owner question asked in
-reply text is an ordinary `end_turn`. The stop reason is whatever the agent
-reports: codex-acp maps a failed turn to `end_turn`, which #173's systemError
-detection turns into `error`/`turn_failed`.
+Only `session/request_permission` produces `blocked`. An owner question asked
+only in reply text is an ordinary `end_turn` and does not by itself wake; a
+`question_waiting` wake requires an undelivered host-view `decisions` /
+`host-decision` row. The stop reason is whatever the agent reports: codex-acp
+maps a failed turn to `end_turn`, which #173's systemError detection turns into
+`error`/`turn_failed`.
 
 Delivery: POST the payload as the JSON body with `Content-Type: application/json`
 and `User-Agent: kaola-delegator-wake/1`, plus the configured key header for a
 `header` attachment. Redirects are refused (`redirect-refused`, no retry). Each
-attempt times out at 3 s. One initial attempt plus up to 3 retries (4 attempts,
-backoff 1 s, 2 s, 4 s); only timeouts, connection errors, HTTP 5xx, 408 and 429
-retry; any other non-2xx is final. A 2xx is `delivered`. Not configured or
-`enabled: false` writes one `skipped`/`not-configured` receipt with no network;
-invalid config or mode writes one `failed`/`invalid-config`/`config-mode` receipt
-with no network. The sender enforces the signal shape: a payload whose keys are
-not exactly the eight above, with schema `kaola-delegator-wake/1`, `state` in
-`{end_turn, blocked, error, stopped, test}`, an integer `event_seq`, and a
-`state_detail` that is null or a token string, is refused
-— exit 1, and one `failed`/`invalid-payload` receipt when the project resolves.
+attempt times out at 12 s. One initial attempt plus up to 3 retries (4 attempts,
+backoff 1 s, 2 s, 4 s). The retryable set is connection errors, HTTP 5xx, HTTP
+408 and HTTP 429. A client timeout is not retried: the server may already have
+accepted the POST. Any other non-2xx is final. A 2xx is `delivered`. Not
+configured or `enabled: false` writes one `skipped`/`not-configured` receipt
+with no network and does not consume the event; invalid config or mode writes
+one `failed`/`invalid-config`/`config-mode` receipt with no network and does
+not consume it either. Before the first network attempt the sender claims
+`holder_instance_id` + `event_seq` under the receipts flock
+(`.kaola/delegator-webhook-claims.json`, mode 0600, last 256 pairs). A second
+deliver of that pair writes one `skipped`/`duplicate` receipt and does not POST.
+The claim stays after success and after final network failure. A death-recovery
+wake uses a new `event_seq`, so it is not that duplicate. The sender enforces
+the signal shape: a payload whose keys are not exactly the nine above, with
+schema `kaola-delegator-wake/1`, `state` in
+`{end_turn, blocked, error, stopped, test}`, an integer `event_seq`, a `reason`
+in the closed vocabulary, and a `state_detail` that is null or a token string,
+is refused — exit 1, and one `failed`/`invalid-payload` receipt when the project
+resolves. An invalid payload does not claim the event.
 
 Per-attempt receipt (closed shape; `reason` present only on `skipped`; `error` is a
 classified code, never an exception message — urllib errors can embed the URL):
@@ -826,8 +881,10 @@ exit 0 on success):
 
 The Delegator records the wake pair in `timer_owner`: `wake_mode` is `heartbeat`
 or `webhook+heartbeat` (absent means heartbeat-only) and `webhook_routine_id`
-names the webhook routine. Running Host holders need a seat restart to pick up
-the hook.
+names the webhook routine. The payload is a signal, not evidence: on a wake the
+Delegator re-reads the bridge Accepted line, locates, and reads authoritative
+`status`, `observe` and `capture` receipts. Running Host holders need a seat
+restart to pick up the gating. The holder is in the operator restart set.
 
 ## Runner entrypoint (`kaola-tmux.sh`)
 

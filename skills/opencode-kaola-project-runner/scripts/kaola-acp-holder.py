@@ -269,6 +269,89 @@ SIDEAGENT_ROLES = ("sideagent", "sidekick")
 # Issue #299: a wake state_detail carries the agent's stopReason verbatim only
 # when it is one clean token; anything else reads "other".
 DELEGATOR_WAKE_DETAIL_RE = re.compile(r"[A-Za-z0-9_.:-]{1,64}")
+# Issue #302: closed wake-reason vocabulary. Keep this set in lockstep with
+# ``DELEGATOR_WEBHOOK_REASONS`` in kaola-acp.py. The sender refuses anything else.
+DELEGATOR_WAKE_REASONS = frozenset({
+    "host_stopped_pending",
+    "permission_required",
+    "needs_decision",
+    "question_waiting",
+    "delivery_review",
+    "turn_failed",
+    "agent_exited",
+    "boot_failure",
+    "holder_lost",
+    "exact_stop",
+    "test",
+})
+# A length stop means the Host stopped with work still pending.
+DELEGATOR_LENGTH_STOPS = frozenset({"max_tokens", "max_turn_requests", "length"})
+# Host-view attention ``why`` values that mean a delivery needs review.
+DELEGATOR_DELIVERY_WHYS = frozenset({"awaiting-verdict", "delivery-open", "verdict-missing"})
+
+
+def delegator_turn_wake_reason(
+        *,
+        outcome: str | None,
+        stop_reason: Any,
+        prompt_source: str | None,
+        self_continuing: bool,
+        stop_requested: bool,
+        attention_rows: list | None,
+        staged_undelivered: bool,
+) -> str | None:
+    """Issue #302: why a completed or canceled Host turn wakes the Delegator.
+
+    ``None`` means the Delegator does not need to act. Permission, turn
+    failure, agent exit, boot failure, exact stop and ``holder_lost`` are
+    decided by their own call sites and never pass through here.
+
+    The holder only uses facts it can see:
+
+    * ``self_continuing`` — the next beat is already admitted (``turn.active``)
+      or a Delegator after-turn steer is queued. No wake.
+    * ``prompt_source == "delegator"`` — this turn was admitted by a socket
+      prompt or by steer. The Delegator is already there. No wake.
+    * undelivered Host attention (heartbeat body is a host view whose
+      fingerprint is not ``host_attention_seen``), classified from the rows:
+      a ``decisions``/``host-decision`` row is ``question_waiting``; a
+      ``tasks`` row whose ``why`` is awaiting-verdict, delivery-open or
+      verdict-missing is ``delivery_review``; any other row is
+      ``needs_decision``.
+    * staged worker events with no prompt fingerprint, or an unconfirmed
+      overflow, or a length stop (``max_tokens``, ``max_turn_requests``,
+      ``length``) is ``host_stopped_pending``.
+    * ``refusal``, or an unrequested cancel, is ``needs_decision``.
+    * a clean ``end_turn`` with nothing pending is idle. No wake.
+
+    There is no time throttle. A canceled turn under a requested stop is
+    covered by the exact-stop wake.
+    """
+    if outcome not in ("turn_completed", "turn_canceled"):
+        return None
+    if outcome == "turn_canceled" and stop_requested:
+        return None
+    if self_continuing:
+        return None
+    if (prompt_source or "delegator") == "delegator":
+        return None
+    rows = attention_rows or []
+    if any(isinstance(row, dict) and row.get("kind") == "decisions"
+           and row.get("why") == "host-decision" for row in rows):
+        return "question_waiting"
+    if any(isinstance(row, dict) and row.get("kind") == "tasks"
+           and row.get("why") in DELEGATOR_DELIVERY_WHYS for row in rows):
+        return "delivery_review"
+    if rows:
+        return "needs_decision"
+    if staged_undelivered or (
+            isinstance(stop_reason, str) and stop_reason in DELEGATOR_LENGTH_STOPS):
+        return "host_stopped_pending"
+    if stop_reason == "refusal":
+        return "needs_decision"
+    if outcome == "turn_canceled":
+        return "needs_decision"
+    return None
 RELAY_SCHEMA = "kaola-sideagent-relay/1"
 OVERFLOW_FULL_CHECK_MARK = "kaola-host-notify/overflow-full-check"
 # Issue #94: every turn-opening prompt to a ZCode Host opens with the native
@@ -1857,6 +1940,9 @@ class Holder:
         self.followers: list[Follower] = []
         self.followers_lock = threading.Lock()
         self.turn: dict[str, Any] = self._empty_turn()
+        # Issue #302: Delegator after-turn steers already queued. A turn end
+        # while this is non-zero is self-continuation: the Delegator is injecting.
+        self._delegator_followups = 0
         try:
             previous_record = json.loads(self.record_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -2001,6 +2087,9 @@ class Holder:
             "started_at": None,
             "ended_at": None,
             "cancel_requested": False,
+            # Issue #302: "delegator" (socket prompt or steer) or "self"
+            # (worker-event delivery, compact reload, compact notice).
+            "prompt_source": "delegator",
         }
 
     def dispatcher_identity(self) -> dict[str, str]:
@@ -2342,7 +2431,7 @@ class Holder:
                 self._notify_heartbeat_host_now(
                     "permission_required", "session/request_permission pending",
                     extra={"request_id": key})
-                self._delegator_wake("blocked", "permission_required")
+                self._delegator_wake("blocked", "permission_required", "permission_required")
             return
         self.agent.send_message(
             {"jsonrpc": "2.0", "id": request_id,
@@ -2479,21 +2568,25 @@ class Holder:
         with self.turn_cond:
             self.turn_cond.notify_all()
         self._worker_event_turn_end(turn.get("fingerprint"), outcome)
-        # Issue #299: the webhook wake mirrors the turn verdict. A canceled
-        # turn under a requested stop is covered by op_stop's own "stopped".
+        # Issue #299 / #302: an error still wakes even when this turn was the
+        # Delegator's or a worker event then continued. A canceled turn under
+        # a requested stop is covered by op_stop's own "stopped". A completed
+        # or unrequested-cancel turn wakes only when the Delegator must act.
         if outcome == "turn_failed":
-            self._delegator_wake("error", "turn_failed")
+            self._delegator_wake("error", "turn_failed", "turn_failed")
         elif outcome == "turn_completed" or (
                 outcome == "turn_canceled" and not self.stop_requested):
-            # The agent's own stopReason, verbatim when it is a clean token;
-            # an absent reason on a cancel reads "cancelled".
-            stop = turn.get("stop_reason")
-            if isinstance(stop, str):
-                detail = (stop if DELEGATOR_WAKE_DETAIL_RE.fullmatch(stop)
-                          else "other")
-            else:
-                detail = "cancelled" if outcome == "turn_canceled" else None
-            self._delegator_wake("end_turn", detail)
+            reason = self._delegator_turn_end_reason(turn)
+            if reason is not None:
+                # The agent's own stopReason, verbatim when it is a clean token;
+                # an absent reason on a cancel reads "cancelled".
+                stop = turn.get("stop_reason")
+                if isinstance(stop, str):
+                    detail = (stop if DELEGATOR_WAKE_DETAIL_RE.fullmatch(stop)
+                              else "other")
+                else:
+                    detail = "cancelled" if outcome == "turn_canceled" else None
+                self._delegator_wake("end_turn", detail, reason)
 
     def on_agent_exit(self, code: int) -> None:
         reason = (f"exit_code={self.agent.exit_code}"
@@ -2550,7 +2643,7 @@ class Holder:
         # Issue #299: an unrequested agent exit outside the boot window is an
         # error wake; the boot failure branch and op_stop carry their own.
         if not self.stop_requested and self.state not in ("starting", "error"):
-            self._delegator_wake("error", "agent_exit")
+            self._delegator_wake("error", "agent_exit", "agent_exited")
 
     # -- ops ---------------------------------------------------------------------
 
@@ -2735,10 +2828,14 @@ class Holder:
             fingerprint = "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
             previous = self.last_prompt or {}
             self.turn = self._empty_turn()
+            source = params.get("_prompt_source")
             self.turn.update({
                 "active": True,
                 "fingerprint": fingerprint,
                 "started_at": time.monotonic(),
+                # Socket prompts cannot set this: handle_request strips it.
+                # Only holder-internal admissions pass "self".
+                "prompt_source": "self" if source == "self" else "delegator",
             })
             duplicate = None
             if previous.get("fingerprint") == fingerprint:
@@ -2862,19 +2959,69 @@ class Holder:
             with self.undelivered_wakes_lock:
                 self.undelivered_wakes.pop(IDLE_WAKE_KEY, None)
 
+    def _delegator_pending_facts(self) -> tuple[bool, list | None]:
+        """Staged undelivered worker events, and undelivered host-view rows.
+
+        Attention is undelivered when the heartbeat body is a host view whose
+        fingerprint differs from the one last delivered to this Host. A body
+        that is not a host view contributes no rows.
+        """
+        with self.worker_events_lock:
+            staged = any(
+                "prompt_fingerprint" not in item and "relayed" not in item
+                for item in self.pending_worker_events
+            ) or (
+                self.overflow_generation > self.overflow_confirmed_generation
+                and self.overflow_inflight_generation is None
+            )
+            seen = self.host_attention_seen
+        source = Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"
+        _doc, body, _defect = read_heartbeat_file(source)
+        fingerprint = attention_fingerprint(body)
+        if fingerprint is None or fingerprint == seen:
+            return staged, None
+        try:
+            view = json.loads(body or "")
+        except ValueError:
+            return staged, None
+        rows = view.get("attention") if isinstance(view, dict) else None
+        if not isinstance(rows, list):
+            return staged, None
+        return staged, rows
+
+    def _delegator_turn_end_reason(self, turn: dict[str, Any]) -> str | None:
+        """Issue #302 predicate for one ended turn. See ``delegator_turn_wake_reason``."""
+        staged, rows = self._delegator_pending_facts()
+        with self.lock:
+            # ``self.turn`` may already be the next admitted beat. The ended
+            # turn is ``turn``. A queued steer counts until its follow-up returns.
+            self_continuing = bool(self.turn.get("active") or self._delegator_followups)
+        return delegator_turn_wake_reason(
+            outcome=turn.get("outcome"),
+            stop_reason=turn.get("stop_reason"),
+            prompt_source=turn.get("prompt_source") or "delegator",
+            self_continuing=self_continuing,
+            stop_requested=self.stop_requested,
+            attention_rows=rows,
+            staged_undelivered=staged,
+        )
+
     def _delegator_wake(self, state: str, detail: str | None = None,
-                        inline: bool = False) -> None:
-        """Issue #299: fire the Delegator webhook signal for a Host holder.
+                        reason: str | None = None, inline: bool = False) -> None:
+        """Issue #299 / #302: fire the Delegator webhook signal for a Host holder.
 
         The payload is a signal only (identity + event_seq + state + detail +
-        ts). The detached ``kaola-acp.py delegator-webhook deliver`` child
-        reads the config, validates, POSTs and writes receipts, so the holder
-        never blocks on the network and the delivery survives holder exit. A
-        spawn failure is one event-log line with the exception class name only.
-        ``inline`` spawns without a thread or a wait for the op_stop path that
-        exits right after its reply.
+        reason + ts). ``reason`` names why the Delegator must act. The detached
+        ``kaola-acp.py delegator-webhook deliver`` child reads the config,
+        validates, POSTs and writes receipts, so the holder never blocks on the
+        network and the delivery survives holder exit. A spawn failure is one
+        event-log line with the exception class name only. ``inline`` spawns
+        without a thread or a wait for the op_stop path that exits right after
+        its reply. A reason outside the closed vocabulary is not sent.
         """
         if self.session_role != "host":
+            return
+        if reason not in DELEGATOR_WAKE_REASONS:
             return
         payload = {
             "schema": "kaola-delegator-wake/1",
@@ -2884,6 +3031,7 @@ class Holder:
             "event_seq": self.events.cursor,
             "state": state,
             "state_detail": detail,
+            "reason": reason,
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
         argv = [sys.executable,
@@ -4218,6 +4366,7 @@ class Holder:
             text = self.host_entry + "\n" + text
         try:
             prompt = self.op_prompt({"text": text, "wait": False,
+                                     "_prompt_source": "self",
                                      "expected_holder_instance_id": notice["holder_instance_id"],
                                      "expected_acp_session_id": notice["acp_session_id"],
                                      "expected_prior_turn_request_id": notice["prior_turn_request_id"],
@@ -4365,7 +4514,7 @@ class Holder:
                          "available Skill catalog or the active task records, then read "
                          "its full SKILL.md. Do not treat the source checkout directory "
                          "as an installed Skill file.")
-        prompt = self.op_prompt({"text": text, "wait": False})
+        prompt = self.op_prompt({"text": text, "wait": False, "_prompt_source": "self"})
         if prompt.get("error") or prompt.get("outcome") != "in_progress":
             return {"delivered": False, "error": prompt.get("error") or prompt}
         self.events.append({"kind": "compact_reload_delivered",
@@ -4427,7 +4576,7 @@ class Holder:
             if self.turn["active"]:
                 return {"delivered": False, "reason": "prompt-in-progress"}
             text, meta = self._heartbeat_payload(staged, overflow_ready)
-            prompt = self.op_prompt({"text": text, "wait": False})
+            prompt = self.op_prompt({"text": text, "wait": False, "_prompt_source": "self"})
             error = prompt.get("error")
             if error or prompt.get("outcome") != "in_progress":
                 # Nothing was marked, so there is nothing to undo: the events
@@ -4887,30 +5036,42 @@ class Holder:
                     "confirmation": "holder-queued", "turn_request_id": turn_request_id_before,
                     "fingerprint": base["steer_fingerprint"]})
                 def after_turn() -> None:
-                    with self.turn_cond:
-                        while original["active"] and not self.agent.exited.is_set():
-                            self.turn_cond.wait()
-                    original_result = {"request_id": original.get("request_id"),
-                        "fingerprint": original.get("fingerprint"),
-                        "outcome": original.get("outcome"),
-                        "stop_reason": original.get("stop_reason"),
-                        "final_text": original.get("final_text")}
-                    if original.get("outcome") != "turn_completed":
-                        sent = {"outcome": "prior_turn_not_completed",
-                                "mutation_status": "not_started", "mutation_performed": False}
-                    else:
-                        # op_prompt refuses before writing if another prompt
-                        # owns the slot or the holder is stopping. Preserve that
-                        # receipt; never cancel that prompt or retry the write.
-                        sent = self.op_prompt({"text": text, "wait": False,
-                            "expected_holder_instance_id": self.holder_instance_id,
-                            "expected_prior_turn_request_id": turn_request_id_before,
-                            "expected_acp_session_id": session_id})
-                    self.events.append({"kind": "steer_followup", "queue_cursor": queue_cursor,
-                        "turn_request_id": turn_request_id_before,
-                        "original_turn": original_result,
-                        "fingerprint": base["steer_fingerprint"], "receipt": sent})
-                threading.Thread(target=after_turn, daemon=True).start()
+                    try:
+                        with self.turn_cond:
+                            while original["active"] and not self.agent.exited.is_set():
+                                self.turn_cond.wait()
+                        original_result = {"request_id": original.get("request_id"),
+                            "fingerprint": original.get("fingerprint"),
+                            "outcome": original.get("outcome"),
+                            "stop_reason": original.get("stop_reason"),
+                            "final_text": original.get("final_text")}
+                        if original.get("outcome") != "turn_completed":
+                            sent = {"outcome": "prior_turn_not_completed",
+                                    "mutation_status": "not_started", "mutation_performed": False}
+                        else:
+                            # op_prompt refuses before writing if another prompt
+                            # owns the slot or the holder is stopping. Preserve that
+                            # receipt; never cancel that prompt or retry the write.
+                            # No _prompt_source: this follow-up is the Delegator's.
+                            sent = self.op_prompt({"text": text, "wait": False,
+                                "expected_holder_instance_id": self.holder_instance_id,
+                                "expected_prior_turn_request_id": turn_request_id_before,
+                                "expected_acp_session_id": session_id})
+                        self.events.append({"kind": "steer_followup", "queue_cursor": queue_cursor,
+                            "turn_request_id": turn_request_id_before,
+                            "original_turn": original_result,
+                            "fingerprint": base["steer_fingerprint"], "receipt": sent})
+                    finally:
+                        # Decrement only after op_prompt returns or is skipped,
+                        # so the ended turn still sees the queued follow-up.
+                        with self.lock:
+                            self._delegator_followups = max(0, self._delegator_followups - 1)
+                self._delegator_followups += 1
+                try:
+                    threading.Thread(target=after_turn, daemon=True).start()
+                except Exception:
+                    self._delegator_followups = max(0, self._delegator_followups - 1)
+                    raise
                 return {**base, "steer_outcome": "queued", "steer_consumed": None,
                     "steer_confirmation": "holder-queued", "steer_queue_cursor": queue_cursor,
                     "steer_native_written": False, "turn_request_id": turn_request_id_before,
@@ -5735,7 +5896,7 @@ class Holder:
         self.write_record()
         # Issue #299: inline spawn — this op exits right after its reply, so the
         # detached child must already hold its payload before we answer.
-        self._delegator_wake("stopped", "exact_stop", inline=True)
+        self._delegator_wake("stopped", "exact_stop", "exact_stop", inline=True)
         result = {"stopped": True, "residual_pids": residual,
                   "swept_child_pgids": self.swept_child_pgids,
                   **({"spared_child_pgids": self.spared_child_pgids}
@@ -5956,6 +6117,11 @@ class Holder:
         if op == "compact_notice":
             return self.op_compact_notice(params)
         if op == "prompt":
+            # A socket client must not claim the prompt was holder-internal.
+            # That claim is what suppresses a Delegator wake.
+            if isinstance(params, dict):
+                params = dict(params)
+                params.pop("_prompt_source", None)
             return self.op_prompt(params)
         if op == "steer":
             return self.op_steer(params)
@@ -6147,7 +6313,7 @@ class Holder:
             self.fatal_error = self.start_failure_facts(result["error"])
             self.state = "error"
             self.write_record()
-            self._delegator_wake("error", "boot_failure")
+            self._delegator_wake("error", "boot_failure", "boot_failure")
             if result["error"].get("code") == "acp-protocol-version-unsupported":
                 self._terminate_group(force=True)
             elif self.agent.proc and not self.agent.exited.is_set():

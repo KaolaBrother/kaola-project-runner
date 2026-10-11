@@ -41,7 +41,7 @@ HEADER_NAME = "X-Kaola-Wake-Key"
 HEADER_PREFIX = "WAKE "
 
 PAYLOAD_KEYS = {"schema", "project", "session", "holder_instance_id",
-                "event_seq", "state", "state_detail", "ts"}
+                "event_seq", "state", "state_detail", "reason", "ts"}
 ATTEMPT_RECEIPT_KEYS = {"ts", "state", "state_detail", "session",
                         "holder_instance_id", "event_seq", "result",
                         "attempt", "max_attempts",
@@ -59,8 +59,9 @@ def wait_for(predicate, timeout: float, label: str, interval: float = 0.05):
 
 
 class Endpoint:
-    """Loopback sink. ``/slow`` sleeps past the 3 s attempt timeout,
-    ``/err`` answers 500, ``/redirect`` answers 302, anything else 200."""
+    """Loopback sink. ``sleep_seconds`` delays the response. ``/err`` answers
+    500, ``/redirect`` answers 302, ``/status/<code>`` answers that code,
+    anything else 200."""
 
     def __init__(self, sleep_seconds: float = 0.0):
         self.posts: list[dict] = []
@@ -80,13 +81,20 @@ class Endpoint:
                 outer.posts.append({"path": self.path,
                                     "headers": dict(self.headers),
                                     "body": body})
+                code = 200
                 if self.path.startswith("/err"):
-                    self.send_response(500)
+                    code = 500
                 elif self.path.startswith("/redirect"):
-                    self.send_response(302)
+                    code = 302
+                elif self.path.startswith("/status/"):
+                    token = self.path.split("/", 2)[-1].split("?", 1)[0]
+                    try:
+                        code = int(token)
+                    except ValueError:
+                        code = 200
+                self.send_response(code)
+                if code in (301, 302, 303, 307, 308):
                     self.send_header("Location", "/hook")
-                else:
-                    self.send_response(200)
                 self.end_headers()
 
             def log_message(self, *args):
@@ -126,7 +134,18 @@ class WebhookCase(unittest.TestCase):
             self.acp("stop", "--force", check=False, timeout=30)
         if self.endpoint:
             self.endpoint.stop()
-        self.tmp.cleanup()
+        # Exact stop wakes a detached deliver child. Its receipt replace can
+        # recreate a file under .kaola while this tree is being removed.
+        last_error: OSError | None = None
+        for _ in range(25):
+            try:
+                self.tmp.cleanup()
+                return
+            except OSError as exc:
+                last_error = exc
+                time.sleep(0.2)
+        if last_error is not None:
+            raise last_error
 
     # -- helpers -------------------------------------------------------------
 
@@ -521,6 +540,7 @@ class DeliveryCli(WebhookCase):
         payload = {"schema": "kaola-delegator-wake/1", "project": self.project,
                    "session": "s1", "holder_instance_id": "h1",
                    "event_seq": 3, "state": "end_turn", "state_detail": None,
+                   "reason": "host_stopped_pending",
                    "ts": "2026-01-01T00:00:00Z"}
         proc = self.deliver(payload)
         self.assertEqual(proc.returncode, 0)
@@ -561,6 +581,7 @@ class DeliveryCli(WebhookCase):
         payload = {"schema": "kaola-delegator-wake/1", "project": self.project,
                    "session": "s1", "holder_instance_id": "h1",
                    "event_seq": 1, "state": "test", "state_detail": "test",
+                   "reason": "test",
                    "ts": "2026-01-01T00:00:00Z"}
         code, out = self.hook_json("test", "--project", str(self.repo))
         self.assertNotEqual(code, 0)
@@ -589,6 +610,7 @@ class DeliveryCli(WebhookCase):
                              "project": self.project, "session": "s1",
                              "holder_instance_id": "h1", "event_seq": 2,
                              "state": "end_turn", "state_detail": None,
+                             "reason": "host_stopped_pending",
                              "ts": "2026-01-01T00:00:00Z"})
         self.assertNotEqual(proc.returncode, 0)
         last = self.receipts()[-4:]
@@ -604,11 +626,15 @@ class DeliveryCli(WebhookCase):
         base = {"schema": "kaola-delegator-wake/1", "project": self.project,
                 "session": "s1", "holder_instance_id": "h1", "event_seq": 1,
                 "state": "end_turn", "state_detail": "end_turn",
+                "reason": "host_stopped_pending",
                 "ts": "2026-01-01T00:00:00Z"}
         bad_payloads = []
         for mutate in (lambda p: p.update(extra="x"),
                        lambda p: p.pop("ts"),
                        lambda p: p.pop("state_detail"),
+                       lambda p: p.pop("reason"),
+                       lambda p: p.update(reason="not_a_reason"),
+                       lambda p: p.update(reason="bad token"),
                        lambda p: p.update(schema="kaola-delegator-wake/2"),
                        lambda p: p.update(state="ping"),
                        lambda p: p.update(event_seq=True),
@@ -657,6 +683,7 @@ class DeliveryCli(WebhookCase):
                                      "project": self.project, "session": "s1",
                                      "holder_instance_id": "h1",
                                      "event_seq": 0, "state": "test", "state_detail": "test",
+                                     "reason": "test",
                                      "ts": "2026-01-01T00:00:00Z"}).encode())
         try:
             argv = subprocess.run(["ps", "-o", "command=", "-p", str(proc.pid)],
@@ -686,6 +713,7 @@ class DeliveryCli(WebhookCase):
                                  "project": self.project, "session": "s1",
                                  "holder_instance_id": "h1", "event_seq": seq,
                                  "state": "end_turn", "state_detail": None,
+                                 "reason": "host_stopped_pending",
                                  "ts": "2026-01-01T00:00:00Z"})
             self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         receipts = self.receipts()
@@ -708,28 +736,37 @@ def socket_probe_closed_port() -> int:
 
 class HolderWakes(WebhookCase):
     def test_turn_end_delivers_one_signal(self) -> None:
+        # A Delegator send is not a wake. Exact stop still is, and it carries
+        # the signal shape including reason.
         self.endpoint = Endpoint()
         code, out = self.configure(self.endpoint.url)
         self.assertEqual(code, 0, out)
         self.start_host("turn")
         code, sent = self.send("--wait")
         self.assertEqual(sent.get("outcome"), "turn_completed", sent)
+        time.sleep(0.4)
+        self.assertFalse(self.endpoint.posts, self.endpoint.posts)
+        self.assertFalse(self.receipts())
+        code, stopped = self.acp("stop")
+        self.assertTrue(stopped.get("stopped"), stopped)
+        self.session = None
         receipt = wait_for(
             lambda: next((r for r in self.receipts()
-                          if r.get("state") == "end_turn"), None),
-            15, "end_turn delivered receipt")
+                          if r.get("state") == "stopped"), None),
+            15, "stopped delivered receipt")
         self.assertEqual(receipt["result"], "delivered")
         posts = wait_for(
             lambda: [p for p in self.endpoint.posts
-                     if (p["body"] or {}).get("state") == "end_turn"],
-            5, "end_turn POST")
+                     if (p["body"] or {}).get("state") == "stopped"],
+            5, "stopped POST")
         self.assertEqual(len(posts), 1)
         body = posts[0]["body"]
         self.assertEqual(set(body), PAYLOAD_KEYS)
         self.assertEqual(body["schema"], "kaola-delegator-wake/1")
         self.assertEqual(body["project"], self.project)
-        self.assertEqual(body["session"], self.session)
-        self.assertEqual(body["state_detail"], "end_turn")
+        self.assertEqual(body["session"], "grok-w299-orchestrator-turn")
+        self.assertEqual(body["state_detail"], "exact_stop")
+        self.assertEqual(body["reason"], "exact_stop")
         self.assertIsInstance(body["event_seq"], int)
         self.assertIsInstance(body["holder_instance_id"], str)
         self.assertRegex(body["ts"], r"^\d{4}-\d{2}-\d{2}T")
@@ -737,18 +774,19 @@ class HolderWakes(WebhookCase):
     def test_unconfigured_skips_without_network(self) -> None:
         self.endpoint = Endpoint()
         self.start_host("skip")
-        code, sent = self.send("--wait")
-        self.assertEqual(sent.get("outcome"), "turn_completed", sent)
+        code, stopped = self.acp("stop")
+        self.assertTrue(stopped.get("stopped"), stopped)
+        self.session = None
         receipt = wait_for(lambda: self.receipts()[-1] if self.receipts() else None,
                            15, "skipped receipt")
         self.assertEqual((receipt["result"], receipt["reason"]),
                          ("skipped", "not-configured"))
-        self.assertEqual(receipt["state"], "end_turn")
+        self.assertEqual(receipt["state"], "stopped")
         self.assertFalse(self.endpoint.posts)
 
     def test_unreachable_never_blocks_the_holder(self) -> None:
-        # a dead port: the child retries in the background; the send is not
-        # held by the delivery path (well under the 3 s attempt timeout)
+        # Exact stop is the wake. A dead port retries in the background; stop
+        # itself returns immediately.
         closed = socket_probe_closed_port()
         self.write_config({self.project: {
             "url": f"http://127.0.0.1:{closed}/hook", "sender_key": None,
@@ -757,38 +795,46 @@ class HolderWakes(WebhookCase):
             "updated_at": "2026-01-01T00:00:00Z"}})
         self.start_host("down")
         started = time.monotonic()
-        code, sent = self.send("--wait")
+        code, stopped = self.acp("stop")
         elapsed = time.monotonic() - started
-        self.assertEqual(sent.get("outcome"), "turn_completed", sent)
-        self.assertLess(elapsed, 2.5, "send was held by webhook delivery")
-        # the first attempt's receipt lands promptly, long before the retry
-        # chain ends — a killed child still records the attempts it made
+        self.assertTrue(stopped.get("stopped"), stopped)
+        self.assertLess(elapsed, 2.5, "stop was held by webhook delivery")
+        self.session = None
         first = wait_for(
             lambda: next((r for r in self.receipts()
-                          if r.get("state") == "end_turn"
+                          if r.get("state") == "stopped"
                           and r.get("result") == "failed"), None),
             6, "first failed attempt receipt")
         self.assertEqual(first["attempt"], 1)
         self.assertIs(first["final"], False)
         self.assertEqual(first["error"], "connection")
-        # a slow endpoint: same non-blocking shape, timeout classification
+        # A response between the old 3 s timeout and the 12 s timeout is one
+        # delivery and no retry. Stop still returns immediately.
         self.endpoint = Endpoint(sleep_seconds=4.0)
         self.write_config({self.project: {
             "url": self.endpoint.url, "sender_key": None,
             "sender_key_attachment": {"style": "url"},
             "enabled": True, "owner_agent": "agent-A",
             "updated_at": "2026-01-01T00:00:00Z"}})
+        self.start_host("slow")
         started = time.monotonic()
-        code, sent = self.send("--wait")
+        code, stopped = self.acp("stop")
         elapsed = time.monotonic() - started
-        self.assertEqual(sent.get("outcome"), "turn_completed", sent)
-        self.assertLess(elapsed, 3.0, "send was held by webhook delivery")
-        first = wait_for(
+        self.assertTrue(stopped.get("stopped"), stopped)
+        self.assertLess(elapsed, 2.5, "stop was held by webhook delivery")
+        self.session = None
+        delivered = wait_for(
             lambda: next((r for r in self.receipts()
-                          if r.get("error") == "timeout"), None),
-            8, "first timeout receipt")
-        self.assertEqual(first["attempt"], 1)
-        self.assertIs(first["final"], False)
+                          if r.get("state") == "stopped"
+                          and r.get("result") == "delivered"), None),
+            15, "slow endpoint delivered")
+        self.assertEqual(delivered["attempt"], 1)
+        self.assertIs(delivered["final"], True)
+        self.assertIsNone(delivered["error"])
+        posts = [p for p in self.endpoint.posts
+                 if (p["body"] or {}).get("state") == "stopped"]
+        self.assertEqual(len(posts), 1)
+        self.assertEqual(posts[0]["body"]["reason"], "exact_stop")
 
     def test_no_secret_leaks_into_records_or_output(self) -> None:
         self.endpoint = Endpoint()
@@ -796,8 +842,9 @@ class HolderWakes(WebhookCase):
         code, out = self.configure(url, key=None, attachment=("--key-in-url",))
         self.assertEqual(code, 0, out)
         self.start_host("leak")
-        self.send("--wait")
-        wait_for(lambda: any(r.get("state") == "end_turn" for r in self.receipts()),
+        code, stopped = self.acp("stop")
+        self.assertTrue(stopped.get("stopped"), stopped)
+        wait_for(lambda: any(r.get("state") == "stopped" for r in self.receipts()),
                  15, "delivered receipt")
         surfaces = {"receipts": self.receipts_path().read_bytes()}
         _, status = self.hook_json("status", "--project", str(self.repo))
@@ -835,7 +882,13 @@ class HolderWakes(WebhookCase):
             15, "blocked receipt")
         self.assertEqual(blocked["result"], "delivered")
         self.assertEqual(blocked["state_detail"], "permission_required")
-        # resolve the pending permission so the turn can end
+        blocked_post = wait_for(
+            lambda: next((p for p in self.endpoint.posts
+                          if (p["body"] or {}).get("state") == "blocked"), None),
+            5, "blocked POST")
+        self.assertEqual(blocked_post["body"]["reason"], "permission_required")
+        # resolve the pending permission so the turn can end. That completing
+        # turn is the Delegator's own send, so it does not wake again.
         _, obs = self.acp("observe", scenario="permission_gate")
         pending = obs.get("pending_permissions") or []
         self.assertTrue(pending, obs)
@@ -843,9 +896,10 @@ class HolderWakes(WebhookCase):
                              str(pending[0]["request_id"]),
                              "--option", pending[0]["options"][0]["id"],
                              scenario="permission_gate")
-        wait_for(lambda: any(r.get("state") == "end_turn"
-                             for r in self.receipts()),
-                 15, "end_turn receipt")
+        wait_for(lambda: self.acp("status", scenario="permission_gate")[1].get(
+            "turn_active") is False, 15, "turn ended after permit")
+        time.sleep(0.4)
+        self.assertFalse(any(r.get("state") == "end_turn" for r in self.receipts()))
         # stop: the inline spawn hands the payload off before the reply
         code, stopped = self.acp("stop", scenario="permission_gate")
         self.assertTrue(stopped.get("stopped"), stopped)
@@ -870,10 +924,8 @@ class HolderWakes(WebhookCase):
         self.start_host("killstart")
         code, sent = self.send("--wait")
         self.assertEqual(sent.get("outcome"), "turn_completed", sent)
-        first = wait_for(
-            lambda: next((p for p in self.endpoint.posts
-                          if (p["body"] or {}).get("state") == "end_turn"), None),
-            10, "end_turn POST")
+        time.sleep(0.4)
+        self.assertFalse(self.endpoint.posts)
         dead = self.sigkill_session()
         dead_id = dead["holder_instance_id"]
         # the next start replaces the dead record: one holder_lost wake
@@ -888,9 +940,10 @@ class HolderWakes(WebhookCase):
             15, "holder_lost POST")
         body = post["body"]
         self.assertEqual(body["state"], "error")
+        self.assertEqual(body["reason"], "holder_lost")
         self.assertEqual(body["holder_instance_id"], dead_id)
         self.assertEqual(set(body), PAYLOAD_KEYS)
-        self.assertGreater(body["event_seq"], first["body"]["event_seq"])
+        self.assertIsInstance(body["event_seq"], int)
         # a clean stop sends the new holder's own "stopped"; a later start
         # recovers nothing further for the dead id (exactly once)
         code, stopped = self.acp("stop")
@@ -925,9 +978,11 @@ class HolderWakes(WebhookCase):
         code, receipt = self.acp("start")
         self.assertNotIn("delegator_death_wake", receipt)
         time.sleep(0.5)
-        self.assertEqual(len(self.posts_with_detail("holder_lost")), 1)
+        lost = self.posts_with_detail("holder_lost")
+        self.assertEqual(len(lost), 1)
+        self.assertEqual(lost[0]["body"]["reason"], "holder_lost")
         self.assertTrue(all((p["body"] or {}).get("holder_instance_id") == dead_id
-                            for p in self.posts_with_detail("holder_lost")))
+                            for p in lost))
 
     def test_non_host_or_clean_stop_not_recovered(self) -> None:
         self.endpoint = Endpoint()
@@ -949,24 +1004,24 @@ class HolderWakes(WebhookCase):
         self.assertFalse(self.posts_with_detail("holder_lost"))
 
     def test_stop_reason_detail_carried(self) -> None:
+        # A Delegator send reports the stop reason on its own receipt and does
+        # not wake. Exact stop still wakes. Self-sourced detail is #302.
         self.endpoint = Endpoint()
         code, out = self.configure(self.endpoint.url)
         self.assertEqual(code, 0, out)
         self.start_host("reason", scenario="stop_reason")
-        for text, detail in (("end_turn", "end_turn"),
-                             ("max_tokens", "max_tokens"),
-                             ("refusal", "refusal"),
-                             ("cancelled", "cancelled"),
-                             ("not a token", "other")):
-            before = len(self.endpoint.posts)
-            code, sent = self.acp("send", "--text", text, "--wait",
-                                  scenario="stop_reason")
-            post = wait_for(
-                lambda: self.endpoint.posts[before]
-                if len(self.endpoint.posts) > before else None,
-                10, f"wake POST for {text!r}")
-            self.assertEqual(post["body"]["state"], "end_turn")
-            self.assertEqual(post["body"]["state_detail"], detail)
+        for text in ("end_turn", "max_tokens", "refusal", "cancelled", "not a token"):
+            self.acp("send", "--text", text, "--wait", scenario="stop_reason")
+        time.sleep(0.4)
+        self.assertFalse(self.endpoint.posts)
+        code, stopped = self.acp("stop", scenario="stop_reason")
+        self.assertTrue(stopped.get("stopped"), stopped)
+        self.session = None
+        post = wait_for(
+            lambda: next((p for p in self.endpoint.posts
+                          if (p["body"] or {}).get("reason") == "exact_stop"), None),
+            10, "exact_stop POST")
+        self.assertEqual(post["body"]["state_detail"], "exact_stop")
 
 
 class RecordContractWakeMode(WebhookCase):

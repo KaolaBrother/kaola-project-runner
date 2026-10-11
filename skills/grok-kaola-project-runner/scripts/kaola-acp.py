@@ -1959,6 +1959,7 @@ def recover_host_death_wake(directory: Path | None,
         "event_seq": event_seq,
         "state": "error",
         "state_detail": "holder_lost",
+        "reason": "holder_lost",
         "ts": _utc_stamp(),
     }
     try:
@@ -6019,18 +6020,29 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
 
 
 # ---------------------------------------------------------------------------
-# Issue #299: Delegator webhook wake. A Host holder spawns the ``deliver``
-# subcommand detached at turn/permission/stop boundaries; this CLI owns the
-# config, validation, POST, retries and receipts. No receipt ever carries the
-# URL, the sender key, or an exception message (urllib errors can embed the
-# URL); only the classified error code travels.
+# Issue #299 / #302: Delegator webhook wake. A Host holder spawns the
+# ``deliver`` subcommand detached only when the Delegator must act; this CLI
+# owns the config, validation, POST, retries, dedupe and receipts. No receipt
+# ever carries the URL, the sender key, or an exception message (urllib errors
+# can embed the URL); only the classified error code travels.
 # ---------------------------------------------------------------------------
 
 DELEGATOR_WEBHOOK_CONFIG_ENV = "KAOLA_DELEGATOR_WEBHOOK_CONFIG"
 DELEGATOR_WEBHOOK_SCHEMA = "kaola-delegator-webhook/1"
 DELEGATOR_WEBHOOK_RECEIPTS_SCHEMA = "kaola-delegator-webhook-receipts/1"
 DELEGATOR_WEBHOOK_RECEIPTS_LIMIT = 32
-DELEGATOR_WEBHOOK_TIMEOUT = 3.0
+DELEGATOR_WEBHOOK_CLAIMS_SCHEMA = "kaola-delegator-webhook-claims/1"
+# Bound of remembered (holder_instance_id, event_seq) pairs. A pair is claimed
+# before the first network attempt and kept after success or final failure, so
+# a retry of that same event does not POST again. Oldest pairs fall off only
+# after this many later events. A death-recovery wake uses a new event_seq, so
+# it is not one of those pairs.
+DELEGATOR_WEBHOOK_CLAIMS_LIMIT = 256
+# 12 s: one attempt, inside the required 10–15 s range. The old 3 s timeout
+# was shorter than a cold listener accept, so the client timed out after the
+# server had already taken the POST and then retried it. 12 s covers that
+# accept and still fails a dead endpoint once, with no timeout retry.
+DELEGATOR_WEBHOOK_TIMEOUT = 12.0
 DELEGATOR_WEBHOOK_BACKOFF = (1.0, 2.0, 4.0)
 DELEGATOR_WEBHOOK_MAX_ATTEMPTS = 1 + len(DELEGATOR_WEBHOOK_BACKOFF)
 DELEGATOR_WEBHOOK_RETRY_STATUS = frozenset({408, 429})
@@ -6038,7 +6050,23 @@ DELEGATOR_WEBHOOK_USER_AGENT = "kaola-delegator-wake/1"
 DELEGATOR_WEBHOOK_PAYLOAD_SCHEMA = "kaola-delegator-wake/1"
 DELEGATOR_WEBHOOK_PAYLOAD_KEYS = frozenset(
     {"schema", "project", "session", "holder_instance_id", "event_seq",
-     "state", "state_detail", "ts"})
+     "state", "state_detail", "reason", "ts"})
+# Closed reason vocabulary. Keep in lockstep with DELEGATOR_WAKE_REASONS
+# in kaola-acp-holder.py. ``holder_lost`` is sent by death recovery here;
+# ``test`` is the CLI test payload.
+DELEGATOR_WEBHOOK_REASONS = frozenset({
+    "host_stopped_pending",
+    "permission_required",
+    "needs_decision",
+    "question_waiting",
+    "delivery_review",
+    "turn_failed",
+    "agent_exited",
+    "boot_failure",
+    "holder_lost",
+    "exact_stop",
+    "test",
+})
 DELEGATOR_WEBHOOK_DETAIL_RE = re.compile(r"[A-Za-z0-9_.:-]{1,64}")
 DELEGATOR_WEBHOOK_PAYLOAD_STATES = frozenset(
     {"end_turn", "blocked", "error", "stopped", "test"})
@@ -6228,8 +6256,16 @@ def _webhook_post(url: str, attachment: dict[str, Any], sender_key: str | None,
 
 
 def _webhook_retryable(http_status: int | None, error: str | None) -> bool:
-    if error in ("timeout", "connection"):
+    """Retry connection errors, HTTP 5xx, 408 and 429. Never a client timeout.
+
+    A timeout means this attempt may already have been accepted. Retrying it
+    is how the same event was delivered twice. 408 and 429 are server
+    responses that ask for a retry; they are not that client-timeout case.
+    """
+    if error == "connection":
         return True
+    if error == "timeout":
+        return False
     if error == "http-status" and isinstance(http_status, int):
         return http_status >= 500 or http_status in DELEGATOR_WEBHOOK_RETRY_STATUS
     return False
@@ -6258,47 +6294,96 @@ def _webhook_attempt_receipt(payload: dict[str, Any], attempt: int, result: str,
     return receipt
 
 
+def _webhook_under_lock(project_root: str, fn: Any) -> Any:
+    """Run ``fn`` while holding the receipts flock. Not re-entrant."""
+    import fcntl
+    kaola_dir = Path(project_root) / ".kaola"
+    kaola_dir.mkdir(exist_ok=True)
+    lock_path = kaola_dir / "delegator-webhook-receipts.lock"
+    with open(lock_path, "a+b") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        return fn()
+
+
+def _webhook_atomic_json(path: Path, doc: dict[str, Any]) -> None:
+    """Atomic 0600 replace. Caller holds the receipts flock."""
+    data = json.dumps(doc, ensure_ascii=False, sort_keys=True, indent=1).encode("utf-8") + b"\n"
+    temp_name = str(path.with_name(f"{path.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp"))
+    fd = os.open(temp_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as temp:
+            temp.write(data)
+            temp.flush()
+            os.fsync(temp.fileno())
+        os.replace(temp_name, path)
+    except BaseException:
+        try:
+            os.unlink(temp_name)
+        except OSError:
+            pass
+        raise
+
+
+def _webhook_append_receipts_unlocked(project_root: str, receipts: list[dict[str, Any]]) -> None:
+    path = delegator_webhook_receipts_path(project_root)
+    old: list[dict[str, Any]] = []
+    if path.is_file():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+            if (isinstance(existing, dict)
+                    and existing.get("schema") == DELEGATOR_WEBHOOK_RECEIPTS_SCHEMA
+                    and isinstance(existing.get("receipts"), list)):
+                old = [item for item in existing["receipts"] if isinstance(item, dict)]
+        except (OSError, ValueError):
+            old = []
+    merged = (old + receipts)[-DELEGATOR_WEBHOOK_RECEIPTS_LIMIT:]
+    doc = {"schema": DELEGATOR_WEBHOOK_RECEIPTS_SCHEMA,
+           "limit": DELEGATOR_WEBHOOK_RECEIPTS_LIMIT, "receipts": merged}
+    _webhook_atomic_json(path, doc)
+
+
 def _webhook_append_receipts(project_root: str, receipts: list[dict[str, Any]]) -> None:
     """Append to the bounded receipts file; every write failure is swallowed
     (deliver must never crash the detached child over bookkeeping)."""
     try:
-        import fcntl
-        kaola_dir = Path(project_root) / ".kaola"
-        kaola_dir.mkdir(exist_ok=True)
-        path = delegator_webhook_receipts_path(project_root)
-        lock_path = kaola_dir / "delegator-webhook-receipts.lock"
-        with open(lock_path, "a+b") as lock_file:
-            fcntl.flock(lock_file, fcntl.LOCK_EX)
-            old: list[dict[str, Any]] = []
-            if path.is_file():
-                try:
-                    existing = json.loads(path.read_text(encoding="utf-8"))
-                    if (isinstance(existing, dict)
-                            and existing.get("schema") == DELEGATOR_WEBHOOK_RECEIPTS_SCHEMA
-                            and isinstance(existing.get("receipts"), list)):
-                        old = [item for item in existing["receipts"] if isinstance(item, dict)]
-                except (OSError, ValueError):
-                    old = []
-            merged = (old + receipts)[-DELEGATOR_WEBHOOK_RECEIPTS_LIMIT:]
-            doc = {"schema": DELEGATOR_WEBHOOK_RECEIPTS_SCHEMA,
-                   "limit": DELEGATOR_WEBHOOK_RECEIPTS_LIMIT, "receipts": merged}
-            data = json.dumps(doc, ensure_ascii=False, sort_keys=True, indent=1).encode("utf-8") + b"\n"
-            temp_name = str(path.with_name(f"receipts.{os.getpid()}.{secrets.token_hex(4)}.tmp"))
-            try:
-                fd = os.open(temp_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-                with os.fdopen(fd, "wb") as temp:
-                    temp.write(data)
-                    temp.flush()
-                    os.fsync(temp.fileno())
-                os.replace(temp_name, path)
-            except BaseException:
-                try:
-                    os.unlink(temp_name)
-                except OSError:
-                    pass
-                raise
+        _webhook_under_lock(
+            project_root,
+            lambda: _webhook_append_receipts_unlocked(project_root, receipts))
     except Exception:
         pass
+
+
+def _webhook_claims_path(project_root: str) -> Path:
+    return Path(project_root) / ".kaola" / "delegator-webhook-claims.json"
+
+
+def _webhook_claim_event(project_root: str, holder_instance_id: str, event_seq: int) -> bool:
+    """True when this call owns ``holder_instance_id`` + ``event_seq``.
+
+    False when that pair was already claimed. A claim-file failure returns
+    True so the event is still delivered once. Caller holds the receipts flock.
+    The claim stays after success and after final network failure. Config and
+    invalid-payload skips do not call this, so they do not consume the event.
+    """
+    path = _webhook_claims_path(project_root)
+    try:
+        claims: list[dict[str, Any]] = []
+        if path.is_file():
+            doc = json.loads(path.read_text(encoding="utf-8"))
+            if (isinstance(doc, dict)
+                    and doc.get("schema") == DELEGATOR_WEBHOOK_CLAIMS_SCHEMA
+                    and isinstance(doc.get("claims"), list)):
+                claims = [item for item in doc["claims"] if isinstance(item, dict)]
+        for item in claims:
+            if (item.get("holder_instance_id") == holder_instance_id
+                    and item.get("event_seq") == event_seq):
+                return False
+        claims.append({"holder_instance_id": holder_instance_id, "event_seq": event_seq})
+        claims = claims[-DELEGATOR_WEBHOOK_CLAIMS_LIMIT:]
+        _webhook_atomic_json(path, {"schema": DELEGATOR_WEBHOOK_CLAIMS_SCHEMA, "claims": claims})
+        return True
+    except Exception:
+        return True
 
 
 def _webhook_read_receipts(project_root: str) -> list[dict[str, Any]]:
@@ -6316,11 +6401,13 @@ def _webhook_payload_ok(payload: Any) -> bool:
     """True only for the exact wake signal shape — nothing else may be POSTed."""
     event_seq = payload.get("event_seq") if isinstance(payload, dict) else None
     detail = payload.get("state_detail") if isinstance(payload, dict) else False
+    reason = payload.get("reason") if isinstance(payload, dict) else None
     return (isinstance(payload, dict)
             and set(payload) == DELEGATOR_WEBHOOK_PAYLOAD_KEYS
             and payload.get("schema") == DELEGATOR_WEBHOOK_PAYLOAD_SCHEMA
             and payload.get("state") in DELEGATOR_WEBHOOK_PAYLOAD_STATES
             and isinstance(event_seq, int) and not isinstance(event_seq, bool)
+            and isinstance(reason, str) and reason in DELEGATOR_WEBHOOK_REASONS
             and (detail is None or (isinstance(detail, str)
                  and DELEGATOR_WEBHOOK_DETAIL_RE.fullmatch(detail) is not None)))
 
@@ -6347,6 +6434,25 @@ def _webhook_deliver(project_root: str, payload: dict[str, Any]) -> list[dict[st
         return one("skipped", None, "not-configured")
     if _webhook_entry_error(entry) is not None:
         return one("failed", "invalid-config", None)
+
+    # Claim before any network attempt. A duplicate of this holder event is a
+    # skipped receipt and no POST. Retries of a retryable error stay inside
+    # this call, which already owns the claim. Not-configured and invalid
+    # config returned above and did not claim.
+    holder_instance_id = payload.get("holder_instance_id")
+    event_seq = payload.get("event_seq")
+    try:
+        owned = _webhook_under_lock(
+            project_root,
+            lambda: _webhook_claim_event(project_root, holder_instance_id, event_seq))
+    except Exception:
+        owned = True
+    if not owned:
+        receipt = _webhook_attempt_receipt(
+            payload, 0, "skipped", None, None, "duplicate",
+            int(round((time.monotonic() - started) * 1000)), True)
+        _webhook_append_receipts(project_root, [receipt])
+        return [receipt]
 
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     receipts: list[dict[str, Any]] = []
@@ -6491,6 +6597,7 @@ def command_delegator_webhook(argv: list[str]) -> int:
             "event_seq": 0,
             "state": "test",
             "state_detail": "test",
+            "reason": "test",
             "ts": _utc_stamp(),
         }
         receipts = _webhook_deliver(project_root, payload)
