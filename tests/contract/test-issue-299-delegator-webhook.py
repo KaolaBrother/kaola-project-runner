@@ -8,7 +8,11 @@ Contract coverage, all offline:
 - the Host holder's detached wake child: ``end_turn``, ``blocked``,
   ``stopped`` and the skipped/failed short receipts, through a real holder
   driving ``mock-acp-agent.py``;
-- the record contract's ``timer_owner.wake_mode``/``webhook_routine_id``.
+- the record contract's ``timer_owner.wake_mode``/``webhook_routine_id``;
+- Issue #304: a delivered or failed attempt receipt carries the wake
+  ``reason``, a skip carries ``skip_reason`` and no ``reason``, ``status``
+  still parses an old receipts file, and a v0.9.5/v0.9.6 payload with no
+  ``reason`` (and the earlier shape that also omits ``state_detail``) delivers.
 
 Every test pins ``KAOLA_DELEGATOR_WEBHOOK_CONFIG`` (and HOME) to a temp path —
 the real ``~/.config/kaola`` is never touched. The webhook endpoint is a
@@ -506,7 +510,9 @@ class DeliveryCli(WebhookCase):
         self.assertEqual(out["schema"], "kaola-delegator-webhook-test/1")
         self.assertEqual(len(out["receipts"]), 1)
         receipt = out["receipts"][0]
-        self.assertEqual(set(receipt) - {"reason"}, ATTEMPT_RECEIPT_KEYS)
+        self.assertEqual(set(receipt), ATTEMPT_RECEIPT_KEYS | {"reason"})
+        self.assertEqual(receipt["reason"], "test")
+        self.assertNotIn("skip_reason", receipt)
         self.assertEqual(receipt["http_status"], 200)
         self.assertIsNone(receipt["error"])
         self.assertTrue(receipt["final"])
@@ -545,8 +551,9 @@ class DeliveryCli(WebhookCase):
         proc = self.deliver(payload)
         self.assertEqual(proc.returncode, 0)
         [receipt] = self.receipts()
-        self.assertEqual((receipt["result"], receipt["reason"]),
+        self.assertEqual((receipt["result"], receipt["skip_reason"]),
                          ("skipped", "not-configured"))
+        self.assertNotIn("reason", receipt)
         self.assertFalse(self.endpoint.posts)
         # enabled: false — same skip
         self.write_config({self.project: {
@@ -557,6 +564,8 @@ class DeliveryCli(WebhookCase):
         proc = self.deliver(payload)
         self.assertEqual(proc.returncode, 0)
         self.assertEqual(self.receipts()[-1]["result"], "skipped")
+        self.assertEqual(self.receipts()[-1]["skip_reason"], "not-configured")
+        self.assertNotIn("reason", self.receipts()[-1])
         self.assertFalse(self.endpoint.posts)
         # a group-readable config fails as config-mode with no POST
         self.write_config({self.project: {
@@ -568,6 +577,8 @@ class DeliveryCli(WebhookCase):
         self.assertNotEqual(proc.returncode, 0)
         last = self.receipts()[-1]
         self.assertEqual((last["result"], last["error"]), ("failed", "config-mode"))
+        self.assertEqual(last["reason"], "host_stopped_pending")
+        self.assertNotIn("skip_reason", last)
         self.assertFalse(self.endpoint.posts)
 
     def test_retry_policy_and_redirect_refusal(self) -> None:
@@ -587,6 +598,8 @@ class DeliveryCli(WebhookCase):
         self.assertNotEqual(code, 0)
         self.assertEqual(len(out["receipts"]), 4)
         self.assertTrue(all(r["error"] == "http-status" and r["http_status"] == 500
+                            for r in out["receipts"]))
+        self.assertTrue(all(r["reason"] == "test" and "skip_reason" not in r
                             for r in out["receipts"]))
         self.assertTrue(out["receipts"][-1]["final"])
         # redirect: refused without retry
@@ -615,6 +628,7 @@ class DeliveryCli(WebhookCase):
         self.assertNotEqual(proc.returncode, 0)
         last = self.receipts()[-4:]
         self.assertTrue(all(r["error"] == "connection" for r in last))
+        self.assertTrue(all(r["reason"] == "host_stopped_pending" for r in last))
 
     def test_deliver_refuses_non_signal_payload(self) -> None:
         self.endpoint = Endpoint()
@@ -631,8 +645,11 @@ class DeliveryCli(WebhookCase):
         bad_payloads = []
         for mutate in (lambda p: p.update(extra="x"),
                        lambda p: p.pop("ts"),
+                       lambda p: p.pop("schema"),
+                       lambda p: p.pop("holder_instance_id"),
+                       lambda p: p.pop("event_seq"),
+                       # reason without state_detail is not a shipped shape
                        lambda p: p.pop("state_detail"),
-                       lambda p: p.pop("reason"),
                        lambda p: p.update(reason="not_a_reason"),
                        lambda p: p.update(reason="bad token"),
                        lambda p: p.update(schema="kaola-delegator-wake/2"),
@@ -720,9 +737,212 @@ class DeliveryCli(WebhookCase):
         self.assertEqual(len(receipts), 32)
         self.assertEqual(receipts[0]["event_seq"], 4)
         self.assertEqual(receipts[-1]["event_seq"], 35)
+        self.assertTrue(all(item["reason"] == "host_stopped_pending"
+                            and "skip_reason" not in item for item in receipts))
         # receipt atomic writes leave no stray temp files in .kaola
         kaola_dir = self.repo / ".kaola"
         self.assertFalse(list(kaola_dir.glob("*.tmp")))
+
+    def _url_config(self, url: str) -> None:
+        self.write_config({self.project: {
+            "url": url, "sender_key": None,
+            "sender_key_attachment": {"style": "url"},
+            "enabled": True, "owner_agent": "agent-A",
+            "updated_at": "2026-01-01T00:00:00Z"}})
+
+    def test_delivered_failed_and_skipped_receipt_fields(self) -> None:
+        self.endpoint = Endpoint()
+        self._url_config(self.endpoint.url)
+        payload = {"schema": "kaola-delegator-wake/1", "project": self.project,
+                   "session": "s1", "holder_instance_id": "h1", "event_seq": 11,
+                   "state": "end_turn", "state_detail": "end_turn",
+                   "reason": "delivery_review", "ts": "2026-01-01T00:00:00Z"}
+        proc = self.deliver(payload)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        delivered = self.receipts()[-1]
+        self.assertEqual(delivered["result"], "delivered")
+        self.assertEqual(delivered["reason"], "delivery_review")
+        self.assertNotIn("skip_reason", delivered)
+        self.assertEqual(set(delivered), ATTEMPT_RECEIPT_KEYS | {"reason"})
+
+        code, status = self.hook_json("status", "--project", str(self.repo))
+        self.assertEqual(code, 0)
+        self.assertEqual(status["schema"], "kaola-delegator-webhook-status/1")
+        self.assertEqual(status["last_receipt"]["reason"], "delivery_review")
+        self.assertEqual(status["last_receipt"]["result"], "delivered")
+        self.assertIsNone(status["last_test"])
+        self.assertIn("receipts_path", status)
+
+        code, tested = self.hook_json("test", "--project", str(self.repo))
+        self.assertEqual((code, tested["result"]), (0, "delivered"), tested)
+        self.assertEqual(tested["receipts"][0]["reason"], "test")
+        code, status = self.hook_json("status", "--project", str(self.repo))
+        self.assertEqual(code, 0)
+        self.assertEqual(status["schema"], "kaola-delegator-webhook-status/1")
+        self.assertEqual(status["last_test"]["result"], "delivered")
+        self.assertEqual(status["last_test"]["state"], "test")
+        self.assertEqual(status["last_test"]["reason"], "test")
+        self.assertNotIn("skip_reason", status["last_test"])
+
+        self.endpoint.posts.clear()
+        proc = self.deliver(payload)
+        self.assertEqual(proc.returncode, 0)
+        self.assertFalse(self.endpoint.posts)
+        duplicate = self.receipts()[-1]
+        self.assertEqual(duplicate["result"], "skipped")
+        self.assertEqual(duplicate["skip_reason"], "duplicate")
+        self.assertNotIn("reason", duplicate)
+        self.assertEqual(set(duplicate), ATTEMPT_RECEIPT_KEYS | {"skip_reason"})
+
+        self.write_config({self.project: {
+            "url": self.endpoint.url, "sender_key": None,
+            "sender_key_attachment": {"style": "url"},
+            "enabled": False, "owner_agent": "agent-A",
+            "updated_at": "2026-01-01T00:00:00Z"}})
+        skipped_payload = dict(payload)
+        skipped_payload["event_seq"] = 12
+        proc = self.deliver(skipped_payload)
+        self.assertEqual(proc.returncode, 0)
+        self.assertFalse(self.endpoint.posts)
+        skipped = self.receipts()[-1]
+        self.assertEqual(skipped["skip_reason"], "not-configured")
+        self.assertNotIn("reason", skipped)
+
+        self._url_config(f"http://127.0.0.1:{self.endpoint.port}/status/400")
+        failed_payload = dict(payload)
+        failed_payload["event_seq"] = 13
+        failed_payload["reason"] = "turn_failed"
+        proc = self.deliver(failed_payload)
+        self.assertEqual(proc.returncode, 1)
+        failed = self.receipts()[-1]
+        self.assertEqual(failed["result"], "failed")
+        self.assertEqual(failed["reason"], "turn_failed")
+        self.assertEqual(failed["http_status"], 400)
+        self.assertNotIn("skip_reason", failed)
+        self.assertEqual(self.endpoint.posts[-1]["body"]["reason"], "turn_failed")
+
+    def test_status_reads_pre_304_receipts_unchanged(self) -> None:
+        path = self.receipts_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        doc = {
+            "schema": "kaola-delegator-webhook-receipts/1",
+            "limit": 32,
+            "receipts": [
+                {
+                    "ts": "2026-10-11T00:00:00Z", "state": "test",
+                    "state_detail": "test", "session": None,
+                    "holder_instance_id": "test-old", "event_seq": 0,
+                    "result": "delivered", "attempt": 1, "max_attempts": 4,
+                    "http_status": 200, "error": None, "elapsed_ms": 3,
+                    "final": True,
+                },
+                {
+                    "ts": "2026-10-11T00:00:01Z", "state": "end_turn",
+                    "state_detail": None, "session": "s1",
+                    "holder_instance_id": "h1", "event_seq": 1,
+                    "result": "skipped", "reason": "not-configured",
+                    "attempt": 0, "max_attempts": 4, "http_status": None,
+                    "error": None, "elapsed_ms": 0, "final": True,
+                },
+            ],
+        }
+        path.write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
+        path.chmod(0o600)
+        before = path.read_bytes()
+        code, status = self.hook_json("status", "--project", str(self.repo))
+        self.assertEqual(code, 0)
+        self.assertEqual(status["schema"], "kaola-delegator-webhook-status/1")
+        self.assertEqual(status["last_test"]["result"], "delivered")
+        self.assertEqual(status["last_test"]["state"], "test")
+        self.assertNotIn("reason", status["last_test"])
+        self.assertNotIn("skip_reason", status["last_test"])
+        self.assertEqual(status["last_receipt"]["result"], "skipped")
+        self.assertEqual(status["last_receipt"]["reason"], "not-configured")
+        self.assertNotIn("skip_reason", status["last_receipt"])
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_old_shape_payload_delivers_malformed_is_refused(self) -> None:
+        self.endpoint = Endpoint()
+        self._url_config(self.endpoint.url)
+        v096 = {
+            "schema": "kaola-delegator-wake/1", "project": self.project,
+            "session": "s1", "holder_instance_id": "h-old", "event_seq": 3626,
+            "state": "end_turn", "state_detail": "end_turn",
+            "ts": "2026-10-11T10:58:00Z",
+        }
+        proc = self.deliver(v096)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(self.endpoint.posts[-1]["body"], v096)
+        self.assertNotIn("reason", self.endpoint.posts[-1]["body"])
+        receipt = self.receipts()[-1]
+        self.assertEqual(receipt["result"], "delivered")
+        self.assertIn("reason", receipt)
+        self.assertIsNone(receipt["reason"])
+        self.assertNotIn("skip_reason", receipt)
+        self.assertEqual(receipt["state_detail"], "end_turn")
+
+        null_detail = dict(v096)
+        null_detail["state_detail"] = None
+        null_detail["event_seq"] = 3627
+        proc = self.deliver(null_detail)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(self.endpoint.posts[-1]["body"], null_detail)
+        self.assertIsNone(self.receipts()[-1]["reason"])
+        self.assertIsNone(self.receipts()[-1]["state_detail"])
+
+        early = {key: value for key, value in v096.items() if key != "state_detail"}
+        early["event_seq"] = 3635
+        proc = self.deliver(early)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(self.endpoint.posts[-1]["body"], early)
+        self.assertNotIn("state_detail", self.endpoint.posts[-1]["body"])
+        receipt = self.receipts()[-1]
+        self.assertEqual(receipt["result"], "delivered")
+        self.assertIsNone(receipt["reason"])
+        self.assertIsNone(receipt["state_detail"])
+
+        self._url_config(f"http://127.0.0.1:{self.endpoint.port}/status/400")
+        failed = dict(v096)
+        failed["event_seq"] = 3639
+        proc = self.deliver(failed)
+        self.assertEqual(proc.returncode, 1)
+        failed_receipt = self.receipts()[-1]
+        self.assertEqual(failed_receipt["result"], "failed")
+        self.assertIsNone(failed_receipt["reason"])
+        self.assertEqual(failed_receipt["error"], "http-status")
+        self.assertEqual(failed_receipt["http_status"], 400)
+        self.assertNotIn("skip_reason", failed_receipt)
+        self.assertNotIn("reason", self.endpoint.posts[-1]["body"])
+
+        self._url_config(self.endpoint.url)
+        posts_before = len(self.endpoint.posts)
+        base = dict(v096)
+        base["reason"] = "delivery_review"
+        base["state_detail"] = "end_turn"
+        base["event_seq"] = 3700
+        for key in ("schema", "holder_instance_id", "event_seq"):
+            bad = dict(base)
+            bad.pop(key)
+            proc = self.deliver(bad)
+            self.assertEqual(proc.returncode, 1, key)
+        self.assertEqual(len(self.endpoint.posts), posts_before)
+        refused = [item for item in self.receipts()
+                   if item.get("error") == "invalid-payload"]
+        self.assertEqual(len(refused), 3)
+        self.assertTrue(all(
+            item["result"] == "failed" and item["reason"] == "delivery_review"
+            and "skip_reason" not in item for item in refused))
+
+        # A previous shape that also lacks schema is refused, and the receipt
+        # records the honest absent reason.
+        bare = dict(early)
+        bare.pop("schema")
+        bare["event_seq"] = 3701
+        proc = self.deliver(bare)
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(len(self.endpoint.posts), posts_before)
+        self.assertEqual(self.receipts()[-1]["error"], "invalid-payload")
+        self.assertIsNone(self.receipts()[-1]["reason"])
 
 
 def socket_probe_closed_port() -> int:
@@ -781,8 +1001,9 @@ class HolderWakes(WebhookCase):
         self.session = None
         receipt = wait_for(lambda: self.receipts()[-1] if self.receipts() else None,
                            15, "skipped receipt")
-        self.assertEqual((receipt["result"], receipt["reason"]),
+        self.assertEqual((receipt["result"], receipt["skip_reason"]),
                          ("skipped", "not-configured"))
+        self.assertNotIn("reason", receipt)
         self.assertEqual(receipt["state"], "stopped")
         self.assertFalse(self.endpoint.posts)
 

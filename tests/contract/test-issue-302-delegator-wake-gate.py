@@ -223,6 +223,8 @@ class WakeGate(issue299.WebhookCase):
         self.assertEqual(len(self.receipts()), 1)
         receipt = self.receipts()[0]
         self.assertEqual(receipt["result"], "delivered")
+        self.assertEqual(receipt["reason"], "exact_stop")
+        self.assertNotIn("skip_reason", receipt)
         self.assertEqual(receipt["attempt"], 1)
         self.assertIs(receipt["final"], True)
         self.assertIsNone(receipt["error"])
@@ -239,6 +241,8 @@ class WakeGate(issue299.WebhookCase):
         receipts = self.receipts()
         self.assertEqual(len(receipts), 1)
         self.assertEqual(receipts[0]["error"], "timeout")
+        self.assertEqual(receipts[0]["reason"], "exact_stop")
+        self.assertNotIn("skip_reason", receipts[0])
         self.assertEqual(receipts[0]["attempt"], 1)
         self.assertIs(receipts[0]["final"], True)
         time.sleep(1.0)
@@ -253,6 +257,7 @@ class WakeGate(issue299.WebhookCase):
         connection = self.receipts()
         self.assertEqual(len(connection), 4)
         self.assertTrue(all(item["error"] == "connection" for item in connection))
+        self.assertTrue(all(item["reason"] == "exact_stop" for item in connection))
         self.assertIs(connection[0]["final"], False)
         self.assertIs(connection[-1]["final"], True)
 
@@ -287,11 +292,18 @@ class WakeGate(issue299.WebhookCase):
         for proc in procs:
             proc.communicate(timeout=20)
         self.assertEqual(len(self.endpoint.posts), 1)
-        skipped = [item for item in self.receipts() if item.get("reason") == "duplicate"]
+        skipped = [item for item in self.receipts()
+                   if item.get("skip_reason") == "duplicate"]
         self.assertEqual(len(skipped), 1)
+        self.assertNotIn("reason", skipped[0])
         self.assertEqual(skipped[0]["attempt"], 0)
         self.assertEqual(skipped[0]["result"], "skipped")
         self.assertIs(skipped[0]["final"], True)
+        delivered = [item for item in self.receipts()
+                     if item.get("result") == "delivered"]
+        self.assertEqual(len(delivered), 1)
+        self.assertEqual(delivered[0]["reason"], "exact_stop")
+        self.assertNotIn("skip_reason", delivered[0])
         # A later event_seq for the same holder is a different event.
         proc = self.deliver(self.signal(holder_instance_id="holder-a", event_seq=5),
                             timeout=20)
@@ -305,7 +317,8 @@ class WakeGate(issue299.WebhookCase):
         payload = self.signal(event_seq=6)
         proc = self.deliver(payload)
         self.assertEqual(proc.returncode, 0)
-        self.assertEqual(self.receipts()[-1]["reason"], "not-configured")
+        self.assertEqual(self.receipts()[-1]["skip_reason"], "not-configured")
+        self.assertNotIn("reason", self.receipts()[-1])
         self.assertFalse(self.endpoint.posts)
         bad = dict(payload)
         bad["reason"] = "not_a_reason"
@@ -316,6 +329,8 @@ class WakeGate(issue299.WebhookCase):
         proc = self.deliver(payload)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(len(self.endpoint.posts), 1)
+        self.assertEqual(self.receipts()[-1]["reason"], "exact_stop")
+        self.assertNotIn("skip_reason", self.receipts()[-1])
 
     def test_delegator_send_does_not_wake(self) -> None:
         # A live dispatched seat is still running, and these turns are the

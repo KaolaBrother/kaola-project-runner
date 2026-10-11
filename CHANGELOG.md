@@ -4,6 +4,32 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+Seats: restart not required
+
+- **Webhook receipts record the wake reason, and a previous holder's payload still delivers (Issue #304).**
+  A `delivered` or `failed` row in `.kaola/delegator-webhook-receipts.json`
+  records the payload's wake `reason`. The value is JSON null when that
+  payload had no string `reason`. Skip causes `not-configured` and
+  `duplicate` are `skip_reason`. A skipped row has no `reason` key.
+  `delegator-webhook deliver` accepts the v0.9.5/v0.9.6 key set (no
+  `reason`; `state_detail` still present, null or a token) and the earlier
+  #299 key set that also omits `state_detail`. The POST body is the payload
+  as received. The receipt records the absent reason as null. A wrong
+  schema, an extra key, a `reason` outside the vocabulary, a `reason`
+  without `state_detail`, or a missing core key (`schema`, `project`,
+  `session`, `holder_instance_id`, `event_seq`, `state`, `ts`) is still
+  `invalid-payload` and is not POSTed.
+  Restart judgment: `scripts/kaola-acp.py` is a per-call CLI and is outside
+  the operator restart set (`docs/conventions.md`). Each wake spawns a new
+  `delegator-webhook deliver` process, so a running seat does not keep this
+  validator in memory. No seat restart is required. The child is the
+  `kaola-acp.py` beside the holder script. A symlink install already uses
+  the checkout; a copy install uses the new file only after that copy is
+  replaced. A holder still running the pre-v0.9.7 payload builder does not
+  need a restart for its next wake to be delivered.
+
 ## 0.9.7 — 2026-10-11 (delegator wake gate: real work only, once per event)
 
 Seats: restart required

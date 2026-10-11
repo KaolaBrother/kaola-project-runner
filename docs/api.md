@@ -769,8 +769,10 @@ wake from that holder. The start/stop receipt names the outcome under
 `delegator_death_wake` (`sent`, `holder_instance_id`, `event_seq`, or a
 `reason` of `already-recovered`/`spawn-failed`).
 
-Payload (signal only, no transcript, prompt, diff or secret). `reason` is
-required and is one of the tokens in the tables above, or `test`:
+Payload (signal only, no transcript, prompt, diff or secret). A current
+holder (v0.9.7 and later) sends `reason`, one of the tokens in the tables
+above, or `test`. A previous holder's payload may omit it; the accepted-shape
+rule below says which omissions `deliver` still POSTs:
 
 ```json
 {"schema": "kaola-delegator-wake/1", "project": "<repo realpath>", "session": "<--session>",
@@ -778,8 +780,9 @@ required and is one of the tokens in the tables above, or `test`:
  "state_detail": "max_tokens", "reason": "host_stopped_pending", "ts": "YYYY-MM-DDTHH:MM:SSZ"}
 ```
 
-`state_detail` is always present (a string matching `^[A-Za-z0-9_.:-]{1,64}$`,
-or null). It is not the wake reason:
+On every shape except the pre-`state_detail` key set, `state_detail` is
+present (a string matching `^[A-Za-z0-9_.:-]{1,64}$`, or null). It is not the
+wake reason:
 
 | state | state_detail |
 | --- | --- |
@@ -803,31 +806,72 @@ attempt times out at 12 s. One initial attempt plus up to 3 retries (4 attempts,
 backoff 1 s, 2 s, 4 s). The retryable set is connection errors, HTTP 5xx, HTTP
 408 and HTTP 429. A client timeout is not retried: the server may already have
 accepted the POST. Any other non-2xx is final. A 2xx is `delivered`. Not
-configured or `enabled: false` writes one `skipped`/`not-configured` receipt
-with no network and does not consume the event; invalid config or mode writes
-one `failed`/`invalid-config`/`config-mode` receipt with no network and does
-not consume it either. Before the first network attempt the sender claims
-`holder_instance_id` + `event_seq` under the receipts flock
-(`.kaola/delegator-webhook-claims.json`, mode 0600, last 256 pairs). A second
-deliver of that pair writes one `skipped`/`duplicate` receipt and does not POST.
-The claim stays after success and after final network failure. A death-recovery
-wake uses a new `event_seq`, so it is not that duplicate. The sender enforces
-the signal shape: a payload whose keys are not exactly the nine above, with
-schema `kaola-delegator-wake/1`, `state` in
-`{end_turn, blocked, error, stopped, test}`, an integer `event_seq`, a `reason`
-in the closed vocabulary, and a `state_detail` that is null or a token string,
-is refused — exit 1, and one `failed`/`invalid-payload` receipt when the project
-resolves. An invalid payload does not claim the event.
+configured or `enabled: false` writes one `skipped` receipt with
+`skip_reason` `not-configured` and no network, and does not consume the event;
+invalid config or mode writes one `failed`/`invalid-config`/`config-mode`
+receipt with no network and does not consume it either. Before the first
+network attempt the sender claims `holder_instance_id` + `event_seq` under
+the receipts flock (`.kaola/delegator-webhook-claims.json`, mode 0600, last
+256 pairs). A second deliver of that pair writes one `skipped` receipt with
+`skip_reason` `duplicate` and does not POST. The claim stays after success
+and after final network failure. A death-recovery wake uses a new
+`event_seq`, so it is not that duplicate.
 
-Per-attempt receipt (closed shape; `reason` present only on `skipped`; `error` is a
-classified code, never an exception message — urllib errors can embed the URL):
+Accepted payload shapes (#304). `deliver` is a new process per wake. A holder
+that is still running an older build sends the shape it was started with, and
+that wake must still be POSTed. The POST body is the payload as received: a
+missing `reason` is not filled in. Three exact key sets are accepted (no
+extra keys). Every set has `schema` `kaola-delegator-wake/1`, `state` in
+`{end_turn, blocked, error, stopped, test}`, and an integer `event_seq`
+(a boolean is not an integer).
+
+| shape | keys | `reason` | `state_detail` |
+| --- | --- | --- | --- |
+| v0.9.7 and later | core + `state_detail` + `reason` | required, closed vocabulary | required: null or a token |
+| v0.9.5 / v0.9.6 | core + `state_detail` | optional, default absent | required: null or a token |
+| first #299 sender, before `state_detail` (`843902e2`) | core only | optional, default absent | optional only on this key set |
+
+Core keys, required in every accepted shape: `schema`, `project`, `session`,
+`holder_instance_id`, `event_seq`, `state`, `ts`. `reason` is optional and
+defaults to absent: the receipt records JSON null, and the sender does not
+invent a wake token. `state_detail` is optional only for the key set that
+predates it. A payload that has `reason` must be the current nine-key shape
+(`state_detail` present and valid). A present `reason` outside the vocabulary,
+a wrong schema, an extra key, or a missing core key is refused — exit 1, and
+one `failed`/`invalid-payload` receipt when the project resolves. An invalid
+payload does not claim the event.
+
+Per-attempt receipt (`error` is a classified code, never an exception message
+— urllib errors can embed the URL). `delivered` and `failed` include `reason`
+and no `skip_reason`. `reason` is the payload's string wake reason, or JSON
+null when that payload had no string `reason` (an accepted previous shape, or
+a refused payload that carried no string). A refused payload's `reason` is
+copied when it is a string, including a string outside the vocabulary.
+`skipped` includes `skip_reason` (`not-configured` or `duplicate`) and no
+`reason` key.
 
 ```json
 {"ts": "...", "state": "end_turn", "state_detail": "end_turn", "session": "...",
- "holder_instance_id": "...", "event_seq": 7, "result": "delivered|failed|skipped",
- "attempt": 1, "max_attempts": 4,
+ "holder_instance_id": "...", "event_seq": 7, "reason": "delivery_review",
+ "result": "delivered", "attempt": 1, "max_attempts": 4,
  "http_status": 200, "error": null, "elapsed_ms": 12, "final": true}
 ```
+
+```json
+{"ts": "...", "state": "end_turn", "state_detail": null, "session": "...",
+ "holder_instance_id": "...", "event_seq": 8, "skip_reason": "duplicate",
+ "result": "skipped", "attempt": 0, "max_attempts": 4,
+ "http_status": null, "error": null, "elapsed_ms": 1, "final": true}
+```
+
+Receipts written before this change put the skip cause in `reason`
+(`not-configured` or `duplicate`) and omitted `reason` on `delivered` and
+`failed`. `status` returns `last_receipt` and `last_test` as stored, so both
+generations parse, and a read does not rewrite the file. `last_test` is still
+the newest stored receipt whose `state` is `test`. Readiness stays
+`last_test.result == "delivered"`. A reader that classifies a skip uses
+`skip_reason` when the key is present, and otherwise treats a `skipped`
+receipt whose `reason` is `not-configured` or `duplicate` as that skip cause.
 
 `error` is one of `timeout`, `connection`, `http-status`, `redirect-refused`,
 `invalid-config`, `config-mode`, `invalid-payload`, or null. Receipts land in

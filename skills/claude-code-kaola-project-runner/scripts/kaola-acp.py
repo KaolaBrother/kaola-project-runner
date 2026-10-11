@@ -6020,11 +6020,13 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
 
 
 # ---------------------------------------------------------------------------
-# Issue #299 / #302: Delegator webhook wake. A Host holder spawns the
+# Issue #299 / #302 / #304: Delegator webhook wake. A Host holder spawns the
 # ``deliver`` subcommand detached only when the Delegator must act; this CLI
 # owns the config, validation, POST, retries, dedupe and receipts. No receipt
 # ever carries the URL, the sender key, or an exception message (urllib errors
-# can embed the URL); only the classified error code travels.
+# can embed the URL); only the classified error code travels. ``deliver`` is a
+# new process per wake, so it accepts a payload from a holder that is still
+# running the previous shape (#304).
 # ---------------------------------------------------------------------------
 
 DELEGATOR_WEBHOOK_CONFIG_ENV = "KAOLA_DELEGATOR_WEBHOOK_CONFIG"
@@ -6048,9 +6050,15 @@ DELEGATOR_WEBHOOK_MAX_ATTEMPTS = 1 + len(DELEGATOR_WEBHOOK_BACKOFF)
 DELEGATOR_WEBHOOK_RETRY_STATUS = frozenset({408, 429})
 DELEGATOR_WEBHOOK_USER_AGENT = "kaola-delegator-wake/1"
 DELEGATOR_WEBHOOK_PAYLOAD_SCHEMA = "kaola-delegator-wake/1"
-DELEGATOR_WEBHOOK_PAYLOAD_KEYS = frozenset(
+# Keys every shipped wake shape carried: the first #299 sender, v0.9.5/v0.9.6
+# (which added state_detail), and v0.9.7 (which added reason).
+DELEGATOR_WEBHOOK_PAYLOAD_CORE_KEYS = frozenset(
     {"schema", "project", "session", "holder_instance_id", "event_seq",
-     "state", "state_detail", "reason", "ts"})
+     "state", "ts"})
+# Current holder shape (v0.9.7+). ``reason`` is optional on the two previous
+# shapes; ``state_detail`` is optional only on the shape that predates it.
+DELEGATOR_WEBHOOK_PAYLOAD_KEYS = frozenset(
+    DELEGATOR_WEBHOOK_PAYLOAD_CORE_KEYS | {"state_detail", "reason"})
 # Closed reason vocabulary. Keep in lockstep with DELEGATOR_WAKE_REASONS
 # in kaola-acp-holder.py. ``holder_lost`` is sent by death recovery here;
 # ``test`` is the CLI test payload.
@@ -6274,7 +6282,17 @@ def _webhook_retryable(http_status: int | None, error: str | None) -> bool:
 
 def _webhook_attempt_receipt(payload: dict[str, Any], attempt: int, result: str,
                              http_status: int | None, error: str | None,
-                             reason: str | None, elapsed_ms: int, final: bool) -> dict[str, Any]:
+                             skip_reason: str | None, elapsed_ms: int,
+                             final: bool) -> dict[str, Any]:
+    """One attempt row.
+
+    ``delivered`` and ``failed`` always include ``reason``: the payload's
+    string wake reason, or null when the payload had none (an accepted
+    pre-v0.9.7 shape, or a refused payload with no string reason). The sender
+    does not invent a wake token. ``skipped`` includes ``skip_reason``
+    (``not-configured`` or ``duplicate``) and no ``reason`` key.
+    ``skip_reason`` is ignored unless ``result`` is ``skipped``.
+    """
     receipt: dict[str, Any] = {
         "ts": _utc_stamp(),
         "state": payload.get("state"),
@@ -6290,8 +6308,11 @@ def _webhook_attempt_receipt(payload: dict[str, Any], attempt: int, result: str,
         "elapsed_ms": elapsed_ms,
         "final": final,
     }
-    if reason is not None:
-        receipt["reason"] = reason
+    if result == "skipped":
+        receipt["skip_reason"] = skip_reason
+    else:
+        raw_reason = payload.get("reason")
+        receipt["reason"] = raw_reason if isinstance(raw_reason, str) else None
     return receipt
 
 
@@ -6398,19 +6419,59 @@ def _webhook_read_receipts(project_root: str) -> list[dict[str, Any]]:
     return [item for item in doc["receipts"] if isinstance(item, dict)]
 
 
+def _webhook_state_detail_ok(detail: Any) -> bool:
+    return detail is None or (
+        isinstance(detail, str)
+        and DELEGATOR_WEBHOOK_DETAIL_RE.fullmatch(detail) is not None)
+
+
 def _webhook_payload_ok(payload: Any) -> bool:
-    """True only for the exact wake signal shape — nothing else may be POSTed."""
-    event_seq = payload.get("event_seq") if isinstance(payload, dict) else None
-    detail = payload.get("state_detail") if isinstance(payload, dict) else False
-    reason = payload.get("reason") if isinstance(payload, dict) else None
-    return (isinstance(payload, dict)
-            and set(payload) == DELEGATOR_WEBHOOK_PAYLOAD_KEYS
-            and payload.get("schema") == DELEGATOR_WEBHOOK_PAYLOAD_SCHEMA
-            and payload.get("state") in DELEGATOR_WEBHOOK_PAYLOAD_STATES
-            and isinstance(event_seq, int) and not isinstance(event_seq, bool)
-            and isinstance(reason, str) and reason in DELEGATOR_WEBHOOK_REASONS
-            and (detail is None or (isinstance(detail, str)
-                 and DELEGATOR_WEBHOOK_DETAIL_RE.fullmatch(detail) is not None)))
+    """True for the current wake shape or a previous holder's shape.
+
+    A running holder keeps the payload builder it was started with, and the
+    next wake spawns this CLI as a new process. Refusing the previous shape
+    drops that wake (#304, v0.9.6 holder against a v0.9.7 deliver).
+
+    Accepted key sets, exact (no extra keys):
+
+    - v0.9.7+: core + ``state_detail`` + ``reason``. ``reason`` is in the
+      closed vocabulary. ``state_detail`` is null or a token.
+    - v0.9.5 / v0.9.6: core + ``state_detail``, no ``reason``. ``reason`` is
+      optional and defaults to absent. ``state_detail`` is null or a token.
+    - First #299 sender, before ``state_detail`` (``843902e2``): core only.
+      ``state_detail`` is optional only for that shape.
+
+    Core keys are ``schema``, ``project``, ``session``, ``holder_instance_id``,
+    ``event_seq``, ``state`` and ``ts``. A ``reason`` key without
+    ``state_detail`` is not a shipped shape. A wrong schema, a missing core
+    key, an extra key, or a present ``reason`` outside the vocabulary is
+    refused. The POST body stays the payload as received.
+    """
+    if not isinstance(payload, dict):
+        return False
+    keys = set(payload)
+    if not DELEGATOR_WEBHOOK_PAYLOAD_CORE_KEYS <= keys:
+        return False
+    if keys - DELEGATOR_WEBHOOK_PAYLOAD_KEYS:
+        return False
+    has_reason = "reason" in keys
+    has_detail = "state_detail" in keys
+    if has_reason and not has_detail:
+        return False
+    event_seq = payload.get("event_seq")
+    if payload.get("schema") != DELEGATOR_WEBHOOK_PAYLOAD_SCHEMA:
+        return False
+    if payload.get("state") not in DELEGATOR_WEBHOOK_PAYLOAD_STATES:
+        return False
+    if not isinstance(event_seq, int) or isinstance(event_seq, bool):
+        return False
+    if has_reason:
+        reason = payload.get("reason")
+        if not isinstance(reason, str) or reason not in DELEGATOR_WEBHOOK_REASONS:
+            return False
+    if has_detail and not _webhook_state_detail_ok(payload.get("state_detail")):
+        return False
+    return True
 
 
 def _webhook_deliver(project_root: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -6421,9 +6482,9 @@ def _webhook_deliver(project_root: str, payload: dict[str, Any]) -> list[dict[st
     doc, config_error, _mode = _webhook_read_config(config_path)
     started = time.monotonic()
 
-    def one(result: str, error: str | None, reason: str | None) -> list[dict[str, Any]]:
+    def one(result: str, error: str | None, skip_reason: str | None) -> list[dict[str, Any]]:
         receipt = _webhook_attempt_receipt(
-            payload, 0, result, None, error, reason,
+            payload, 0, result, None, error, skip_reason,
             int(round((time.monotonic() - started) * 1000)), True)
         _webhook_append_receipts(project_root, [receipt])
         return [receipt]
@@ -6466,7 +6527,8 @@ def _webhook_deliver(project_root: str, payload: dict[str, Any]) -> list[dict[st
             or attempt == DELEGATOR_WEBHOOK_MAX_ATTEMPTS
         # Each attempt's receipt lands before its backoff sleep, so a slow or
         # dead endpoint leaves evidence immediately and a killed child still
-        # records every attempt it made.
+        # records every attempt it made. skip_reason stays None: this row is
+        # delivered or failed, so the receipt copies the payload wake reason.
         receipts.append(_webhook_attempt_receipt(
             payload, attempt, result, http_status, error, None,
             int(round((time.monotonic() - attempt_started) * 1000)), final))
