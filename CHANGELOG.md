@@ -4,6 +4,59 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+Seats: restart not required
+
+- **Luna computer-use only, Sonnet profile trim, Claude Haiku Worker tier (Issue #301).**
+  `platforms/codex.yaml` `luna_model_profile` is now exactly: "Computer-use
+  worker only: drives GUI/browser/desktop QA and verification with screenshots
+  and verdicts; not for general implementation, debugging, or design."
+  `luna_model_class` stays Worker. Model id `gpt-6-luna` and effort `max` are
+  unchanged.
+  `platforms/claude-code.yaml` `sonnet_model_profile` is now exactly:
+  "All-round execution worker, especially UI and 3D visual implementation."
+  Class stays Elite. Effort stays `high`.
+  New tier `haiku` (`named_tiers`: `opus-xhigh,fable,sonnet,haiku`).
+  `haiku_model_name` is Claude Haiku, `haiku_model_id` is `haiku`,
+  `haiku_model_class` is Worker. `haiku_model_profile` is exactly: "Fast
+  all-round execution worker, well suited to well-scoped work, especially UI
+  and 3D visual implementation." That is Sonnet's previous profile with
+  "Fast" added (owner amendment, Yanlei 2026-10-11 14:31).
+  `haiku_model_parameters` is `effort=high` and `haiku_model_effort` is
+  `high`, the same high effort the Claude Code family uses for default,
+  fable, and sonnet. Effort evidence, recorded here and not re-probed:
+  claude 2.1.295 `--help` documents `--effort <level>` (low, medium, high,
+  xhigh, max) as a session-level flag, not model-gated. Host live probe on
+  this Mac, 2026-10-11: `claude --model haiku --effort high --print "Reply
+  with exactly: ok"` replied `ok` and exited 0. `model_package_rule` already
+  mapped `haiku` to `subscription`; that map is unchanged.
+  The Worker pool is now six presets, with `claude-code/haiku` first. Catalog
+  rows, the README region, worker-profiles, the Delegator host-platforms
+  line, and the Claude Code Skill are regenerated from the manifests.
+  `scripts/adapters/claude-code.sh` mirrors the new tier's name, id, and
+  effort so the adapter stays in lockstep with `named_tiers`.
+  Restart judgment: a new dispatch reads `platforms/*.yaml` on that CLI call
+  (`catalog_from_files`). `project`, `project --seats`, and delegator view
+  use that catalog, so they see Haiku and the new profile texts without a
+  seat restart. A running seat keeps the model and effort stored in
+  `start_evidence` at start. Profile text is selection guidance and is not
+  reapplied to a live session. This change does not edit the holder,
+  `kaola-quota.py`, `kaola-record-contract.py`, or `kaola-acp-paths.py`.
+  ACP launch does not source the adapter shell.
+  The operator diff of `platforms/` and `scripts/adapters/claude-code.sh` is
+  non-empty, so a release cut that follows the conventions.md operator test
+  literally would say restart required. `_restart_required_name` treats
+  `platform.yaml`, names starting with `platforms/`, and `adapters/` as
+  restart-required. After an install replaces an installed seat's
+  `scripts/platform.yaml` and `adapters/claude-code.sh`, `seat_freshness`
+  lists those names in `restart_files`. A non-checkout installed seat then
+  reports `stale` / `restart-required`. A checkout-started seat reports
+  `checkout-drift` only. `stale` is a list/status fact and does not refuse
+  dispatch. This change does not install, so seats already running keep the
+  files they started with until those recorded paths change. Running seats
+  do not need a restart for this catalog change.
+
 ## 0.9.5 — 2026-10-10 (delegator webhook wake, shared tier seats, opencode loopback repair)
 
 Seats: restart required

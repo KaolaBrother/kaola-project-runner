@@ -9,6 +9,7 @@
 - Runner opus-xhigh preset `claude-code/opus-xhigh` (`--tier opus-xhigh`): **Opus 5.5** — `opus` with `effort=xhigh`
 - Runner fable preset `claude-code/fable` (`--tier fable`): **Fable** — `fable` with `effort=high`
 - Runner sonnet preset `claude-code/sonnet` (`--tier sonnet`): **Sonnet** — `sonnet` with `effort=high`
+- Runner haiku preset `claude-code/haiku` (`--tier haiku`): **Claude Haiku** — `haiku` with `effort=high`
 - Fast support: Fast via process-scoped `--settings '{"fastMode": ...}'` at launch: `--fast on` passes fastMode=true, `--fast off` pins fastMode=false for the session; the native CLI determines model support — effective stays unknown without native evidence and the selected model is never changed
 
 ## Preflight

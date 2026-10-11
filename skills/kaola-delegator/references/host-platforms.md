@@ -54,7 +54,7 @@ Relay these facts. The Host selects seats; do not load its selection policy.
 
 - **Expert**: complex thinking only. Each task needs explicit user permission. No implementation.
 - **Elite**: primary implementation and demanding execution, only inside an explicit preset/count grant.
-- **Worker**: simpler bounded work. The pool is exactly: `codex/luna`, `devin/default`, `dsh/default`, `opencode/default`, `zcode/default`. Those five are default-authorized and do not consume Elite/Expert grants; real limits and owner exclusions still apply. Default authorization is permission, not a preference over a suitable Elite.
+- **Worker**: simpler bounded work. The pool is exactly: `claude-code/haiku`, `codex/luna`, `devin/default`, `dsh/default`, `opencode/default`, `zcode/default`. Those six are default-authorized and do not consume Elite/Expert grants; limits and exclusions still apply. Default authorization is permission, not a preference over Elite.
 
 Name current grants/pauses by exact catalog preset id; remove settled revocations. Name each seat (`<platform>/<tier>`; absent `special_requirements` means none). A switch grant is per seat and stays inside that runtime. Visibility is not authorization.
 

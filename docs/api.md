@@ -1635,8 +1635,10 @@ is the same display name Opus 5.5, preset `claude-code/opus-xhigh`, native alias
 `effort=xhigh` (Elite; planning, design, and review; it does not perform
 implementation). The preset ID is not the alias. `--tier sonnet` is Sonnet (`sonnet`)
 at `effort=high` (Elite; an explicit preset and count grant, not a Worker-pool member).
-Codex's `--tier luna` is GPT-6 Luna (`gpt-6-luna`) at `effort=max` (Issue #188): a
-lower-cost worker choice, not an upgrade. These are applied as ordinary ACP config
+`--tier haiku` is Claude Haiku (`haiku`) at `effort=high` (Worker; a default-authorized
+pool member). Codex's `--tier luna` is GPT-6 Luna (`gpt-6-luna`) at `effort=max`
+(Issue #188, profile narrowed in #301): a computer-use-only Worker, not an upgrade
+and not a general implementation preset. These are applied as ordinary ACP config
 options; a native rejection is a `config_application` limitation, never a substitute.
 
 ## Agent-directed transport results

@@ -7,8 +7,8 @@ so a declaration change regenerates the rows instead of leaving a handwritten
 mapping behind. This suite pins four things:
 
 * the exact catalog: the README's generated region and the installed
-  ``profile-catalog.md`` table carry the same 21 Preset ID cells in class
-  grouping (Elite 13 / Worker 5 / Expert 3), each ID resolving to its
+  ``profile-catalog.md`` table carry the same 22 Preset ID cells in class
+  grouping (Elite 13 / Worker 6 / Expert 3), each ID resolving to its
   manifest model name on the same row;
 * the similar-name pairs the IDs exist to keep apart — ``cursor-cli/default``
   vs ``grok/default``, ``claude-code/default`` vs ``claude-code/sonnet`` — plus
@@ -26,7 +26,11 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -47,9 +51,24 @@ ELITE = [
     "cursor-cli/opus", "devin/opus-fusion", "droid/default", "droid/opus", "droid/core",
     "grok/default", "kimi-cli/default", "kimi-cli/kimi-k2-8",
 ]
-WORKER = ["codex/luna", "devin/default", "dsh/default", "opencode/default", "zcode/default"]
+WORKER = [
+    "claude-code/haiku", "codex/luna", "devin/default", "dsh/default",
+    "opencode/default", "zcode/default",
+]
 EXPERT = ["claude-code/fable", "codex/astra", "devin/fable"]
 EXPECTED_ORDER = ELITE + WORKER + EXPERT
+
+# Issue #301 owner texts. Haiku keeps Sonnet's previous profile with "Fast"
+# added (owner amendment, 2026-10-11). Do not paraphrase these.
+HAIKU_PROFILE = (
+    "Fast all-round execution worker, well suited to well-scoped work, "
+    "especially UI and 3D visual implementation."
+)
+SONNET_PROFILE = "All-round execution worker, especially UI and 3D visual implementation."
+LUNA_PROFILE = (
+    "Computer-use worker only: drives GUI/browser/desktop QA and verification "
+    "with screenshots and verdicts; not for general implementation, debugging, or design."
+)
 
 ROW = re.compile(
     r"^\| (?P<class>\w+) \| (?P<runtime>[^|]+?) \| `(?P<tier>[^`]+)` \| "
@@ -109,7 +128,7 @@ class PresetCatalogTest(unittest.TestCase):
         for label, rows in (("profile-catalog", self.orchestrator_rows),
                             ("README region", self.readme_rows)):
             self.assertEqual(catalog_ids(rows), EXPECTED_ORDER, label)
-            self.assertEqual(len(set(catalog_ids(rows))), 21, label)
+            self.assertEqual(len(set(catalog_ids(rows))), 22, label)
 
     def test_class_grouping_matches_issue(self) -> None:
         for rows in (self.orchestrator_rows, self.readme_rows):
@@ -162,10 +181,17 @@ class PresetCatalogTest(unittest.TestCase):
         self.assertEqual(extra_manifest["opus_xhigh_model_id"], "opus")
         self.assertNotEqual(default["preset"], extra["preset"])
         self.assertEqual(sonnet["class"], "Elite")
+        self.assertEqual(sonnet["model"].strip(), "Sonnet")
         self.assertEqual(sonnet["parameters"].strip(), "effort=high")
-        self.assertEqual(
-            sonnet["profile"].strip(),
-            "All-round execution worker, well suited to well-scoped work, especially UI and 3D visual implementation.")
+        self.assertEqual(sonnet["profile"].strip(), SONNET_PROFILE)
+        haiku = rows["claude-code/haiku"]
+        self.assertEqual(haiku["class"], "Worker")
+        self.assertEqual(haiku["model"].strip(), "Claude Haiku")
+        self.assertEqual(haiku["parameters"].strip(), "effort=high")
+        self.assertEqual(haiku["profile"].strip(), HAIKU_PROFILE)
+        self.assertEqual(rows["codex/luna"]["class"], "Worker")
+        self.assertEqual(rows["codex/luna"]["parameters"].strip(), "effort=max")
+        self.assertEqual(rows["codex/luna"]["profile"].strip(), LUNA_PROFILE)
         self.assertEqual(rows["claude-code/fable"]["class"], "Expert")
         self.assertEqual(rows["claude-code/fable"]["parameters"].strip(), "effort=high")
         self.assertEqual(rows["cursor-cli/opus"]["class"], "Elite")
@@ -326,15 +352,16 @@ class AuthorizationNotationTest(unittest.TestCase):
             self.assertFalse(list(SCRIPTS.glob(f"*{name}*")), name)
 
     def test_sonnet_is_elite_without_a_preset_cap_or_pool_seat(self) -> None:
-        """Issue #228: Sonnet is Elite at high. The five Workers stay exempt."""
+        """Issue #228: Sonnet is Elite at high. Issue #301: six Workers stay exempt."""
         readme = README.read_text(encoding="utf-8")
         self.assertIn("| **Elite** | 13 |", readme)
-        self.assertIn("| **Worker** | 5 |", readme)
+        self.assertIn("| **Worker** | 6 |", readme)
         self.assertIn("| **Expert** | 3 |", readme)
         self.assertIn("no default seat and no preset-specific", readme)
         pool = (ORCHESTRATOR / "references" / "worker-profiles.md").read_text(encoding="utf-8")
         membership = pool.split("The Worker pool is exactly:", 1)[1].split(".", 1)[0]
         self.assertNotIn("claude-code/sonnet", membership)
+        self.assertIn("`claude-code/haiku`", membership)
         self.assertIn("`claude-code/opus-xhigh` plans, designs and reviews but does not implement", pool)
         self.assertNotIn("`claude-code/default` does not perform implementation", pool)
         skeleton = (ORCHESTRATOR / "references" / "heartbeat-skeleton.md").read_text(encoding="utf-8")
@@ -342,12 +369,13 @@ class AuthorizationNotationTest(unittest.TestCase):
         grant_ids = [preset for grant in example["authorization"]["grants"]
                      for preset in (grant.get("preset_ids") or [grant["id"]])]
         self.assertNotIn("claude-code/sonnet", grant_ids)
+        self.assertNotIn("claude-code/haiku", grant_ids)
         # be04bd09 moved the pool statement; the skeleton keeps the
         # current-only "Worker pool unchanged" rule.
         self.assertIn("Worker 池不变", skeleton)
         self.assertIn("The Worker pool is exactly:", pool)
         stale = (
-            "six Worker", "Six Worker", "six-preset", "these six presets",
+            "five Worker", "Five Worker", "five-preset", "these five presets",
             "Disciplined implementation", "strongest in Worker Class",
             "preferred for the more complex and harder tasks",
         )
@@ -359,6 +387,79 @@ class AuthorizationNotationTest(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             for needle in stale:
                 self.assertNotIn(needle, text, f"{path}: {needle}")
+
+    def test_haiku_resolves_in_project_seats_and_delegator_view(self) -> None:
+        """Issue #301: dispatch lists claude-code/haiku as a Worker preset."""
+        env = {key: value for key, value in os.environ.items()
+               if key not in ("KAOLA_ACP_DISPATCHER", "KAOLA_ACP_HEARTBEAT_HOST",
+                              "KAOLA_ACP_HEARTBEAT_HOST_SOCKET", "KAOLA_ACP_CHILD_RECORD")}
+        dispatch = SCRIPTS / "kaola-dispatch.py"
+        with tempfile.TemporaryDirectory(prefix="kpr-i301-") as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            auth = root / "auth.json"
+            auth.write_text(json.dumps({"grants": []}), encoding="utf-8")
+            live = root / "live.json"
+            live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": []}),
+                            encoding="utf-8")
+
+            def run(args: list[str]) -> dict:
+                proc = subprocess.run(
+                    [sys.executable, str(dispatch), *args],
+                    capture_output=True, text=True, timeout=60, env=env)
+                self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+                return json.loads(proc.stdout)
+
+            project = run(["project", "--authorization", str(auth),
+                           "--platforms", str(PLATFORMS)])
+            by_id = {item["id"]: item for item in project["candidates"]}
+            haiku = by_id["claude-code/haiku"]
+            self.assertEqual(haiku["class"], "Worker")
+            self.assertEqual(haiku["profile"], HAIKU_PROFILE)
+            self.assertEqual(haiku["selection"]["effort"], "high")
+            self.assertEqual(haiku["selection"]["model_id"], "haiku")
+            self.assertEqual(haiku["selection"]["model_name"], "Claude Haiku")
+            self.assertEqual(haiku["selection"]["parameters"], "effort=high")
+            self.assertEqual(haiku["state"], "default-pool")
+            self.assertTrue(haiku["pool"])
+            self.assertNotIn("claude-code/sonnet", by_id)
+            luna = by_id["codex/luna"]
+            self.assertEqual(luna["class"], "Worker")
+            self.assertEqual(luna["profile"], LUNA_PROFILE)
+            self.assertEqual(luna["selection"]["effort"], "max")
+
+            seats = run([
+                "project", "--seats", "--repo", str(repo),
+                "--authorization", str(auth), "--live", str(live),
+                "--platforms", str(PLATFORMS),
+            ])
+            self.assertEqual(seats["summary"]["worker_pool"], WORKER)
+
+            delegator = repo / ".kaola" / "delegator-heartbeat.json"
+            delegator.parent.mkdir()
+            delegator.write_text(json.dumps({
+                "schema": "kaola-delegator-heartbeat/1",
+                "revision": 1,
+                "updated_at": "2026-10-11T00:00:00+00:00",
+                "authorization": {
+                    "dispatch_enabled": True,
+                    "worker_pool": ["claude-code/haiku"],
+                },
+            }), encoding="utf-8")
+            narrowed = run([
+                "project", "--seats", "--repo", str(repo),
+                "--authorization", str(auth), "--live", str(live),
+                "--platforms", str(PLATFORMS),
+            ])
+            self.assertEqual(narrowed["summary"]["worker_pool"], ["claude-code/haiku"])
+            viewed = run([
+                "delegator", "view", "--file", str(delegator),
+                "--repo", str(repo), "--live", str(live),
+                "--platforms", str(PLATFORMS),
+            ])
+            self.assertEqual(viewed["seats"]["worker_pool"], ["claude-code/haiku"])
 
 
 if __name__ == "__main__":

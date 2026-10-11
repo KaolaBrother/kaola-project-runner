@@ -10,7 +10,7 @@ start behavior. The class attaches to the preset, not the whole runtime.
 | Class | Responsibility | Authorization and lifecycle |
 |---|---|---|
 | **Expert** | Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat. | An explicit grant. A task grant (the default) ends with its task. A standing grant lets the Host invoke that preset within its stated scope, count and resource limits until revoked or expired, without asking again; never infer one from a task or finished grant. The Host judges completion and reclaims (exact-stops) the seat; that stop revokes no standing grant. Continuing turns or recovery of the same approved task need no repeated approval. |
-| **Worker** | Cheaper and generally weaker; simpler, bounded work supporting parallel throughput. | The exact five-preset pool below is default-authorized for authorized project tasks. |
+| **Worker** | Cheaper and generally weaker; simpler, bounded work supporting parallel throughput. | The exact six-preset pool below is default-authorized for authorized project tasks. |
 | **Elite** | Main execution workforce: primary implementation and demanding execution. | Existing explicit runtime/preset/count grants, shared counts, service/resource restrictions and seat-switch rules. A valid grant stays valid within its scope; no per-task permission. |
 
 Expert review informs the Host; it never replaces Host acceptance or
@@ -84,9 +84,9 @@ Do not keep a universal model ranking, invent a complexity classifier or
 routing engine, fix per-runtime quotas, create work to fill
 capacity, or interrupt useful work.
 
-The Worker pool is exactly: `codex/luna`, `devin/default`, `dsh/default`, `opencode/default`, `zcode/default`.
+The Worker pool is exactly: `claude-code/haiku`, `codex/luna`, `devin/default`, `dsh/default`, `opencode/default`, `zcode/default`.
 For an authorized project
-task, these five presets need no per-seat, count, or priority approval. Their live seats do not consume Elite/Expert grants. A runtime's `default` is not automatically a pool member. Real account, service, and resource limits
+task, these six presets need no per-seat, count, or priority approval. Their live seats do not consume Elite/Expert grants. A runtime's `default` is not automatically a pool member. Real account, service, and resource limits
 and explicit owner restrictions still apply; an unspecified quota is not
 unlimited. Default authorization is permission, not a preference over
 suitable authorized Elite; never wait on a less suitable Worker. Existing grants stay valid within scope; the pool is not
