@@ -301,6 +301,7 @@ def delegator_turn_wake_reason(
         attention_rows: list | None,
         staged_undelivered: bool,
         live_seats: bool = True,
+        all_idle_due: bool = True,
 ) -> str | None:
     """Issue #302: why a completed or canceled Host turn wakes the Delegator.
 
@@ -317,10 +318,16 @@ def delegator_turn_wake_reason(
       ``holders_dispatched_by(..., working=True)`` skips a seat-exempt record
       (``session_role`` ``sideagent`` or legacy ``sidekick``, including the
       bound Sideagent node) and a record whose ``state`` is ``agent_exited``,
-      ``stopping``, or ``stopped``. The Host is idle and nobody is working,
-      so the wake is ``all-idle`` whether or not attention or other pending
-      work is recorded, and whether or not this turn was the Delegator's.
-      Owner rule, Yanlei 2026-10-11 16:49.
+      ``stopping``, or ``stopped``. The Host is idle and nobody is working.
+      ``all-idle`` is once per transition into that state, whether or not
+      attention or other pending work is recorded. Owner rule, Yanlei
+      2026-10-11 16:49. ``all_idle_due`` is true only when this idle episode
+      has not yet sent ``all-idle`` (the latch is clear). A Delegator-admitted
+      turn returns ``None`` unless that transition is still due, so a later
+      send or steer does not wake by itself (Issue #307). When the latch is
+      clear, including a Delegator turn in which the last working seat
+      stopped, the one wake is still ``all-idle``. A self turn still reports
+      ``all-idle``; ``_emit_delegator_all_idle`` drops a second POST.
     * ``prompt_source == "delegator"`` — this turn was admitted by a socket
       prompt or by steer, and a seat is still live. The Delegator is already
       there. No wake.
@@ -346,10 +353,12 @@ def delegator_turn_wake_reason(
         return None
     if self_continuing:
         return None
-    # Zero live seats: the project would otherwise sit stalled. Pending
-    # attention does not pick a different reason, and a Delegator-caused
-    # turn does not suppress this wake.
+    # Nobody is working. Pending attention does not pick a different reason.
+    # A Delegator-admitted turn reports all-idle only when the busy -> idle
+    # transition is still due (the episode latch is clear). Issue #307.
     if not live_seats:
+        if (prompt_source or "delegator") == "delegator" and not all_idle_due:
+            return None
         return "all-idle"
     if (prompt_source or "delegator") == "delegator":
         return None
@@ -1992,8 +2001,10 @@ class Holder:
         # Issue #302: Delegator after-turn steers already queued. A turn end
         # while this is non-zero is self-continuation: the Delegator is injecting.
         self._delegator_followups = 0
-        # Issue #305: one all-idle wake per idle episode. Not a timer. A new
-        # Host turn, or a later non-exempt worker termination, clears it.
+        # Issue #305 / #307: one all-idle wake per idle episode. Not a timer.
+        # Cleared only when work resumes: a re-check still sees a working
+        # non-exempt seat, a non-exempt worker terminates, or a self turn
+        # admits new worker events. A Delegator-admitted turn does not.
         self._all_idle_woken = False
         self._all_idle_lock = threading.Lock()
         try:
@@ -2894,8 +2905,10 @@ class Holder:
                 # Only holder-internal admissions pass "self".
                 "prompt_source": "self" if source == "self" else "delegator",
             })
-            # Issue #305: a new turn opens a new idle episode. Not a timer.
-            self._note_delegator_working_again()
+            # Issue #307: admitting a turn does not open an idle episode.
+            # A Delegator send or steer is not a working-again fact. A self
+            # turn opens one only when it carries new worker events, and
+            # that clear is in ``_deliver_worker_events`` after admission.
             duplicate = None
             if previous.get("fingerprint") == fingerprint:
                 duplicate = {
@@ -3068,6 +3081,8 @@ class Holder:
         # gated wake to the next turn end; the error/stop/death wakes never
         # pass through this lock.
         self_continuing = bool(self.turn.get("active") or self._delegator_followups)
+        with self._all_idle_lock:
+            all_idle_due = not self._all_idle_woken
         return delegator_turn_wake_reason(
             outcome=turn.get("outcome"),
             stop_reason=turn.get("stop_reason"),
@@ -3077,6 +3092,7 @@ class Holder:
             attention_rows=rows,
             staged_undelivered=staged,
             live_seats=live_seats,
+            all_idle_due=all_idle_due,
         )
 
     def _delegator_wake(self, state: str, detail: str | None = None,
@@ -3139,7 +3155,13 @@ class Holder:
             threading.Thread(target=spawn, args=(True,), daemon=True).start()
 
     def _note_delegator_working_again(self) -> None:
-        """The idle episode ended. The next all-idle may wake. Not a timer."""
+        """A real working-again fact ended the idle episode. Not a timer.
+
+        The next all-idle may wake. Callers are a re-check that still sees a
+        working non-exempt seat, a non-exempt worker termination, and a self
+        turn that admitted new worker events. A Delegator-admitted turn does
+        not call this.
+        """
         with self._all_idle_lock:
             self._all_idle_woken = False
 
@@ -3149,9 +3171,10 @@ class Holder:
         The claim is taken before the detached deliver spawn, so a turn-end
         wake and a stop re-check in the same episode POST once. Dedupe on
         ``holder_instance_id`` + ``event_seq`` still applies to a replay of
-        the same event. A later episode (a new turn, or a non-exempt worker
-        termination) clears the latch and may wake again. There is no time
-        throttle.
+        the same event. The latch clears only when a non-exempt seat is
+        working again, a non-exempt worker terminates, or a self turn admits
+        new worker events. A Delegator-admitted turn does not clear it.
+        There is no time throttle.
         """
         with self._all_idle_lock:
             if self._all_idle_woken:
@@ -4739,6 +4762,11 @@ class Holder:
                 # stay staged for the next boundary or a resume, exactly as a
                 # refused or unwritten prompt always left them.
                 return {"delivered": False, "error": error or prompt}
+            # Issue #307: this self turn carries new worker events (staged
+            # events or an unconfirmed overflow). That re-opens the idle
+            # episode. A failed admission above does not. A Delegator turn
+            # and a self turn with no new worker events do not either.
+            self._note_delegator_working_again()
             fingerprint = prompt.get("prompt_fingerprint")
             self.host_attention_seen = meta.get("attention_fingerprint")
             for item in staged:

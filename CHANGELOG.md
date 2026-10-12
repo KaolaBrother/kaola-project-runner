@@ -4,6 +4,27 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+Seats: restart required — the holder changed (`scripts/kaola-acp-holder.py`).
+A running Host keeps the v0.9.8 latch, which treats every new turn as a new
+idle episode, until that seat restarts.
+
+- **`all-idle` is once per busy-to-idle transition (Issue #307).**
+  A Delegator-admitted turn (socket `send` or steer) no longer clears the
+  once-per-episode latch and no longer wakes `all-idle` by itself. The latch
+  clears only when a re-check still sees a working non-exempt seat, a
+  non-exempt worker terminates, or a self turn admits new worker events.
+  When the latch is clear, the one transition wake is still `all-idle`,
+  including a Delegator turn in which the Host stops the last working seat,
+  and including the #305 re-check after the Host's last turn. A later
+  Delegator turn that ends still idle does not wake. A self-continuation
+  with no new worker events does not send a second `all-idle`. Permission,
+  failure, exit, boot, and exact-stop wakes are unchanged.
+  Restart judgment: `scripts/kaola-acp-holder.py` changed. It is in the
+  operator restart set, so running Hosts and seats must restart to load
+  the new latch. `kaola-acp.py` did not change.
+
 ## 0.9.8 — 2026-10-12 (seat exemption, wake receipts + all-idle re-check, install payload bytecode)
 
 Seats: restart required — the holder and its pinned record contract changed

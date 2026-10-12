@@ -86,15 +86,33 @@ class Predicate(unittest.TestCase):
             ({"outcome": "turn_failed"}, None),
             ({"prompt_source": "delegator", "stop_reason": "max_tokens"}, None),
             # Owner rule 2026-10-11 16:49: nobody left working wakes all-idle
-            # even when pending attention is recorded or the turn was the
-            # Delegator's. A live seat with nothing owed stays quiet. A Host
-            # that already continued does not wake.
+            # even when pending attention is recorded. all_idle_due defaults
+            # true, so a Delegator turn whose episode latch is still clear
+            # reports the one transition. Issue #307: once this episode has
+            # sent all-idle, a Delegator turn returns None. A self turn still
+            # names all-idle; the emit latch drops the duplicate POST.
+            # A live seat with nothing owed stays quiet. A Host that already
+            # continued does not wake.
             ({"live_seats": False}, "all-idle"),
             ({"live_seats": False, "prompt_source": "delegator"}, "all-idle"),
             ({"live_seats": False, "attention_rows": question,
               "prompt_source": "delegator"}, "all-idle"),
+            ({"live_seats": False, "prompt_source": "delegator",
+              "all_idle_due": True}, "all-idle"),
+            ({"live_seats": False, "prompt_source": "delegator",
+              "stop_reason": "max_tokens", "all_idle_due": True}, "all-idle"),
+            ({"live_seats": False, "prompt_source": "delegator",
+              "stop_reason": "refusal", "all_idle_due": False}, None),
+            ({"live_seats": False, "prompt_source": "delegator",
+              "all_idle_due": False}, None),
+            ({"live_seats": False, "attention_rows": question,
+              "prompt_source": "delegator", "all_idle_due": False}, None),
+            ({"live_seats": False, "prompt_source": "self",
+              "all_idle_due": False}, "all-idle"),
             ({"live_seats": False, "stop_reason": "max_tokens"}, "all-idle"),
             ({"live_seats": False, "self_continuing": True}, None),
+            ({"live_seats": False, "self_continuing": True,
+              "prompt_source": "delegator", "all_idle_due": True}, None),
             ({"live_seats": False, "outcome": "turn_canceled",
               "stop_requested": True}, None),
         ]
@@ -261,6 +279,20 @@ class WakeGate(issue299.WebhookCase):
         host._delegator_followups = 0
         host._all_idle_woken = False
         return host
+
+    def end_turn_wake(self, host, prompt_source: str) -> str | None:
+        """The production turn-end wake branch, for one already-ended turn."""
+        host.turn["active"] = False
+        host.turn["outcome"] = "turn_completed"
+        host.turn["stop_reason"] = "end_turn"
+        host.turn["prompt_source"] = prompt_source
+        host._delegator_followups = 0
+        reason = host._delegator_turn_end_reason(host.turn)
+        if reason == "all-idle":
+            host._emit_delegator_all_idle("end_turn", "end_turn")
+        elif reason is not None:
+            host._delegator_wake("end_turn", "end_turn", reason)
+        return reason
 
     def event_rows(self, host) -> list[dict]:
         path = Path(host.record_dir) / "events.jsonl"
@@ -875,6 +907,136 @@ class WakeGate(issue299.WebhookCase):
             host._stop_node("node-holder")
             time.sleep(0.6)
             self.assertFalse(self.posts_for(host.holder_instance_id), self.endpoint.posts)
+
+    def test_delegator_sends_to_an_idle_host_do_not_wake_again(self) -> None:
+        # Issue #307, KPM receipts 4382-4418. The fresh holder's latch is
+        # clear, so the first idle turn is the one transition wake (4369).
+        # Each later Delegator send, with no live seat, ends with no wake.
+        self.endpoint = Endpoint()
+        code, out = self.configure(self.endpoint.url)
+        self.assertEqual(code, 0, out)
+        self.start_host("kpm-repeat")
+        self.acp("send", "--text", "restart-context", "--wait")
+        wait_for(lambda: len(self.posts_with_reason("all-idle")) == 1,
+                 15, "one transition all-idle")
+        for text in ("evidence", "choice-3", "choice-4", "choice-5"):
+            self.acp("send", "--text", text, "--wait")
+        time.sleep(0.6)
+        self.assertEqual(len(self.posts_with_reason("all-idle")), 1)
+        self.assertFalse(self.posts_with_reason("needs_decision"))
+        self.assertFalse(self.posts_with_reason("question_waiting"))
+
+    def test_delegator_turn_that_stops_the_last_seat_wakes_once(self) -> None:
+        # The transition happens during a Delegator-admitted turn: the Host
+        # stops the last working seat before that turn ends. Exactly one
+        # all-idle, and a later send does not add another.
+        self.endpoint = Endpoint()
+        code, out = self.configure(self.endpoint.url)
+        self.assertEqual(code, 0, out)
+        self.start_host("during", turn_ms=3000)
+        worker = self.start_worker("during")
+        self.session = self.host_session
+        self.acp("send", "--text", "stop-last", "--no-wait")
+        wait_for(lambda: self.acp("status")[1].get("turn_active") is True,
+                 15, "delegator turn active")
+        self.session = worker
+        self.acp("stop", "--force")
+        self.worker = None
+        self.session = self.host_session
+        status = self.acp("status")[1]
+        if status.get("turn_active"):
+            time.sleep(0.4)
+            self.assertFalse(self.posts_with_reason("all-idle"), self.endpoint.posts)
+        post = wait_for(lambda: (self.posts_with_reason("all-idle") or [None])[-1],
+                        20, "transition all-idle")
+        self.assertEqual(post["body"]["state"], "end_turn")
+        self.assertEqual(post["body"]["reason"], "all-idle")
+        wait_for(lambda: self.acp("status")[1].get("turn_active") is False,
+                 20, "continuation ended")
+        time.sleep(0.6)
+        self.assertEqual(len(self.posts_with_reason("all-idle")), 1)
+        self.acp("send", "--text", "still-idle", "--wait")
+        time.sleep(0.5)
+        self.assertEqual(len(self.posts_with_reason("all-idle")), 1)
+
+    def test_latched_delegator_turn_and_quiet_self_turn_do_not_wake(self) -> None:
+        # After the episode has woken, a Delegator turn end is not a wake,
+        # and a self continuation with no new worker events does not POST
+        # a second all-idle. Admitting either turn does not clear the latch.
+        self.endpoint = Endpoint()
+        self.configure_endpoint()
+        with self.webhook_process_env():
+            host = self.idle_host("latched")
+            host._maybe_delegator_all_idle()
+            wait_for(lambda: self.posts_for(host.holder_instance_id) or None,
+                     15, "episode all-idle")
+            self.assertTrue(host._all_idle_woken)
+            host.acp_session_id = "sess-307"
+            host.agent.proc = argparse.Namespace(pid=1)
+            host.agent.exited.clear()
+            host.agent.pending_out = {}
+            host.agent.send_request = lambda method, params: 1
+            for params in (
+                    {"text": "delegator-again", "wait": False},
+                    {"text": "self-quiet", "wait": False, "_prompt_source": "self"},
+            ):
+                receipt = host.op_prompt(params)
+                self.assertEqual(receipt.get("outcome"), "turn_failed", receipt)
+                self.assertTrue(host._all_idle_woken)
+            self.assertIsNone(self.end_turn_wake(host, "delegator"))
+            self.assertIsNone(self.end_turn_wake(host, "delegator"))
+            # A self turn still names all-idle. The episode latch drops the POST.
+            self.assertEqual(self.end_turn_wake(host, "self"), "all-idle")
+            self.assertTrue(host._all_idle_woken)
+            time.sleep(0.6)
+            self.assertEqual(len(self.posts_for(host.holder_instance_id)), 1)
+
+    def test_worker_event_self_turn_reopens_the_idle_episode(self) -> None:
+        # A self turn that admits new worker events clears the latch. The
+        # next all-idle transition wakes once. A following self turn with
+        # no new events does not.
+        self.endpoint = Endpoint()
+        self.configure_endpoint()
+        with self.webhook_process_env():
+            host = self.idle_host("reopen")
+            host._maybe_delegator_all_idle()
+            wait_for(lambda: self.posts_for(host.holder_instance_id) or None,
+                     15, "first episode")
+            self.assertTrue(host._all_idle_woken)
+            host.agent.proc = object()
+            host.agent.exited.clear()
+            host.pending_worker_events.append({
+                "event_id": "grok/worker/idle/1",
+                "kind": "idle",
+                "platform": "grok",
+                "session": "grok-i307-worker",
+                "repo": host.args.repo,
+                "reason": "end_turn",
+                "event_cursor": 1,
+            })
+
+            def admit(params):
+                self.assertEqual(params.get("_prompt_source"), "self")
+                host.turn["prompt_source"] = "self"
+                host.turn["active"] = False
+                host.turn["outcome"] = "turn_completed"
+                host.turn["stop_reason"] = "end_turn"
+                return {"outcome": "in_progress", "prompt_fingerprint": "fp-307",
+                        "mutation_performed": True}
+
+            host.op_prompt = admit
+            delivered = host._deliver_worker_events()
+            self.assertTrue(delivered.get("delivered"), delivered)
+            self.assertFalse(host._all_idle_woken)
+            self.assertEqual(self.end_turn_wake(host, "self"), "all-idle")
+            wait_for(lambda: len(self.posts_for(host.holder_instance_id)) >= 2,
+                     15, "reopened all-idle")
+            self.assertTrue(host._all_idle_woken)
+            self.assertEqual(self.end_turn_wake(host, "self"), "all-idle")
+            time.sleep(0.6)
+            posts = self.posts_for(host.holder_instance_id)
+            self.assertEqual(len(posts), 2)
+            self.assertTrue(all(post["body"]["reason"] == "all-idle" for post in posts))
 
 
 if __name__ == "__main__":

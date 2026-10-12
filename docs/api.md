@@ -737,7 +737,8 @@ Delegator is not already there and the Host did not continue by itself:
 | what the holder saw | reason |
 | --- | --- |
 | next beat already admitted, or a Delegator after-turn steer is queued | no wake |
-| no working dispatched seat | `all-idle` |
+| no working dispatched seat, and this idle episode has not yet sent `all-idle` | `all-idle` |
+| no working dispatched seat, this episode already sent `all-idle`, and the prompt source is `delegator` | no wake |
 | prompt source `delegator` (this send or steer) and a seat is still live | no wake |
 | undelivered host-view row `kind=decisions`, `why=host-decision` | `question_waiting` |
 | undelivered host-view row `kind=tasks` and `why` one of `awaiting-verdict`, `delivery-open`, `verdict-missing` | `delivery_review` |
@@ -753,10 +754,20 @@ everything below it (no wake): the Host has not gone idle. A working seat is
 a running holder whose record names this Host instance as `dispatcher`, whose
 `session_role` is not `sideagent` or legacy `sidekick`, and whose `state` is
 not `agent_exited`, `stopping`, or `stopped`. The bound Sideagent node is not
-a seat. When that scan is empty, the wake is `all-idle` even if attention or
-other pending work is recorded, and even if the turn was the Delegator's own
-send or steer (owner rule, Yanlei 2026-10-11 16:49). A `ps` failure looks
-like no seats and wakes `all-idle`. With a seat still working, a
+a seat. When that scan is empty, `all-idle` is once per transition into
+all-idle, even if attention or other pending work is recorded (owner rule,
+Yanlei 2026-10-11 16:49). The episode latch starts clear, so the first time
+the holder observes that state it wakes once. A Delegator-admitted turn
+(socket `send` or steer) does not open an idle episode and does not wake by
+itself: if this episode already sent `all-idle`, the turn returns no wake.
+It still reports the one `all-idle` when the latch is clear, including when
+that turn stops the last working seat. A later Delegator turn that ends
+still idle does not wake again. A self turn with no working seat still names
+`all-idle`; the episode latch sends it only when due, so a self-continuation
+that ends with no change after `all-idle` was already sent does not POST
+again. A self turn that delivers new worker events clears the latch, and the
+next all-idle transition wakes once. A `ps` failure looks like no seats and,
+when the latch is clear, wakes `all-idle`. With a seat still working, a
 Delegator-caused turn does not wake, and a waiting question wins over a
 delivery review. `state` for these rows is `end_turn`. `state_detail` stays
 the agent's ACP `stopReason` when it is a clean token, otherwise `"other"`,
@@ -774,8 +785,10 @@ turn is not active and no Delegator follow-up is queued; the last turn
 outcome is `turn_completed` or `turn_canceled`; and no working dispatched
 seat remains. The check is non-blocking, the same detached deliver child as
 every other wake, and there is no time throttle. One idle episode sends one
-`all-idle`. A new Host turn, or a later non-exempt worker termination, opens
-another episode and may wake again. The stop-time payload is `state`
+`all-idle`. The latch clears when a re-check still sees a working non-exempt
+seat, when a non-exempt worker terminates, or when a self turn delivers new
+worker events. A Delegator-admitted turn does not clear it. A later
+non-exempt worker termination can wake again. The stop-time payload is `state`
 `end_turn`, `state_detail` `end_turn`, `reason` `all-idle`. The Host is
 already idle, and this stop is not a new turn and not an exact Host stop, so
 `stopped` / `exact_stop` stay reserved for `op_stop`. A turn-end `all-idle`

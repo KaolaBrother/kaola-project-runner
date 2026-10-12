@@ -2,9 +2,9 @@
 
 A webhook wakes you when the Host holder decides you must act, so you do not
 wait for the next heartbeat. It does not wake on every turn end. The Host
-holder sends the signal. A model or a prompt never sends it. Configure it
-yourself with this procedure. The only owner action is to paste the URL and
-the sender key into the masked secret input one time.
+holder sends the signal; a model or a prompt never does. Configure it yourself
+with this procedure. The only owner action is to paste the URL and the sender
+key into the masked secret input one time.
 
 ## One Delegator timer
 
@@ -44,22 +44,18 @@ $HOOK remove --project "$PROJECT" --owner-agent "$LABEL"
 1. **Discover.** Run `status`. If `configured` and `enabled` are true,
    `owner_agent` is your label and `last_test.result` is `delivered`, the
    webhook is ready. Do nothing more.
-2. **Create the wake pair.** Create your webhook routine for this project.
-   Make your existing heartbeat the cron fallback at low frequency, or keep it
-   if it is already low. Do not create a third routine. Set both routine
-   bodies to the canonical timer body.
+2. **Create the wake pair.** One webhook routine for this project. Make the
+   existing heartbeat the low-frequency cron fallback, or keep it if it is
+   already low. No third routine. Both bodies are the canonical timer body.
 3. **Get the URL and the sender key without seeing them.** Ask the owner one
    time to paste the routine's webhook URL and sender key from the routine
    panel into the Grok Bot masked secret input. Never ask for them in chat.
-   The values arrive as environment variables on the Grok Bot box. Use them
-   only by variable name. Also ask how the routine panel attaches the sender
-   key: a named header (copy the exact header name and any value prefix,
-   for example `Bearer `), or a key that is already part of the URL. Take this
-   format from the routine panel only. Do not guess a header name.
-   Owner-verified for Grok Bot (live, 2026-10-10): routine webhooks
-   authenticate with `Authorization: Bearer <key>`, so configure with
-   `--key-header Authorization --key-prefix 'Bearer '`; a bare key without
-   the prefix gets HTTP 401.
+   They arrive as environment variables. Use them only by variable name.
+   Also ask how the panel attaches the key: a header name plus any prefix,
+   or a key already in the URL. Do not guess.
+   Owner-verified for Grok Bot (live, 2026-10-10): `Authorization: Bearer <key>`,
+   so use `--key-header Authorization --key-prefix 'Bearer '`. A bare key
+   gets HTTP 401.
 4. **Configure.** Give the values by variable name, from stdin, or from a file.
    Never put a value on a command line and never echo it.
    - Variable names: `--url-env URL_VAR [--key-env KEY_VAR]`.
@@ -88,10 +84,10 @@ $HOOK remove --project "$PROJECT" --owner-agent "$LABEL"
    `cadence`). Report the exact blocker to the owner (receipt `result`,
    `http_status`, `error`). Do not retry blindly.
 
-A Host holder sends signals only after a seat restart on a KPR build that has
-this hook. If `test` delivers but Host turns write no receipts, report that
-the Host holder is older than the hook. A restart needs its own
-authorization ([host-platforms.md](host-platforms.md#kpr-updates)).
+A Host holder sends this hook only after a seat restart on a build that has
+it. If `test` delivers but turns write no receipts, the holder is older than
+the hook. Restart needs its own authorization
+([host-platforms.md](host-platforms.md#kpr-updates)).
 
 ## On a wake
 
@@ -109,8 +105,11 @@ transcript, prompt, diff or secret. `reason` names why you were woken:
 
 You are not woken when the Host ends a turn and continues by itself. You are
 not woken when the turn end is your own send or steer and a worker seat is
-still working. You are woken with `all-idle` when the Host goes idle and no
-dispatched seat is still working, whether or not pending work is recorded. You
+still working. `all-idle` fires once per transition to idle: the Host is idle
+and no dispatched seat is working, whether or not pending work is recorded.
+A turn you admitted does not open that episode and does not wake by itself,
+unless that turn stops the last working seat. A self turn with no new worker
+event sends no second `all-idle`. You
 are also woken for a permission, a failure, an agent exit, a failed boot, an
 exact stop, a recovered holder death, a waiting question, a delivery that
 needs review, a decision, or a Host that stopped with pending work while a
@@ -121,7 +120,9 @@ After the Host's last turn, confirmed `sideagent_node_stopped` or the last
 worker's `terminated` re-checks one non-blocking `all-idle` (`state`
 `end_turn`, `state_detail` `end_turn`) when the Host is idle and no seat is
 working. A live seat, an active turn, a follow-up, an unconfirmed node stop,
-or exact stop does not. One episode, one wake. No time throttle.
+or exact stop does not. One episode, one wake. It re-opens when a non-exempt
+seat is working, a non-exempt worker stops, or a self turn delivers worker
+events. Your send does not re-open it. No time throttle.
 
 If a Host holder dies without a signal, the next `start` or `stop` of that
 session sends one `error` wake with `reason` `holder_lost`, the dead

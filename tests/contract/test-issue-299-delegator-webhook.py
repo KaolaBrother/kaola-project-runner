@@ -1231,20 +1231,26 @@ class HolderWakes(WebhookCase):
         self.assertFalse(self.posts_with_detail("holder_lost"))
 
     def test_stop_reason_detail_carried(self) -> None:
-        # No seat is live, so each Delegator send wakes all-idle whatever the
-        # stop reason was. Exact stop still wakes on its own.
+        # No seat is live. The first Delegator send is the one all-idle
+        # transition and carries the agent's stop reason as state_detail.
+        # Later sends in that idle episode do not wake, whatever the stop
+        # reason was (Issue #307). Exact stop still wakes on its own.
         self.endpoint = Endpoint()
         code, out = self.configure(self.endpoint.url)
         self.assertEqual(code, 0, out)
         self.start_host("reason", scenario="stop_reason")
-        texts = ("end_turn", "max_tokens", "refusal", "cancelled", "not a token")
-        for text in texts:
+        self.acp("send", "--text", "end_turn", "--wait", scenario="stop_reason")
+        post = wait_for(
+            lambda: next((p for p in self.endpoint.posts
+                          if (p["body"] or {}).get("reason") == "all-idle"), None),
+            10, "all-idle POST")
+        self.assertEqual(post["body"]["state"], "end_turn")
+        self.assertEqual(post["body"]["state_detail"], "end_turn")
+        for text in ("max_tokens", "refusal", "cancelled", "not a token"):
             self.acp("send", "--text", text, "--wait", scenario="stop_reason")
-        wait_for(lambda: len(self.endpoint.posts) >= len(texts) or None,
-                 10, "all-idle posts")
+        time.sleep(0.5)
         self.assertEqual(
-            [p["body"]["reason"] for p in self.endpoint.posts],
-            ["all-idle"] * len(texts))
+            [p["body"]["reason"] for p in self.endpoint.posts], ["all-idle"])
         code, stopped = self.acp("stop", scenario="stop_reason")
         self.assertTrue(stopped.get("stopped"), stopped)
         self.session = None
