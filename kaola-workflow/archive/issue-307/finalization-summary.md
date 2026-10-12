@@ -96,3 +96,10 @@ Files this branch changed outside the kaola-workflow/ run-state band:
 
 Ready: candidate reviewed, affected scope green, validation recorded.
 Proceed to sink (merge) and archive.
+
+## Sink Findings
+
+post_rebase_tests: skipped
+
+archived_paths:
+- kaola-workflow/archive/issue-307/finalization-summary.md
