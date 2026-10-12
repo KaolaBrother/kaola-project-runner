@@ -6,9 +6,7 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
-Seats: restart required — the holder changed (`scripts/kaola-acp-holder.py`).
-A running Host keeps the v0.9.8 latch, which treats every new turn as a new
-idle episode, until that seat restarts.
+Seats: restart required
 
 - **`all-idle` is once per busy-to-idle transition (Issue #307).**
   A Delegator-admitted turn (socket `send` or steer) no longer clears the
@@ -25,6 +23,9 @@ idle episode, until that seat restarts.
   operator restart set, so running Hosts and seats must restart to load
   the new latch. `kaola-acp.py` did not change.
 
+  Restart detail: the holder changed (`scripts/kaola-acp-holder.py`); a
+  running Host keeps the v0.9.8 latch, which treats every new turn as a
+  new idle episode, until that seat restarts.
 ## 0.9.8 — 2026-10-12 (seat exemption, wake receipts + all-idle re-check, install payload bytecode)
 
 Seats: restart required — the holder and its pinned record contract changed
