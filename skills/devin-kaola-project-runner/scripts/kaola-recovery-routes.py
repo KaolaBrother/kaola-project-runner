@@ -287,6 +287,7 @@ ROUTES: dict[str, tuple[str, str]] = {
     "runner-python-missing": ("route", "Install python3 or set PYTHON_BIN to an executable, then rerun the same command."),
     "schema-unsupported": ("route", "Read detail and the current revision. Run the state command detail names (init, migrate, update, or retire) with that revision. Do not write a second file or retry the same patch unchanged."),
     "scoped-checkpoint-already-settled": ("route", "Read detail and the current revision. Run the state command detail names (init, migrate, update, or retire) with that revision. Do not write a second file or retry the same patch unchanged."),
+    "verified-past-revision": ("self-route", "The returned input is covered by a later verified checkpoint and is settled. Read that checkpoint record; do not re-file the input or retry the same registration."),
     "script-missing": ("route", "Run ./scripts/render-skills.py --write so the worker script exists, then rerun attest."),
     "script-not-executable": ("route", "Make the worker runtime-tmux.sh executable, then rerun attest."),
     "script-outside-root": ("route", "Use the worker script inside this checkout. Do not attest a script outside the root."),

@@ -238,8 +238,12 @@ class RecoveryRoutes(unittest.TestCase):
         self.assertIn("scripts/kaola-recovery-routes.py", api)
         changelog = (REPO / "CHANGELOG.md").read_text(encoding="utf-8")
         unreleased = changelog.split("## 0.9.9", 1)[0]
-        self.assertIn("Seats: restart not required", unreleased)
-        self.assertNotIn("Seats: restart required", unreleased)
+        # After the batch union (#308/#310 entries merged alongside #309) the
+        # section line is the batch truth: the holder changed, so seats restart.
+        # #309's own entry keeps its per-entry judgment (holder unchanged for
+        # its text); the bare section token stays exactly one (#162).
+        self.assertIn("\nSeats: restart required\n", unreleased)
+        self.assertIn("the holder process is unchanged", unreleased)
         self.assertIn("Issue #309", unreleased)
         validate = (REPO / "scripts" / "validate.sh").read_text(encoding="utf-8")
         self.assertEqual(validate.count('"test-issue-309-recovery-routes.py"'), 2)
