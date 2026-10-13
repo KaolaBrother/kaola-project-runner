@@ -1635,6 +1635,81 @@ class WakeGate(issue299.WebhookCase):
         self.assertEqual(len(self.posts_with_reason("delivery_review")), 1)
         self.assertFalse(self.posts_with_reason("all-idle"))
 
+    def test_issue_321_steer_interrupt_of_a_self_turn_does_not_wake(self) -> None:
+        # Review G5. A worker-event self turn is open and a seat is in a
+        # turn. ``steer --steer-mode interrupt`` cancels that self turn
+        # from the socket and admits the steering text as the next turn.
+        # That cancel does not POST ``needs_decision`` / ``cancelled``.
+        # ``op_steer_interrupt`` does not increment ``_delegator_followups``
+        # (only an after-turn steer queue does). The follow-up admission
+        # replaces ``self.turn`` with an active turn before the predicate
+        # reads it: ``holders_dispatched_by`` scans ps first, and
+        # ``self_continuing`` is that active follow-up, so the
+        # ``turn_canceled`` branch is not reached.
+        self.endpoint = Endpoint()
+        code, out = self.configure(self.endpoint.url)
+        self.assertEqual(code, 0, out)
+        host = self.start_host("g5", scenario="hang_until_cancel")
+        notifier = self.start_worker("g5-note")
+        busy = self.start_worker("g5-busy", turn_ms=60000)
+        self.extra_sessions = [notifier]
+        self.begin_active_turn(busy)
+        self.session = notifier
+        self.acp("send", "--text", "notify-host", "--wait")
+        self.session = host
+        wait_for(lambda: self.delivered_count(host) >= 1, 15, "self turn admitted")
+        wait_for(lambda: self.acp("status")[1].get("turn_active") is True,
+                 15, "self turn still open")
+        self.session = busy
+        busy_status = self.acp("status")[1]
+        self.assertIs(busy_status.get("turn_active"), True, busy_status)
+        self.session = host
+        self.assertFalse(self.endpoint.posts, self.endpoint.posts)
+
+        _code, receipt = self.acp(
+            "steer", "--steer-mode", "interrupt", "--text", "redirect the self turn",
+            timeout=30)
+        self.assertEqual(receipt.get("steer_outcome"), "interrupted_and_resent", receipt)
+        self.assertIs(receipt.get("interrupted"), True, receipt)
+        self.assertEqual(receipt.get("steer_confirmation"), "cancel-confirmed", receipt)
+        self.assertEqual(receipt.get("steer_mode"), "interrupt", receipt)
+        self.assertEqual(receipt.get("steer_method"), "cancel+prompt", receipt)
+        cancelled_id = receipt.get("cancelled_turn_request_id")
+        new_id = receipt.get("new_turn_request_id")
+        self.assertIsNotNone(cancelled_id, receipt)
+        self.assertNotEqual(new_id, cancelled_id, receipt)
+
+        events = self.session_events(host)
+        delivered = [event for event in events
+                     if event.get("kind") == "worker_event_delivered"]
+        self.assertTrue(delivered, events[-8:])
+        fingerprint = delivered[-1].get("prompt_fingerprint")
+        self.assertIsInstance(fingerprint, str)
+        canceled = [event for event in events
+                    if event.get("kind") == "turn_ended"
+                    and event.get("outcome") == "turn_canceled"]
+        self.assertTrue(canceled, events[-8:])
+        self.assertEqual(canceled[-1].get("prompt_fingerprint"), fingerprint)
+        self.assertEqual(canceled[-1].get("stop_reason"), "cancelled")
+        interrupts = [event for event in events if event.get("kind") == "steer_interrupt"]
+        self.assertEqual(len(interrupts), 1, interrupts)
+        self.assertIs(interrupts[0].get("interrupted"), True)
+
+        status = self.acp("status")[1]
+        self.assertIs(status.get("turn_active"), True, status)
+        self.session = busy
+        still = self.acp("status")[1]
+        self.assertIs(still.get("turn_active"), True, still)
+        self.session = host
+        time.sleep(1.0)
+        self.assertFalse(self.posts_with_reason("needs_decision"), self.endpoint.posts)
+        self.assertFalse(
+            [post for post in self.endpoint.posts
+             if (post.get("body") or {}).get("state_detail") == "cancelled"],
+            self.endpoint.posts)
+        self.assertFalse(self.endpoint.posts, self.endpoint.posts)
+        self.assertEqual(self.receipts(), [])
+
 
 if __name__ == "__main__":
     unittest.main()
