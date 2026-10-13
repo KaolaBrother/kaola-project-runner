@@ -59,6 +59,8 @@ TERM_GRACE = 3.0
 # Issue #146: the shared session/new wait; a manifest `acp_session_new_timeout`
 # overrides it per platform (codex measured past 15 s on live starts).
 SESSION_NEW_TIMEOUT = 15.0
+# Issue #308: resume/load wait ceiling. The client passes --resume-timeout.
+RESUME_TIMEOUT_MAX = 600.0
 # Issue #203: ceiling for the start selection/application evidence a record keeps.
 START_EVIDENCE_BYTES = 16384
 SENSITIVE_KEYS = ("_API_KEY", "TOKEN", "Authorization")
@@ -66,6 +68,21 @@ SENSITIVE_KEYS = ("_API_KEY", "TOKEN", "Authorization")
 
 def canonical(value: Any) -> bytes:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def bounded_seconds(raw: object, cap: float) -> float | None:
+    """A finite wait in (0, cap], or None when the value is absent or unusable."""
+    if raw is None or raw == "":
+        return None
+    try:
+        seconds = float(raw)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    if seconds != seconds or seconds == float("inf") or seconds == float("-inf"):
+        return None
+    if 0 < seconds <= cap:
+        return seconds
+    return None
 
 
 def normalize_id(value: Any) -> str:
@@ -1171,7 +1188,8 @@ class AgentConnection:
             slot["event"].set()
         return request_id
 
-    def wait_response(self, request_id: int, timeout: float | None) -> dict[str, Any] | None:
+    def wait_response(self, request_id: int, timeout: float | None,
+                      retain_on_timeout: bool = False) -> dict[str, Any] | None:
         key = normalize_id(request_id)
         with self.lock:
             slot = self.pending_out.get(key)
@@ -1179,6 +1197,10 @@ class AgentConnection:
             return None
         slot["event"].wait(timeout)
         with self.lock:
+            # A late resume keeps the slot so the reply can correct the record.
+            # A reply that landed as the wait expired is still this wait's answer.
+            if slot["response"] is None and retain_on_timeout:
+                return None
             self.pending_out.pop(key, None)
         return slot["response"]
 
@@ -1189,6 +1211,11 @@ class AgentConnection:
         if slot is not None:
             slot["response"] = message
             slot["event"].set()
+            # Lock order: agent.lock is already released. note_late_resume
+            # takes only resume_lock, then agent.lock after releasing it.
+            pending = getattr(self.holder, "resume_pending_id", None)
+            if pending is not None and normalize_id(pending) == key:
+                self.holder.note_late_resume(message)
         else:
             self.holder.events.append({"kind": "orphan_response", "id": message.get("id")})
 
@@ -2013,6 +2040,13 @@ class Holder:
             previous_record = {}
         self.last_prompt: dict[str, Any] = previous_record.get("last_prompt") or {}
         self.fatal_error: dict[str, Any] | None = None
+        # Issue #308: a resume that outlives its wait. The reader corrects the
+        # record when the agent answers after the wait; run() must not publish
+        # state=error over that correction. Never nest agent.lock under this.
+        self.resume_lock = threading.Lock()
+        self.resume_pending_id: int | None = None
+        self.resume_target_id: str | None = None
+        self.resume_wait_abandoned = False
         self.record_lock = threading.Lock()
         self.last_activity = time.monotonic()
         self.agent_exited = threading.Event()
@@ -2213,6 +2247,7 @@ class Holder:
             "malformed_stdout_lines": self.agent.malformed_lines,
             "agent_message_errors": self.agent.handler_errors,
             "fatal_error": self.fatal_error,
+            "resume_pending": self.resume_pending_id is not None,
             "created_at": getattr(self, "created_at", None),
             "updated_at": round(time.time(), 3),
             **extra,
@@ -2291,19 +2326,7 @@ class Holder:
             }
         session_caps = self.capabilities.get("sessionCapabilities") or {}
         if resume is not None:
-            if not capability_supported(session_caps, "resume") \
-                    and not capability_supported(self.capabilities, "loadSession"):
-                return {"error": {"code": "resume-unsupported", "message": "agent lacks resume/loadSession"}}
-            method = "session/resume" if capability_supported(session_caps, "resume") else "session/load"
-            request_id = self.agent.send_request(
-                method, {"sessionId": resume, "cwd": self.args.repo, "mcpServers": []}
-            )
-            response = self.agent.wait_response(request_id, 15.0)
-            if response is None or "error" in response:
-                return {"error": {"code": "resume-failed", "message": json.dumps(response)}}
-            self.session_meta = response.get("result") or {}
-            self.initial_config_options = self.session_meta.get("configOptions")
-            self.acp_session_id = self.session_meta.get("sessionId", resume)
+            return self._request_resume(resume)
         elif use_continue:
             if not capability_supported(session_caps, "list"):
                 return {"error": {"code": "continue-unsupported", "message": "agent lacks session/list"}}
@@ -2378,24 +2401,126 @@ class Holder:
             seen_cursors.add(cursor)
 
     def initialize_agent_resume(self, session_id: str) -> dict[str, Any]:
+        return self._request_resume(session_id)
+
+    def _resume_timeout(self) -> float:
+        """Issue #308: the client-supplied resume wait, else the session/new wait."""
+        chosen = bounded_seconds(getattr(self.args, "resume_timeout", None), RESUME_TIMEOUT_MAX)
+        if chosen is None:
+            chosen = bounded_seconds(getattr(self.args, "session_new_timeout", None),
+                                     RESUME_TIMEOUT_MAX)
+        return chosen if chosen is not None else SESSION_NEW_TIMEOUT
+
+    def _resume_success(self) -> dict[str, Any]:
+        return {"acp_session_id": self.acp_session_id, "agent_info": self.agent_info,
+                "protocol_version": self.protocol_version, "capabilities": self.capabilities}
+
+    def _finish_resume_locked(self, result: dict, *, recovered: bool) -> dict[str, Any]:
+        """Publish a successful resume. Caller holds resume_lock. Idempotent."""
+        if self.state == "ready" and self.resume_pending_id is None:
+            return self._resume_success()
+        self.session_meta = result if isinstance(result, dict) else {}
+        self.initial_config_options = self.session_meta.get("configOptions")
+        self.acp_session_id = self.session_meta.get("sessionId", self.resume_target_id)
+        self.resume_pending_id = None
+        self.resume_wait_abandoned = False
+        self.fatal_error = None
+        self.state = "ready"
+        if recovered:
+            self.events.append({"kind": "resume_recovered",
+                                "acp_session_id": self.acp_session_id})
+        self.write_record()
+        return self._resume_success()
+
+    def _request_resume(self, session_id: str) -> dict[str, Any]:
+        """session/resume, or session/load when that is all the agent advertises.
+
+        The wait is ``--resume-timeout`` (the client's size-aware value). A
+        timeout keeps the JSON-RPC slot and records ``resume_pending`` so a
+        later success can clear the failure instead of landing as an orphan.
+        """
         session_caps = self.capabilities.get("sessionCapabilities") or {}
         if not capability_supported(session_caps, "resume") \
                 and not capability_supported(self.capabilities, "loadSession"):
-            return {"error": {"code": "resume-unsupported"}}
+            return {"error": {"code": "resume-unsupported",
+                              "message": "agent lacks resume/loadSession"}}
         method = "session/resume" if capability_supported(session_caps, "resume") else "session/load"
         request_id = self.agent.send_request(
             method, {"sessionId": session_id, "cwd": self.args.repo, "mcpServers": []}
         )
-        response = self.agent.wait_response(request_id, 15.0)
-        if response is None or "error" in response:
-            return {"error": {"code": "resume-failed", "message": json.dumps(response)}}
-        self.session_meta = response.get("result") or {}
-        self.initial_config_options = self.session_meta.get("configOptions")
-        self.acp_session_id = self.session_meta.get("sessionId", session_id)
-        self.state = "ready"
-        self.write_record()
-        return {"acp_session_id": self.acp_session_id, "agent_info": self.agent_info,
-                "protocol_version": self.protocol_version, "capabilities": self.capabilities}
+        with self.resume_lock:
+            self.resume_pending_id = request_id
+            self.resume_target_id = session_id
+            self.resume_wait_abandoned = False
+        response = self.agent.wait_response(
+            request_id, self._resume_timeout(), retain_on_timeout=True)
+        key = normalize_id(request_id)
+        if response is not None and "error" not in response:
+            with self.resume_lock:
+                return self._finish_resume_locked(response.get("result") or {}, recovered=False)
+        if response is not None:
+            with self.resume_lock:
+                self.resume_pending_id = None
+                self.resume_wait_abandoned = False
+            return {"error": {"code": "resume-failed", "message": json.dumps(response),
+                              "resume_pending": False}}
+        with self.resume_lock:
+            if self.state == "ready" and self.resume_pending_id is None:
+                return self._resume_success()
+            self.resume_wait_abandoned = True
+        message = None
+        with self.agent.lock:
+            slot = self.agent.pending_out.get(key)
+            if slot is not None and slot.get("response") is not None:
+                message = slot["response"]
+                self.agent.pending_out.pop(key, None)
+        if message is not None and "error" not in message:
+            with self.resume_lock:
+                return self._finish_resume_locked(message.get("result") or {}, recovered=False)
+        if message is not None:
+            with self.resume_lock:
+                self.resume_pending_id = None
+                self.resume_wait_abandoned = False
+                self.fatal_error = {"code": "resume-failed", "message": json.dumps(message),
+                                    "resume_pending": False}
+                self.state = "error"
+                self.write_record()
+                pending_error = dict(self.fatal_error)
+            return {"error": pending_error}
+        with self.resume_lock:
+            if self.state == "ready" and self.resume_pending_id is None:
+                return self._resume_success()
+            self.fatal_error = {"code": "resume-failed", "message": "null",
+                                "resume_pending": True}
+            self.state = "error"
+            self.write_record()
+            pending_error = dict(self.fatal_error)
+        return {"error": pending_error}
+
+    def note_late_resume(self, message: dict[str, Any]) -> None:
+        """A session/resume reply that arrived after the wait gave up.
+
+        Takes resume_lock only. The caller must not hold agent.lock.
+        """
+        key = normalize_id(message.get("id"))
+        consumed = False
+        with self.resume_lock:
+            if (self.resume_pending_id is None or not self.resume_wait_abandoned
+                    or normalize_id(self.resume_pending_id) != key):
+                return
+            consumed = True
+            if "error" in message:
+                self.resume_pending_id = None
+                self.resume_wait_abandoned = False
+                self.fatal_error = {"code": "resume-failed", "message": json.dumps(message),
+                                    "resume_pending": False}
+                self.state = "error"
+                self.write_record()
+            else:
+                self._finish_resume_locked(message.get("result") or {}, recovered=True)
+        if consumed:
+            with self.agent.lock:
+                self.agent.pending_out.pop(key, None)
 
     # -- inbound agent messages --------------------------------------------------
 
@@ -2767,6 +2892,7 @@ class Holder:
             "unknown_update_variants": self.agent.unknown_updates,
             "agent_message_errors": self.agent.handler_errors,
             "fatal_error": self.fatal_error,
+            "resume_pending": self.resume_pending_id is not None,
         }
 
     def turn_receipt(self, wait_timeout: float | None = None,
@@ -6505,16 +6631,26 @@ class Holder:
         result = self.initialize_agent(
             resume=self.args.resume, use_continue=self.args.use_continue
         )
-        if "error" in result:
-            self.fatal_error = self.start_failure_facts(result["error"])
-            self.state = "error"
-            self.write_record()
-            self._delegator_wake("error", "boot_failure", "boot_failure")
-            if result["error"].get("code") == "acp-protocol-version-unsupported":
-                self._terminate_group(force=True)
-            elif self.agent.proc and not self.agent.exited.is_set():
-                pass
-        elif self.args.resume or self.args.use_continue:
+        with self.resume_lock:
+            already_ready = self.state == "ready" and self.resume_pending_id is None
+        if already_ready:
+            pass
+        elif "error" in result:
+            with self.resume_lock:
+                if self.state == "ready" and self.resume_pending_id is None:
+                    already_ready = True
+                else:
+                    self.fatal_error = self.start_failure_facts(result["error"])
+                    self.state = "error"
+                    self.write_record()
+            if not already_ready:
+                self._delegator_wake("error", "boot_failure", "boot_failure")
+                if result["error"].get("code") == "acp-protocol-version-unsupported":
+                    self._terminate_group(force=True)
+                elif self.agent.proc and not self.agent.exited.is_set():
+                    pass
+        if (already_ready or "error" not in result) and (
+                self.args.resume or self.args.use_continue):
             # session/load resume: redeliver events the previous holder never
             # saw confirmed (Issue #62 phase 2).
             self._restore_worker_events()
@@ -6715,6 +6851,7 @@ def main() -> int:
     parser.add_argument("--command", required=True)
     parser.add_argument("--resume")
     parser.add_argument("--continue", dest="use_continue", action="store_true")
+    parser.add_argument("--resume-timeout", type=float, default=None)
     parser.add_argument("--init-meta", default="")
     parser.add_argument("--session-new-timeout", type=float, default=SESSION_NEW_TIMEOUT)
     parser.add_argument("--host-entry", default=None)

@@ -411,6 +411,16 @@ class MockAgent:
         if "resume" not in self.caps:
             respond(request_id, error={"code": -32601, "message": "session/resume unsupported"})
             return
+        # Issue #308: a supported resume may answer after the holder's wait so a
+        # contract can prove a late success corrects the record.
+        delay = os.environ.get("MOCK_ACP_RESUME_DELAY_MS")
+        if delay:
+            try:
+                milliseconds = float(delay)
+            except ValueError:
+                milliseconds = 0.0
+            if milliseconds > 0:
+                time.sleep(milliseconds / 1000.0)
         session_id = params.get("sessionId", "")
         if session_id not in self.sessions:
             # Opt-in for contract tests: a new process can resume an id the

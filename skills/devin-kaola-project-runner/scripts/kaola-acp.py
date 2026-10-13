@@ -59,6 +59,12 @@ START_WAIT = 20.0
 # preflight probe bound grow by the same amount so they still enclose it.
 SESSION_NEW_TIMEOUT = 15.0
 SESSION_NEW_TIMEOUT_MAX = 600.0
+# Issue #308: resume/load wait. An explicit KAOLA_RESUME_TIMEOUT wins. Otherwise
+# the session/new wait grows by KAOLA_RESUME_TOKENS/10000, capped here. The
+# client keeps polling RESUME_RECOVERY_GRACE seconds after that wait so a late
+# load success can clear a resume-failed record.
+RESUME_TIMEOUT_MAX = 600.0
+RESUME_RECOVERY_GRACE = 20.0
 PROBE_WAIT = 60.0
 SESSION_PREFIX = "kaola"
 # Issue #22: default start sets session/set_config_option configId=mode to each
@@ -743,6 +749,61 @@ def session_new_timeout(args: argparse.Namespace) -> float:
 def session_new_extra(args: argparse.Namespace) -> float:
     """Seconds this platform's session/new wait exceeds the shared default."""
     return max(0.0, session_new_timeout(args) - SESSION_NEW_TIMEOUT)
+
+
+def bounded_seconds(raw: object, cap: float) -> float | None:
+    """A finite wait in (0, cap], or None when the value is absent or unusable."""
+    if raw is None or raw == "":
+        return None
+    try:
+        seconds = float(raw)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    if seconds != seconds or seconds == float("inf") or seconds == float("-inf"):
+        return None
+    if 0 < seconds <= cap:
+        return seconds
+    return None
+
+
+def resume_wait_seconds(args: argparse.Namespace) -> float:
+    """Issue #308: how long session/resume may take before it is pending.
+
+    ``KAOLA_RESUME_TIMEOUT`` (seconds, finite, in (0, 600]) wins, including
+    over the token hint. Otherwise the platform session/new wait is the base
+    and ``KAOLA_RESUME_TOKENS`` adds one second per 10_000 tokens. The runner
+    does not know a session's token count; the environment is the size hook.
+    """
+    explicit = bounded_seconds(os.environ.get("KAOLA_RESUME_TIMEOUT"), RESUME_TIMEOUT_MAX)
+    if explicit is not None:
+        return explicit
+    base = session_new_timeout(args)
+    raw_tokens = os.environ.get("KAOLA_RESUME_TOKENS")
+    tokens = 0
+    if raw_tokens:
+        try:
+            tokens = int(raw_tokens)
+        except ValueError:
+            tokens = 0
+    if tokens > 0:
+        base += tokens / 10000.0
+    if base > RESUME_TIMEOUT_MAX:
+        return RESUME_TIMEOUT_MAX
+    if base <= 0:
+        return SESSION_NEW_TIMEOUT
+    return base
+
+
+def resume_window_extra(args: argparse.Namespace) -> float:
+    """Extra start-window seconds for a resume, including the late-success grace.
+
+    Zero unless this start is a resume or continue. A resume that answers
+    inside the shared session/new wait adds only the grace, and the poll
+    returns as soon as the holder is ready, so a fast resume stays fast.
+    """
+    if not (getattr(args, "resume", None) or getattr(args, "use_continue", False)):
+        return 0.0
+    return max(0.0, resume_wait_seconds(args) - SESSION_NEW_TIMEOUT) + RESUME_RECOVERY_GRACE
 
 
 class InputError(SystemExit):
@@ -5193,6 +5254,38 @@ def outside_launch_requested(args: argparse.Namespace) -> bool:
     return resolved_launch_backend(args) != "direct"
 
 
+def attach_broker_reconcile(receipt: dict[str, Any], args: argparse.Namespace,
+                            repo: str, directory: Path) -> None:
+    """Issue #308: exact-stop reaps a stale exited one-shot for this session.
+
+    An absent job adds nothing. A missing broker or an unsupported backend
+    does not fail the stop. A reap, or a job that is still live or unreadable,
+    is a short ``broker_job`` fact. The long recovery command stays on the
+    broker refusal; this receipt only flags it.
+    """
+    broker = LAUNCH_BROKER
+    if not broker.is_file() or not args.platform or not args.session or not repo:
+        return
+    run_base = directory / "launch"
+    cmd = [sys.executable, str(broker), "reconcile",
+           "--platform", args.platform, "--session", args.session, "--repo", repo,
+           "--record-dir", str(directory), "--run-base", str(run_base),
+           "--backend", "auto"]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        out = json.loads(result.stdout)
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return
+    if not isinstance(out, dict) or out.get("reason") == "launch-backend-unsupported":
+        return
+    if out.get("result") == "reconciled" and out.get("reaped") is True:
+        receipt["broker_job"] = {"reaped": True, "label": out.get("label"),
+                                 "result": "reconciled"}
+    elif out.get("reason") in ("job-occupied", "job-state-unknown"):
+        receipt["broker_job"] = {"reaped": False, "label": out.get("label"),
+                                 "reason": out.get("reason"), "result": "refused"}
+
+
 def spawn_holder_outside(args: argparse.Namespace, repo: str, directory: Path,
                          holder_argv: list[str], holder_env: dict[str, str],
                          log_path: Path, sock: Path) -> dict[str, Any]:
@@ -5222,6 +5315,11 @@ def spawn_holder_outside(args: argparse.Namespace, repo: str, directory: Path,
            "--record-dir", str(directory), "--socket", str(sock), "--log", str(log_path),
            "--cwd", repo, "--run-base", str(run_base),
            "--backend", resolved_launch_backend(args), "--argv-json", str(argv_file)]
+    # A resume's ready window has to cover the holder's wait plus the grace in
+    # which a late load success corrects the record. The broker kills the holder
+    # when that window ends. A fresh session keeps the broker default.
+    if args.resume or args.use_continue:
+        cmd += ["--ready-timeout", repr(resume_wait_seconds(args) + RESUME_RECOVERY_GRACE)]
     child_record = holder_env.get("KAOLA_ACP_CHILD_RECORD")
     if child_record:
         cmd += ["--child-record", child_record]
@@ -5229,9 +5327,10 @@ def spawn_holder_outside(args: argparse.Namespace, repo: str, directory: Path,
         if key:
             cmd += ["--env-allow", key]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True,
-                                timeout=START_WAIT + session_new_extra(args) + 60,
-                                env={**holder_env})
+        result = subprocess.run(
+            cmd, capture_output=True, text=True,
+            timeout=START_WAIT + session_new_extra(args) + resume_window_extra(args) + 60,
+            env={**holder_env})
     except subprocess.TimeoutExpired:
         return {"error": {"code": "launch-broker-timeout",
                           "message": "the outside launcher did not answer inside the window"},
@@ -5250,9 +5349,11 @@ def spawn_holder_outside(args: argparse.Namespace, repo: str, directory: Path,
     if out.get("result") not in ("ready", "existing"):
         if requested == "auto" and out.get("reason") == "launch-backend-unsupported":
             return {"degraded": True, "detail": out.get("detail")}
-        return {"error": {"code": out.get("reason") or "launch-broker-failed",
-                          "message": out.get("detail") or "outside launch refused"},
-                "holder_may_exist": bool(out.get("holder_may_exist"))}
+        error = {"code": out.get("reason") or "launch-broker-failed",
+                 "message": out.get("detail") or "outside launch refused"}
+        if out.get("recovery"):
+            error["recovery"] = out["recovery"]
+        return {"error": error, "holder_may_exist": bool(out.get("holder_may_exist"))}
     return {"launch": out}
 
 
@@ -5348,6 +5449,11 @@ def command_start(args: argparse.Namespace, repo: str,
         holder_argv += ["--resume", args.resume]
     if args.use_continue:
         holder_argv += ["--continue"]
+    if args.resume or args.use_continue:
+        # The holder does not read KAOLA_RESUME_* itself: the broker drops
+        # unlisted environment names, and the client is the one place that
+        # computes the wait.
+        holder_argv += ["--resume-timeout", repr(resume_wait_seconds(args))]
     # Issue #119: the Host turn-opening entry and name come from this platform's
     # own manifest, never from the platform id.
     holder_argv += ["--host-entry", args.manifest.get("host_skill_entry") or "",
@@ -5433,13 +5539,17 @@ def command_start(args: argparse.Namespace, repo: str,
         holder_pid_hint = launched["launch"].get("holder_pid")
         if launched["launch"].get("child_record") is not None:
             receipt["child_record"] = launched["launch"]["child_record"]
-    deadline = time.monotonic() + START_WAIT + session_new_extra(args)
+    deadline = time.monotonic() + START_WAIT + session_new_extra(args) + resume_window_extra(args)
     state: dict[str, Any] | None = None
     while time.monotonic() < deadline:
         if sock.exists():
             state = socket_request(sock, "state", {}, 5.0)
             if "error" not in state or state.get("error", {}).get("code") != "holder-unreachable":
-                if state.get("state") in ("ready", "error", "agent_exited"):
+                # A resume that is still pending is not terminal: the load may
+                # answer inside the grace and clear the failure.
+                if state.get("state") in ("ready", "agent_exited"):
+                    break
+                if state.get("state") == "error" and not state.get("resume_pending"):
                     break
         if not pid_alive(holder_pid_hint):
             break
@@ -7379,6 +7489,8 @@ def main() -> int:
             receipt = op_or_holder_lost(
                 args, repo, directory, "stop", params, 30.0
             )
+            if directory is not None:
+                attach_broker_reconcile(receipt, args, repo, directory)
     else:
         die(f"unhandled command {args.command}")
     print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))

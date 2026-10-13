@@ -478,6 +478,37 @@ boundary; no content hashing). Git runs with `GIT_TERMINAL_PROMPT=0`; no credent
 printed, hashed, or forwarded; paths in the receipt are local evidence and never enter an
 account Skill.
 
+## Outside-caller launch reconcile and resume wait (Issue #308)
+
+The outside-caller launcher is `scripts/kaola-launchd-broker.py`. One session
+has one job label, derived from the platform, the session, and the repo. Each
+submit mints a new attempt directory, so a job left behind by an earlier
+attempt is never owned by the attempt that is starting now.
+
+```text
+scripts/kaola-launchd-broker.py reconcile --platform ID --session NAME --repo GIT_ROOT
+    [--record-dir DIR] [--run-base DIR] [--backend auto|launchd|systemd-user]
+```
+
+`reconcile` is the recovery route for that leftover:
+
+- The job is absent. The receipt is `{result: reconciled, reaped: false}`. Nothing was unloaded.
+- The job has exited and the session record has no live holder pid, agent pid, or agent process group. The broker boots the job out (one retry) and the receipt is `{result: reconciled, reaped: true}`. `submit` does this itself, so `start --resume` continues without a hand-run `launchctl` or `systemctl`.
+- The job is still running, or the record still has a live holder or native agent. The broker does not unload it. The refusal reason is `job-occupied`. The text names the route: exact-stop the session through the Runner; when the one-shot has exited (`KeepAlive` is false; reconcile does not reap a job that is still running), run the `reconcile` command above, then retry `start --resume`. Do not run `launchctl` or `systemctl` by hand.
+- The service manager cannot be read. Reason `job-state-unknown`, same route, nothing unloaded.
+
+`submit` keeps `launch-in-progress` for a job that is still running and does not kill it. `cleanup` is unchanged: it still refuses a non-owned exited job with `job-not-owned` and does not unload it. That refusal also names `reconcile`.
+
+`kaola-acp.py stop` runs `reconcile` after the stop, including a stop where the holder is already gone. `kaola-locate.py --intent resume` runs it when `--worker` is a known worker, `--session` is set, and `--project` resolves to a checkout top level. Both attach `broker_job` only when the job was reaped or the broker refused `job-occupied` or `job-state-unknown`. An absent job adds no field. A live job does not turn an otherwise good attestation into a refusal. A missing broker does not fail the stop.
+
+Resume wait. The holder sends `session/resume` (or `session/load` when that is the capability the agent advertises) and waits:
+
+- `KAOLA_RESUME_TIMEOUT`, when it is a finite number of seconds in (0, 600], wins. A non-numeric value, `nan`, or `inf` is ignored.
+- Otherwise the wait is the platform `session/new` wait (manifest `acp_session_new_timeout`, default 15 seconds) plus `KAOLA_RESUME_TOKENS / 10000` seconds. A 960 000 token session adds 96 seconds. The total is capped at 600. The runner does not know the token count; the environment is the size hook. The explicit timeout wins over the token hint.
+- The client passes that number to the holder as `--resume-timeout`. The broker does not forward `KAOLA_RESUME_*`.
+
+The client keeps polling for 20 seconds after that wait (`RESUME_RECOVERY_GRACE`). On the outside-caller path the broker `--ready-timeout` is the resume wait plus the same grace, so the grace is inside the window that would otherwise kill the holder. A fresh session does not change the broker's 90 second default. A resume that becomes `ready` inside the wait returns immediately. A `session/resume` success that arrives after the wait, while the holder is still alive, clears `resume-failed`, sets the holder `ready`, and appends an event `resume_recovered`. The start receipt is then a ready session, not `resume-failed`. A success that arrives after the holder has been killed cannot be recorded. This wait is the load wait. The runner does not compact on resume, and it does not call `session/compact` while loading a session.
+
 ## Dispatch and collect (`kaola-dispatch.py`)
 
 The orchestrator Skill ships one entry, `scripts/kaola-dispatch.py`, for an

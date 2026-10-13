@@ -37,7 +37,11 @@ elsewhere, and never ownership, which the worker preflight proves. Every receipt
 ``KAOLA_ZCODE_NODE`` are absolute files on this host). That fact does not refuse the
 receipt. ``--intent start`` or ``--intent resume`` with ``--worker zcode`` is the
 attestation that feeds a ZCode launch: a missing pair refuses ``zcode-runtime-unset``
-and a set path that is not a file here refuses ``zcode-runtime-invalid``. Status, send,
+and a set path that is not a file here refuses ``zcode-runtime-invalid``. ``--intent
+resume`` with a known worker, a session, and a project top level also reaps a stale
+exited outside-caller job for that session (or flags a job that is still live). An
+absent job adds nothing, and a live job does not turn an otherwise good attestation
+into a refusal. Status, send,
 and stop attestations omit ``--intent`` and stay usable when the bridge shell has no
 ZCode paths. A non-zcode ``--worker`` is never refused for those paths. ``root.path`` and ``project.path``
 are real local paths and may include the user's home directory: bounded local evidence for
@@ -368,6 +372,40 @@ def emit(receipt: dict[str, object]) -> int:
     return 0 if receipt.get("result") == "ok" else 1
 
 
+def reconcile_broker_job(worker: str, session: str, toplevel: str) -> dict | None:
+    """Issue #308: reap a stale exited one-shot before a resume attestation.
+
+    Returns a short fact only when the job was reaped or the broker refused
+    because it is still live or unreadable. An absent job, a missing broker,
+    and an unsupported backend add nothing, so a receipt that never had a job
+    stays the same size.
+    """
+    broker = Path(__file__).resolve().with_name("kaola-launchd-broker.py")
+    if not broker.is_file():
+        return None
+    try:
+        directory = acp_paths.find_directory(worker, session, toplevel)
+    except (acp_paths.RecordRootMismatch, acp_paths.RecordRootUnsafe):
+        return None
+    cmd = [sys.executable, str(broker), "reconcile",
+           "--platform", worker, "--session", session, "--repo", toplevel,
+           "--record-dir", str(directory), "--run-base", str(directory / "launch"),
+           "--backend", "auto"]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        out = json.loads(result.stdout)
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return None
+    if not isinstance(out, dict) or out.get("reason") == "launch-backend-unsupported":
+        return None
+    if out.get("result") == "reconciled" and out.get("reaped") is True:
+        return {"reaped": True, "label": out.get("label"), "result": "reconciled"}
+    if out.get("reason") in ("job-occupied", "job-state-unknown"):
+        return {"reaped": False, "label": out.get("label"),
+                "reason": out.get("reason"), "result": "refused"}
+    return None
+
+
 def receipt_command(args: argparse.Namespace) -> int:
     reasons: list[str] = []
     receipt: dict[str, object] = {"schema": SCHEMA, "host": host_facts(), "target": args.target}
@@ -403,18 +441,29 @@ def receipt_command(args: argparse.Namespace) -> int:
         pf, more = project_facts(args.project)
         receipt["project"] = pf
         reasons.extend(more)
+    toplevel: str | None = None
     if args.session is not None:
         session = session_facts(args.session) if args.worker is None else {
             "name": args.session, "present": None, "acp_holder_alive": None}
         if args.worker in WORKER_IDS:
             project = receipt.get("project")
-            toplevel = project.get("toplevel") if isinstance(project, dict) else None
-            if isinstance(toplevel, str):
+            found = project.get("toplevel") if isinstance(project, dict) else None
+            if isinstance(found, str):
+                toplevel = found
                 directory = acp_paths.find_directory(args.worker, args.session, toplevel)
                 record = acp_paths.read_record(directory)
                 session["present"] = record is not None
                 session["acp_holder_alive"] = acp_paths.live((record or {}).get("holder_pid"))
         receipt["session"] = session
+    # Issue #308: only a resume attestation that names a worker, a session, and
+    # a project top level touches the broker. A live job is flagged, not a new
+    # refusal. Callers without that identity (including a bare zcode resume
+    # preflight) never invoke it.
+    if (args.intent == "resume" and args.worker in WORKER_IDS and args.session
+            and isinstance(toplevel, str)):
+        broker_job = reconcile_broker_job(args.worker, args.session, toplevel)
+        if broker_job is not None:
+            receipt["broker_job"] = broker_job
     # Issue #162: every receipt reports the ZCode paths. Only an attestation
     # that feeds a zcode start or resume refuses. status/send/stop and any
     # non-zcode worker keep the fact and do not refuse for it.

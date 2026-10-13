@@ -36,6 +36,34 @@ Seats: restart not required
   install uses the new file on the next process. A copy install uses it only
   after that copy is replaced. This change does not install. A running
   Delegator loads the cron instruction only after it reloads `kaola-delegator`.
+Seats: restart required
+
+- **Stale exited launch jobs can be reconciled, and a slow resume is not a failed resume (Issue #308).**
+  A one-shot outside-caller job that has exited, and whose recorded holder and
+  native agent are both dead, is stale even when it belongs to an earlier
+  attempt. `start --resume` reaps that job and continues. A job that is still
+  running, or an exited job whose holder or native agent is still alive, is
+  still refused, and the refusal names the recovery route: exact-stop the
+  session through the Runner, run `kaola-launchd-broker.py reconcile` for that
+  session, then retry `start --resume`. Do not boot the job out by hand.
+  `exact-stop` and `kaola-locate.py --intent resume` (when the worker, session,
+  and project top level are all present) reap the same stale job, or flag a
+  job that is still live. An absent job adds nothing to the receipt.
+  The resume wait is no longer a fixed 15 seconds. `KAOLA_RESUME_TIMEOUT`
+  sets it (finite seconds in (0, 600], and it wins). Otherwise the platform
+  session/new wait grows by one second per 10 000 `KAOLA_RESUME_TOKENS`,
+  capped at 600. The client keeps a 20 second grace after that wait. A
+  session/resume success that arrives after the wait, while the holder is
+  still alive, clears `resume-failed` and records `resume_recovered`. The
+  runner does not compact on resume. A load that runs longer than the wait
+  plus the grace is still `resume-failed`; set the timeout for the session.
+  Restart judgment: `scripts/kaola-acp-holder.py` changed. It is in the
+  operator restart set, so running seats keep the fixed 15 second resume
+  wait until they restart. `kaola-acp.py` and `kaola-launchd-broker.py` are
+  per-call: the next start, stop, and attest use the new route and the new
+  wait immediately, but the operator test is non-empty on the holder, so
+  this line is restart required.
+
 
 ## 0.9.9 — 2026-10-12 (all-idle wakes once per transition)
 
