@@ -54,8 +54,6 @@ Seats: restart required
   Restart detail: the holder changed (`scripts/kaola-acp-holder.py`); a
   running seat keeps suppressing that all-ended wake until it restarts.
 
-<<<<<<< HEAD
-=======
 - **The Host can wake the Delegator while seats are still working (Issue #317).**
   `kaola-acp.py <platform> wake --reason REASON` asks the Host holder to send
   now. `REASON` is `needs_decision`, `question_waiting`, or `delivery_review`.
@@ -70,7 +68,6 @@ Seats: restart required
   #299, and no delivery-failure wake (#318). No new reason word.
   Restart judgment: `scripts/kaola-acp-holder.py` changed, same Unreleased
   restart line. A running Host does not accept `wake` until it restarts.
->>>>>>> 85ca4bf1 (fix(#317): let the Host wake the Delegator while seats work)
 
 - **`all-idle` counts a seat only while that seat has an active turn (Issue #314).**
   The all-idle scan (`holders_dispatched_by(..., working=True)`) used to treat
