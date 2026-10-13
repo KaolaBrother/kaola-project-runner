@@ -396,8 +396,11 @@ def delegator_turn_wake_reason(
       2026-10-13 for a registered decision. ``all_idle_due`` is true only when
       this idle episode has not yet sent ``all-idle`` (the latch is clear).
       A Delegator-admitted turn returns ``None`` unless that transition is
-      still due, so a later send or steer does not wake by itself
-      (Issue #307). When the latch is clear, including a Delegator turn in
+      still due, so a later send or steer in the SAME episode does not wake
+      by itself (Issue #307). The holder clears the latch at the start of a
+      new all-ended episode before this call (Issue #317), so a carried latch
+      does not suppress that one wake, including when the turn is the
+      Delegator's. When the latch is clear, including a Delegator turn in
       which the last working seat stopped, the one wake is still ``all-idle``.
       A self turn still reports ``all-idle``; ``_emit_delegator_all_idle``
       drops a second POST.
@@ -2143,10 +2146,17 @@ class Holder:
         # while this is non-zero is self-continuation: the Delegator is injecting.
         self._delegator_followups = 0
         # Issue #305 / #307: one all-idle wake per idle episode. Not a timer.
-        # Cleared only when work resumes: a re-check still sees a working
-        # non-exempt seat, a non-exempt worker terminates, or a self turn
-        # admits new worker events. A Delegator-admitted turn does not.
+        # ``_all_ended_busy`` is distinct (Issue #317): real work has resumed
+        # since the last all-idle settlement. The next all-ended transition
+        # clears ``_all_idle_woken`` once, so a latch carried from the earlier
+        # episode cannot suppress that wake, then the latch holds the rest of
+        # the episode. A Delegator send alone does not set the flag. A live
+        # ``send --wait`` caller is not all-ended yet; the wake waits until
+        # that caller has left.
         self._all_idle_woken = False
+        self._all_ended_busy = False
+        self._all_ended_deferred = False
+        self._send_waiters = 0
         self._all_idle_lock = threading.Lock()
         try:
             previous_record = json.loads(self.record_path.read_text(encoding="utf-8"))
@@ -2879,21 +2889,7 @@ class Holder:
             self._delegator_wake("error", "turn_failed", "turn_failed")
         elif outcome == "turn_completed" or (
                 outcome == "turn_canceled" and not self.stop_requested):
-            reason = self._delegator_turn_end_reason(turn)
-            if reason is not None:
-                # The agent's own stopReason, verbatim when it is a clean token;
-                # an absent reason on a cancel reads "cancelled".
-                stop = turn.get("stop_reason")
-                if isinstance(stop, str):
-                    detail = (stop if DELEGATOR_WAKE_DETAIL_RE.fullmatch(stop)
-                              else "other")
-                else:
-                    detail = "cancelled" if outcome == "turn_canceled" else None
-                if reason == "all-idle":
-                    # Shares the idle-episode latch with the stop-time re-check.
-                    self._emit_delegator_all_idle("end_turn", detail)
-                else:
-                    self._delegator_wake("end_turn", detail, reason)
+            self._finish_delegator_turn_wake(turn, self._delegator_turn_end_reason(turn))
 
     def on_agent_exit(self, code: int) -> None:
         reason = (f"exit_code={self.agent.exit_code}"
@@ -3214,24 +3210,31 @@ class Holder:
                     "turn_request_id": request_id,
                     "dispatch_event_cursor": dispatch_cursor,
                     "event_cursor": self.events.cursor}
-        deadline = time.monotonic() + timeout if timeout else None
-        with self.turn_cond:
-            while self.turn["active"]:
-                remaining = (deadline - time.monotonic()) if deadline else 0.5
-                if deadline and remaining <= 0:
-                    break
-                self.turn_cond.wait(timeout=max(remaining, 0.05))
-                if deadline and time.monotonic() >= deadline and self.turn["active"]:
-                    break
-        if self.turn["active"]:
-            return {**self.turn_receipt(max_final_chars=max_chars),
-                    "outcome": "prompt_timeout",
-                    "dispatch_event_cursor": dispatch_cursor,
-                    "duplicate_warning": duplicate}
-        receipt = self.turn_receipt(max_final_chars=max_chars)
-        receipt["duplicate_warning"] = duplicate
-        receipt["dispatch_event_cursor"] = dispatch_cursor
-        return receipt
+        # Issue #317: this caller is still waiting on the send. The all-ended
+        # wake waits until the caller has left (return, timeout, or a failed
+        # reply write on the way out).
+        self._enter_send_waiter()
+        try:
+            deadline = time.monotonic() + timeout if timeout else None
+            with self.turn_cond:
+                while self.turn["active"]:
+                    remaining = (deadline - time.monotonic()) if deadline else 0.5
+                    if deadline and remaining <= 0:
+                        break
+                    self.turn_cond.wait(timeout=max(remaining, 0.05))
+                    if deadline and time.monotonic() >= deadline and self.turn["active"]:
+                        break
+            if self.turn["active"]:
+                return {**self.turn_receipt(max_final_chars=max_chars),
+                        "outcome": "prompt_timeout",
+                        "dispatch_event_cursor": dispatch_cursor,
+                        "duplicate_warning": duplicate}
+            receipt = self.turn_receipt(max_final_chars=max_chars)
+            receipt["duplicate_warning"] = duplicate
+            receipt["dispatch_event_cursor"] = dispatch_cursor
+            return receipt
+        finally:
+            self._leave_send_waiter()
 
     def _await_prompt(self, request_id: int) -> None:
         response = self.agent.wait_response(request_id, None)
@@ -3333,6 +3336,14 @@ class Holder:
         # gated wake to the next turn end; the error/stop/death wakes never
         # pass through this lock.
         self_continuing = bool(self.turn.get("active") or self._delegator_followups)
+        # Issue #317: a working seat is real work, so the idle episode has
+        # ended even when this turn was the Delegator's. The all-ended
+        # transition below then clears a latch carried from the previous
+        # episode. A Delegator send with no working seat does not.
+        if live_seats:
+            self._note_delegator_working_again()
+        elif not self_continuing:
+            self._reset_carried_all_idle_latch()
         with self._all_idle_lock:
             all_idle_due = not self._all_idle_woken
         return delegator_turn_wake_reason(
@@ -3409,13 +3420,99 @@ class Holder:
     def _note_delegator_working_again(self) -> None:
         """A real working-again fact ended the idle episode. Not a timer.
 
-        The next all-idle may wake. Callers are a re-check that still sees a
-        working non-exempt seat, a non-exempt worker termination, and a self
-        turn that admitted new worker events. A Delegator-admitted turn does
-        not call this.
+        The next all-ended transition may wake. Callers are a re-check or a
+        turn-end scan that still sees a working non-exempt seat, a non-exempt
+        worker termination, and a self turn that admitted new worker events.
+        Admitting a Delegator turn does not call this. Seeing a working seat
+        at that turn's end does (Issue #317): the seat is the work, not the
+        send.
         """
         with self._all_idle_lock:
             self._all_idle_woken = False
+            self._all_ended_busy = True
+
+    def _reset_carried_all_idle_latch(self) -> None:
+        """Drop a latch carried from the previous episode, once.
+
+        Issue #317. Real work (``_all_ended_busy``) opened a new episode. The
+        all-ended transition — nothing running — clears ``_all_idle_woken`` so
+        the one ``all-idle`` is unconditional, including when this turn was
+        the Delegator's. The flag drops here, so the rest of this episode
+        does not reset again. A live send waiter is not all-ended; the
+        waiter-leave flush calls this again. No time throttle.
+        """
+        with self._all_idle_lock:
+            if self._send_waiters:
+                if self._all_ended_busy or not self._all_idle_woken:
+                    self._all_ended_deferred = True
+                return
+            if not self._all_ended_busy:
+                return
+            self._all_idle_woken = False
+            self._all_ended_busy = False
+
+    def _enter_send_waiter(self) -> None:
+        """A socket ``send --wait`` or ``op_wait`` caller is blocked on this turn."""
+        with self._all_idle_lock:
+            self._send_waiters += 1
+
+    def _leave_send_waiter(self) -> None:
+        """The caller returned, timed out, or failed before the reply write."""
+        with self._all_idle_lock:
+            self._send_waiters = max(0, self._send_waiters - 1)
+            quiet = self._send_waiters == 0
+        if quiet:
+            self._flush_all_ended_after_waiter()
+
+    def _defer_all_ended_emit(self) -> bool:
+        """True when a live send waiter must hold the all-idle POST."""
+        with self._all_idle_lock:
+            if not self._send_waiters:
+                return False
+            self._all_ended_deferred = True
+            return True
+
+    def _turn_wake_detail(self, turn: dict[str, Any]) -> str | None:
+        """The agent's stopReason when it is a clean token, else the cancel fallback."""
+        stop = turn.get("stop_reason")
+        if isinstance(stop, str):
+            return stop if DELEGATOR_WAKE_DETAIL_RE.fullmatch(stop) else "other"
+        if turn.get("outcome") == "turn_canceled":
+            return "cancelled"
+        return None
+
+    def _finish_delegator_turn_wake(self, turn: dict[str, Any], reason: str | None) -> None:
+        """POST one turn-end wake. ``all-idle`` waits until no send waiter remains."""
+        if reason is None:
+            return
+        detail = self._turn_wake_detail(turn)
+        if reason == "all-idle":
+            if self._defer_all_ended_emit():
+                return
+            # Shares the idle-episode latch with the stop-time re-check.
+            self._emit_delegator_all_idle("end_turn", detail)
+            return
+        self._delegator_wake("end_turn", detail, reason)
+
+    def _flush_all_ended_after_waiter(self) -> None:
+        """The last send waiter left. Send the all-ended wake if it is still owed."""
+        with self._all_idle_lock:
+            if self._send_waiters or not self._all_ended_deferred:
+                return
+            self._all_ended_deferred = False
+        if self.session_role != "host":
+            return
+        if self.stop_requested or self.state in ("stopping", "stopped"):
+            return
+        if self.turn.get("active") or self._delegator_followups:
+            with self._all_idle_lock:
+                if self._all_ended_busy or not self._all_idle_woken:
+                    self._all_ended_deferred = True
+            return
+        if self.turn.get("outcome") not in ("turn_completed", "turn_canceled"):
+            return
+        reason = self._delegator_turn_end_reason(self.turn)
+        self._finish_delegator_turn_wake(self.turn, reason)
 
     def _emit_delegator_all_idle(self, state: str, detail: str | None) -> bool:
         """Send one ``all-idle`` for this idle episode, or nothing if it already went.
@@ -3423,15 +3520,16 @@ class Holder:
         The claim is taken before the detached deliver spawn, so a turn-end
         wake and a stop re-check in the same episode POST once. Dedupe on
         ``holder_instance_id`` + ``event_seq`` still applies to a replay of
-        the same event. The latch clears only when a non-exempt seat is
-        working again, a non-exempt worker terminates, or a self turn admits
-        new worker events. A Delegator-admitted turn does not clear it.
-        There is no time throttle.
+        the same event. The latch clears when real work resumes. A
+        Delegator-admitted turn does not clear it unless that turn's scan
+        sees a working seat (Issue #317). There is no time throttle.
         """
         with self._all_idle_lock:
             if self._all_idle_woken:
                 return False
             self._all_idle_woken = True
+            self._all_ended_busy = False
+            self._all_ended_deferred = False
         self._delegator_wake(state, detail, "all-idle")
         return True
 
@@ -3458,6 +3556,11 @@ class Holder:
         if holders_dispatched_by(self.holder_instance_id, working=True,
                                  ignore_sessions=ignore_sessions):
             self._note_delegator_working_again()
+            return
+        # Issue #317: a latch carried from the previous episode does not
+        # suppress this re-check when real work has resumed.
+        self._reset_carried_all_idle_latch()
+        if self._defer_all_ended_emit():
             return
         self._emit_delegator_all_idle("end_turn", "end_turn")
 
@@ -5371,13 +5474,18 @@ class Holder:
     def op_wait(self, params: dict[str, Any]) -> dict[str, Any]:
         timeout = params.get("timeout")
         deadline = time.monotonic() + timeout if timeout else None
-        with self.turn_cond:
-            while self.turn["active"]:
-                remaining = (deadline - time.monotonic()) if deadline else 0.5
-                if deadline and remaining <= 0:
-                    return {**self.turn_receipt(), "outcome": "prompt_timeout"}
-                self.turn_cond.wait(timeout=max(remaining, 0.05))
-        return self.turn_receipt()
+        # Same live-waiter fact as ``send --wait`` (Issue #317).
+        self._enter_send_waiter()
+        try:
+            with self.turn_cond:
+                while self.turn["active"]:
+                    remaining = (deadline - time.monotonic()) if deadline else 0.5
+                    if deadline and remaining <= 0:
+                        return {**self.turn_receipt(), "outcome": "prompt_timeout"}
+                    self.turn_cond.wait(timeout=max(remaining, 0.05))
+            return self.turn_receipt()
+        finally:
+            self._leave_send_waiter()
 
     def _settle_pending_permission_locked(self, key: str, option: Any) -> dict[str, Any] | None:
         """Lookup pending → one JSON-RPC result → pop. Caller holds self.lock.

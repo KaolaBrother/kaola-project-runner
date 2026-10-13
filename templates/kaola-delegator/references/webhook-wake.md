@@ -97,20 +97,20 @@ while a worker seat still has an active turn. A pending Delegator decision
 wakes `needs_decision` only from `state.decisions` (`owner` `delegator` or
 `user`, `status` `pending`). A `.kaola/run` file or turn text does not. That
 wake is not `all-idle`, and the idle latch does not block it, including the
-turn after a compaction reload. With no registered decision or attention row
-and no active seat turn, a silent turn falls back to `all-idle`, once per
-idle episode. A turn you admitted does not open that episode and does not
-wake by itself, unless it stops the last working seat. A self turn with no
-new worker event sends no second `all-idle`. A Sideagent node is not a seat.
-Only an active turn is working. Idle held seats, `agent_exited`, `stopping`,
-and `stopped` are not. After the Host's last turn, confirmed
+turn after a compaction reload. With nothing registered and no active seat
+turn, a silent turn is `all-idle` once per all-ended episode (Host idle, no
+seat in an active turn). One episode, one wake. A carried latch does not
+suppress it, and neither does the turn being yours. The same episode does
+not wake again. Your send alone does not open the next one. It re-opens when
+a non-exempt seat is working, a non-exempt worker stops, or a self turn
+delivers worker events. A `send --wait` still in flight is not all-ended;
+the wake runs after it returns. A Sideagent node is not a seat. Only an
+active turn is working. Idle held seats, `agent_exited`, `stopping`, and
+`stopped` are not. After the Host's last turn, confirmed
 `sideagent_node_stopped` or the last worker's `terminated` re-checks one
 non-blocking `all-idle` (`state` `end_turn`, `state_detail` `end_turn`) when
-the Host is idle and no seat is working. An active turn, a follow-up, an
-unconfirmed node stop, or exact stop does not. One episode, one `all-idle`.
-It re-opens when a non-exempt seat is working, a non-exempt worker stops, or
-a self turn delivers worker events. Your send does not re-open it. No time
-throttle.
+that episode owes it. An active turn, a follow-up, an unconfirmed node stop,
+or exact stop does not. No time throttle.
 
 A dead holder with no signal gets one `error`/`holder_lost` wake for that
 `holder_instance_id` and a new `event_seq`. `start` or a dead-holder `stop`

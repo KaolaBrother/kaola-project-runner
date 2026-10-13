@@ -317,11 +317,17 @@ class WakeGate(issue299.WebhookCase):
         host.turn["prompt_source"] = prompt_source
         host._delegator_followups = 0
         reason = host._delegator_turn_end_reason(host.turn)
-        if reason == "all-idle":
-            host._emit_delegator_all_idle("end_turn", "end_turn")
-        elif reason is not None:
-            host._delegator_wake("end_turn", "end_turn", reason)
+        host._finish_delegator_turn_wake(host.turn, reason)
         return reason
+
+    def note_ended_turn(self, host) -> None:
+        """Append the ``turn_ended`` row a real turn writes before the wake.
+
+        ``event_seq`` is that cursor. A new all-ended episode is a new event,
+        so the deliver claim does not treat the next ``all-idle`` as a replay
+        of the previous one.
+        """
+        host.events.append({"kind": "turn_ended", "outcome": "turn_completed"})
 
     def event_rows(self, host) -> list[dict]:
         path = Path(host.record_dir) / "events.jsonl"
@@ -1321,6 +1327,220 @@ class WakeGate(issue299.WebhookCase):
                 if proc is not None and proc.poll() is None:
                     proc.kill()
                     proc.wait(timeout=5)
+
+    def test_issue_317_carried_latch_wakes_once_per_new_episode(self) -> None:
+        # The previous episode already sent all-idle. A Delegator turn with
+        # no new work stays silent. Arming the next episode while that latch
+        # is still set, then ending with nobody running, sends exactly one
+        # all-idle. The same episode does not send another. A later episode
+        # does.
+        self.endpoint = Endpoint()
+        self.configure_endpoint()
+        with self.webhook_process_env():
+            host = self.idle_host("carried-latch")
+            holder_id = host.holder_instance_id
+            host._all_idle_woken = True
+            host._all_ended_busy = False
+            self.note_ended_turn(host)
+            self.assertIsNone(self.end_turn_wake(host, "delegator"))
+            time.sleep(0.4)
+            self.assertFalse(self.posts_for(holder_id))
+            self.assertTrue(host._all_idle_woken)
+
+            host._all_ended_busy = True
+            self.assertTrue(host._all_idle_woken)
+            self.note_ended_turn(host)
+            self.assertEqual(self.end_turn_wake(host, "delegator"), "all-idle")
+            wait_for(lambda: len(self.posts_for(holder_id)) == 1,
+                     15, "one all-idle despite the carried latch")
+            self.assertTrue(host._all_idle_woken)
+            self.assertFalse(host._all_ended_busy)
+            self.assertIsNone(self.end_turn_wake(host, "delegator"))
+            # A self turn still names all-idle. The episode latch drops the POST.
+            self.assertEqual(self.end_turn_wake(host, "self"), "all-idle")
+            time.sleep(0.5)
+            self.assertEqual(len(self.posts_for(holder_id)), 1)
+
+            host._all_ended_busy = True
+            self.assertTrue(host._all_idle_woken)
+            self.note_ended_turn(host)
+            self.assertEqual(self.end_turn_wake(host, "delegator"), "all-idle")
+            wait_for(lambda: len(self.posts_for(holder_id)) == 2,
+                     15, "the next episode wakes again")
+            posts = self.posts_for(holder_id)
+            self.assertEqual(len(posts), 2)
+            self.assertTrue(all(post["body"]["reason"] == "all-idle" for post in posts))
+            self.assertNotEqual(posts[0]["body"]["event_seq"], posts[1]["body"]["event_seq"])
+            self.assertIsNone(self.end_turn_wake(host, "delegator"))
+            time.sleep(0.4)
+            self.assertEqual(len(self.posts_for(holder_id)), 2)
+
+    def test_issue_317_completed_seat_opens_one_new_episode(self) -> None:
+        # VRPCadCore shape: the seat's turn completes and the process stays
+        # up, so nothing calls the terminated re-check. Seeing that seat
+        # working re-opens the episode. The Delegator turn that then finds
+        # it idle sends one all-idle. A repeat does not. Another working
+        # stretch does.
+        self.endpoint = Endpoint()
+        self.configure_endpoint()
+        proc = None
+        with self.webhook_process_env():
+            host = self.idle_host("completed-seat")
+            holder_id = host.holder_instance_id
+            try:
+                self.note_ended_turn(host)
+                self.assertEqual(self.end_turn_wake(host, "delegator"), "all-idle")
+                wait_for(lambda: len(self.posts_for(holder_id)) == 1,
+                         15, "first idle episode")
+                self.assertTrue(host._all_idle_woken)
+                self.assertFalse(host._all_ended_busy)
+
+                proc, record_dir = self.spawn_seat(
+                    "grok-i317-seat", "expert", "ready", holder_id,
+                    last_prompt={"mutation_status": "in_progress"})
+                found = wait_for(
+                    lambda: holder.holders_dispatched_by(holder_id, working=True) or None,
+                    5, "working seat visible")
+                self.assertEqual(found, [proc.pid])
+                self.note_ended_turn(host)
+                self.assertIsNone(self.end_turn_wake(host, "delegator"))
+                self.assertTrue(host._all_ended_busy)
+                self.assertFalse(host._all_idle_woken)
+                time.sleep(0.4)
+                self.assertEqual(len(self.posts_for(holder_id)), 1)
+
+                self.write_seat_prompt(record_dir, "completed")
+                self.assertEqual(
+                    holder.holders_dispatched_by(holder_id, working=True), [])
+                self.note_ended_turn(host)
+                self.assertEqual(self.end_turn_wake(host, "delegator"), "all-idle")
+                wait_for(lambda: len(self.posts_for(holder_id)) == 2,
+                         15, "all-idle after the seat's turn completed")
+                self.assertIsNone(self.end_turn_wake(host, "delegator"))
+                time.sleep(0.4)
+                self.assertEqual(len(self.posts_for(holder_id)), 2)
+
+                self.write_seat_prompt(record_dir, "in_progress")
+                self.assertEqual(
+                    holder.holders_dispatched_by(holder_id, working=True), [proc.pid])
+                self.note_ended_turn(host)
+                self.assertIsNone(self.end_turn_wake(host, "delegator"))
+                self.assertTrue(host._all_ended_busy)
+                self.write_seat_prompt(record_dir, "completed")
+                self.note_ended_turn(host)
+                self.assertEqual(self.end_turn_wake(host, "delegator"), "all-idle")
+                wait_for(lambda: len(self.posts_for(holder_id)) == 3,
+                         15, "third episode after work resumed")
+                self.assertIsNone(self.end_turn_wake(host, "delegator"))
+                time.sleep(0.4)
+                posts = self.posts_for(holder_id)
+                self.assertEqual(len(posts), 3)
+                self.assertEqual(
+                    len({post["body"]["event_seq"] for post in posts}), 3)
+            finally:
+                if proc is not None and proc.poll() is None:
+                    proc.kill()
+                    proc.wait(timeout=5)
+
+    def test_issue_317_live_send_waiter_defers_one_all_idle(self) -> None:
+        # A caller still blocked on send is not all-ended. The owed wake
+        # runs once that caller has left, and the same episode does not
+        # send a second one. A timeout while the Host turn is still active
+        # does not send it either.
+        self.endpoint = Endpoint()
+        self.configure_endpoint()
+        with self.webhook_process_env():
+            host = self.idle_host("waiter")
+            holder_id = host.holder_instance_id
+            host._all_idle_woken = True
+            host._all_ended_busy = True
+            host._send_waiters = 1
+            self.note_ended_turn(host)
+            self.assertIsNone(self.end_turn_wake(host, "delegator"))
+            self.assertTrue(host._all_ended_deferred)
+            self.assertTrue(host._all_idle_woken)
+            time.sleep(0.4)
+            self.assertFalse(self.posts_for(holder_id))
+
+            host.turn["active"] = True
+            host._send_waiters = 0
+            host._flush_all_ended_after_waiter()
+            self.assertTrue(host.turn["active"])
+            self.assertTrue(host._all_ended_deferred)
+            self.assertFalse(self.posts_for(holder_id))
+
+            host.turn["active"] = False
+            host.turn["outcome"] = "turn_completed"
+            host._flush_all_ended_after_waiter()
+            wait_for(lambda: len(self.posts_for(holder_id)) == 1,
+                     15, "one all-idle after the waiter left")
+            self.assertTrue(host._all_idle_woken)
+            self.assertFalse(host._all_ended_busy)
+            self.assertFalse(host._all_ended_deferred)
+            self.note_ended_turn(host)
+            self.assertIsNone(self.end_turn_wake(host, "delegator"))
+            time.sleep(0.4)
+            self.assertEqual(len(self.posts_for(holder_id)), 1)
+            self.assertEqual(self.posts_for(holder_id)[0]["body"]["reason"], "all-idle")
+
+    def test_issue_317_real_host_wakes_once_per_all_ended_episode(self) -> None:
+        # Both send forms. The first idle turn is one all-idle. Later sends
+        # in that episode are not. A long worker turn blocks the next one.
+        # Stopping that worker is the second. Sends after it stay quiet.
+        # A second worker cycle is the third.
+        self.endpoint = Endpoint()
+        code, out = self.configure(self.endpoint.url)
+        self.assertEqual(code, 0, out)
+        self.start_host("episode")
+        self.acp("send", "--text", "first-idle", "--wait")
+        wait_for(lambda: len(self.posts_with_reason("all-idle")) == 1,
+                 15, "first all-ended episode")
+        self.acp("send", "--text", "same-episode-wait", "--wait")
+        self.acp("send", "--text", "same-episode-nowait", "--no-wait")
+        wait_for(lambda: self.acp("status")[1].get("turn_active") is False,
+                 15, "same-episode send ended")
+        time.sleep(0.6)
+        self.assertEqual(len(self.posts_with_reason("all-idle")), 1)
+
+        worker = self.start_worker("episode", turn_ms=20000)
+        self.begin_active_turn(worker)
+        self.session = self.host_session
+        self.acp("send", "--text", "while-seat-works", "--wait")
+        time.sleep(0.5)
+        self.assertEqual(len(self.posts_with_reason("all-idle")), 1)
+        self.session = worker
+        status = self.acp("status")[1]
+        self.assertIs(status.get("turn_active"), True, status)
+        self.acp("stop", "--force")
+        self.worker = None
+        self.session = self.host_session
+        wait_for(lambda: len(self.posts_with_reason("all-idle")) == 2,
+                 20, "second episode after the worker stopped")
+        self.acp("send", "--text", "after-second-wait", "--wait")
+        self.acp("send", "--text", "after-second-nowait", "--no-wait")
+        wait_for(lambda: self.acp("status")[1].get("turn_active") is False,
+                 15, "post-episode send ended")
+        time.sleep(0.6)
+        self.assertEqual(len(self.posts_with_reason("all-idle")), 2)
+
+        worker = self.start_worker("episode-b", turn_ms=20000)
+        self.begin_active_turn(worker)
+        self.session = self.host_session
+        self.acp("send", "--text", "while-second-seat-works", "--no-wait")
+        wait_for(lambda: self.acp("status")[1].get("turn_active") is False,
+                 15, "second observation ended")
+        time.sleep(0.4)
+        self.assertEqual(len(self.posts_with_reason("all-idle")), 2)
+        self.session = worker
+        self.acp("stop", "--force")
+        self.worker = None
+        self.session = self.host_session
+        wait_for(lambda: len(self.posts_with_reason("all-idle")) == 3,
+                 20, "third episode after work resumed")
+        posts = self.posts_with_reason("all-idle")
+        self.assertEqual(len(posts), 3)
+        self.assertEqual(len({post["body"]["event_seq"] for post in posts}), 3)
+        self.assertTrue(all(post["body"]["state"] == "end_turn" for post in posts))
 
 
 if __name__ == "__main__":

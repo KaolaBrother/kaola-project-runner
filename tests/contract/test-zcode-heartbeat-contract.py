@@ -1221,6 +1221,9 @@ def bare_holder(module, entries: list[dict] | None = None, *,
     holder.state = "ready"
     holder._delegator_followups = {}
     holder._all_idle_woken = False
+    holder._all_ended_busy = False
+    holder._all_ended_deferred = False
+    holder._send_waiters = 0
     holder._all_idle_lock = threading.Lock()
     holder.holder_instance_id = "bare-holder-instance"
     return holder

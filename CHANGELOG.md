@@ -34,6 +34,26 @@ Seats: restart required
   `scripts/kaola-acp-holder.py` is unchanged. The next `start` records `tier_reason`.
   The next `status` or `observe` reads the model. A running holder does not restart.
   This change does not install.
+- **An all-ended episode wakes `all-idle` once, even when the previous latch is still set (Issue #317).**
+  When the Host turn is idle, no follow-up is queued, and no seat has an
+  active turn, that is one all-ended episode. The wake is `all-idle` once.
+  A Delegator-admitted turn does not suppress it, and a latch carried from an
+  earlier episode does not either. The same episode does not wake again.
+  Real work arms the next episode: a turn-end scan or a re-check that sees a
+  working non-exempt seat, a non-exempt worker stopping, or a self turn that
+  delivers worker events. A Delegator send alone does not. A live
+  `send --wait` or `op_wait` caller is not all-ended yet; the same one wake
+  runs after that caller returns, times out, or loses the reply write. The
+  reason stays `all-idle`. `event_seq` dedupe still applies. No new wake
+  kind. A Delegator turn that ends while a seat is still working stays quiet.
+  Restart judgment: `scripts/kaola-acp-holder.py` changed. It is in the
+  operator restart set (`docs/conventions.md`). A running Host keeps the
+  previous latch and does not send this wake until that Host restarts. This
+  change does not install.
+
+  Restart detail: the holder changed (`scripts/kaola-acp-holder.py`); a
+  running seat keeps suppressing that all-ended wake until it restarts.
+
 
 - **`all-idle` counts a seat only while that seat has an active turn (Issue #314).**
   The all-idle scan (`holders_dispatched_by(..., working=True)`) used to treat
