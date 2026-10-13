@@ -47,11 +47,9 @@ continue. Installation and live migration need their own authorization.
 
 ## User-facing writing
 
-Ordinary user questions, progress replies and inquiry reports use the recorded
-reply language (`project.user_language`); an unset value keeps the existing
-conversation preference. Agent-to-agent messages and documentation keep their
-own language. The style standard sets style, not language; it does not force
-English.
+Questions, progress replies and inquiry reports use `project.user_language`;
+unset keeps the conversation preference. Agent messages and documentation keep
+their language. Style sets style, not language, and does not force English.
 
 ## Native timer
 
@@ -65,6 +63,8 @@ from it. At each inquiry, read the timer back where its API allows and run
 inquiry. If it cannot be read back, report that plainly. This check never
 delays an urgent stop, never stops in-flight work and never blocks an
 unrelated user task.
+
+If `status.last_receipt` is `failed` and `final`, treat it as a missed wake and run the whole inquiry; never conclude 'nothing new' from an empty webhook run.
 
 ## Fixed report
 
@@ -90,13 +90,13 @@ report has these five parts, in order. An empty part says
    when granted). Working, idle-but-unreclaimed, reserved, held/faulted and
    unknown are distinct; `ready` alone proves none of them. Unknown is not free.
    Missing Expert authorization says “none”. Derive totals from grant/shared counts
-   and occupancy; keep service/quota/fault restrictions in their proper roles. Host/Sideagent and
-   Pool seats are exempt. The view derives these facts from current grants,
-   dispatch/task links and fresh Runner records. Keep no occupancy table in
-   either JSON. External QA target capacity needs its original resource receipt.
-   Host reads the same `project --seats` facts only when needed for dispatch;
-   there is no compulsory Host report or added injection. Missing facts stay
-   explicit; `--live`, `--index` and `--availability` accept existing receipts.
+   and occupancy; keep service/quota/fault restrictions in their roles.
+   Host/Sideagent and Pool seats are exempt. Derive the summary from grants,
+   task links and Runner records. Keep no occupancy table in either JSON.
+   External QA capacity needs its original resource receipt. Host reads
+   `project --seats` only for dispatch; no compulsory Host report or injection.
+   Missing facts stay explicit; `--live`, `--index` and `--availability` accept
+   existing receipts.
 2. Special situations: holds, alerts (`watch`, `warn`, `severe`), major
    pending decisions and `unverified` items. Every unresolved one is reported
    again each time, coalesced, never escalated by elapsed time alone. With a

@@ -64,6 +64,34 @@ Seats: restart required
   running seat does not read `state.decisions`, and does not fall back to
   `all-idle` on a silent turn, until it restarts.
 
+- **A final failed webhook delivery names the next step, by class (Issue #318).**
+  The last failed attempt used to carry one route for every `http-status`,
+  `connection`, and `timeout`, and the three earlier rows of a retry carried
+  that same "do not retry a final receipt" text. A final HTTP 401 or 403 now
+  says to rotate the sender key (`webhook-wake.md` step 7), then `test`. A
+  final HTTP 404 says to reconfigure the URL, then `test`. A final HTTP 400,
+  408, 429, or 5xx, a final `connection`, a `timeout`, and any other final
+  `http-status` say the wake was lost: run `status`, then `observe`/`capture`
+  for the recorded Host and the full standard inquiry; run `test` once; if
+  it delivers, nothing else is owed; otherwise stay heartbeat-only and
+  report. A non-final row has no `route`. The sender is still retrying.
+  `redirect-refused` and the config and payload failures keep their routes.
+  The inquiry reference says: if `status.last_receipt` is `failed` and
+  `final`, treat it as a missed wake and run the whole inquiry; never
+  conclude that nothing is new from an empty webhook run. `missed_event_seq`
+  is not added. The three accepted payload shapes are unchanged. There is no
+  holder-side re-offer timer. The claim for that event stays.
+  Seats: restart not required. `scripts/kaola-acp.py` and
+  `scripts/kaola-recovery-routes.py` are per-call CLIs and are outside the
+  operator restart set (`docs/conventions.md`). `scripts/kaola-acp-holder.py`
+  is unchanged. Each `delegator-webhook deliver` is a new process, so a
+  running seat does not restart and does not keep the old route text. A
+  symlink install uses the new files on the next process. A copy install
+  uses them only after that copy is replaced. This change does not install.
+  A running Delegator loads the missed-wake sentence only after it reloads
+  `kaola-delegator`. The section restart still comes from the holder changes
+  above.
+
 ## 0.9.10 — 2026-10-13 (recovery routes, wake and seat diagnostics, install payload bytecode)
 
 Seats: restart required

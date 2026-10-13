@@ -138,8 +138,27 @@ class RecoveryRoutes(unittest.TestCase):
         ok = stamp({"result": "ok", "reason": "already-recovered"})
         self.assertEqual(set(ok), {"result", "reason"})
         failed = stamp({"result": "failed", "error": "timeout", "reason": "holder_lost"})
-        self.assertIn("Do not retry a final receipt", failed["route"])
+        self.assertEqual(failed["route"], self.routes.WEBHOOK_LOST_WAKE)
+        self.assertNotIn("do not retry a final receipt", failed["route"])
         self.assertNotIn("holder_lost", failed["route"])
+        self.assertEqual(
+            self.routes.webhook_delivery_route("http-status", 401, True),
+            self.routes.WEBHOOK_ROTATE_KEY)
+        self.assertEqual(
+            self.routes.webhook_delivery_route("http-status", 403, True),
+            self.routes.WEBHOOK_ROTATE_KEY)
+        self.assertEqual(
+            self.routes.webhook_delivery_route("http-status", 404, True),
+            self.routes.WEBHOOK_RECONFIGURE_URL)
+        self.assertEqual(self.routes.webhook_delivery_route("http-status", 400, False), "")
+        self.assertIsNone(self.routes.webhook_delivery_route("http-status", 400, True))
+        self.assertIsNone(self.routes.webhook_delivery_route("connection", None, True))
+        self.assertEqual(self.routes.webhook_delivery_route("connection", None, False), "")
+        self.assertIsNone(self.routes.webhook_delivery_route("timeout", None, True))
+        self.assertIsNone(self.routes.webhook_delivery_route("redirect-refused", None, True))
+        self.assertEqual(self.routes.ROUTES["http-status"][1], self.routes.WEBHOOK_LOST_WAKE)
+        self.assertEqual(self.routes.ROUTES["connection"][1], self.routes.WEBHOOK_LOST_WAKE)
+        self.assertEqual(self.routes.ROUTES["timeout"][1], self.routes.WEBHOOK_LOST_WAKE)
         duplicate = stamp({"result": "refused", "reason": "duplicate"})
         self.assertIn("route", duplicate)
 

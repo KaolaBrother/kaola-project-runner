@@ -6691,7 +6691,30 @@ def _webhook_attempt_receipt(payload: dict[str, Any], attempt: int, result: str,
         raw_reason = payload.get("reason")
         receipt["reason"] = raw_reason if isinstance(raw_reason, str) else None
     if result == "failed":
-        receipt = _stamp_recovery(receipt)
+        # #318: final rows split by class. A non-final row is still retrying
+        # and is not stamped, so it does not carry the lost-wake route.
+        receipt = _stamp_webhook_failure(receipt, error, http_status, final)
+    return receipt
+
+
+def _stamp_webhook_failure(receipt: dict[str, Any], error: str | None,
+                           http_status: int | None, final: bool) -> dict[str, Any]:
+    """Attach the #318 class route, or leave a retrying row unstamped.
+
+    ``None`` from the routes module means the error-code table, including the
+    lost-wake text on a final connection, timeout, or other final HTTP status.
+    ``""`` means do not stamp. A non-empty string is that route.
+    """
+    module = _load_recovery_routes()
+    chosen = None
+    if module is not None:
+        choose = getattr(module, "webhook_delivery_route", None)
+        if choose is not None:
+            chosen = choose(error, http_status, final)
+    if chosen is None:
+        return _stamp_recovery(receipt)
+    if chosen:
+        receipt["route"] = chosen
     return receipt
 
 

@@ -471,6 +471,8 @@ class WakeGate(issue299.WebhookCase):
         self.assertNotIn("skip_reason", receipts[0])
         self.assertEqual(receipts[0]["attempt"], 1)
         self.assertIs(receipts[0]["final"], True)
+        self.assertEqual(receipts[0]["route"], issue299.LOST_WAKE_ROUTE)
+        self.assertNotIn(issue299.FINAL_RECEIPT_TEXT, receipts[0]["route"])
         time.sleep(1.0)
         self.assertEqual(len(self.endpoint.posts), 1)
 
@@ -486,6 +488,11 @@ class WakeGate(issue299.WebhookCase):
         self.assertTrue(all(item["reason"] == "exact_stop" for item in connection))
         self.assertIs(connection[0]["final"], False)
         self.assertIs(connection[-1]["final"], True)
+        for item in connection[:-1]:
+            self.assertNotIn("route", item)
+            self.assertNotIn("self_route", item)
+            self.assertNotIn(issue299.FINAL_RECEIPT_TEXT, json.dumps(item))
+        self.assertEqual(connection[-1]["route"], issue299.LOST_WAKE_ROUTE)
 
         # Issue #311: 400 joins the delayed retry set. 401, 403 and 404 stay
         # final on attempt 1. Other 4xx stay final too (422 stands for them).
@@ -501,8 +508,20 @@ class WakeGate(issue299.WebhookCase):
             self.assertTrue(all(item["http_status"] == code for item in matching))
             self.assertEqual(len(self.endpoint.posts), attempts, code)
             self.assertIs(matching[-1]["final"], True)
+            if code in (401, 403):
+                expected = issue299.ROTATE_KEY_ROUTE
+            elif code == 404:
+                expected = issue299.RECONFIGURE_URL_ROUTE
+            else:
+                expected = issue299.LOST_WAKE_ROUTE
+            self.assertEqual(matching[-1]["route"], expected, code)
+            self.assertNotIn(issue299.FINAL_RECEIPT_TEXT, matching[-1]["route"])
             if attempts > 1:
                 self.assertIs(matching[0]["final"], False)
+                for item in matching[:-1]:
+                    self.assertNotIn("route", item, code)
+                    self.assertNotIn("self_route", item, code)
+                    self.assertNotIn(issue299.FINAL_RECEIPT_TEXT, json.dumps(item))
 
     def test_duplicate_event_posts_once_and_recovery_seq_does_not(self) -> None:
         self.endpoint = Endpoint(sleep_seconds=0.4)

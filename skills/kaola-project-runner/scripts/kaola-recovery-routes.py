@@ -19,6 +19,16 @@ FALLBACK = (
     "Self-route: read detail and status before any stop or start. "
     "Do not repeat the refused command unchanged and do not start a second session on a guess."
 )
+# Issue #318. One lost wake, not a holder timer. 401/403 and 404 replace this
+# text; a non-final delivery row is not stamped with it.
+WEBHOOK_LOST_WAKE = (
+    "This wake was lost; run status, then observe/capture for the recorded Host "
+    "and the full standard inquiry; run test once — if it delivers, nothing else "
+    "is owed; otherwise stay heartbeat-only and report."
+)
+WEBHOOK_ROTATE_KEY = "Rotate the sender key (webhook-wake.md step 7), then test."
+WEBHOOK_RECONFIGURE_URL = "Reconfigure the URL, then test."
+_WEBHOOK_DELIVERY_ERRORS = frozenset({"http-status", "connection", "timeout"})
 
 ROUTES: dict[str, tuple[str, str]] = {
     "accepted-revision-superseded": ("route", "A newer revision is accepted. Remove the registration receipt before rolling back, then register."),
@@ -74,7 +84,7 @@ ROUTES: dict[str, tuple[str, str]] = {
     "config-option-unavailable": ("route", "Omit --option or pass a config id this platform advertises."),
     "config-source-unreadable": ("route", "The config source cannot be read. Fix the path named in the receipt and rerun."),
     "conflict": ("route", "Read detail and the current revision. Run the state command detail names (init, migrate, update, or retire) with that revision. Do not write a second file or retry the same patch unchanged."),
-    "connection": ("route", "Report result, http_status, error, and response_body. Do not retry a final receipt and do not POST by hand. Stay heartbeat-only when test does not wake the routine."),
+    "connection": ("route", WEBHOOK_LOST_WAKE),
     "continue-ambiguous": ("route", "Exact-stop this session (stop --repo REPO --session SESSION --expected-holder-instance-id ID), attest, then start --resume NATIVE_ID. If resume still fails, start a fresh Host session and hand it the summary from status, capture --lines 200, list --repo --include-dead, and delegator view (goals, decisions, in-flight tasks, live seats and holders, pending items). The new Host re-adopts live seats from that list. Do not retry the dead session. This build does not auto-reap an unowned exited job."),
     "continue-empty": ("route", "Exact-stop this session (stop --repo REPO --session SESSION --expected-holder-instance-id ID), attest, then start --resume NATIVE_ID. If resume still fails, start a fresh Host session and hand it the summary from status, capture --lines 200, list --repo --include-dead, and delegator view (goals, decisions, in-flight tasks, live seats and holders, pending items). The new Host re-adopts live seats from that list. Do not retry the dead session. This build does not auto-reap an unowned exited job."),
     "continue-list-cursor-loop": ("route", "Exact-stop this session (stop --repo REPO --session SESSION --expected-holder-instance-id ID), attest, then start --resume NATIVE_ID. If resume still fails, start a fresh Host session and hand it the summary from status, capture --lines 200, list --repo --include-dead, and delegator view (goals, decisions, in-flight tasks, live seats and holders, pending items). The new Host re-adopts live seats from that list. Do not retry the dead session. This build does not auto-reap an unowned exited job."),
@@ -136,7 +146,7 @@ ROUTES: dict[str, tuple[str, str]] = {
     "host-turn-required": ("route", "Read detail and the current revision. Run the state command detail names (init, migrate, update, or retire) with that revision. Do not write a second file or retry the same patch unchanged."),
     "host-unreachable": ("route", "Exact-stop this session (stop --repo REPO --session SESSION --expected-holder-instance-id ID), attest, then start --resume NATIVE_ID. If resume still fails, start a fresh Host session and hand it the summary from status, capture --lines 200, list --repo --include-dead, and delegator view (goals, decisions, in-flight tasks, live seats and holders, pending items). The new Host re-adopts live seats from that list. Do not retry the dead session. This build does not auto-reap an unowned exited job."),
     "host-view-too-large": ("route", "Read detail and the current revision. Run the state command detail names (init, migrate, update, or retire) with that revision. Do not write a second file or retry the same patch unchanged."),
-    "http-status": ("route", "Report result, http_status, error, and response_body. Do not retry a final receipt and do not POST by hand. Stay heartbeat-only when test does not wake the routine."),
+    "http-status": ("route", WEBHOOK_LOST_WAKE),
     "identity-mismatch": ("self-route", "Do not retry this target. Re-read status or the locator receipt and operate only the named session, repo, and holder_instance_id."),
     "identity-unavailable": ("self-route", "Do not retry this target. Re-read status or the locator receipt and operate only the named session, repo, and holder_instance_id."),
     "index-unidentified": ("self-route", "Do not retry this target. Re-read status or the locator receipt and operate only the named session, repo, and holder_instance_id."),
@@ -342,7 +352,7 @@ ROUTES: dict[str, tuple[str, str]] = {
     "target-mismatch": ("route", "The declared --target does not match registration. Do not reuse this receipt."),
     "target-required": ("route", "Pass --target local or cloud when attesting a project, worker, or session."),
     "tier-not-declared": ("route", "Fix the named argument in detail and rerun the same command. Do not start a second session or bootstrap a partial job."),
-    "timeout": ("route", "Report result, http_status, error, and response_body. Do not retry a final receipt and do not POST by hand. Stay heartbeat-only when test does not wake the routine."),
+    "timeout": ("route", WEBHOOK_LOST_WAKE),
     "transport-pty-retired": ("route", "Re-run without --transport (or with --transport acp)."),
     "turn-failed": ("route", "Exact-stop this session (stop --repo REPO --session SESSION --expected-holder-instance-id ID), attest, then start --resume NATIVE_ID. If resume still fails, start a fresh Host session and hand it the summary from status, capture --lines 200, list --repo --include-dead, and delegator view (goals, decisions, in-flight tasks, live seats and holders, pending items). The new Host re-adopts live seats from that list. Do not retry the dead session. This build does not auto-reap an unowned exited job."),
     "turn-fingerprint-differs": ("self-route", "The prompt fingerprint does not match the admitted turn. Read capture and do not accept the result. Collect again after the Host identifies the turn."),
@@ -371,6 +381,30 @@ def lookup(code: str) -> tuple[str, str]:
     if found is not None:
         return found
     return ("self-route", f"{code}: {FALLBACK}")
+
+
+def webhook_delivery_route(error: str | None, http_status: object, final: bool) -> str | None:
+    """Class split for one failed webhook delivery row (#318).
+
+    ``None`` means stamp from the error code. ``""`` means a non-final
+    ``connection`` or ``http-status`` row: the sender is still retrying, so
+    the row gets no route. A non-empty string is the route and replaces stamp.
+
+    Final 401 and 403 rotate the sender key. Final 404 reconfigures the URL.
+    A final connection, timeout, or any other final HTTP status uses the table
+    text (the lost-wake route). That includes 400, 408, 429, 5xx, and any
+    other final 4xx. ``redirect-refused`` and config or payload errors are
+    not this split. There is no holder-side re-offer timer.
+    """
+    if error not in _WEBHOOK_DELIVERY_ERRORS:
+        return None
+    if not final:
+        return ""
+    if error == "http-status" and http_status in (401, 403):
+        return WEBHOOK_ROTATE_KEY
+    if error == "http-status" and http_status == 404:
+        return WEBHOOK_RECONFIGURE_URL
+    return None
 
 
 def _already(payload: dict[str, Any]) -> bool:

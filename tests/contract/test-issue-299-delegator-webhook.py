@@ -52,6 +52,19 @@ ATTEMPT_RECEIPT_KEYS = {"ts", "state", "state_detail", "session",
                         "http_status", "error", "elapsed_ms", "final",
                         "response_body", "response_body_truncated",
                         "response_headers"}
+# Issue #318. The final row's route, and the sentence the inquiry must read.
+LOST_WAKE_ROUTE = (
+    "This wake was lost; run status, then observe/capture for the recorded Host "
+    "and the full standard inquiry; run test once — if it delivers, nothing else "
+    "is owed; otherwise stay heartbeat-only and report."
+)
+ROTATE_KEY_ROUTE = "Rotate the sender key (webhook-wake.md step 7), then test."
+RECONFIGURE_URL_ROUTE = "Reconfigure the URL, then test."
+MISSED_WAKE_INQUIRY = (
+    "If `status.last_receipt` is `failed` and `final`, treat it as a missed wake "
+    "and run the whole inquiry; never conclude 'nothing new' from an empty webhook run."
+)
+FINAL_RECEIPT_TEXT = "do not retry a final receipt"
 
 
 def wait_for(predicate, timeout: float, label: str, interval: float = 0.05):
@@ -841,6 +854,8 @@ class DeliveryCli(WebhookCase):
         self.assertEqual(failed["http_status"], 401)
         self.assertEqual(failed["attempt"], 1)
         self.assertIs(failed["final"], True)
+        self.assertEqual(failed["route"], ROTATE_KEY_ROUTE)
+        self.assertNotIn(FINAL_RECEIPT_TEXT, failed["route"])
         self.assertEqual(failed["response_body"], '{"error":"nope"}')
         self.assertIs(failed["response_body_truncated"], False)
         self.assertEqual(failed["response_headers"]["content-type"], "application/json")
@@ -1015,10 +1030,41 @@ class DeliveryCli(WebhookCase):
             self.assertEqual(item["response_headers"]["x-request-id"], "[redacted]")
             self.assertEqual(item["response_headers"]["www-authenticate"], "Bearer [redacted]")
             self.assertNotIn("x-unlisted", item["response_headers"])
+        for item in matching[:-1]:
+            self.assertIs(item["final"], False)
+            self.assertNotIn("route", item)
+            self.assertNotIn("self_route", item)
+            self.assertNotIn(FINAL_RECEIPT_TEXT, json.dumps(item))
+            self.assertNotIn("This wake was lost", json.dumps(item))
+        self.assertEqual(matching[-1]["route"], LOST_WAKE_ROUTE)
+        self.assertNotIn(FINAL_RECEIPT_TEXT, matching[-1]["route"])
         raw = self.receipts_path().read_text(encoding="utf-8")
         self.assertNotIn(key, raw)
         self.assertNotIn(encoded, raw)
         self.assertNotIn(url, raw)
+
+    def test_final_401_403_404_carry_their_routes(self) -> None:
+        self.endpoint = Endpoint()
+        payload = {"schema": "kaola-delegator-wake/1", "project": self.project,
+                   "session": "s1", "holder_instance_id": "h-class",
+                   "event_seq": 1, "state": "error", "state_detail": "turn_failed",
+                   "reason": "turn_failed", "ts": "2026-01-01T00:00:00Z"}
+        for status, route in ((401, ROTATE_KEY_ROUTE), (403, ROTATE_KEY_ROUTE),
+                              (404, RECONFIGURE_URL_ROUTE)):
+            self.endpoint.posts.clear()
+            self._url_config(f"http://127.0.0.1:{self.endpoint.port}/status/{status}")
+            body = dict(payload)
+            body["event_seq"] = status
+            proc = self.deliver(body, timeout=15)
+            self.assertEqual(proc.returncode, 1, status)
+            rows = [item for item in self.receipts() if item.get("event_seq") == status]
+            self.assertEqual(len(rows), 1, status)
+            self.assertEqual(rows[0]["http_status"], status)
+            self.assertIs(rows[0]["final"], True)
+            self.assertEqual(rows[0]["route"], route)
+            self.assertNotIn(FINAL_RECEIPT_TEXT, rows[0]["route"])
+            self.assertNotIn(LOST_WAKE_ROUTE, rows[0]["route"])
+            self.assertEqual(len(self.endpoint.posts), 1, status)
 
 
 class HolderLostStatus(WebhookCase):
@@ -1511,6 +1557,17 @@ class RecordContractWakeMode(WebhookCase):
         view = json.loads(proc.stdout)
         self.assertEqual(view["timer_owner"]["wake_mode"], "webhook+heartbeat")
         self.assertEqual(view["timer_owner"]["webhook_routine_id"], "r1")
+
+
+class MissedWakeInquiry(unittest.TestCase):
+    """Issue #318: the rendered inquiry reference names a missed wake."""
+
+    def test_rendered_inquiry_reference_contains_the_missed_wake_instruction(self) -> None:
+        template = REPO / "templates" / "kaola-delegator" / "references" / "inquiry-report.md"
+        rendered = REPO / "skills" / "kaola-delegator" / "references" / "inquiry-report.md"
+        self.assertIn(MISSED_WAKE_INQUIRY, template.read_text(encoding="utf-8"))
+        self.assertEqual(rendered.read_bytes(), template.read_bytes())
+        self.assertLessEqual(len(template.read_bytes()), 8192)
 
 
 if __name__ == "__main__":

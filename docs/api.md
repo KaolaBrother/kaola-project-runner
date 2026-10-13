@@ -527,6 +527,8 @@ a stored index stays compatible; when that code is the receipt `reason` or
 The holder process is unchanged. The CLI, launch broker, locator, dispatch
 entry, installer, and Grok Bot verifier attach the field on the next process.
 A direct holder-socket client does not see it. The agent path is the CLI.
+A webhook delivery failure splits that route by HTTP class and by whether the
+row is final. The split is in the delegator-webhook receipt section below.
 
 A Host that cannot be resumed (timeout, `resume-failed`, `holder-lost`, an
 unowned exited launchd job) is exact-stopped, attested, then `start --resume`.
@@ -1104,7 +1106,30 @@ the newest stored receipt whose `state` is `test`. Readiness stays
 receipt whose `reason` is `not-configured` or `duplicate` as that skip cause.
 
 `error` is one of `timeout`, `connection`, `http-status`, `redirect-refused`,
-`invalid-config`, `config-mode`, `invalid-payload`, or null. Receipts land in
+`invalid-config`, `config-mode`, `invalid-payload`, or null.
+
+A failed delivery row carries `route` only when `final` is true (#318).
+HTTP 401 and 403: rotate the sender key
+(`templates/kaola-delegator/references/webhook-wake.md` step 7), then `test`.
+HTTP 404: reconfigure the URL, then `test`. A final HTTP 400, 408, 429, or
+5xx, a final `connection`, a `timeout`, and any other final `http-status`
+(for example 405, 409, or 422) say this wake was lost: run `status`, then
+`observe`/`capture` for the recorded Host and the full standard inquiry; run
+`test` once; if it delivers, nothing else is owed; otherwise stay
+heartbeat-only and report. A non-final row (`final` false) has no `route`.
+The sender is still retrying that deliver, and the row does not say to stop
+for a final receipt. `redirect-refused`, `invalid-config`, `config-mode`,
+and `invalid-payload` keep their own routes. The holder does not re-offer
+the wake on a timer. The claim stays, so that `event_seq` is not POSTed again.
+
+The Delegator inquiry treats `status.last_receipt` with `result` `failed`
+and `final` true as a missed wake. The sentence is in
+`templates/kaola-delegator/references/inquiry-report.md`: run the whole
+inquiry, and never conclude that nothing is new from an empty webhook run.
+`missed_event_seq` is not a payload field. The three accepted shapes above
+are unchanged.
+
+Receipts land in
 `<repo>/.kaola/delegator-webhook-receipts.json`
 (`{"schema": "kaola-delegator-webhook-receipts/1", "limit": 32, "receipts": [...]}`,
 last 32 attempts oldest-first, mode 0600, atomic replace under a sidecar flock).
