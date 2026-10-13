@@ -39,8 +39,11 @@ class CodexChildPathTests(unittest.TestCase):
         self.manifest = self.acp.load_manifest("codex")
 
     def args(self, **overrides):
+        # #308: spawn_holder_outside also reads the resume flags when it
+        # builds the outside-caller launch; fixtures set the no-resume shape.
         values = {"platform": "codex", "manifest": self.manifest,
-                  "agent_command_given": False}
+                  "agent_command_given": False,
+                  "resume": None, "use_continue": None}
         values.update(overrides)
         return argparse.Namespace(**values)
 

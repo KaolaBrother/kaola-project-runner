@@ -27,7 +27,11 @@ spec.loader.exec_module(paths)
 
 class AcrossCallerRoots(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(prefix='i278-', dir='/tmp')
+        # Scratch only: a late .git write from the stopped mock holder can
+        # race macOS rmtree at teardown (Errno 66); that noise must not
+        # fail a test whose assertions already passed.
+        self.tmp = tempfile.TemporaryDirectory(prefix='i278-', dir='/tmp',
+                                                ignore_cleanup_errors=True)
         self.addCleanup(self.tmp.cleanup)
         self.base = Path(self.tmp.name)
         self.repo = self.base / 'repo'
