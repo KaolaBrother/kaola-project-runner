@@ -54,6 +54,23 @@ Seats: restart required
   Restart detail: the holder changed (`scripts/kaola-acp-holder.py`); a
   running seat keeps suppressing that all-ended wake until it restarts.
 
+<<<<<<< HEAD
+=======
+- **The Host can wake the Delegator while seats are still working (Issue #317).**
+  `kaola-acp.py <platform> wake --reason REASON` asks the Host holder to send
+  now. `REASON` is `needs_decision`, `question_waiting`, or `delivery_review`.
+  The payload is `state` `end_turn`, `state_detail` `host_initiated`. The
+  all-idle latch, a Delegator turn, and a live waiter do not suppress it, and
+  the call does not change the latch. Each call appends
+  `delegator_wake_requested` and is a new `event_seq`. These two rules are
+  the core model: all-ended `all-idle` once per episode, and this explicit
+  call. Permission, turn failure, agent exit, boot failure, exact stop, and
+  `holder_lost` stay their own wakes. The turn-end decision scan and
+  `host_stopped_pending` stay too. No stuck-seat timer, no crash wake beyond
+  #299, and no delivery-failure wake (#318). No new reason word.
+  Restart judgment: `scripts/kaola-acp-holder.py` changed, same Unreleased
+  restart line. A running Host does not accept `wake` until it restarts.
+>>>>>>> 85ca4bf1 (fix(#317): let the Host wake the Delegator while seats work)
 
 - **`all-idle` counts a seat only while that seat has an active turn (Issue #314).**
   The all-idle scan (`holders_dispatched_by(..., working=True)`) used to treat

@@ -1542,6 +1542,99 @@ class WakeGate(issue299.WebhookCase):
         self.assertEqual(len({post["body"]["event_seq"] for post in posts}), 3)
         self.assertTrue(all(post["body"]["state"] == "end_turn" for post in posts))
 
+    def test_issue_317_host_wake_while_a_seat_works(self) -> None:
+        # Rule 2. The Host records the request by calling the holder. The
+        # wake is that call, not the all-ended transition. A working seat
+        # and a set latch do not suppress it, and the call does not clear
+        # the latch. A second call is a new event. Replaying the first
+        # event_seq does not POST again.
+        self.endpoint = Endpoint()
+        self.configure_endpoint()
+        proc = None
+        with self.webhook_process_env():
+            host = self.idle_host("host-wake")
+            holder_id = host.holder_instance_id
+            host._all_idle_woken = True
+            host._all_ended_busy = False
+            try:
+                proc, _record_dir = self.spawn_seat(
+                    "grok-i317-wake", "expert", "ready", holder_id,
+                    last_prompt={"mutation_status": "in_progress"})
+                found = wait_for(
+                    lambda: holder.holders_dispatched_by(holder_id, working=True) or None,
+                    5, "seat still working")
+                self.assertEqual(found, [proc.pid])
+                refused = host.op_wake_delegator({"reason": "all-idle"})
+                self.assertEqual(refused.get("error", {}).get("code"), "wake-reason-refused")
+                host.session_role = "expert"
+                not_host = host.op_wake_delegator({"reason": "needs_decision"})
+                self.assertEqual(not_host.get("error", {}).get("code"), "wake-not-host")
+                host.session_role = "host"
+                receipt = host.op_wake_delegator({"reason": "needs_decision"})
+                self.assertTrue(receipt.get("woke"), receipt)
+                self.assertEqual(receipt.get("state_detail"), "host_initiated")
+                post = wait_for(
+                    lambda: (self.posts_for(holder_id, "needs_decision") or [None])[-1],
+                    15, "needs_decision while the seat works")
+                self.assertEqual(post["body"]["state"], "end_turn")
+                self.assertEqual(post["body"]["state_detail"], "host_initiated")
+                self.assertEqual(post["body"]["event_seq"], receipt["event_seq"])
+                self.assertEqual(
+                    holder.holders_dispatched_by(holder_id, working=True), [proc.pid])
+                self.assertFalse(self.posts_for(holder_id, "all-idle"))
+                self.assertTrue(host._all_idle_woken)
+                self.assertFalse(host._all_ended_busy)
+                replay = self.deliver(post["body"], timeout=20)
+                self.assertEqual(replay.returncode, 0, replay.stderr)
+                time.sleep(0.4)
+                self.assertEqual(len(self.posts_for(holder_id, "needs_decision")), 1)
+                second = host.op_wake_delegator({"reason": "question_waiting"})
+                self.assertTrue(second.get("woke"), second)
+                self.assertNotEqual(second["event_seq"], receipt["event_seq"])
+                wait_for(
+                    lambda: self.posts_for(holder_id, "question_waiting") or None,
+                    15, "second explicit wake")
+                self.assertEqual(
+                    holder.holders_dispatched_by(holder_id, working=True), [proc.pid])
+                self.assertFalse(self.posts_for(holder_id, "all-idle"))
+            finally:
+                if proc is not None and proc.poll() is None:
+                    proc.kill()
+                    proc.wait(timeout=5)
+
+    def test_issue_317_cli_wake_does_not_wait_for_the_seat(self) -> None:
+        # The same call through the CLI, with a real worker turn still open.
+        self.endpoint = Endpoint()
+        code, out = self.configure(self.endpoint.url)
+        self.assertEqual(code, 0, out)
+        self.start_host("cli-wake")
+        worker = self.start_worker("cli-wake", turn_ms=20000)
+        self.begin_active_turn(worker)
+        self.session = self.host_session
+        _code, receipt = self.acp("wake", "--reason", "needs_decision")
+        self.assertTrue(receipt.get("woke"), receipt)
+        self.assertEqual(receipt.get("reason"), "needs_decision")
+        post = wait_for(lambda: (self.posts_with_reason("needs_decision") or [None])[-1],
+                        15, "CLI wake while the worker turn is open")
+        self.assertEqual(post["body"]["state_detail"], "host_initiated")
+        self.assertEqual(post["body"]["state"], "end_turn")
+        self.session = worker
+        status = self.acp("status")[1]
+        self.assertIs(status.get("turn_active"), True, status)
+        self.session = self.host_session
+        self.assertFalse(self.posts_with_reason("all-idle"))
+        _code, second = self.acp("wake", "--reason", "delivery_review")
+        self.assertNotEqual(second.get("event_seq"), receipt.get("event_seq"))
+        wait_for(lambda: self.posts_with_reason("delivery_review") or None,
+                 15, "second CLI wake")
+        self.session = worker
+        status = self.acp("status")[1]
+        self.assertIs(status.get("turn_active"), True, status)
+        time.sleep(0.4)
+        self.assertEqual(len(self.posts_with_reason("needs_decision")), 1)
+        self.assertEqual(len(self.posts_with_reason("delivery_review")), 1)
+        self.assertFalse(self.posts_with_reason("all-idle"))
+
 
 if __name__ == "__main__":
     unittest.main()

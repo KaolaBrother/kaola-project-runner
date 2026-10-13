@@ -820,6 +820,30 @@ the prompt source was the Delegator. Exact stop is spawned inline because the
 holder exits with its reply. A canceled turn under a requested stop does not
 send its own wake; exact stop covers it.
 
+Host-initiated wake (Issue #317, Yanlei 2026-10-14 00:46). The Host calls
+`kaola-acp.py <platform> wake --repo REPO --session SESSION --reason REASON`
+on its own holder. `REASON` is `needs_decision` (a decision, a grant, or a
+blocker), `question_waiting`, or `delivery_review`. The holder appends
+`delegator_wake_requested` and sends at that call. Seats may still be in a
+turn. The all-idle latch, a Delegator-caused turn, and a live `send --wait`
+do not suppress it, and the call does not set or clear the latch. `state` is
+`end_turn`. `state_detail` is `host_initiated`. Each call is a new
+`event_seq`. A second deliver of that pair does not POST. Any other reason
+is refused and sends nothing. A session that is not the Host is refused.
+No new reason word.
+
+The two rules are the core model. Rule 1 is the all-ended `all-idle` below.
+Rule 2 is this call. Folded into them: a silent turn and the stop re-check
+are rule 1, not a second idle wake; a decision, question, or delivery review
+the Host wants sent while seats still work is rule 2, not a new per-turn
+reason. Kept, because they are different facts: `permission_required`,
+`turn_failed`, `agent_exited`, `boot_failure`, `exact_stop`, and
+`holder_lost`. Also kept: the turn-end attention scan when no seat is in a
+turn (Issue #315), and `host_stopped_pending` or a refusal `needs_decision`
+while a seat is still in a turn. A stuck seat is rule 2 when the Host judges
+it stuck; this issue adds no timer. A Host crash or hang stays the #299
+`holder_lost` backfill. A delivery failure is #318 and is not a wake here.
+
 A completed turn, or a cancel that was not requested, wakes only when the
 Delegator is not already there and the Host did not continue by itself:
 
@@ -897,7 +921,7 @@ does not POST again. A self turn that delivers new worker events clears the
 latch, and the next all-idle transition wakes once. A `ps` failure looks like no seats and,
 when the latch is clear, wakes `all-idle`. With a seat still working, a
 Delegator-caused turn does not wake, and a waiting question wins over a
-delivery review. `state` for these rows is `end_turn`. `state_detail` stays
+delivery review. An explicit `wake` call still sends while that seat works. `state` for these rows is `end_turn`. `state_detail` stays
 the agent's ACP `stopReason` when it is a clean token, otherwise `"other"`,
 `"cancelled"`, or null, as in the table below.
 

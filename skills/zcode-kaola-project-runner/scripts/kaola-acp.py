@@ -6706,6 +6706,13 @@ DELEGATOR_WEBHOOK_REASONS = frozenset({
     "all-idle",
     "test",
 })
+# Issue #317. The Host's explicit wake. Same three tokens as
+# HOST_INITIATED_WAKE_REASONS in kaola-acp-holder.py. Not a new vocabulary.
+HOST_INITIATED_WAKE_REASONS = frozenset({
+    "needs_decision",
+    "question_waiting",
+    "delivery_review",
+})
 DELEGATOR_WEBHOOK_DETAIL_RE = re.compile(r"[A-Za-z0-9_.:-]{1,64}")
 DELEGATOR_WEBHOOK_PAYLOAD_STATES = frozenset(
     {"end_turn", "blocked", "error", "stopped", "test"})
@@ -7658,7 +7665,7 @@ def main() -> int:
     parser.add_argument("command", choices=[
         "preflight", "start", "send", "steer", "wait", "observe", "capture",
         "permit", "key", "answer", "cancel", "stop", "status", "view",
-        "follow", "drain-restart", "rebind-host",
+        "follow", "drain-restart", "rebind-host", "wake",
     ])
     parser.add_argument("--repo", required=True)
     parser.add_argument("--session")
@@ -7667,6 +7674,7 @@ def main() -> int:
     parser.add_argument("--resume")
     parser.add_argument("--continue", dest="use_continue", action="store_true")
     parser.add_argument("--text")
+    parser.add_argument("--reason")
     parser.add_argument("--stdin", action="store_true")
     parser.add_argument("--wait", dest="wait", action="store_true", default=None)
     parser.add_argument("--no-wait", dest="wait", action="store_false")
@@ -7971,6 +7979,20 @@ def main() -> int:
         receipt = base_receipt(args, repo)
         receipt["error"] = {"code": "answer-unsupported",
                             "message": "use send; --decision-id maps to permit --request-id"}
+    elif args.command == "wake":
+        # Issue #317: explicit Host wake. The holder mints event_seq and
+        # sends now. Seats may still be working. This is not all-idle.
+        if args.reason not in HOST_INITIATED_WAKE_REASONS:
+            die("wake requires --reason needs_decision, question_waiting, "
+                "or delivery_review")
+        record = read_record(directory)
+        params = {"reason": args.reason}
+        if args.expected_holder_instance_id is not None:
+            params["expected_holder_instance_id"] = args.expected_holder_instance_id
+        elif isinstance((record or {}).get("holder_instance_id"), str):
+            params["expected_holder_instance_id"] = record["holder_instance_id"]
+        receipt = op_or_holder_lost(
+            args, repo, directory, "wake_delegator", params, sock_timeout)
     elif args.command == "stop":
         # Issue #73: a stop is bound to the exact holder instance the Agent
         # verified, so a same-named session rebuilt by a later instance is

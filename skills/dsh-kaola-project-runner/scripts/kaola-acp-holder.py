@@ -309,6 +309,15 @@ DELEGATOR_DELIVERY_WHYS = frozenset({"awaiting-verdict", "delivery-open", "verdi
 # Issue #315: owners whose open ``state.decisions`` row is not already an
 # attention item. ``owner`` ``host`` is ``why`` ``host-decision`` in the view.
 DELEGATOR_DECISION_OWNERS = frozenset({"delegator", "user"})
+# Issue #317: reasons the Host may send on purpose, without waiting for
+# every process to end. Not a new vocabulary. ``all-idle`` stays the
+# automatic all-ended wake. Permission, failure, exit, boot, exact stop,
+# and ``holder_lost`` keep their own call sites.
+HOST_INITIATED_WAKE_REASONS = frozenset({
+    "needs_decision",
+    "question_waiting",
+    "delivery_review",
+})
 
 
 def open_registered_decision_rows(doc: Any) -> list[dict[str, Any]]:
@@ -1566,7 +1575,7 @@ FOLLOW_HEARTBEAT_SECONDS = 5.0
 FOLLOW_SNDBUF = 4096
 FOLLOW_DROP_GRACE = 2.0
 FOLLOW_WRITE_OPS = frozenset({"prompt", "steer", "steer_interrupt", "permit",
-                              "cancel", "stop"})
+                              "cancel", "stop", "wake_delegator"})
 
 
 def _as_text(value: Any) -> str:
@@ -5471,6 +5480,37 @@ class Holder:
             self._deliver_worker_events()
 
 
+    def op_wake_delegator(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Issue #317: the Host wakes the Delegator now, seats may still be working.
+
+        This is the explicit rule. It does not read the all-idle latch, the
+        prompt source, live seats, or a live ``send --wait``. It does not
+        change that latch. The event row is the record. ``event_seq`` is that
+        row's cursor, so a replay of this event does not POST twice and the
+        next call is a new event. ``all-idle`` is not a reason here.
+        """
+        if self.session_role != "host":
+            return {"error": {"code": "wake-not-host",
+                              "message": "only the Host holder can wake the Delegator"}}
+        expected = params.get("expected_holder_instance_id")
+        if expected is not None and expected != self.holder_instance_id:
+            return self._holder_instance_mismatch("wake_delegator", expected)
+        reason = params.get("reason")
+        if reason not in HOST_INITIATED_WAKE_REASONS:
+            return {"error": {
+                "code": "wake-reason-refused",
+                "message": "wake reason must be needs_decision, "
+                           "question_waiting, or delivery_review",
+            }}
+        event_seq = self.events.append({
+            "kind": "delegator_wake_requested",
+            "reason": reason,
+        })
+        self._delegator_wake("end_turn", "host_initiated", reason)
+        return {"woke": True, "reason": reason, "event_seq": event_seq,
+                "holder_instance_id": self.holder_instance_id,
+                "state": "end_turn", "state_detail": "host_initiated"}
+
     def op_wait(self, params: dict[str, Any]) -> dict[str, Any]:
         timeout = params.get("timeout")
         deadline = time.monotonic() + timeout if timeout else None
@@ -6734,6 +6774,8 @@ class Holder:
             return self.op_record_start_evidence(params)
         if op == "rebind_heartbeat_host":
             return self.op_rebind_heartbeat_host(params)
+        if op == "wake_delegator":
+            return self.op_wake_delegator(params)
         if op == "stop":
             return self.op_stop(params)
         return {"error": {"code": "unknown-op", "message": f"unsupported op {op}"}}
