@@ -243,7 +243,7 @@ class RecoveryRoutes(unittest.TestCase):
         # #309's own entry keeps its per-entry judgment (holder unchanged for
         # its text); the bare section token stays exactly one (#162).
         self.assertIn("\nSeats: restart required\n", unreleased)
-        self.assertIn("the holder process is unchanged", unreleased)
+        self.assertIn("The holder process is unchanged", unreleased)
         self.assertIn("Issue #309", unreleased)
         validate = (REPO / "scripts" / "validate.sh").read_text(encoding="utf-8")
         self.assertEqual(validate.count('"test-issue-309-recovery-routes.py"'), 2)
