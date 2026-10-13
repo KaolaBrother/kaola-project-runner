@@ -6,6 +6,34 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+Seats: restart required
+
+- **Covered maintenance-returned inputs leave, and a partial checkpoint names its missing sources (Issue #310).**
+  A verified checkpoint drops a returned input whose `host_revision_through` is at or
+  below that checkpoint's `host_revision.through`. A `batch:` input stays while a
+  returned `host:` change at or below that revision is still open. `recovery#` and
+  any other non-batch input clear on that coverage alone. A verified checkpoint that
+  settled `recovery#N` drops that exact input even when its revision is above the
+  checkpoint range. A later recovery sequence does not satisfy an older one. An input
+  with no `host_revision_through` that this checkpoint did not settle stays. Stop
+  duties stay until the exact stop. A partial checkpoint does not coverage-clear.
+  The holder copies only the recovery inputs that remain into the next batch's
+  `recovery_alerts`. A later failure record does not put a covered input back.
+  A `recovery#` this checkpoint did not settle, at that checkpoint's own
+  revision, is still recorded.
+  A partial checkpoint record includes `missing_sources`, mapping each unsettled
+  input to `recovery-sources-empty`, `not-in-batch`, `unaccounted`, or `other`.
+  `returned_to_host` keeps the detailed reason. The carrier's `checkpoint-partial`
+  alert input and the holder's settled event carry the same map, and the Host wake
+  names each source.
+  Restart judgment: `scripts/kaola-acp-holder.py` and `scripts/kaola-record-contract.py`
+  changed. Both are in the operator restart set (`docs/conventions.md`). A running
+  holder keeps copying every `recovery#` input and does not name missing sources
+  until it restarts. The record contract is loaded with the holder. `kaola-dispatch.py`
+  is per-call, so the next checkpoint uses the new lifecycle immediately, but the
+  operator test is non-empty on the holder and the contract, so this line is restart
+  required. This change does not install.
+
 Seats: restart not required
 
 - **Webhook receipts keep a truncated HTTP error body, HTTP 400 is retried, and cron `status` wakes a lost Host (Issue #311).**

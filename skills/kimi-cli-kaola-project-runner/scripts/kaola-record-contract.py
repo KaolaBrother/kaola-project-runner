@@ -332,6 +332,132 @@ def _string_list_ok(value: Any) -> bool:
     return isinstance(value, list) and all(isinstance(item, str) for item in value)
 
 
+# A partial checkpoint names each unsettled input with one of these. A longer
+# checkpoint reason is `other`; the detailed text stays on returned_to_host.
+MISSING_SOURCE_REASONS = frozenset({
+    "recovery-sources-empty", "not-in-batch", "unaccounted", "other",
+})
+MAINTENANCE_STOP_DUTIES = frozenset({"stop-unconfirmed", "old-node-live"})
+
+
+def missing_source_reason(why: Any) -> str:
+    """The partial-source vocabulary for one checkpoint reason."""
+    return why if isinstance(why, str) and why in MISSING_SOURCE_REASONS else "other"
+
+
+def missing_sources_ok(value: Any) -> bool:
+    """A non-empty map of input id to one partial-source reason."""
+    return (isinstance(value, dict) and bool(value)
+            and all(isinstance(key, str) and key and isinstance(item, str) and item in MISSING_SOURCE_REASONS
+                    for key, item in value.items()))
+
+
+def host_input_revision(ident: Any) -> int | None:
+    """The `@rev` of a `host:…@rev` id. Other ids have none."""
+    if not isinstance(ident, str):
+        return None
+    head, _, tail = ident.rpartition("@")
+    return int(tail) if head.startswith("host:") and tail.isdigit() else None
+
+
+def returned_input_revision(row: Any) -> int | None:
+    """The originating batch revision stored on a returned input, if it has one."""
+    if not isinstance(row, dict) or "host_revision_through" not in row:
+        return None
+    value = row["host_revision_through"]
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def coverage_blockers(ident: str, inputs: dict[str, Any], checkpoint: dict[str, Any],
+                      exclude: set[str] | None = None) -> list[str] | None:
+    """Open `host:` changes that keep a `batch:` input uncovered.
+
+    None means coverage does not apply (not a verified checkpoint, a stop
+    duty, no stored revision, or the revision is past the checkpoint). An
+    empty list means the verified range covers this input. Only a `batch:`
+    id can be blocked; `recovery#` and other ids clear on the range alone.
+    `exclude` is ids a caller already decided are gone, so a covered host
+    change stops blocking its batch wrapper.
+    """
+    if not isinstance(checkpoint, dict) or checkpoint.get("verified") is not True:
+        return None
+    if not isinstance(inputs, dict) or not isinstance(ident, str):
+        return None
+    row = inputs.get(ident)
+    if not isinstance(row, dict) or row.get("why") in MAINTENANCE_STOP_DUTIES:
+        return None
+    revision = returned_input_revision(row)
+    span = checkpoint.get("host_revision")
+    through = span.get("through") if isinstance(span, dict) else None
+    if (revision is None or not isinstance(through, int) or isinstance(through, bool)
+            or revision > through):
+        return None
+    if not ident.startswith("batch:"):
+        return []
+    skipped = exclude or set()
+    blockers = []
+    for other, item in inputs.items():
+        if other == ident or other in skipped:
+            continue
+        if isinstance(item, dict) and item.get("why") in MAINTENANCE_STOP_DUTIES:
+            continue
+        other_rev = host_input_revision(other)
+        if other_rev is not None and other_rev <= revision:
+            blockers.append(other)
+    return sorted(blockers)
+
+
+def superseded_returned_inputs(inputs: dict[str, Any], checkpoint: dict[str, Any]) -> set[str]:
+    """Returned inputs a verified checkpoint covers or satisfies.
+
+    Satisfaction is this checkpoint's `settled` list, including the exact
+    `recovery#seq` it settled, even when that input's revision is above the
+    checkpoint range. A later sequence does not satisfy an older one.
+    Coverage is `host_revision_through` at or below the verified `through`.
+    Stop duties are never in the set. An input with no stored revision that
+    this checkpoint did not settle stays out.
+    """
+    if (not isinstance(inputs, dict) or not isinstance(checkpoint, dict)
+            or checkpoint.get("verified") is not True):
+        return set()
+    settled = {item for item in (checkpoint.get("settled") or []) if isinstance(item, str)}
+    gone: set[str] = set()
+    for ident, row in inputs.items():
+        if not isinstance(row, dict) or row.get("why") in MAINTENANCE_STOP_DUTIES:
+            continue
+        if ident in settled:
+            gone.add(ident)
+    pending = True
+    while pending:
+        pending = False
+        for ident, row in inputs.items():
+            if ident in gone or not isinstance(row, dict):
+                continue
+            blockers = coverage_blockers(ident, inputs, checkpoint, exclude=gone)
+            if blockers == []:
+                gone.add(ident)
+                pending = True
+    return gone
+
+
+def missing_sources_of(checkpoint: dict[str, Any] | None) -> dict[str, str]:
+    """The partial-source map on a checkpoint, or one derived from its reasons.
+
+    An empty stored map is not a map. Older records with only
+    `returned_to_host` still name each unsettled input.
+    """
+    if not isinstance(checkpoint, dict):
+        return {}
+    stored = checkpoint.get("missing_sources")
+    if missing_sources_ok(stored):
+        return {ident: reason for ident, reason in stored.items()}
+    returned = checkpoint.get("returned_to_host")
+    if not isinstance(returned, dict):
+        return {}
+    return {ident: missing_source_reason(why) for ident, why in returned.items()
+            if isinstance(ident, str) and ident}
+
+
 def record_type_problem(kind: str, record: dict[str, Any]) -> dict[str, str] | None:
     """Refuse nested bags and wrong types. Null is a deletion and is not checked here."""
     if kind == "tasks":
@@ -382,10 +508,12 @@ def record_type_problem(kind: str, record: dict[str, Any]) -> dict[str, str] | N
             if not isinstance(inputs, dict):
                 return refusal("alerts.inputs", "object keyed by current input id", "retain original input receipts")
             for ident, item in inputs.items():
-                allowed = {"why", "batch", "evidence", "next", "host_revision_through"}
+                allowed = {"why", "batch", "evidence", "next", "host_revision_through", "missing_sources"}
                 if (not isinstance(item, dict) or set(item) - allowed or not isinstance(item.get("why"), str)
-                        or any(not isinstance(value, str) for key, value in item.items() if key != "host_revision_through")
-                        or ("host_revision_through" in item and not count_ok(item["host_revision_through"]))):
+                        or any(not isinstance(value, str) for key, value in item.items()
+                               if key not in ("host_revision_through", "missing_sources"))
+                        or ("host_revision_through" in item and not count_ok(item["host_revision_through"]))
+                        or ("missing_sources" in item and not missing_sources_ok(item["missing_sources"]))):
                     return refusal(f"alerts.inputs.{ident}", ", ".join(sorted(allowed)),
                                    "use the original current failure/input receipt; the file was not changed")
     return None

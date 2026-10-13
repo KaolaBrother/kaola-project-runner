@@ -645,6 +645,30 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   when its batch carried it, never through `--events`, and keeps an uncarried input's
   original facts. A Host recovery request's batch also carries Host changes still pending
   past `handled_host_revision`, including a failed batch's range.
+- A verified checkpoint also drops a returned input whose `host_revision_through` is at or
+  below that checkpoint's `host_revision.through` (coverage, Issue #310). A `batch:` input
+  stays while another returned `host:` change at or below that revision is still open.
+  `recovery#` and any other non-batch input clear on that coverage with no open-change guard.
+  A verified checkpoint that settled `recovery#N` removes that exact input even when its
+  `host_revision_through` is above the checkpoint range (satisfaction). A later recovery
+  sequence does not satisfy an older one. An input with no `host_revision_through` that this
+  checkpoint did not settle stays. Stop duties stay until the exact stop. A partial checkpoint
+  does not coverage-clear. The holder copies only the recovery inputs that remain into the
+  next batch's `recovery_alerts`. A later failure record does not put a covered input back
+  (`verified-past-revision`; a failure whose id is in `settled` stays
+  `scoped-checkpoint-already-settled`). A `recovery#` this checkpoint did not
+  settle, recorded at that checkpoint's own revision, is still written: the
+  range has not moved past it. A new returned row records `host_revision_through`
+  as the input's `@rev` when the id is `host:…@rev`, otherwise the batch `through`. An
+  input this batch did not carry keeps its original facts, including a missing revision.
+- A partial checkpoint record includes `missing_sources`: each unsettled input id mapped to
+  `recovery-sources-empty`, `not-in-batch`, `unaccounted`, or `other`. `returned_to_host`
+  keeps the detailed reason. The returned alert input's `why` is that vocabulary term; when
+  the detailed reason differs, it is that input's `evidence` string. The carrier's
+  `checkpoint-partial` row keeps `why` `checkpoint-partial` and carries the same
+  `missing_sources` map. The holder's `sideagent_node_settled` event copies the map, and
+  the Host wake names each `input why`. An older checkpoint with only `returned_to_host`
+  still names its sources from those reasons.
 - With node mode, worker events are not node inputs: they reach the Host at its next idle
   boundary as without a binding. A Host holder advertising `sideagent-node/1` starts one fresh
   node per batch of Host business changes past `handled_host_revision`, selected only while the

@@ -5253,7 +5253,7 @@ def record_recovery(args: argparse.Namespace, doc: dict[str, Any], current: dict
             "route until its proper type is established.")
 
 
-STOP_DUTIES = ("stop-unconfirmed", "old-node-live")
+STOP_DUTIES = RECORD.MAINTENANCE_STOP_DUTIES
 RETURNED_SUMMARY = re.compile(r"\d+ maintenance input\(s\) not applied by a node")
 
 
@@ -5262,10 +5262,12 @@ def input_settlement_problem(state: dict[str, Any], inputs: dict[str, Any], iden
     """Why the named evidence does not prove one returned input handled.
 
     The proof is the recorded node checkpoint: it settled this exact input,
-    or it is verified, its range reaches the failed batch's Host revision and
-    no returned Host change at or below that revision is still open. A
-    recovery-only checkpoint selects no new business range, so it cannot
-    reach an unsent one. A stop duty is proven by the exact stop, never here."""
+    or it is verified and its range covers the input's `host_revision_through`.
+    A `batch:` input still needs no returned Host change at or below that
+    revision to be open. A `recovery#` input clears on that coverage, or when
+    this checkpoint settled that exact sequence. A recovery-only checkpoint
+    selects no new business range, so it cannot reach an unsent one. A stop
+    duty is proven by the exact stop, never here."""
     item = inputs.get(ident)
     if isinstance(item, dict) and item.get("why") in STOP_DUTIES:
         return (f"{ident} is a stop duty ({item['why']}); only the exact stop of the original node "
@@ -5277,20 +5279,26 @@ def input_settlement_problem(state: dict[str, Any], inputs: dict[str, Any], iden
         return "--evidence must name the recorded node checkpoint as checkpoint:BATCH"
     if last.get("batch") != batch:
         return f"checkpoint:{batch} is not the recorded node checkpoint"
-    if ident in (last.get("settled") or []):
+    if ident in RECORD.superseded_returned_inputs(inputs, last):
         return None
+    blockers = RECORD.coverage_blockers(ident, inputs, last)
     failed = item.get("host_revision_through") if isinstance(item, dict) else None
-    covered = (last.get("host_revision") or {}).get("through")
-    if (ident.startswith("batch:") and isinstance(failed, int) and not isinstance(failed, bool)
-            and last.get("verified") is True and isinstance(covered, int) and failed <= covered):
-        open_changes = sorted(other for other in inputs
-                              if (revision_of(other) or failed + 1) <= failed)
-        if not open_changes:
-            return None
-        return (f"returned Host change(s) {', '.join(open_changes)} at or below revision {failed} "
+    if blockers:
+        return (f"returned Host change(s) {', '.join(blockers)} at or below revision {failed} "
                 f"are still open, so checkpoint:{batch} does not prove {ident} handled")
     return (f"checkpoint:{batch} did not settle {ident}"
             + (f" or verify its Host revision range through {failed}" if failed is not None else ""))
+
+
+def dropped_input_refs(prior_inputs: dict[str, Any], removed: list[str] | set[str],
+                       remaining: dict[str, Any]) -> set[str]:
+    """Evidence refs only a removed input named. Refs a remaining input still names stay."""
+    kept = {ref for row in remaining.values() if isinstance(row, dict)
+            for ref in (row.get("evidence"), f"checkpoint:{row.get('batch')}") if ref}
+    gone = {ref for ident in removed if isinstance(prior_inputs.get(ident), dict)
+            for ref in (prior_inputs[ident].get("evidence"),
+                        f"checkpoint:{prior_inputs[ident].get('batch')}") if ref}
+    return gone - kept
 
 
 def settle_recovery(args: argparse.Namespace, doc: dict[str, Any], current: dict[str, Any],
@@ -5357,12 +5365,9 @@ def settle_inputs(args: argparse.Namespace, doc: dict[str, Any], current: dict[s
     if remaining:
         merged["inputs"] = remaining
     # Pointers only a removed input named leave with it; no settled copy stays.
-    kept = {ref for row in remaining.values() if isinstance(row, dict)
-            for ref in (row.get("evidence"), f"checkpoint:{row.get('batch')}") if ref}
-    gone = {ref for ident in removals if isinstance(inputs[ident], dict)
-            for ref in (inputs[ident].get("evidence"), f"checkpoint:{inputs[ident].get('batch')}") if ref}
     if isinstance(merged.get("evidence"), list):
-        merged["evidence"] = [ref for ref in merged["evidence"] if ref not in gone - kept]
+        merged["evidence"] = [ref for ref in merged["evidence"]
+                              if ref not in dropped_input_refs(inputs, removals, remaining)]
         if not merged["evidence"]:
             merged.pop("evidence")
     if isinstance(merged.get("summary"), str) and RETURNED_SUMMARY.match(merged["summary"]):
@@ -6269,8 +6274,25 @@ host_changes = RECORD.host_changes
 
 
 def revision_of(ident: str) -> int | None:
-    head, _, tail = ident.rpartition("@")
-    return int(tail) if head.startswith("host:") and tail.isdigit() else None
+    return RECORD.host_input_revision(ident)
+
+
+def returned_alert_row(ident: str, why: str, batch: str, through: int) -> dict[str, Any]:
+    """The Host's receipt for one unsettled checkpoint input.
+
+    `why` is the partial-source vocabulary. A longer checkpoint reason stays
+    on `evidence`. `host_revision_through` is this input's own revision, or
+    the batch's, so a later verified checkpoint can cover it.
+    """
+    term = RECORD.missing_source_reason(why)
+    revision = revision_of(ident)
+    row: dict[str, Any] = {
+        "why": term, "batch": batch,
+        "host_revision_through": revision if revision is not None else through,
+    }
+    if why != term:
+        row["evidence"] = why
+    return row
 
 
 def retirement_stones(state: dict[str, Any], kind: str, record_id: str) -> list[dict[str, Any]]:
@@ -6365,15 +6387,52 @@ def command_state_recovery_input(args: argparse.Namespace) -> int:
                 if not ident:
                     raise StateRefusal("invalid-input", "a failure names its actual input or batch")
                 last = maintenance.get("last_checkpoint") or {}
-                if args.fail not in ("stop-unconfirmed", "old-node-live") and last.get("verified") and ident in (last.get("settled") or []):
-                    return emit({"result": "unchanged", "value": prior, "reason": "scoped-checkpoint-already-settled"})
+                if not isinstance(last, dict):
+                    last = {}
                 alerts = doc["state"].setdefault("alerts", {})
                 alert = alerts.get("maintenance-returned") or {}
                 inputs = dict(alert.get("inputs") or {})
+                missing = None
+                raw_sources = getattr(args, "missing_sources", None)
+                if raw_sources not in (None, ""):
+                    try:
+                        parsed = json.loads(raw_sources)
+                    except ValueError as exc:
+                        raise StateRefusal("invalid-input", f"--missing-sources is JSON: {exc}")
+                    if not RECORD.missing_sources_ok(parsed):
+                        raise StateRefusal(
+                            "invalid-input",
+                            "--missing-sources maps each unsettled input to recovery-sources-empty, "
+                            "not-in-batch, unaccounted, or other")
+                    missing = parsed
+                elif args.fail == "checkpoint-partial":
+                    derived = RECORD.missing_sources_of(last)
+                    if derived:
+                        missing = derived
                 row = {"why": args.fail, "evidence": evidence,
                        "next": "Host: reconcile the original node and stop receipts; repair the binding; request a bounded check",
                        **({"host_revision_through": args.through_host_revision}
-                          if args.through_host_revision is not None else {})}
+                          if args.through_host_revision is not None else {}),
+                       **({"missing_sources": missing} if missing else {})}
+                # A verified checkpoint that already settled this input, or
+                # whose range is past a returned input's revision, is not
+                # reopened by a late failure record. A recovery this
+                # checkpoint itself did not settle, at this checkpoint's own
+                # revision, is still recorded: the range has not moved past it.
+                if args.fail not in STOP_DUTIES and last.get("verified"):
+                    if ident in (last.get("settled") or []):
+                        return emit({"result": "unchanged", "value": prior,
+                                     "reason": "scoped-checkpoint-already-settled"})
+                    if ident in RECORD.superseded_returned_inputs({**inputs, ident: row}, last):
+                        span = last.get("host_revision") if isinstance(last.get("host_revision"), dict) else {}
+                        checkpoint_through = span.get("through")
+                        same_range_recovery = (
+                            ident.startswith("recovery#") and ident not in (last.get("settled") or [])
+                            and isinstance(checkpoint_through, int) and not isinstance(checkpoint_through, bool)
+                            and row.get("host_revision_through") == checkpoint_through)
+                        if not same_range_recovery:
+                            return emit({"result": "unchanged", "value": prior,
+                                         "reason": "verified-past-revision"})
                 if inputs.get(ident) == row:
                     return emit({"result": "unchanged", "value": prior})
                 inputs[ident] = row
@@ -6562,6 +6621,8 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
               "at": observed_at(), "source": args.source, "verified": verified,
               "host_revision": {"from": handled, "through": through, "current": current},
               "settled": sorted(settled), "returned_to_host": dict(sorted(returned.items())),
+              **({"missing_sources": {ident: RECORD.missing_source_reason(why)
+                                      for ident, why in sorted(returned.items())}} if returned else {}),
               **({"superseded": sorted(superseded)} if superseded else {})}
     if recovery:
         ident = f"recovery#{recovery['seq']}"
@@ -6580,12 +6641,18 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
     prior = alerts.get(alert_id) if isinstance(alerts.get(alert_id), dict) else {}
     inputs = dict(prior.get("inputs") or {})
     for ident in settled:
+        row = inputs.get(ident)
+        # A stop duty leaves only by its exact stop, even if a node named it.
+        if isinstance(row, dict) and row.get("why") in STOP_DUTIES:
+            continue
         inputs.pop(ident, None)
     if returned:
         # Handed to the Host once, as one durable alert: never re-sent to
         # another node, never counted as applied. Already-settled inputs leave.
         # A current input this batch did not carry keeps its original facts.
-        inputs.update({ident: {"why": why, "batch": args.batch} for ident, why in returned.items()
+        # A partial checkpoint does not coverage-clear older inputs.
+        inputs.update({ident: returned_alert_row(ident, why, args.batch, through)
+                       for ident, why in returned.items()
                        if ident not in inputs or ident in selected or ident in recovery_ids})
         alerts[alert_id] = {**prior, "level": "warn", "owner": "host",
                             "summary": f"{len(inputs)} maintenance input(s) not applied by a node; "
@@ -6595,13 +6662,26 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
                             "created_at": prior.get("created_at") or observed_at(),
                             "updated_at": observed_at(), "source": args.source,
                             "writer": writer_trace(args, caller), "writer_holder": holder}
-    elif alert_id in alerts and not inputs:
-        alerts.pop(alert_id, None)
-    elif alert_id in alerts and inputs != (prior.get("inputs") or {}):
-        alerts[alert_id] = {**prior, "inputs": inputs,
-                            "summary": f"{len(inputs)} maintenance input(s) not applied by a node; "
-                                       "judge or re-dispatch them from their sources",
-                            "rev": int(prior.get("rev") or 0) + 1, "updated_at": observed_at()}
+    elif alert_id in alerts:
+        # Verified past this input's revision, or this checkpoint settled it.
+        removed = [ident for ident in inputs if ident in RECORD.superseded_returned_inputs(inputs, record)]
+        for ident in removed:
+            inputs.pop(ident, None)
+        if not inputs:
+            alerts.pop(alert_id, None)
+        elif inputs != (prior.get("inputs") or {}):
+            merged = {**prior, "inputs": inputs,
+                      "summary": f"{len(inputs)} maintenance input(s) not applied by a node; "
+                                 "judge or re-dispatch them from their sources",
+                      "rev": int(prior.get("rev") or 0) + 1, "updated_at": observed_at()}
+            if isinstance(prior.get("evidence"), list):
+                evidence = [ref for ref in prior["evidence"]
+                            if ref not in dropped_input_refs(prior.get("inputs") or {}, removed, inputs)]
+                if evidence:
+                    merged["evidence"] = evidence
+                else:
+                    merged.pop("evidence", None)
+            alerts[alert_id] = merged
     return record
 
 
@@ -7182,6 +7262,9 @@ def build_parser() -> argparse.ArgumentParser:
     recovery.add_argument("--fail")
     recovery.add_argument("--input")
     recovery.add_argument("--through-host-revision", type=int)
+    recovery.add_argument("--missing-sources",
+                          help="JSON object: unsettled input id to recovery-sources-empty, "
+                               "not-in-batch, unaccounted, or other")
     recovery.set_defaults(func=command_state_recovery_input)
 
     checkpoint = actions.add_parser("checkpoint", help="a maintenance node's input accounting")

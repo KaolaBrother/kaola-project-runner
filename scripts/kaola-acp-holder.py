@@ -4070,7 +4070,8 @@ class Holder:
         threading.Thread(target=register, daemon=True).start()
 
     def _maintenance_failure(self, why: str, through: Any = None,
-                             recovery: dict[str, Any] | None = None, wake: bool = True) -> None:
+                             recovery: dict[str, Any] | None = None, wake: bool = True,
+                             missing_sources: dict[str, Any] | None = None) -> None:
         if self.session_role != "host":
             return
         doc = self._lifecycle_state()
@@ -4088,15 +4089,35 @@ class Holder:
         if wake:
             self._node_to_host(binding, f"maintenance {ident}: {why}; Host must reconcile original receipts, "
                                        "repair the binding and request a bounded check", record=False)
-        def record_failure():
+        sources = missing_sources if isinstance(missing_sources, dict) and missing_sources else None
+        encoded = json.dumps(sources, sort_keys=True) if sources else None
+        def record_failure(encoded: str | None = encoded) -> None:
             receipt = self._maintenance_tool(["--source", "carrier-maintenance-failure", "--fail", why,
                                               "--input", ident, "--evidence", evidence,
                                               *(["--through-host-revision", str(through)]
-                                                if isinstance(through, int) else [])])
+                                                if isinstance(through, int) else []),
+                                              *(["--missing-sources", encoded] if encoded else [])])
             self.events.append({"kind": "sideagent_maintenance_failure_recorded", "input": ident,
                                 "reason": why, "receipt": receipt})
             self._kick_worker_events()
         threading.Thread(target=record_failure, daemon=True).start()
+
+    def _recovery_alerts(self, doc: dict[str, Any] | None) -> dict[str, Any]:
+        """Recovery inputs the next batch still carries.
+
+        A verified checkpoint that covers an input's revision, or that
+        settled that exact recovery sequence, drops it. An older bundle
+        without the shared predicate still copies every recovery input.
+        """
+        inputs = (((doc or {}).get("state") or {}).get("alerts") or {}).get(
+            "maintenance-returned", {}).get("inputs") or {}
+        if not isinstance(inputs, dict):
+            return {}
+        last = (((doc or {}).get("state") or {}).get("maintenance") or {}).get("last_checkpoint")
+        predicate = getattr(_RECORD, "superseded_returned_inputs", None)
+        gone = predicate(inputs, last) if callable(predicate) and isinstance(last, dict) else set()
+        return {ident: value for ident, value in inputs.items()
+                if isinstance(ident, str) and ident.startswith("recovery#") and ident not in gone}
 
     def _node_relay_pass(self, binding: dict[str, Any]) -> dict[str, Any]:
         """Node mode of the relay. Caller holds ``worker_events_lock``.
@@ -4203,10 +4224,7 @@ class Holder:
                                 "target_holder": target["holder_instance_id"],
                                 "host_revision_through": through, "host_holder": self.holder_instance_id,
                                 "recovery_input": recovery,
-                                "recovery_alerts": {ident: value for ident, value in
-                                    (((doc or {}).get("state") or {}).get("alerts") or {}).get(
-                                        "maintenance-returned", {}).get("inputs", {}).items()
-                                    if ident.startswith("recovery#")},
+                                "recovery_alerts": self._recovery_alerts(doc),
                                 "prompt_fingerprint": receipt["prompt_fingerprint"]})
             result["receipt"] = {"batch": batch, "target_session": session}
         else:
@@ -4349,6 +4367,15 @@ class Holder:
             changed = (verified and attention is not None and attention != node.get("attention_sent")
                        and attention != self.host_attention_seen
                        and self._node_wrote_attention(doc, body, node["holder"]))
+            missing: dict[str, Any] = {}
+            if ours:
+                reader = getattr(_RECORD, "missing_sources_of", None)
+                if callable(reader):
+                    missing = reader(last) or {}
+                elif isinstance(last.get("missing_sources"), dict):
+                    missing = last["missing_sources"]
+            named = ", ".join(f"{ident} {why}" for ident, why in sorted(missing.items())
+                              if isinstance(ident, str) and isinstance(why, str))
             if verified and not changed:
                 end["node_quiet"] = True
             else:
@@ -4358,8 +4385,12 @@ class Holder:
                 elif short_range:
                     detail = (f"checkpoint partial: host revision "
                               f"{(covered if isinstance(covered, int) else 0) + 1}..{sent} not handled")
+                    if named:
+                        detail = f"{detail}; {named}"
+                elif ours:
+                    detail = f"checkpoint partial: {named}" if named else "checkpoint partial"
                 else:
-                    detail = "checkpoint partial" if ours else "checkpoint missing"
+                    detail = "checkpoint missing"
                 end["reason"] = f"{end.get('reason')} maintenance batch {node['batch']} {detail}"
             self.events.append({"kind": "sideagent_node_settled", "batch": node["batch"],
                                 "holder": node["holder"], "checkpoint": "verified" if verified
@@ -4367,10 +4398,12 @@ class Holder:
                                 "host_revision_through": sent,
                                 **({"checkpoint_through": covered} if ours else {}),
                                 "host_woken": bool(end.get("host_owned")),
-                                **({"attention_changed": True} if changed else {})})
+                                **({"attention_changed": True} if changed else {}),
+                                **({"missing_sources": missing} if missing else {})})
             if not verified:
                 self._maintenance_failure("checkpoint-partial" if ours else "checkpoint-missing", sent,
-                                          recovery, wake=False)
+                                          recovery, wake=False,
+                                          missing_sources=missing or None)
             holder = node["holder"]
             node.update(phase="stopping", batch=None, fingerprint=None)
             threading.Thread(target=self._stop_node, args=(holder,), daemon=True).start()

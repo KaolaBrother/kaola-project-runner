@@ -2598,6 +2598,8 @@ class MaintenanceCheckpoint(StateProject):
                       record["returned_to_host"]["codex/codex-KT-i1-a/idle/5"],
                       "older evidence cannot settle a new input")
         self.assertEqual(record["returned_to_host"][f"host:tasks/t3@{later}"], "unaccounted")
+        self.assertEqual(record["missing_sources"]["codex/codex-KT-i1-a/idle/5"], "other")
+        self.assertEqual(record["missing_sources"][f"host:tasks/t3@{later}"], "unaccounted")
         maintenance = self.doc()["state"]["maintenance"]
         self.assertEqual(maintenance["acked_host_revision"], later - 1,
                          "the acknowledgment does not pass an unaccounted change")
@@ -2606,6 +2608,13 @@ class MaintenanceCheckpoint(StateProject):
         alert = self.doc()["state"]["alerts"]["maintenance-returned"]
         self.assertEqual(alert["owner"], "host")
         self.assertEqual(sorted(alert["inputs"]), sorted(record["returned_to_host"]))
+        event_row = alert["inputs"]["codex/codex-KT-i1-a/idle/5"]
+        self.assertEqual(event_row["why"], "other")
+        self.assertIn("not a current record this node wrote", event_row["evidence"])
+        self.assertEqual(event_row["host_revision_through"], later)
+        task_row = alert["inputs"][f"host:tasks/t3@{later}"]
+        self.assertEqual(task_row["why"], "unaccounted")
+        self.assertEqual(task_row["host_revision_through"], later)
         self.assertEqual(self.sideagent_view()["pending_host_changes"], [],
                          "returned inputs are the Host's, never re-sent to another node")
         attention = json.loads(self.doc()["body"])["attention"]
@@ -2865,24 +2874,24 @@ class MaintenanceCheckpoint(StateProject):
     def test_one_proven_returned_input_leaves_and_unrelated_inputs_stay(self) -> None:
         failed = self.mixed_alert()
         # The real business recovery: a node checkpoint whose batch carried the failed range.
+        # Coverage removes batch:b-failed; the other four inputs were not settled and have
+        # no covered revision, so they stay byte-identical.
+        seeded = self.doc()["state"]["alerts"]["maintenance-returned"]["inputs"]
+        others = {ident: json.dumps(row, sort_keys=True) for ident, row in seeded.items()
+                  if ident != "batch:b-failed"}
+        tasks = json.dumps(self.doc()["state"]["tasks"], sort_keys=True)
         code, out = self.checkpoint(self.node("node-real"), "b-real", failed,
                                     [{"input": f"host:tasks/t1@{failed}", "retained": "tasks/t1"}])
         self.assertEqual(code, 0, out)
         self.assertTrue(out["value"]["verified"], out)
-        before = self.doc()["state"]
-        others = {ident: json.dumps(row, sort_keys=True)
-                  for ident, row in before["alerts"]["maintenance-returned"]["inputs"].items()
-                  if ident != "batch:b-failed"}
-        code, out = self.settle("batch:b-failed", "--expect-rev", "3")
-        self.assertEqual(code, 0, out)
-        self.assertEqual(out["value"]["settled_inputs"], ["batch:b-failed"])
         after = self.doc()["state"]
         alert = after["alerts"]["maintenance-returned"]
+        self.assertNotIn("batch:b-failed", alert["inputs"])
         self.assertEqual({ident: json.dumps(row, sort_keys=True) for ident, row in alert["inputs"].items()},
                          others, "unrelated inputs stay byte-identical")
-        self.assertEqual(alert["rev"], 4)
         self.assertEqual(alert["evidence"], ["carrier-events#8", "carrier-events#9", "checkpoint:b-old"])
-        self.assertEqual((after["maintenance"], after["tasks"]), (before["maintenance"], before["tasks"]))
+        self.assertEqual(json.dumps(after["tasks"], sort_keys=True), tasks)
+        self.assertEqual(after["maintenance"]["handled_host_revision"], failed)
         # Nothing settled stays behind in another routine field.
         self.assertNotIn("b-failed", self.file.read_text())
         self.assertNotIn("carrier-events#7", self.file.read_text())
@@ -2890,6 +2899,12 @@ class MaintenanceCheckpoint(StateProject):
 
     def test_absent_unproven_and_stale_input_removal_refuse_without_writes(self) -> None:
         failed = self.mixed_alert()
+        # An open host change below the failed range blocks coverage, so the
+        # verified checkpoint leaves batch:b-failed in place.
+        doc = self.doc()
+        doc["state"]["alerts"]["maintenance-returned"]["inputs"][f"host:tasks/t0@{failed - 1}"] = {
+            "why": "not-in-batch", "batch": "b-old"}
+        self.file.write_text(json.dumps(doc))
         self.checkpoint(self.node("node-real"), "b-real", failed,
                         [{"input": f"host:tasks/t1@{failed}", "retained": "tasks/t1"}])
         before = self.file.read_bytes()
@@ -2908,7 +2923,7 @@ class MaintenanceCheckpoint(StateProject):
             self.assertIn("--evidence checkpoint:b-real", out["recovery"])
             self.assertIn(json.dumps({"inputs": {ident: None}}), out["recovery"])
             self.assertIn("state recovery-input --kind request", out["recovery"])
-            self.assertIn("Do not retire the whole alert while 4 other input(s) remain", out["recovery"])
+            self.assertIn("Do not retire the whole alert while 5 other input(s) remain", out["recovery"])
             self.assertEqual(self.file.read_bytes(), before)
         code, out = self.settle("batch:b-failed", "--expect-rev", "2")
         self.assertEqual((code, out["reason"]), (3, "conflict"), out)
@@ -2958,6 +2973,152 @@ class MaintenanceCheckpoint(StateProject):
         self.assertEqual((code, out["reason"]), (2, "input-unproven"), out)
         self.assertEqual(self.file.read_bytes(), before)
 
+    def test_verified_checkpoint_clears_covered_returned_inputs_and_keeps_uncovered(self) -> None:
+        """#310: a later verified checkpoint covers host_revision_through.
+        An input past that range, one with no revision, and a stop duty stay.
+        A late failure record does not put a covered input back."""
+        self.init()
+        self.bind()
+        doc = self.doc()
+        doc["host_revision"] = 1275
+        doc["state"]["maintenance"] = {"handled_host_revision": 1274, "acked_host_revision": 1274}
+        doc["state"]["alerts"] = {"maintenance-returned": {
+            "owner": "host", "level": "warn", "rev": 6,
+            "summary": "maintenance needs Host recovery from original receipts",
+            "evidence": ["carrier-events#76", "carrier-events#80", "carrier-events#90"],
+            "inputs": {
+                "recovery#76": {"why": "checkpoint-partial", "batch": "b-1259",
+                                "evidence": "carrier-events#76", "host_revision_through": 1259},
+                "recovery#80": {"why": "checkpoint-partial", "batch": "b-1300",
+                                "evidence": "carrier-events#80", "host_revision_through": 1300},
+                "batch:b-cb80e71acb90": {"why": "checkpoint-partial", "evidence": "carrier-events#cb",
+                                         "host_revision_through": 1265},
+                "recovery#90": {"why": "unrelated"},
+                "batch:b-stop": {"why": "stop-unconfirmed", "evidence": "carrier-events#stop",
+                                 "host_revision_through": 1259}}}}
+        self.file.write_text(json.dumps(doc))
+        code, out = self.checkpoint(self.node("node-later"), "b-1275", 1275, [])
+        self.assertEqual(code, 0, out)
+        self.assertTrue(out["value"]["verified"], out)
+        self.assertNotIn("missing_sources", out["value"])
+        inputs = self.doc()["state"]["alerts"]["maintenance-returned"]["inputs"]
+        self.assertNotIn("recovery#76", inputs)
+        self.assertNotIn("batch:b-cb80e71acb90", inputs)
+        self.assertEqual(inputs["recovery#80"]["host_revision_through"], 1300)
+        self.assertEqual(inputs["recovery#90"], {"why": "unrelated"})
+        self.assertEqual(inputs["batch:b-stop"]["why"], "stop-unconfirmed")
+        self.assertNotIn("carrier-events#76", self.file.read_text())
+        holder = holder_module.Holder.__new__(holder_module.Holder)
+        carried = holder._recovery_alerts(self.doc())
+        self.assertNotIn("recovery#76", carried)
+        self.assertIn("recovery#80", carried)
+        self.assertIn("recovery#90", carried)
+        _, env = self.recovery_host()
+        before = self.file.read_bytes()
+        code, out = self.state(
+            "recovery-input", "--file", str(self.file), "--source", "carrier-maintenance-failure",
+            "--fail", "checkpoint-partial", "--input", "recovery#76",
+            "--through-host-revision", "1259", "--evidence", "events#1", env=env)
+        self.assertEqual(code, 0, out)
+        self.assertEqual((out["result"], out["reason"]), ("unchanged", "verified-past-revision"))
+        self.assertEqual(self.file.read_bytes(), before)
+        self.assertNotIn("recovery#76", self.doc()["state"]["alerts"]["maintenance-returned"]["inputs"])
+
+    def test_holder_omits_a_covered_recovery_alert_even_when_the_row_remains(self) -> None:
+        """The batch snapshot uses the same predicate when the alert row is still stored."""
+        holder = holder_module.Holder.__new__(holder_module.Holder)
+        doc = {"state": {
+            "maintenance": {"last_checkpoint": {
+                "verified": True, "host_revision": {"from": 1274, "through": 1275},
+                "settled": ["host:section/project@1275"]}},
+            "alerts": {"maintenance-returned": {"inputs": {
+                "recovery#76": {"why": "checkpoint-partial", "host_revision_through": 1259},
+                "recovery#80": {"why": "checkpoint-partial", "host_revision_through": 1300}}}}}}
+        carried = holder._recovery_alerts(doc)
+        self.assertEqual(set(carried), {"recovery#80"})
+
+    def test_verified_recovery_request_clears_its_input_even_above_the_range(self) -> None:
+        """Satisfaction is the exact settled recovery sequence, not a later one."""
+        self.init()
+        self.bind()
+        through = self.doc()["host_revision"]
+        doc = self.doc()
+        doc["state"]["maintenance"] = {"handled_host_revision": through}
+        self.file.write_text(json.dumps(doc))
+        item = self.recovery_request()
+        env = self.recovery_receipt(item)
+        doc = self.doc()
+        doc["state"]["alerts"] = {"maintenance-returned": {
+            "owner": "host", "level": "warn", "rev": 2, "summary": "original", "inputs": {
+                f"recovery#{item['seq']}": {"why": "checkpoint-partial", "host_revision_through": 500,
+                                            "evidence": "events#1"},
+                "recovery#90": {"why": "unrelated"},
+                "recovery#80": {"why": "checkpoint-partial", "host_revision_through": 900}}}}
+        self.file.write_text(json.dumps(doc))
+        code, out = self.recovery_checkpoint(env, item, [self.scoped_entry(item["seq"])])
+        self.assertEqual(code, 0, out)
+        self.assertTrue(out["value"]["verified"], out)
+        self.assertIn(f"recovery#{item['seq']}", out["value"]["settled"])
+        inputs = self.doc()["state"]["alerts"]["maintenance-returned"]["inputs"]
+        self.assertNotIn(f"recovery#{item['seq']}", inputs)
+        self.assertEqual(inputs["recovery#90"], {"why": "unrelated"})
+        self.assertEqual(inputs["recovery#80"]["host_revision_through"], 900)
+
+    def test_partial_checkpoint_names_empty_recovery_sources(self) -> None:
+        self.init()
+        self.bind()
+        through = self.doc()["host_revision"]
+        doc = self.doc()
+        doc["state"]["maintenance"] = {"handled_host_revision": through}
+        doc["state"]["alerts"] = {"maintenance-returned": {
+            "owner": "host", "level": "warn", "rev": 1, "summary": "original",
+            "inputs": {"recovery#76": {"why": "checkpoint-partial", "host_revision_through": 1}}}}
+        self.file.write_text(json.dumps(doc))
+        item = self.recovery_request()
+        env = self.recovery_receipt(item)
+        entry = {"input": f"recovery#{item['seq']}",
+                 "checked": {"authorization": [], "duties": [], "links": []}}
+        code, out = self.recovery_checkpoint(env, item, [entry])
+        self.assertEqual(code, 0, out)
+        record = out["value"]
+        self.assertFalse(record["verified"])
+        ident = f"recovery#{item['seq']}"
+        self.assertEqual(record["returned_to_host"][ident], "recovery-sources-empty")
+        self.assertEqual(record["missing_sources"][ident], "recovery-sources-empty")
+        row = self.doc()["state"]["alerts"]["maintenance-returned"]["inputs"][ident]
+        self.assertEqual(row["why"], "recovery-sources-empty")
+        self.assertIn("recovery#76", self.doc()["state"]["alerts"]["maintenance-returned"]["inputs"],
+                      "a partial checkpoint does not coverage-clear an older input")
+
+    def test_partial_checkpoint_names_not_in_batch_and_unaccounted(self) -> None:
+        self.init()
+        self.bind()
+        self.update("host", "tasks", "w5-i135", {"stage": "todo", "goal": "gap", "next": "host reads"})
+        later = self.doc()["host_revision"]
+        doc = self.doc()
+        doc["state"].setdefault("maintenance", {})["handled_host_revision"] = later - 1
+        doc["state"].setdefault("alerts", {})["maintenance-returned"] = {
+            "owner": "host", "level": "warn", "rev": 1, "summary": "original",
+            "inputs": {"recovery#76": {"why": "checkpoint-partial", "host_revision_through": 1}}}
+        self.file.write_text(json.dumps(doc))
+        code, out = self.checkpoint(
+            self.node("node-1"), "b-cb80e71acb90", later,
+            [{"input": "w5-i135", "retained": "section/project"}])
+        self.assertEqual(code, 0, out)
+        record = out["value"]
+        self.assertFalse(record["verified"])
+        self.assertEqual(record["returned_to_host"]["w5-i135"], "not-in-batch")
+        self.assertEqual(record["missing_sources"]["w5-i135"], "not-in-batch")
+        task = f"host:tasks/w5-i135@{later}"
+        self.assertEqual(record["returned_to_host"][task], "unaccounted")
+        self.assertEqual(record["missing_sources"][task], "unaccounted")
+        inputs = self.doc()["state"]["alerts"]["maintenance-returned"]["inputs"]
+        self.assertEqual(inputs["w5-i135"]["why"], "not-in-batch")
+        self.assertEqual(inputs[task]["why"], "unaccounted")
+        self.assertEqual(inputs[task]["host_revision_through"], later)
+        self.assertEqual(inputs["recovery#76"]["why"], "checkpoint-partial",
+                         "an uncarried input keeps its original facts")
+        self.assertIn("recovery#76", inputs)
 
 
 FAKE_NODE_RUNNER = textwrap.dedent("""\
@@ -3390,12 +3551,8 @@ class HolderNodeMode(HolderFixture):
             "--entries", json.dumps([MaintenanceCheckpoint.scoped_entry(request["seq"]),
                                       {"input": "host:section/project@3", "retained": "section/project"}])], env)
         self.assertEqual(code, 0, out); self.assertTrue(out["value"]["verified"], out)
-        rev = self.holder._lifecycle_state()["state"]["alerts"]["maintenance-returned"]["rev"]
-        code, out = run(["state", "update", "--file", str(path), "--writer", "host", "--source", "host-turn",
-                         "--kind", "alerts", "--id", "maintenance-returned", "--expect-rev", str(rev),
-                         "--evidence", f"checkpoint:{batch}", "--set", json.dumps({"inputs": {"batch:3": None}})])
-        self.assertEqual(code, 0, out)
-        self.assertNotIn("maintenance-returned", self.holder._lifecycle_state()["state"].get("alerts") or {})
+        self.assertNotIn("maintenance-returned", self.holder._lifecycle_state()["state"].get("alerts") or {},
+                         "the verified range covers batch:3, so the returned input leaves")
         self.sideagent_end(9, 1, holder="node-1")
         self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "recovery reclaim")
 
@@ -3813,6 +3970,47 @@ class HolderNodeMode(HolderFixture):
         self.assertEqual(self.fake.prompts, [])
         self.assertNotIn("sideagent_node_started", self.log_kinds())
         self.assertEqual(len(self.agent.prompts()), 1, "the event still reaches the session it names")
+
+    def test_a_partial_checkpoint_names_its_missing_sources_to_the_host(self) -> None:
+        """#310: the settled event, the Host wake, and the carrier alert name
+        not-in-batch rather than only checkpoint-partial."""
+        self.write_node_state()
+        batch = self.first_node()
+        path = self.repo / ".kaola" / "heartbeat-prompt.json"
+        env = dict(os.environ)
+        env["KAOLA_ACP_RECORD_ROOT"] = str(self.records)
+        env["KAOLA_ACP_DISPATCHER"] = json.dumps({
+            "platform": "zcode", "session": "zcode-KT-sideagent", "repo": str(self.repo),
+            "holder_instance_id": "node-1"})
+        code, out = run([
+            "state", "checkpoint", "--file", str(path), "--writer", "sideagent", "--source", batch,
+            "--batch", batch, "--through-host-revision", "4",
+            "--entries", json.dumps([{"input": "w5-i135", "retained": "section/project"}])], env)
+        self.assertEqual(code, 0, out)
+        self.assertFalse(out["value"]["verified"], out)
+        self.assertEqual(out["value"]["missing_sources"]["w5-i135"], "not-in-batch")
+        self.assertIn("unaccounted", out["value"]["missing_sources"].values())
+        self.holder.session_role = "host"
+        self.holder.write_record()
+        self.sideagent_end(9, 1, holder="node-1")
+        self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "the node stop")
+        log = Path(self.holder.args.record_dir) / "events.jsonl"
+        settled = [json.loads(line) for line in log.read_text().splitlines()
+                   if json.loads(line).get("kind") == "sideagent_node_settled"]
+        self.assertEqual(settled[-1]["checkpoint"], "partial")
+        self.assertEqual(settled[-1]["missing_sources"]["w5-i135"], "not-in-batch")
+        self.assertTrue(self.agent.prompts())
+        self.assertIn("w5-i135 not-in-batch", self.agent.prompts()[0])
+        self.wait_for(lambda: any(
+            isinstance(row, dict) and isinstance(row.get("missing_sources"), dict)
+            and row["missing_sources"].get("w5-i135") == "not-in-batch"
+            for row in ((self.holder._lifecycle_state()["state"].get("alerts") or {})
+                        .get("maintenance-returned") or {}).get("inputs", {}).values()),
+            "the carrier alert names the missing source")
+        inputs = self.holder._lifecycle_state()["state"]["alerts"]["maintenance-returned"]["inputs"]
+        carrier = inputs[f"batch:{batch}"]
+        self.assertEqual(carrier["why"], "checkpoint-partial")
+        self.assertEqual(carrier["missing_sources"]["w5-i135"], "not-in-batch")
 
 
 class HostPreserveStop(WorkerTree):
