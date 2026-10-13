@@ -11,19 +11,22 @@ Two closed vocabularies:
   ``ok`` | ``malformed`` | ``platform-token-mismatch`` | ``not-issue-named``.
 * ``issue_name`` is the start/list advisory for an issue-named worker:
   ``ok`` | ``malformed`` | ``platform-token-mismatch`` | ``no-active-run``.
-  Host, sideagent, and seat names are ``not-issue-named`` and carry no
-  ``issue_name``. Their honest marker is ``name_role``
-  (``host`` | ``sideagent`` | ``seat``). A worker's ``name_role`` is
-  ``worker``.
+  Host, sideagent, seat, and general names are ``not-issue-named`` and
+  carry no ``issue_name``. Their honest marker is ``name_role``
+  (``host`` | ``sideagent`` | ``seat`` | ``general``). A worker's
+  ``name_role`` is ``worker``.
 * ``seat_issue_drift`` (Issue #312) is the live-seat advisory. Its
   ``advisories`` are ``dispatch-issue-mismatch`` and ``no-active-run``.
   ``None`` means the seat is not flagged. The function does not stop,
   rename, or refuse.
 
 ``classification`` ``ok`` means the name is
-``<platform>-<PROJECT>-i<ISSUE>-<purpose>`` and ``platform`` is the exact
-platform id. The advisory ``ok`` also requires at least one active claim for
-that issue. The consumer join is stricter: see ``JOIN_RULE``.
+``<platform>-<CODE>-i<ISSUE>-<purpose>`` and ``platform`` is the exact
+platform id. ``CODE`` starts with a letter and is letters and digits only.
+The advisory ``ok`` requires exactly one in-progress non-bundle run for
+that issue whose claim has the same git origin as the session repo.
+``<platform>-<CODE>-general-<purpose>`` is not issue-named: ``name_role``
+is ``general`` and there is no ``issue_name``. See ``JOIN_RULE``.
 """
 
 from __future__ import annotations
@@ -50,7 +53,7 @@ ISSUE_NAME_VALUES = (
     "platform-token-mismatch",
     "no-active-run",
 )
-NAME_ROLES = ("worker", "host", "sideagent", "seat")
+NAME_ROLES = ("worker", "host", "sideagent", "seat", "general")
 # Live-seat drift. Not a start refusal and not a second name validator.
 DRIFT_ADVISORIES = (
     "dispatch-issue-mismatch",
@@ -73,37 +76,42 @@ PARSED_KEYS = (
 MISMATCH_KINDS = ("short-alias", "other-platform", "other-token")
 
 # Consumer join. The first sentence is the rule. The rest is how this
-# repository decides each side of it. Archived runs are not claims.
+# repository decides each side of it. Archived runs and bundle runs are not
+# the one active run.
 JOIN_RULE = (
     "name parses AND the repo's active run claims that issue number => bound; "
     "else unbound. Parses means classification ok: the name is "
     "<platform>-<PROJECT>-i<ISSUE>-<purpose> and platform is the exact "
     "platform id derived from platforms/*.yaml session_prefix (the id, such "
     "as claude-code or cursor-cli, not a short alias such as claude or "
-    "cursor). The repo's active run is exactly one non-archived "
+    "cursor). PROJECT starts with a letter and is letters and digits only. "
+    "The repo's active run is exactly one non-archived non-bundle "
     "kaola-workflow/<run>/workflow-state.md in that repo's main checkout "
     "whose status is active, whose issue_number equals that ISSUE, and whose "
-    "claim_repository_id matches the Runner record repository identity. A "
-    "short alias, another platform's prefix, a malformed name, a host, "
-    "sideagent, or seat name, no active run, a repository mismatch, and two "
-    "active runs for one issue are unbound."
+    "claim_repository_id has the same git origin as the session repo. A bundle "
+    "is a run with a bundle_id, more than one issue_numbers value, or a "
+    "bundle- folder name. Same origin is the same GitHub owner/repo, compared "
+    "case-insensitively, or the same origin string when it is not a GitHub URL. "
+    "A short alias, another platform's prefix, a malformed name, a host, "
+    "sideagent, seat, or general name, no active run, a bundle run, a "
+    "repository mismatch, and two active runs for one issue are unbound."
 )
 
-# issue_name ok is existence of an active claim, not the consumer join.
-# Two claims, or a claim_repository_id the consumer has not compared, can
-# still be issue_name ok. The join above is what binds a progress bar.
+# issue_name ok is that same single non-bundle same-origin run. It still
+# never blocks start. A different count or origin is no-active-run.
 ADVISORY_NOTE = (
-    "issue_name ok means classification ok and at least one non-archived "
-    "active workflow-state.md claim for that issue_number, with a "
-    "claim_repository_id present. It does not require exactly one claim and "
-    "it does not compare claim_repository_id to the Runner record. Those "
-    "checks are the join rule. issue_name never blocks start."
+    "issue_name ok means classification ok and exactly one in-progress "
+    "non-bundle run whose issue_number equals that issue, and whose "
+    "claim_repository_id has the same git origin as the session repo. "
+    "Zero runs, two or more runs, a bundle run, and a different origin "
+    "are no-active-run. issue_name never blocks start."
 )
 
 # Same reserved names as scripts/kaola-kw-index.py. archive is not a run.
 RESERVED_RUN_NAMES = {"archive", ".ledger", ".roadmap"}
 _ISSUE_MARKER = re.compile(r"-i([1-9][0-9]*)-")
-_PROJECT = re.compile(r"^[A-Za-z0-9]+$")
+# CODE: a letter, then letters and digits. A leading digit is not a code.
+_PROJECT = re.compile(r"^[A-Za-z][A-Za-z0-9]*$")
 _PROJECT_ROLE = re.compile(r"^[A-Za-z0-9_.]+$")
 _PURPOSE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _ROLE_NAME = re.compile(
@@ -117,9 +125,85 @@ _ROLE_TO_NAME_ROLE = {
     "sidekick": "sideagent",
     "seat": "seat",
 }
+# GitHub origin forms. owner/repo, optional .git, case-insensitive later.
+_GITHUB_ORIGINS = (
+    re.compile(r"^https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$", re.IGNORECASE),
+    re.compile(r"^ssh://(?:[^@/]+@)?github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$", re.IGNORECASE),
+    re.compile(r"^git://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$", re.IGNORECASE),
+    re.compile(r"^git@github\.com:([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$", re.IGNORECASE),
+)
 _CLAIM_LINE = re.compile(r"^([A-Za-z0-9_]+):\s*(.*?)\s*$")
 _STATE_BYTES = 256 * 1024
 _KAOLA_SUFFIX = "-kaola"
+
+
+def _split_general(name: str) -> tuple[str, str, str] | None:
+    """``<platform>-<CODE>-general-<purpose>``, or None.
+
+    The platform token may contain hyphens (``cursor-cli``). CODE does not.
+    The first ``-general-`` is the delimiter, and the last hyphen before it
+    separates the platform token from CODE.
+    """
+    if not isinstance(name, str):
+        return None
+    prefix, separator, purpose = name.partition("-general-")
+    if not separator or not _PURPOSE.fullmatch(purpose):
+        return None
+    token, dash, project = prefix.rpartition("-")
+    if not dash or not token or not _PROJECT.fullmatch(project):
+        return None
+    return token, project, purpose
+
+
+def origin_key(value: str | None) -> str:
+    """Comparable origin. GitHub URLs become ``owner/repo``; other strings stay."""
+    text = value.strip() if isinstance(value, str) else ""
+    if not text:
+        return ""
+    for pattern in _GITHUB_ORIGINS:
+        match = pattern.fullmatch(text)
+        if match:
+            return f"{match.group(1)}/{match.group(2)}".lower()
+    return text
+
+
+def same_origin(claim_repository_id: str | None, session_origin: str | None) -> bool:
+    """True when the claim and the session repo name the same git origin."""
+    left = origin_key(claim_repository_id)
+    right = origin_key(session_origin)
+    return bool(left) and left == right
+
+
+def session_origin(repo: str) -> str:
+    """``git remote get-url origin`` for ``repo``, or empty when it cannot be read."""
+    if not isinstance(repo, str) or not repo:
+        return ""
+    try:
+        out = subprocess.run(
+            ["git", "-C", repo, "remote", "get-url", "origin"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if out.returncode != 0:
+        return ""
+    return out.stdout.strip()
+
+
+def is_bundle_claim(claim: dict[str, Any]) -> bool:
+    """A multi-issue run. It is not the one in-progress run for an issue."""
+    if not isinstance(claim, dict):
+        return False
+    if claim.get("bundle") is True:
+        return True
+    bundle_id = claim.get("bundle_id")
+    if isinstance(bundle_id, str) and bundle_id.strip():
+        return True
+    run = claim.get("run")
+    if isinstance(run, str) and run.startswith("bundle-"):
+        return True
+    numbers = claim.get("issue_numbers")
+    return isinstance(numbers, (list, tuple)) and len(numbers) > 1
 
 
 def default_platforms_dir() -> Path | None:
@@ -280,6 +364,20 @@ def parse_session_name(name: str, platform_id: str,
                 project=project,
                 purpose=role.group("purpose"),
             )
+    # A name with no issue. Host and sideagent names already returned above.
+    # This form also draws no task progress: issue_name is omitted.
+    general = _split_general(name)
+    if general is not None and _ISSUE_MARKER.search(name) is None:
+        token, project, purpose = general
+        if token == platform_id and (not ids or platform_id in ids):
+            return _blank(
+                platform_id,
+                classification="not-issue-named",
+                name_role="general",
+                name_token=token,
+                project=project,
+                purpose=purpose,
+            )
     return _blank(platform_id)
 
 
@@ -328,10 +426,22 @@ def _read_claim_fields(path: Path) -> dict[str, Any] | None:
     issue_raw = fields.get("issue_number")
     issue = int(issue_raw) if issue_raw and issue_raw.isascii() and issue_raw.isdecimal() else None
     claim_repo = fields.get("claim_repository_id") or None
+    numbers: list[int] = []
+    for part in (fields.get("issue_numbers") or "").split(","):
+        part = part.strip()
+        if part.isascii() and part.isdecimal():
+            number = int(part)
+            if number >= 1:
+                numbers.append(number)
+    bundle_id = fields.get("bundle_id") or None
+    if not isinstance(bundle_id, str) or not bundle_id.strip():
+        bundle_id = None
     return {
         "status": fields.get("status"),
         "issue_number": issue,
         "claim_repository_id": claim_repo,
+        "bundle_id": bundle_id,
+        "issue_numbers": numbers,
     }
 
 
@@ -341,7 +451,9 @@ def find_active_claims(repo: str, issue: int) -> dict[str, Any]:
     One directory level. ``archive``, dot names, ``.ledger``, and ``.roadmap``
     are not runs. A claim is read from the file: ``status`` active,
     ``issue_number`` equal to ``issue``, and a non-empty ``claim_repository_id``.
-    The folder name is not a claim.
+    The folder name is not a claim. A bundle run is included with
+    ``bundle`` true and is not part of ``count``. ``count`` does not compare
+    origins; ``qualifying_claims`` does that.
     """
     result: dict[str, Any] = {"repo": repo, "issue": issue, "count": 0, "claims": []}
     if (not isinstance(repo, str) or not repo or isinstance(issue, bool)
@@ -374,21 +486,61 @@ def find_active_claims(repo: str, issue: int) -> dict[str, Any]:
         claim_repo = fields["claim_repository_id"]
         if not isinstance(claim_repo, str) or not claim_repo.strip():
             continue
+        bundle = (
+            child.name.startswith("bundle-")
+            or bool(fields["bundle_id"])
+            or len(fields["issue_numbers"]) > 1
+        )
         claims.append({
             "run": child.name,
             "status": "active",
             "issue_number": issue,
             "claim_repository_id": claim_repo,
             "archived": False,
+            "bundle": bundle,
+            "bundle_id": fields["bundle_id"],
+            "issue_numbers": fields["issue_numbers"],
             "path": f"kaola-workflow/{child.name}/workflow-state.md",
         })
     result["claims"] = claims
-    result["count"] = len(claims)
+    result["count"] = sum(1 for claim in claims if not claim["bundle"])
     return result
 
 
-def issue_name_for(parsed: dict[str, Any], active_claim_count: int) -> str | None:
-    """The advisory value, or None when the session is not an issue-named worker."""
+def qualifying_claims(claims: list[dict[str, Any]] | None, issue: int,
+                      session_origin_value: str | None) -> list[dict[str, Any]]:
+    """In-progress, non-bundle claims for ``issue`` with the session's origin.
+
+    Exactly one of these is ``issue_name`` ``ok``. Any other count is
+    ``no-active-run``.
+    """
+    found: list[dict[str, Any]] = []
+    if isinstance(issue, bool) or not isinstance(issue, int):
+        return found
+    for claim in claims or []:
+        if not isinstance(claim, dict) or claim.get("archived") is True:
+            continue
+        if is_bundle_claim(claim):
+            continue
+        if claim.get("status") != "active" or claim.get("issue_number") != issue:
+            continue
+        claim_repo = claim.get("claim_repository_id")
+        if not isinstance(claim_repo, str) or not claim_repo.strip():
+            continue
+        if not same_origin(claim_repo, session_origin_value):
+            continue
+        found.append(claim)
+    return found
+
+
+def issue_name_for(parsed: dict[str, Any], active_claim_count: int,
+                   claims: list[dict[str, Any]] | None = None,
+                   session_origin_value: str | None = None) -> str | None:
+    """The advisory value, or None when the session is not an issue-named worker.
+
+    When ``claims`` is given, the count is the qualifying same-origin
+    non-bundle runs. Otherwise ``active_claim_count`` is that count already.
+    """
     if parsed.get("classification") == "not-issue-named" or parsed.get("name_role") != "worker":
         return None
     classification = parsed.get("classification")
@@ -397,10 +549,14 @@ def issue_name_for(parsed: dict[str, Any], active_claim_count: int) -> str | Non
     if classification == "platform-token-mismatch":
         return "platform-token-mismatch"
     if classification == "ok":
-        if isinstance(active_claim_count, int) and not isinstance(active_claim_count, bool):
-            if active_claim_count >= 1:
-                return "ok"
-        return "no-active-run"
+        if claims is not None:
+            issue = parsed.get("issue")
+            count = len(qualifying_claims(claims, issue, session_origin_value))
+        elif isinstance(active_claim_count, int) and not isinstance(active_claim_count, bool):
+            count = active_claim_count
+        else:
+            count = 0
+        return "ok" if count == 1 else "no-active-run"
     return "malformed"
 
 
@@ -408,30 +564,17 @@ def join_bound(parsed: dict[str, Any], claims: list[dict[str, Any]],
                record_repository_id: str | None = None) -> bool:
     """The consumer join in ``JOIN_RULE``. ``claims`` are caller-supplied.
 
-    A missing ``record_repository_id`` does not skip the identity check: the
-    single matching claim's ``claim_repository_id`` is the identity, and the
-    caller must pass the same string. An empty caller identity is unbound.
+    A missing ``record_repository_id`` does not skip the identity check.
+    The caller passes the session repo's origin. An empty origin is unbound.
+    A bundle claim is not the active run. Identity is same git origin, not
+    a raw string compare.
     """
     if parsed.get("classification") != "ok" or parsed.get("name_role") != "worker":
         return False
     issue = parsed.get("issue")
     if isinstance(issue, bool) or not isinstance(issue, int):
         return False
-    if not isinstance(record_repository_id, str) or not record_repository_id.strip():
-        return False
-    matching: list[dict[str, Any]] = []
-    for claim in claims:
-        if not isinstance(claim, dict) or claim.get("archived") is True:
-            continue
-        if claim.get("status") != "active" or claim.get("issue_number") != issue:
-            continue
-        claim_repo = claim.get("claim_repository_id")
-        if not isinstance(claim_repo, str) or not claim_repo.strip():
-            continue
-        matching.append(claim)
-    if len(matching) != 1:
-        return False
-    return matching[0].get("claim_repository_id") == record_repository_id
+    return len(qualifying_claims(claims, issue, record_repository_id)) == 1
 
 
 def _positive_issues(values: list[int] | tuple[int, ...] | None) -> list[int]:
@@ -456,8 +599,9 @@ def seat_issue_drift(name: str, platform_id: str,
     The caller decides that the seat is live. ``dispatch_issues`` are the
     issues on its current execute items. A name issue that differs from any
     of them is ``dispatch-issue-mismatch``. ``no-active-run`` is the same
-    fact as ``issue_name`` ``no-active-run``: classification ``ok`` and no
-    active claim. A short alias keeps its start advisory and is not also
+    fact as ``issue_name`` ``no-active-run``: classification ``ok`` and the
+    qualifying run count is not exactly one. A passed ``active_claim_count``
+    is that count. A short alias keeps its start advisory and is not also
     called ``no-active-run`` here. This function does not rename, stop, or
     refuse the seat.
     """
@@ -472,8 +616,11 @@ def seat_issue_drift(name: str, platform_id: str,
     if parsed.get("classification") == "ok" and name_issue is not None:
         count = active_claim_count
         if count is None and isinstance(repo, str) and repo:
-            count = find_active_claims(repo, name_issue)["count"]
-        if isinstance(count, int) and not isinstance(count, bool) and count < 1:
+            found = find_active_claims(repo, name_issue)
+            count = len(qualifying_claims(
+                found["claims"], name_issue, session_origin(repo),
+            ))
+        if isinstance(count, int) and not isinstance(count, bool) and count != 1:
             advisories.append("no-active-run")
     if not advisories:
         return None
@@ -498,14 +645,18 @@ def advise(name: str, platform_id: str, repo: str | None = None,
     parsed = parse_session_name(name, platform_id, platforms_dir)
     count = 0
     claims: list[dict[str, Any]] = []
+    origin = ""
     if (parsed["classification"] == "ok" and isinstance(parsed.get("issue"), int)
             and isinstance(repo, str) and repo):
         found = find_active_claims(repo, parsed["issue"])
-        count = found["count"]
         claims = found["claims"]
+        origin = session_origin(repo)
+        count = len(qualifying_claims(claims, parsed["issue"], origin))
     return {
         **parsed,
-        "issue_name": issue_name_for(parsed, count),
+        "issue_name": issue_name_for(
+            parsed, count, claims=claims, session_origin_value=origin,
+        ),
         "active_claim_count": count,
         "claims": claims,
     }

@@ -781,8 +781,10 @@ def collect_issue_drift(bound: list[dict[str, Any]], items: dict[str, dict[str, 
             if name_issue not in claims:
                 try:
                     found = module.find_active_claims(repo, name_issue)
-                    raw = found.get("count") if isinstance(found, dict) else 0
-                    claims[name_issue] = raw if isinstance(raw, int) and not isinstance(raw, bool) else 0
+                    raw_claims = found.get("claims") if isinstance(found, dict) else []
+                    origin = module.session_origin(repo)
+                    matched = module.qualifying_claims(raw_claims, name_issue, origin)
+                    claims[name_issue] = len(matched)
                 except Exception:
                     claims[name_issue] = 0
             count = claims[name_issue]

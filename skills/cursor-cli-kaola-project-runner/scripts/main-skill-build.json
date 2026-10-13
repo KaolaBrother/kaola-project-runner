@@ -1,5 +1,5 @@
 {
-  "build": "d91a16339823",
+  "build": "569b8fb55c1e",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "e87411af5a117aa5edaa26ed935059ff381db776857767f70009b6fcad66e6ca",
@@ -24,10 +24,10 @@
     "references/zcode-native-skill-entry.md": "22f5e4ce50d92a0e264c71252616a9c2db8473817be1c5eb99d0a415f814918f",
     "scripts/kaola-acp-paths.py": "e435b3aeab7979fb1bff8d18b25087021ca1daf9a0015831fde46126d24261ac",
     "scripts/kaola-compact-recovery.py": "c45662a4297047bd860a46157e950b4aac460b3e9df1a889abe99ca687e90f27",
-    "scripts/kaola-dispatch.py": "eb0bf9cf411db331dfec13d645693ad8eb1606b01ae9765aa4b445d18249ed13",
+    "scripts/kaola-dispatch.py": "db1f02967e9646dda0ab73ae18a54ae6f684900a2d4a142742aadd542a804e6b",
     "scripts/kaola-record-contract.py": "ad46090a0a5821e517adbf240ccaaf14b8a4d623696a994e73dbaa6585ad8c8a",
     "scripts/kaola-recovery-routes.py": "7d36e551082cbb3ca3c315ab0d5e69b1f0cf4e5f91578924dbf193885f23a23c",
-    "scripts/kaola-session-names.py": "28cf886b38c0bdba325d1c0fe03f3c13532d3cbf0dc24b1cf6628fd7b7bffaa3"
+    "scripts/kaola-session-names.py": "772f2d729e61763851b78ab9d440c664df225bc4f08dc71f8ba0102ead411316"
   },
   "skill": "kaola-project-runner"
 }

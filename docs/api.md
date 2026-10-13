@@ -1276,31 +1276,43 @@ Human watch is not an L0 receipt. `kaola-acp list [--platform P] [--repo ROOT]` 
 this field. The 1-80 `--session` syntax remains the only name validator. There is no
 registry and no new Workflow state field.
 
-`ok` means the session name is `<exact-platform-id>-<PROJECT>-i<ISSUE>-<purpose>` and
-the repo's main checkout has at least one non-archived
+`ok` means the session name is `<exact-platform-id>-<CODE>-i<ISSUE>-<purpose>` and
+the repo's main checkout has exactly one in-progress, non-bundle
 `kaola-workflow/<run>/workflow-state.md` whose `status` is `active`, whose
-`issue_number` is that issue, and which has a `claim_repository_id`. The exact platform
-id is required. It is the manifest `id` derived from `platforms/*.yaml`
-`session_prefix` by removing the `-kaola` suffix (`claude-code`, `cursor-cli`, ...).
-A short alias does not count: `claude-PROJ-i123-x` on platform `claude-code` is
-`platform-token-mismatch`, and `cursor-` on `cursor-cli` is the same class. Another
-platform's prefix is the same class. `malformed` means the name has no `i<ISSUE>`
-field or does not parse, and it is not a host, sideagent, or seat name
-(`claude-PROJ-haiku-1749-x`). `no-active-run` means the name parses and that scan
-found no active claim (`grok-PROJ-i123-x` with no active run for issue 123).
+`issue_number` is that issue, and whose `claim_repository_id` has the same git
+origin as the session repo. `CODE` starts with a letter and is letters and digits
+only. The exact platform id is required, character for character. It is the
+manifest `id` derived from `platforms/*.yaml` `session_prefix` by removing the
+`-kaola` suffix (`claude-code`, `cursor-cli`, ...). A short alias does not count:
+`claude-PROJ-i123-x` on platform `claude-code` is `platform-token-mismatch`, and
+`cursor-` on `cursor-cli` is the same class. Another platform's prefix is the same
+class. `malformed` means the name has no `i<ISSUE>` field or does not parse, and it
+is not a host, sideagent, seat, or general name (`claude-PROJ-haiku-1749-x`, and a
+leading-digit code such as `codex-1KT-i1-work`). `no-active-run` means the name
+parses and that scan did not find exactly one non-bundle same-origin run
+(`grok-PROJ-i123-x` with no active run for issue 123, two active runs, a bundle
+run, or a different origin). Same origin is the same GitHub `owner/repo`,
+case-insensitively, or the same origin string when it is not a GitHub URL. A
+bundle run has a `bundle_id`, more than one `issue_numbers` value, or a `bundle-`
+folder name.
 
-`issue_name` `ok` is not the consumer join. The join needs the name to parse and
-exactly one such active claim whose `claim_repository_id` matches the Runner record
-repository identity. Two active runs, or a repository mismatch, stay unbound there.
-The join rule and the representative names are
+`issue_name` `ok` uses that same exactly-one rule. The field is optional and
+additive on `kaola-acp-list/1` rows. The schema name stays `kaola-acp-list/1`.
+No existing list field is removed or renamed. The four `issue_name` strings stay
+`ok`, `malformed`, `platform-token-mismatch`, and `no-active-run`. The join rule
+and the representative names are
 `tests/contract/kaola-terminal-name-contract.json`, stated in
-`docs/issue-dispatch-display.md`.
+`docs/issue-dispatch-display.md`. A null `agent_alive` on a list row stays
+unknown. It is not ended.
 
 A host name (`<platform>-<CODE>-orchestrator-<purpose>`), a `sideagent` or legacy
-`sidekick` name, or a `seat` name omits `issue_name`. The receipt sets `name_role` to
-`host`, `sideagent`, or `seat` instead. That marker is not `session_role` and it does
-not change seat accounting. An issue-named worker sets `name_role` to `worker` next
-to `issue_name`. `list` puts the same fields on each row.
+`sidekick` name, a `seat` name, or a general name
+(`<platform>-<CODE>-general-<purpose>`) omits `issue_name`. The receipt sets
+`name_role` to `host`, `sideagent`, `seat`, or `general` instead. That marker is
+not `session_role` and it does not change seat accounting. Host, sideagent, and
+general names carry no `i<ISSUE>`, and this advisory draws no task progress for
+them. An issue-named worker sets `name_role` to `worker` next to `issue_name`.
+`list` puts the same fields on each row.
 
 The lookup reads `kaola-workflow/<run>/workflow-state.md` in the main checkout only
 (one directory level; `archive` is not a run). It reads `status`, `issue_number`, and
@@ -1325,10 +1337,11 @@ issue and a current dispatch issue differs from it. A current dispatch item is
 `in-flight` or `unknown`, or `returned` while acceptance is not `accepted`,
 `cancelled`, `superseded`, or `handed-off`. An item that names a different
 `holder_instance_id` is not this seat's item. `no-active-run` is the same fact as
-`issue_name` `no-active-run`: the name classifies `ok` and that issue has no
-active claim. A short alias keeps its start advisory and is not also called
-`no-active-run` here. A name that does not yield an issue is not a drift row.
-A matching name and dispatch issue with an active claim is not a row.
+`issue_name` `no-active-run`: the name classifies `ok` and that issue does not
+have exactly one non-bundle same-origin run. A short alias keeps its start
+advisory and is not also called `no-active-run` here. A name that does not yield
+an issue is not a drift row. A matching name and dispatch issue with that one
+run is not a row.
 
 `name_issue` is the issue in the session name. `dispatch_issue` is that one
 current issue, or null when the seat has none or several. Several current issues

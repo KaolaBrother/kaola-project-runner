@@ -1,16 +1,18 @@
 {
   "schema": "kaola-terminal-name-contract/1",
-  "grammar": "<platform>-<PROJECT>-i<ISSUE>-<purpose>",
+  "grammar": "<platform>-<CODE>-i<N>-<purpose>",
+  "general_form": "<platform>-<CODE>-general-<purpose>",
+  "code_rule": "CODE starts with a letter and contains only letters and digits",
   "exact_platform_id_required": true,
   "short_aliases_are_not_platform_ids": ["claude", "cursor"],
   "advisory_field": "issue_name",
   "advisory_values": ["ok", "malformed", "platform-token-mismatch", "no-active-run"],
   "advisory_blocks_start": false,
   "name_role_field": "name_role",
-  "name_role_values": ["worker", "host", "sideagent", "seat"],
+  "name_role_values": ["worker", "host", "sideagent", "seat", "general"],
   "non_worker_omits_issue_name": true,
-  "join_rule": "name parses AND the repo's active run claims that issue number => bound; else unbound. Parses means classification ok: the name is <platform>-<PROJECT>-i<ISSUE>-<purpose> and platform is the exact platform id derived from platforms/*.yaml session_prefix (the id, such as claude-code or cursor-cli, not a short alias such as claude or cursor). The repo's active run is exactly one non-archived kaola-workflow/<run>/workflow-state.md in that repo's main checkout whose status is active, whose issue_number equals that ISSUE, and whose claim_repository_id matches the Runner record repository identity. A short alias, another platform's prefix, a malformed name, a host, sideagent, or seat name, no active run, a repository mismatch, and two active runs for one issue are unbound.",
-  "advisory_note": "issue_name ok means classification ok and at least one non-archived active workflow-state.md claim for that issue_number, with a claim_repository_id present. It does not require exactly one claim and it does not compare claim_repository_id to the Runner record. Those checks are the join rule. issue_name never blocks start.",
+  "join_rule": "name parses AND the repo's active run claims that issue number => bound; else unbound. Parses means classification ok: the name is <platform>-<PROJECT>-i<ISSUE>-<purpose> and platform is the exact platform id derived from platforms/*.yaml session_prefix (the id, such as claude-code or cursor-cli, not a short alias such as claude or cursor). PROJECT starts with a letter and is letters and digits only. The repo's active run is exactly one non-archived non-bundle kaola-workflow/<run>/workflow-state.md in that repo's main checkout whose status is active, whose issue_number equals that ISSUE, and whose claim_repository_id has the same git origin as the session repo. A bundle is a run with a bundle_id, more than one issue_numbers value, or a bundle- folder name. Same origin is the same GitHub owner/repo, compared case-insensitively, or the same origin string when it is not a GitHub URL. A short alias, another platform's prefix, a malformed name, a host, sideagent, seat, or general name, no active run, a bundle run, a repository mismatch, and two active runs for one issue are unbound.",
+  "advisory_note": "issue_name ok means classification ok and exactly one in-progress non-bundle run whose issue_number equals that issue, and whose claim_repository_id has the same git origin as the session repo. Zero runs, two or more runs, a bundle run, and a different origin are no-active-run. issue_name never blocks start.",
   "rows": [
     {
       "name": "claude-code-PROJ-i123-x",
@@ -501,7 +503,7 @@
         "purpose": "two",
         "mismatch_kind": null
       },
-      "issue_name": "ok",
+      "issue_name": "no-active-run",
       "join": {
         "platform_id": "claude-code",
         "project": "PROJ",
@@ -533,7 +535,7 @@
         "purpose": "x",
         "mismatch_kind": null
       },
-      "issue_name": "ok",
+      "issue_name": "no-active-run",
       "join": {
         "platform_id": "claude-code",
         "project": "PROJ",
@@ -622,6 +624,147 @@
         "issue": null,
         "purpose": null,
         "bound": false
+      }
+    },
+    {
+      "name": "codex-1KT-i1-work",
+      "platform_id": "codex",
+      "active_claim_count": 0,
+      "record_repository_id": null,
+      "claims": [],
+      "parsed": {
+        "classification": "malformed",
+        "name_role": "worker",
+        "platform_id": "codex",
+        "name_token": null,
+        "project": null,
+        "issue": null,
+        "purpose": null,
+        "mismatch_kind": null
+      },
+      "issue_name": "malformed",
+      "join": {
+        "platform_id": "codex",
+        "project": null,
+        "issue": null,
+        "purpose": null,
+        "bound": false
+      }
+    },
+    {
+      "name": "cursor-cli-KT-general-watch",
+      "platform_id": "cursor-cli",
+      "active_claim_count": 0,
+      "record_repository_id": null,
+      "claims": [],
+      "parsed": {
+        "classification": "not-issue-named",
+        "name_role": "general",
+        "platform_id": "cursor-cli",
+        "name_token": "cursor-cli",
+        "project": "KT",
+        "issue": null,
+        "purpose": "watch",
+        "mismatch_kind": null
+      },
+      "issue_name": null,
+      "join": {
+        "platform_id": "cursor-cli",
+        "project": "KT",
+        "issue": null,
+        "purpose": "watch",
+        "bound": false
+      }
+    },
+    {
+      "name": "claude-KT-general-watch",
+      "platform_id": "claude-code",
+      "active_claim_count": 0,
+      "record_repository_id": null,
+      "claims": [],
+      "parsed": {
+        "classification": "malformed",
+        "name_role": "worker",
+        "platform_id": "claude-code",
+        "name_token": null,
+        "project": null,
+        "issue": null,
+        "purpose": null,
+        "mismatch_kind": null
+      },
+      "issue_name": "malformed",
+      "join": {
+        "platform_id": "claude-code",
+        "project": null,
+        "issue": null,
+        "purpose": null,
+        "bound": false
+      }
+    },
+    {
+      "name": "grok-KT-i50-bundle",
+      "platform_id": "grok",
+      "active_claim_count": 1,
+      "record_repository_id": "https://github.com/example/consumer.git",
+      "claims": [
+        {
+          "status": "active",
+          "issue_number": 50,
+          "claim_repository_id": "https://github.com/example/consumer.git",
+          "archived": false,
+          "bundle": true,
+          "run": "bundle-50-51"
+        }
+      ],
+      "parsed": {
+        "classification": "ok",
+        "name_role": "worker",
+        "platform_id": "grok",
+        "name_token": "grok",
+        "project": "KT",
+        "issue": 50,
+        "purpose": "bundle",
+        "mismatch_kind": null
+      },
+      "issue_name": "no-active-run",
+      "join": {
+        "platform_id": "grok",
+        "project": "KT",
+        "issue": 50,
+        "purpose": "bundle",
+        "bound": false
+      }
+    },
+    {
+      "name": "codex-KT-i77-origin",
+      "platform_id": "codex",
+      "active_claim_count": 1,
+      "record_repository_id": "https://github.com/Example/consumer.git",
+      "claims": [
+        {
+          "status": "active",
+          "issue_number": 77,
+          "claim_repository_id": "git@github.com:example/consumer.git",
+          "archived": false
+        }
+      ],
+      "parsed": {
+        "classification": "ok",
+        "name_role": "worker",
+        "platform_id": "codex",
+        "name_token": "codex",
+        "project": "KT",
+        "issue": 77,
+        "purpose": "origin",
+        "mismatch_kind": null
+      },
+      "issue_name": "ok",
+      "join": {
+        "platform_id": "codex",
+        "project": "KT",
+        "issue": 77,
+        "purpose": "origin",
+        "bound": true
       }
     }
   ]

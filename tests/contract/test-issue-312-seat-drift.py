@@ -67,6 +67,10 @@ def git_init(repo: Path) -> None:
         ["git", "-C", str(repo), "init", "-q"],
         check=True, capture_output=True, text=True,
     )
+    subprocess.run(
+        ["git", "-C", str(repo), "remote", "add", "origin", REPO_ID],
+        check=True, capture_output=True, text=True,
+    )
 
 
 def run_dispatch(args: list[str], env: dict[str, str]) -> tuple[int, str, dict]:
@@ -224,9 +228,16 @@ class SeatDriftAdvisory(unittest.TestCase):
             platforms_dir=PLATFORMS,
         )
         self.assertEqual(alias["advisories"], ["dispatch-issue-mismatch"])
-        self.assertIsNone(names.seat_issue_drift(
+        two = names.seat_issue_drift(
             "codex-PROJ-i1758-work", "codex", [1758], active_claim_count=2,
             platforms_dir=PLATFORMS,
+        )
+        self.assertEqual(two["advisories"], ["no-active-run"])
+        self.assertEqual(two["name_issue"], 1758)
+        self.assertEqual(two["dispatch_issue"], 1758)
+        self.assertIsNone(names.seat_issue_drift(
+            "cursor-cli-KT-general-watch", "cursor-cli", [1758],
+            active_claim_count=0, platforms_dir=PLATFORMS,
         ))
         self.assertIsNone(names.seat_issue_drift(
             "codex-PROJ-i1758-work", "codex", [1758], active_claim_count=1,

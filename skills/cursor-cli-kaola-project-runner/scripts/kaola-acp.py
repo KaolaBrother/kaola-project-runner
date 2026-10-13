@@ -122,9 +122,10 @@ def stamp_issue_name_receipt(receipt: dict[str, Any], platform: str, session: st
 
     Issue-named workers get ``issue_name`` (ok, malformed,
     platform-token-mismatch, or no-active-run) and ``name_role`` worker.
-    A host, sideagent, or seat name omits ``issue_name`` and sets
+    A host, sideagent, seat, or general name omits ``issue_name`` and sets
     ``name_role`` to that role. A missing helper or a lookup error leaves
-    the receipt unchanged.
+    the receipt unchanged. The list schema stays ``kaola-acp-list/1``.
+    A null ``agent_alive`` stays unknown.
     """
     module = _load_session_names()
     if module is None or not isinstance(receipt, dict):

@@ -48,18 +48,9 @@ or register a session.
 
 Join rule, which the fixture's `join_rule` repeats:
 
-name parses AND the repo's active run claims that issue number => bound; else unbound.
-Parses means classification ok: the name is `<platform>-<PROJECT>-i<ISSUE>-<purpose>` and
-platform is the exact platform id derived from `platforms/*.yaml` `session_prefix` (the
-id, such as `claude-code` or `cursor-cli`, not a short alias such as `claude` or
-`cursor`). The repo's active run is exactly one non-archived
-`kaola-workflow/<run>/workflow-state.md` in that repo's main checkout whose status is
-active, whose `issue_number` equals that ISSUE, and whose `claim_repository_id` matches
-the Runner record repository identity. A short alias, another platform's prefix, a
-malformed name, a host, sideagent, or seat name, no active run, a repository mismatch,
-and two active runs for one issue are unbound.
+name parses AND the repo's active run claims that issue number => bound; else unbound. Parses means classification ok: the name is <platform>-<PROJECT>-i<ISSUE>-<purpose> and platform is the exact platform id derived from platforms/*.yaml session_prefix (the id, such as claude-code or cursor-cli, not a short alias such as claude or cursor). PROJECT starts with a letter and is letters and digits only. The repo's active run is exactly one non-archived non-bundle kaola-workflow/<run>/workflow-state.md in that repo's main checkout whose status is active, whose issue_number equals that ISSUE, and whose claim_repository_id has the same git origin as the session repo. A bundle is a run with a bundle_id, more than one issue_numbers value, or a bundle- folder name. Same origin is the same GitHub owner/repo, compared case-insensitively, or the same origin string when it is not a GitHub URL. A short alias, another platform's prefix, a malformed name, a host, sideagent, seat, or general name, no active run, a bundle run, a repository mismatch, and two active runs for one issue are unbound.
 
-The Runner advisory `issue_name` `ok` is weaker than bound: it means the name parses and
-at least one such active claim exists. It does not require exactly one claim, and it does
-not compare `claim_repository_id` to the record. `docs/api.md` states the receipt field.
-`docs/conventions.md` states that the advisory is non-blocking.
+The Runner advisory `issue_name` `ok` is that same exactly-one non-bundle same-origin
+run. Zero runs, two or more runs, a bundle run, and a different origin are
+`no-active-run`. The field still does not block a start. `docs/api.md` states the
+receipt field. `docs/conventions.md` states that the advisory is non-blocking.

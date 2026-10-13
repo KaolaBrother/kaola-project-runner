@@ -73,10 +73,11 @@ Seats: restart not required
   platform id is required (`claude-code-`, `cursor-cli-`, and the other ids
   derived from `platforms/*.yaml` `session_prefix`). A short alias (`claude-`,
   `cursor-`) is `platform-token-mismatch`. A name with no `i<ISSUE>` field,
-  such as `claude-PROJ-haiku-1749-x`, is `malformed`. A parsed name with no
-  active `workflow-state.md` claim for that issue is `no-active-run`. A host,
-  sideagent, or seat name omits `issue_name` and sets `name_role` to `host`,
-  `sideagent`, or `seat`. Start still succeeds for every value. Nothing
+  such as `claude-PROJ-haiku-1749-x`, is `malformed`. `no-active-run` is the
+  case that is not exactly one non-bundle same-origin run for that issue
+  (Issue #312). A host, sideagent, or seat name omits `issue_name` and sets
+  `name_role` to `host`, `sideagent`, or `seat`. Start still succeeds for
+  every value. Nothing
   renames a session or adds a registry. The consumer join is
   `tests/contract/kaola-terminal-name-contract.json`.
   Restart judgment: `scripts/kaola-acp.py` is a per-call CLI and is outside
@@ -92,21 +93,33 @@ Seats: restart not required
 - **A live seat whose dispatch issue differs from its name is an advisory (Issue #312).**
   `project --seats` and the Delegator seat summary report `issue_drift` when a
   live seat's current dispatch issue is not the `i<ISSUE>` in its session name
-  (`dispatch-issue-mismatch`), or when that name's issue has no active run
-  (`no-active-run`). The row names the safe point: exact-stop, then a fresh
-  standard-named session. The view does not block, rename, retarget, or stop
-  the seat. A matching name and dispatch issue with an active claim is not
-  flagged. Plan item `issue` is copied onto the index row and does not admit
-  or refuse. The check is not written into the index, the live list, or a
-  registry. The injected heartbeat body still has no seat table.
-  Restart judgment: `scripts/kaola-dispatch.py` and
-  `scripts/kaola-session-names.py` are per-call CLIs and are outside the
-  operator restart set (`docs/conventions.md`). `scripts/kaola-acp-holder.py`
-  is unchanged. The next `project --seats` and the next Delegator seat view
-  report the field. A running holder is not restarted and its session is not
-  renamed. A symlink install uses the new files on the next process. A copy
-  install uses them only after that copy is replaced. This change does not
-  install.
+  (`dispatch-issue-mismatch`), or when that name's issue does not have exactly
+  one non-bundle same-origin run (`no-active-run`). The row names the safe
+  point: exact-stop, then a fresh standard-named session. The view does not
+  block, rename, retarget, or stop the seat. A matching name and dispatch
+  issue with that one run is not flagged. Plan item `issue` is copied onto
+  the index row and does not admit or refuse. The check is not written into
+  the index, the live list, or a registry. The injected heartbeat body still
+  has no seat table.
+  The same change aligns the #313 name advisory with the published name rules.
+  `<platform>` must equal the row's platform id character for character.
+  `<CODE>` starts with a letter and is letters and digits only.
+  `<platform>-<CODE>-general-<purpose>` omits `issue_name` and sets
+  `name_role` to `general`, so a host, side agent, or general name draws no
+  task progress. `issue_name` stays the four strings `ok`, `malformed`,
+  `platform-token-mismatch`, and `no-active-run`, and it stays an optional
+  additive field on `kaola-acp-list/1`. `no-active-run` is any case other
+  than exactly one in-progress non-bundle run for that issue whose claim has
+  the same git origin as the session repo. A null `agent_alive` stays
+  unknown. It is not ended.
+  Restart judgment: `scripts/kaola-dispatch.py`, `scripts/kaola-session-names.py`,
+  and `scripts/kaola-acp.py` are per-call CLIs and are outside the operator
+  restart set (`docs/conventions.md`). `scripts/kaola-acp-holder.py` is
+  unchanged. The next `project --seats`, the next `start`, and the next
+  `list` report the advisory. A running holder is not restarted and its
+  session is not renamed. A symlink install uses the new files on the next
+  process. A copy install uses them only after that copy is replaced. This
+  change does not install.
 
 Seats: restart required
 

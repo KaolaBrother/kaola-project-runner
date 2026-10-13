@@ -154,20 +154,23 @@ is another platform's id is not this session's name either.
 `start` and `list` report that fact as an advisory. They do not block a start, do not
 rename a session, and do not keep a registry. For an issue-named worker, the receipt field
 `issue_name` is one of `ok`, `malformed`, `platform-token-mismatch`, or `no-active-run`.
-`ok` means the name uses the exact platform id and the repo's main checkout has at least
-one non-archived active `workflow-state.md` claim for that issue. `malformed` means there
-is no `i<ISSUE>` field, or the name does not parse, and the name is not a host, sideagent,
-or seat name. `platform-token-mismatch` means the name parses except the prefix is a short
-alias or another platform's prefix. `no-active-run` means the name parses and no active
-claim for that issue was read. A host (`orchestrator`), sideagent (including the legacy
-`sidekick` spelling), or seat name omits `issue_name` and sets `name_role` to `host`,
-`sideagent`, or `seat`. The consumer join is stricter than `issue_name` `ok`; it is stated
-in `docs/issue-dispatch-display.md` and encoded in
+`CODE` starts with a letter and is letters and digits only. `ok` means the name uses the
+exact platform id and the repo's main checkout has exactly one in-progress non-bundle
+`workflow-state.md` whose issue is that issue and whose claim has the same git origin as
+the session repo. `malformed` means there is no `i<ISSUE>` field, or the name does not
+parse, and the name is not a host, sideagent, seat, or general name.
+`platform-token-mismatch` means the name parses except the prefix is a short alias or
+another platform's prefix. `no-active-run` means the name parses and that exactly-one
+same-origin run was not read. A host (`orchestrator`), sideagent (including the legacy
+`sidekick` spelling), seat, or `<platform>-<CODE>-general-<purpose>` name omits
+`issue_name` and sets `name_role` to `host`, `sideagent`, `seat`, or `general`. The
+consumer join is stated in `docs/issue-dispatch-display.md` and encoded in
 `tests/contract/kaola-terminal-name-contract.json`.
 
 A live seat view (`project --seats`, and the Delegator seat summary) reports
 advisory `issue_drift` when a live seat's current dispatch issue is not the
-`i<ISSUE>` in its name, or when that name's issue has no active run. The
+`i<ISSUE>` in its name, or when that name's issue does not have exactly one
+non-bundle same-origin run. The
 suggestion is to exact-stop at the next safe point and start a fresh
 standard-named session. The view does not block, rename, retarget, or stop the
 seat, and it does not store the field. Detail is in `docs/api.md`.

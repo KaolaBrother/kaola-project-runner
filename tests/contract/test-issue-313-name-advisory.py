@@ -98,6 +98,10 @@ class FixtureMatchesParser(unittest.TestCase):
             "else unbound."
         ))
         self.assertEqual(set(fixture["name_role_values"]), set(self.names.NAME_ROLES))
+        self.assertEqual(
+            fixture["general_form"], "<platform>-<CODE>-general-<purpose>",
+        )
+        self.assertEqual(self.names._PROJECT.pattern, r"^[A-Za-z][A-Za-z0-9]*$")
 
     def test_each_row_matches_the_parser_and_the_join(self) -> None:
         seen_advisories = set()
@@ -107,7 +111,10 @@ class FixtureMatchesParser(unittest.TestCase):
                 self.assertEqual(set(parsed), set(self.names.PARSED_KEYS))
                 self.assertEqual(parsed, row["parsed"])
                 self.assertIn(parsed["classification"], self.names.CLASSIFICATIONS)
-                issue_name = self.names.issue_name_for(parsed, row["active_claim_count"])
+                issue_name = self.names.issue_name_for(
+                    parsed, row["active_claim_count"], claims=row["claims"],
+                    session_origin_value=row.get("record_repository_id"),
+                )
                 self.assertEqual(issue_name, row["issue_name"])
                 if issue_name is not None:
                     self.assertIn(issue_name, self.names.ISSUE_NAME_VALUES)
@@ -155,6 +162,7 @@ class ActiveRunLookup(unittest.TestCase):
         main.mkdir()
         git(main, "init", "-q")
         git(main, "commit", "--allow-empty", "-m", "init")
+        git(main, "remote", "add", "origin", REPO_ID)
         write_state(
             main / "kaola-workflow" / "issue-123" / "workflow-state.md",
             "active", 123, REPO_ID,
@@ -194,6 +202,7 @@ class ActiveRunLookup(unittest.TestCase):
         main.mkdir()
         git(main, "init", "-q")
         git(main, "commit", "--allow-empty", "-m", "init")
+        git(main, "remote", "add", "origin", REPO_ID)
         worktree = self.root / "worktree"
         subprocess.run(
             ["git", "-C", str(main), "worktree", "add", "--detach", str(worktree)],
@@ -209,6 +218,68 @@ class ActiveRunLookup(unittest.TestCase):
         )
         self.assertEqual(self.names.find_active_claims(str(worktree), 123)["count"], 1)
         self.assertEqual(self.names.find_active_claims(str(worktree), 999)["count"], 0)
+
+    def test_bundle_two_runs_and_origin_decide_the_advisory(self) -> None:
+        main = self.root / "main"
+        main.mkdir()
+        git(main, "init", "-q")
+        git(main, "commit", "--allow-empty", "-m", "init")
+        git(main, "remote", "add", "origin", "git@github.com:example/consumer.git")
+        write_state(
+            main / "kaola-workflow" / "issue-10" / "workflow-state.md",
+            "active", 10, "https://github.com/example/consumer.git",
+        )
+        write_state(
+            main / "kaola-workflow" / "issue-10-again" / "workflow-state.md",
+            "active", 12, REPO_ID,
+        )
+        bundle = main / "kaola-workflow" / "bundle-10-11" / "workflow-state.md"
+        bundle.parent.mkdir(parents=True, exist_ok=True)
+        bundle.write_text(
+            "# Kaola-Workflow State\n\n"
+            "## Project\n"
+            "name: bundle-10-11\n"
+            "status: active\n"
+            "bundle_id: bundle-10-11\n"
+            "issue_numbers: 10,11\n\n"
+            "## Claim Identity\n"
+            f"claim_repository_id: {REPO_ID}\n\n"
+            "## Sink\n"
+            "issue_number: 11\n",
+            encoding="utf-8",
+        )
+        one = self.names.advise("grok-KT-i10-work", "grok", str(main))
+        self.assertEqual(one["issue_name"], "ok")
+        self.assertEqual(one["active_claim_count"], 1)
+        two = self.names.advise("grok-KT-i12-work", "grok", str(main))
+        self.assertEqual(two["issue_name"], "ok")
+        write_state(
+            main / "kaola-workflow" / "issue-12-second" / "workflow-state.md",
+            "active", 12, REPO_ID,
+        )
+        doubled = self.names.advise("grok-KT-i12-work", "grok", str(main))
+        self.assertEqual(doubled["issue_name"], "no-active-run")
+        bundled = self.names.advise("grok-KT-i11-bundle", "grok", str(main))
+        self.assertEqual(bundled["issue_name"], "no-active-run")
+        self.assertEqual(self.names.find_active_claims(str(main), 11)["count"], 0)
+        other = self.root / "other"
+        other.mkdir()
+        git(other, "init", "-q")
+        git(other, "commit", "--allow-empty", "-m", "init")
+        git(other, "remote", "add", "origin", "https://github.com/example/other.git")
+        write_state(
+            other / "kaola-workflow" / "issue-10" / "workflow-state.md",
+            "active", 10, REPO_ID,
+        )
+        mismatch = self.names.advise("codex-KT-i10-work", "codex", str(other))
+        self.assertEqual(mismatch["issue_name"], "no-active-run")
+        general = self.names.advise("cursor-cli-KT-general-watch", "cursor-cli", str(main))
+        self.assertEqual(general["name_role"], "general")
+        self.assertIsNone(general["issue_name"])
+        self.assertIsNone(general["issue"])
+        digit = self.names.advise("codex-1KT-i1-work", "codex", str(main))
+        self.assertEqual(digit["issue_name"], "malformed")
+        self.assertIsNone(digit["issue"])
 
 
 class DocsAndInventory(unittest.TestCase):
@@ -264,6 +335,7 @@ class StartStillSucceeds(unittest.TestCase):
         self.repo = Path(os.path.realpath(self.root / "repo"))
         self.repo.mkdir()
         git(self.repo, "init", "-q")
+        git(self.repo, "remote", "add", "origin", REPO_ID)
         write_state(
             self.repo / "kaola-workflow" / "issue-123" / "workflow-state.md",
             "active", 123, REPO_ID,
@@ -315,6 +387,7 @@ class StartStillSucceeds(unittest.TestCase):
             ("grok", "grok-PROJ-i456-x", "no-active-run", "worker"),
             ("claude-code", "claude-PROJ-haiku-1749-x", "malformed", "worker"),
             ("claude-code", "claude-code-PROJ-i123-x", "ok", "worker"),
+            ("grok", "grok-KT-general-watch", None, "general"),
         )
         for platform, session, issue_name, role in cases:
             with self.subTest(session=session):
@@ -322,8 +395,11 @@ class StartStillSucceeds(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, receipt)
                 self.assertNotEqual(receipt.get("result"), "refused", receipt)
                 self.assertEqual(receipt.get("state"), "ready", receipt)
-                self.assertEqual(receipt.get("issue_name"), issue_name, receipt)
                 self.assertEqual(receipt.get("name_role"), role, receipt)
+                if issue_name is None:
+                    self.assertNotIn("issue_name", receipt)
+                else:
+                    self.assertEqual(receipt.get("issue_name"), issue_name, receipt)
                 self.assertNotIn("error", receipt, receipt)
         host = "grok-PROJ-orchestrator-main"
         dead = subprocess.Popen(["/bin/sleep", "30"])
@@ -344,8 +420,11 @@ class StartStillSucceeds(unittest.TestCase):
         _result, listing = self.run_cli("grok", "list", "--include-dead")
         rows = {row["session"]: row for row in listing["rows"]}
         for _platform, session, issue_name, role in cases:
-            self.assertEqual(rows[session]["issue_name"], issue_name)
             self.assertEqual(rows[session]["name_role"], role)
+            if issue_name is None:
+                self.assertNotIn("issue_name", rows[session])
+            else:
+                self.assertEqual(rows[session]["issue_name"], issue_name)
         self.assertNotIn("issue_name", rows[host])
         self.assertEqual(rows[host]["name_role"], "host")
         self.assertTrue(rows[host]["host_class"])
