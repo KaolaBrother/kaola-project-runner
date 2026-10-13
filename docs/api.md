@@ -724,7 +724,7 @@ Always wake (a real stop must not end silently):
 | unrequested agent exit outside the boot window | `error` | `agent_exit` | `agent_exited` |
 | failed boot | `error` | `boot_failure` | `boot_failure` |
 | `op_stop` after the stopped record is written | `stopped` | `exact_stop` | `exact_stop` |
-| dead holder recovered by the next `start` or a dead-holder `stop` | `error` | `holder_lost` | `holder_lost` |
+| dead holder recovered by the next `start`, a dead-holder `stop`, or cron `delegator-webhook status` | `error` | `holder_lost` | `holder_lost` |
 
 `turn_failed`, permission, agent exit, boot failure and exact stop wake even when
 the prompt source was the Delegator. Exact stop is spawned inline because the
@@ -809,6 +809,41 @@ wake from that holder. The start/stop receipt names the outcome under
 `delegator_death_wake` (`sent`, `holder_instance_id`, `event_seq`, or a
 `reason` of `already-recovered`/`spawn-failed`).
 
+`delegator-webhook status` is a third caller (#311). It does not replace or
+retire the record, and it does not need a new Host start. The Delegator's
+low-frequency cron fallback is an Agent inquiry, not a daemon. Its native
+timer body is unchanged. The loaded Skill cadence sentence is what runs
+`delegator-webhook status --project` on that inquiry. Only the `status`
+action scans. `test` sends one `state: test` wake and does not scan.
+`configure` prints the status receipt and does not scan.
+
+The scan runs only when the project entry exists, validates, and `enabled`
+is true. It walks record files for that project and calls
+`recover_host_death_wake` when all of these hold: `session_role` is `host`,
+`state` is not `stopped`, `holder_instance_id` is a non-empty string, the
+record repo is this project, and `holder_pid`, `agent_pid`, and `agent_pgid`
+are all dead (`pid_alive` is false for a missing pid). The same
+`delegator_death_wake` flock and event apply, so a second `status` returns
+`already-recovered` and does not POST again. `status` returns as soon as the
+deliver child is spawned. It does not wait for the network.
+
+A missing config, `enabled: false`, `config-mode`, or `invalid-config` sets
+`holder_lost.scan` to `skipped` with `reason` `not-enabled` or that config
+error, and `wakes` empty. A skipped scan writes no death event, so a later
+enabled `status` can still send the wake. A live `holder_pid` is not woken
+here, including a pid whose argv is no longer the holder: `status` does not
+probe argv. That reused-pid case stays with the next `start` or dead-holder
+`stop`. A live `agent_pid` or `agent_pgid` also suppresses the scan wake.
+That is the same gate `command_start` uses before it will replace the record.
+
+The CLI does not poll and does not read `cadence.interval_minutes`. Nothing
+else in the runner polls webhook state. The cadence bound is the Delegator's
+recorded cron interval. The Skill's example interval is 120 minutes. After
+the Delegator has loaded the cadence line, the wait from a holder death to
+this wake is at most one cron interval, plus delivery. A record-root mismatch
+(`RecordRootMismatch`) returns `holder_lost.scan` `incomplete` and an empty
+`wakes` list. `leg` is always `delegator-webhook status`.
+
 Payload (signal only, no transcript, prompt, diff or secret). A current
 holder (v0.9.7 and later) sends `reason`, one of the tokens in the tables
 above, or `test`. A previous holder's payload may omit it; the accepted-shape
@@ -843,9 +878,12 @@ Delivery: POST the payload as the JSON body with `Content-Type: application/json
 and `User-Agent: kaola-delegator-wake/1`, plus the configured key header for a
 `header` attachment. Redirects are refused (`redirect-refused`, no retry). Each
 attempt times out at 12 s. One initial attempt plus up to 3 retries (4 attempts,
-backoff 1 s, 2 s, 4 s). The retryable set is connection errors, HTTP 5xx, HTTP
-408 and HTTP 429. A client timeout is not retried: the server may already have
-accepted the POST. Any other non-2xx is final. A 2xx is `delivered`. Not
+backoff 1 s, 2 s, 4 s). The retryable set is connection errors, HTTP 400,
+HTTP 408, HTTP 429, and HTTP 5xx (#311; this supersedes the #302 rule that
+HTTP 400 was final). A client timeout is not retried: the server may already
+have accepted the POST. HTTP 401, 403, and 404 are final on attempt 1, and so
+is every other non-2xx that is not in the retry set (including 405, 409, and
+422) and `redirect-refused`. A 2xx is `delivered`. Not
 configured or `enabled: false` writes one `skipped` receipt with
 `skip_reason` `not-configured` and no network, and does not consume the event;
 invalid config or mode writes one `failed`/`invalid-config`/`config-mode`
@@ -894,20 +932,55 @@ copied when it is a string, including a string outside the vocabulary.
 {"ts": "...", "state": "end_turn", "state_detail": "end_turn", "session": "...",
  "holder_instance_id": "...", "event_seq": 7, "reason": "delivery_review",
  "result": "delivered", "attempt": 1, "max_attempts": 4,
- "http_status": 200, "error": null, "elapsed_ms": 12, "final": true}
+ "http_status": 200, "error": null, "response_body": null,
+ "response_body_truncated": false, "response_headers": null,
+ "elapsed_ms": 12, "final": true}
 ```
 
 ```json
 {"ts": "...", "state": "end_turn", "state_detail": null, "session": "...",
  "holder_instance_id": "...", "event_seq": 8, "skip_reason": "duplicate",
  "result": "skipped", "attempt": 0, "max_attempts": 4,
- "http_status": null, "error": null, "elapsed_ms": 1, "final": true}
+ "http_status": null, "error": null, "response_body": null,
+ "response_body_truncated": false, "response_headers": null,
+ "elapsed_ms": 1, "final": true}
 ```
 
-Receipts written before this change put the skip cause in `reason`
+```json
+{"ts": "...", "state": "error", "state_detail": "turn_failed", "session": "...",
+ "holder_instance_id": "...", "event_seq": 9, "reason": "turn_failed",
+ "result": "failed", "attempt": 1, "max_attempts": 4,
+ "http_status": 400, "error": "http-status",
+ "response_body": "{\"error\":\"rejected\"}", "response_body_truncated": false,
+ "response_headers": {"content-type": "application/json", "retry-after": "3",
+  "x-request-id": "req-1"},
+ "elapsed_ms": 20, "final": false}
+```
+
+Every attempt row includes `response_body` (string or null),
+`response_body_truncated` (boolean), and `response_headers` (object or null),
+including skipped and invalid-config rows. Only an HTTP error response
+(`error` `http-status`) fills the body and the headers. The sender reads at
+most 8192 bytes, replaces the configured URL and sender key — and each
+value's percent-encoded form — with the token `[redacted]`, then stores at
+most 512 characters. Redaction runs on that read window before the stored
+cut, so a secret that fits in the window is removed whole. An empty body is
+null. `response_body_truncated` is true when the read hit 8192 bytes or the
+redacted text was longer than 512 characters. `response_headers` keeps only
+`content-type`, `retry-after`, `www-authenticate`, `x-request-id`, and
+`x-correlation-id`. Names are stored in that lowercase form. Each value is
+redacted and cut at 200 characters. Any other response header is dropped.
+No header has its own truncated flag. A 2xx, a timeout, a connection error,
+a refused redirect, a skip, and an invalid config store a null body,
+`response_body_truncated` false, and null headers. Exception text is not
+stored. The URL and the sender key do not appear in the receipt file.
+
+Receipts written before the skip-reason change put the skip cause in `reason`
 (`not-configured` or `duplicate`) and omitted `reason` on `delivered` and
-`failed`. `status` returns `last_receipt` and `last_test` as stored, so both
-generations parse, and a read does not rewrite the file. `last_test` is still
+`failed`. Receipts written before #311 omit `response_body`,
+`response_body_truncated`, and `response_headers`. `status` returns
+`last_receipt` and `last_test` as stored, so every generation parses, and a
+read does not rewrite the file. `last_test` is still
 the newest stored receipt whose `state` is `test`. Readiness stays
 `last_test.result == "delivered"`. A reader that classifies a skip uses
 `skip_reason` when the key is present, and otherwise treats a `skipped`
@@ -960,8 +1033,13 @@ exit 0 on success):
 - `status --project ROOT` prints `kaola-delegator-webhook-status/1`: project,
   config_path, config_mode, configured, enabled, owner_agent,
   sender_key_attachment (style/name/prefix), sender_key_present, a 12-hex
-  `fingerprint` of url+key, last_receipt, last_test, receipts_path. Never the URL
-  or key.
+  `fingerprint` of url+key, last_receipt, last_test, receipts_path, and
+  `holder_lost`. Never the URL or key. `holder_lost` is `{scan, leg, wakes}`
+  and, when `scan` is `skipped`, `reason`. `leg` is `delegator-webhook status`.
+  `scan` is `complete`, `incomplete`, or `skipped`. Each wake is
+  `{session, holder_instance_id, delegator_death_wake}`. Exit stays 0.
+  Eligibility, the skipped-scan rule, and the cron cadence bound are in the
+  death-recovery paragraphs above.
 - `test --project ROOT` sends one `state: "test"` payload through the same
   delivery path and prints `kaola-delegator-webhook-test/1` with the attempt
   receipts; exit 0 only on `delivered`.
@@ -975,7 +1053,12 @@ or `webhook+heartbeat` (absent means heartbeat-only) and `webhook_routine_id`
 names the webhook routine. The payload is a signal, not evidence: on a wake the
 Delegator re-reads the bridge Accepted line, locates, and reads authoritative
 `status`, `observe` and `capture` receipts. Running Host holders need a seat
-restart to pick up the gating. The holder is in the operator restart set.
+restart to pick up holder gating. The holder is in the operator restart set.
+The #311 `status` scan lives in `scripts/kaola-acp.py`, which is outside that
+set. A running holder still emits `holder_lost` only on its next `start` or
+dead-holder `stop`. Between those calls, the cron `status` leg is the
+detector, after the Delegator reloads the Skill that tells the inquiry to
+run `status`.
 
 ## Runner entrypoint (`kaola-tmux.sh`)
 

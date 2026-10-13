@@ -31,7 +31,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 # Issue #278: shared paths also ship beside every generated worker Runner.
 _paths_spec = importlib.util.spec_from_file_location(
@@ -1917,12 +1917,13 @@ def recover_host_death_wake(directory: Path | None,
     """Issue #299: one durable ``error``/``holder_lost`` Delegator wake for a
     Host holder that died without signalling (SIGKILL, crash).
 
-    Called only where the caller is about to replace or retire the dead
-    holder's record: ``command_start`` on a dead or pid-reused holder, and the
-    dead-holder ``stop`` paths. A clean ``op_stop`` writes ``stopped`` (with
-    its own inline wake) before the record can look dead, so the state check
-    plus the exactly-once ``delegator_death_wake`` event guard keep this to
-    genuinely unsignalled deaths. The event cursor doubles as ``event_seq``:
+    Called from ``command_start`` on a dead or pid-reused holder, from the
+    dead-holder ``stop`` paths, and from ``delegator-webhook status`` (#311).
+    Start and stop are about to replace or retire the record. Status leaves
+    the record in place. A clean ``op_stop`` writes ``stopped`` (with its own
+    inline wake) before the record can look dead, so the state check plus the
+    exactly-once ``delegator_death_wake`` event guard keep this to genuinely
+    unsignalled deaths. The event cursor doubles as ``event_seq``:
     ``EventLog`` seeds a fresh instance's cursor from the max over live and
     rotated files in this record dir, so it is strictly newer than anything
     the dead holder sent.
@@ -6057,13 +6058,15 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
 
 
 # ---------------------------------------------------------------------------
-# Issue #299 / #302 / #304: Delegator webhook wake. A Host holder spawns the
-# ``deliver`` subcommand detached only when the Delegator must act; this CLI
+# Issue #299 / #302 / #304 / #311: Delegator webhook wake. A Host holder spawns
+# the ``deliver`` subcommand detached only when the Delegator must act; this CLI
 # owns the config, validation, POST, retries, dedupe and receipts. No receipt
 # ever carries the URL, the sender key, or an exception message (urllib errors
-# can embed the URL); only the classified error code travels. ``deliver`` is a
-# new process per wake, so it accepts a payload from a holder that is still
-# running the previous shape (#304).
+# can embed the URL); only the classified error code travels. An HTTP error
+# stores a truncated redacted body and an allowlisted header set (#311).
+# ``deliver`` is a new process per wake, so it accepts a payload from a holder
+# that is still running the previous shape (#304). ``status`` is the holder-lost
+# detector the cron inquiry runs; it does not schedule itself.
 # ---------------------------------------------------------------------------
 
 DELEGATOR_WEBHOOK_CONFIG_ENV = "KAOLA_DELEGATOR_WEBHOOK_CONFIG"
@@ -6084,7 +6087,23 @@ DELEGATOR_WEBHOOK_CLAIMS_LIMIT = 256
 DELEGATOR_WEBHOOK_TIMEOUT = 12.0
 DELEGATOR_WEBHOOK_BACKOFF = (1.0, 2.0, 4.0)
 DELEGATOR_WEBHOOK_MAX_ATTEMPTS = 1 + len(DELEGATOR_WEBHOOK_BACKOFF)
-DELEGATOR_WEBHOOK_RETRY_STATUS = frozenset({408, 429})
+# Issue #311 supersedes the #302 rule that HTTP 400 was final. A 400 beside
+# sibling 200s of the same shape has been transient. 401, 403 and 404 stay
+# final on attempt 1, and so does every other 4xx that is not listed here.
+DELEGATOR_WEBHOOK_RETRY_STATUS = frozenset({400, 408, 429})
+# Read cap, then the stored cap. Redaction runs on the read window before the
+# stored cut, so a secret that begins inside the stored prefix is removed whole
+# when it fits in the read window. The stored body is at most 512 characters.
+DELEGATOR_WEBHOOK_RESPONSE_READ_CAP = 8192
+DELEGATOR_WEBHOOK_RESPONSE_BODY_LIMIT = 512
+DELEGATOR_WEBHOOK_RESPONSE_HEADER_LIMIT = 200
+DELEGATOR_WEBHOOK_RESPONSE_HEADER_NAMES = (
+    "content-type",
+    "retry-after",
+    "www-authenticate",
+    "x-request-id",
+    "x-correlation-id",
+)
 DELEGATOR_WEBHOOK_USER_AGENT = "kaola-delegator-wake/1"
 DELEGATOR_WEBHOOK_PAYLOAD_SCHEMA = "kaola-delegator-wake/1"
 # Keys every shipped wake shape carried: the first #299 sender, v0.9.5/v0.9.6
@@ -6273,9 +6292,93 @@ class _WebhookNoRedirect(urllib.request.HTTPRedirectHandler):
 _WEBHOOK_OPENER = urllib.request.build_opener(_WebhookNoRedirect)
 
 
+class _WebhookHttpResult(NamedTuple):
+    http_status: int | None
+    error: str | None
+    response_body: str | None
+    response_body_truncated: bool
+    response_headers: dict[str, str] | None
+
+
+def _webhook_secret_values(url: str, sender_key: str | None) -> tuple[str, ...]:
+    values = [url]
+    if isinstance(sender_key, str) and sender_key:
+        values.append(sender_key)
+    return tuple(values)
+
+
+def _webhook_redact(text: str, secrets: tuple[str, ...]) -> str:
+    """Replace the configured URL and sender key, longest first.
+
+    Also replaces each secret's percent-encoded form. The replacement is the
+    fixed token ``[redacted]``. Exception text is never passed in.
+    """
+    ordered = sorted({item for item in secrets if item}, key=len, reverse=True)
+    for secret in ordered:
+        text = text.replace(secret, "[redacted]")
+        quoted = urllib.parse.quote(secret, safe="")
+        if quoted and quoted != secret:
+            text = text.replace(quoted, "[redacted]")
+    return text
+
+
+def _webhook_response_view(raw: bytes, headers: Any, secrets: tuple[str, ...],
+                           hit_read_cap: bool) -> tuple[str | None, bool, dict[str, str] | None]:
+    """Truncated redacted body plus the allowlisted response headers."""
+    text = _webhook_redact(raw.decode("utf-8", errors="replace"), secrets)
+    truncated = hit_read_cap or len(text) > DELEGATOR_WEBHOOK_RESPONSE_BODY_LIMIT
+    if len(text) > DELEGATOR_WEBHOOK_RESPONSE_BODY_LIMIT:
+        text = text[:DELEGATOR_WEBHOOK_RESPONSE_BODY_LIMIT]
+    body = text if text else None
+    picked: dict[str, str] = {}
+    if headers is not None:
+        for name in DELEGATOR_WEBHOOK_RESPONSE_HEADER_NAMES:
+            try:
+                value = headers.get(name)
+            except Exception:
+                value = None
+            if value is None:
+                continue
+            redacted = _webhook_redact(str(value), secrets)
+            if len(redacted) > DELEGATOR_WEBHOOK_RESPONSE_HEADER_LIMIT:
+                redacted = redacted[:DELEGATOR_WEBHOOK_RESPONSE_HEADER_LIMIT]
+            picked[name] = redacted
+    return body, truncated, picked or None
+
+
+def _webhook_http_error_view(exc: urllib.error.HTTPError,
+                             secrets: tuple[str, ...]) -> tuple[str | None, bool, dict[str, str] | None]:
+    raw = b""
+    hit_read_cap = False
+    try:
+        chunk = exc.read(DELEGATOR_WEBHOOK_RESPONSE_READ_CAP + 1)
+        if isinstance(chunk, str):
+            chunk = chunk.encode("utf-8", errors="replace")
+        raw = chunk or b""
+        hit_read_cap = len(raw) > DELEGATOR_WEBHOOK_RESPONSE_READ_CAP
+        if hit_read_cap:
+            raw = raw[:DELEGATOR_WEBHOOK_RESPONSE_READ_CAP]
+    except Exception:
+        raw = b""
+        hit_read_cap = False
+    finally:
+        try:
+            exc.close()
+        except Exception:
+            pass
+    return _webhook_response_view(raw, getattr(exc, "headers", None), secrets, hit_read_cap)
+
+
 def _webhook_post(url: str, attachment: dict[str, Any], sender_key: str | None,
-                  body: bytes) -> tuple[int | None, str | None]:
-    """One POST attempt. Returns (http_status, error): error None on 2xx."""
+                  body: bytes) -> _WebhookHttpResult:
+    """One POST attempt. ``error`` is None on 2xx.
+
+    An HTTP error response contributes a truncated redacted body and the
+    allowlisted headers. A timeout, a connection error, a redirect refusal
+    and a 2xx do not: success bodies are not stored, and a redirect is refused
+    before its body is a delivery.
+    """
+    secrets = _webhook_secret_values(url, sender_key)
     headers = {"Content-Type": "application/json", "User-Agent": DELEGATOR_WEBHOOK_USER_AGENT}
     if attachment.get("style") == "header":
         headers[attachment["name"]] = attachment.get("prefix", "") + (sender_key or "")
@@ -6284,29 +6387,31 @@ def _webhook_post(url: str, attachment: dict[str, Any], sender_key: str | None,
         with _WEBHOOK_OPENER.open(request, timeout=DELEGATOR_WEBHOOK_TIMEOUT) as response:
             status = response.getcode() or 0
     except _WebhookRedirectRefused as exc:
-        return exc.status, "redirect-refused"
+        return _WebhookHttpResult(exc.status, "redirect-refused", None, False, None)
     except urllib.error.HTTPError as exc:
-        return exc.code, "http-status"
+        response_body, truncated, response_headers = _webhook_http_error_view(exc, secrets)
+        return _WebhookHttpResult(exc.code, "http-status", response_body, truncated, response_headers)
     except urllib.error.URLError as exc:
         reason = exc.reason
         if isinstance(reason, (socket.timeout, TimeoutError)):
-            return None, "timeout"
-        return None, "connection"
+            return _WebhookHttpResult(None, "timeout", None, False, None)
+        return _WebhookHttpResult(None, "connection", None, False, None)
     except (socket.timeout, TimeoutError):
-        return None, "timeout"
+        return _WebhookHttpResult(None, "timeout", None, False, None)
     except OSError:
-        return None, "connection"
+        return _WebhookHttpResult(None, "connection", None, False, None)
     if 200 <= status < 300:
-        return status, None
-    return status, "http-status"
+        return _WebhookHttpResult(status, None, None, False, None)
+    return _WebhookHttpResult(status, "http-status", None, False, None)
 
 
 def _webhook_retryable(http_status: int | None, error: str | None) -> bool:
-    """Retry connection errors, HTTP 5xx, 408 and 429. Never a client timeout.
+    """Retry connection errors, HTTP 400, 408, 429 and 5xx. Never a client timeout.
 
     A timeout means this attempt may already have been accepted. Retrying it
-    is how the same event was delivered twice. 408 and 429 are server
-    responses that ask for a retry; they are not that client-timeout case.
+    is how the same event was delivered twice. 400, 408 and 429 are server
+    responses that are retried with the same backoff. 401, 403 and 404, and
+    every other 4xx, are final on attempt 1 (#311; 400 is no longer final).
     """
     if error == "connection":
         return True
@@ -6320,7 +6425,9 @@ def _webhook_retryable(http_status: int | None, error: str | None) -> bool:
 def _webhook_attempt_receipt(payload: dict[str, Any], attempt: int, result: str,
                              http_status: int | None, error: str | None,
                              skip_reason: str | None, elapsed_ms: int,
-                             final: bool) -> dict[str, Any]:
+                             final: bool, response_body: str | None = None,
+                             response_body_truncated: bool = False,
+                             response_headers: dict[str, str] | None = None) -> dict[str, Any]:
     """One attempt row.
 
     ``delivered`` and ``failed`` always include ``reason``: the payload's
@@ -6342,6 +6449,9 @@ def _webhook_attempt_receipt(payload: dict[str, Any], attempt: int, result: str,
         "max_attempts": DELEGATOR_WEBHOOK_MAX_ATTEMPTS,
         "http_status": http_status,
         "error": error,
+        "response_body": response_body,
+        "response_body_truncated": bool(response_body_truncated),
+        "response_headers": response_headers,
         "elapsed_ms": elapsed_ms,
         "final": final,
     }
@@ -6557,18 +6667,19 @@ def _webhook_deliver(project_root: str, payload: dict[str, Any]) -> list[dict[st
     receipts: list[dict[str, Any]] = []
     for attempt in range(1, DELEGATOR_WEBHOOK_MAX_ATTEMPTS + 1):
         attempt_started = time.monotonic()
-        http_status, error = _webhook_post(
+        posted = _webhook_post(
             entry["url"], entry["sender_key_attachment"], entry.get("sender_key"), body)
-        result = "delivered" if error is None else "failed"
-        final = error is None or not _webhook_retryable(http_status, error) \
+        result = "delivered" if posted.error is None else "failed"
+        final = posted.error is None or not _webhook_retryable(posted.http_status, posted.error) \
             or attempt == DELEGATOR_WEBHOOK_MAX_ATTEMPTS
         # Each attempt's receipt lands before its backoff sleep, so a slow or
         # dead endpoint leaves evidence immediately and a killed child still
         # records every attempt it made. skip_reason stays None: this row is
         # delivered or failed, so the receipt copies the payload wake reason.
         receipts.append(_webhook_attempt_receipt(
-            payload, attempt, result, http_status, error, None,
-            int(round((time.monotonic() - attempt_started) * 1000)), final))
+            payload, attempt, result, posted.http_status, posted.error, None,
+            int(round((time.monotonic() - attempt_started) * 1000)), final,
+            posted.response_body, posted.response_body_truncated, posted.response_headers))
         _webhook_append_receipts(project_root, receipts[-1:])
         if final:
             break
@@ -6578,6 +6689,83 @@ def _webhook_deliver(project_root: str, payload: dict[str, Any]) -> list[dict[st
 
 def _webhook_fingerprint(url: str, sender_key: str | None) -> str:
     return hashlib.sha256((url + "\n" + (sender_key or "")).encode("utf-8")).hexdigest()[:12]
+
+
+def _webhook_same_project(record: dict[str, Any], project_root: str) -> bool:
+    repo = record.get("repo")
+    if not isinstance(repo, str) or not repo:
+        return False
+    try:
+        return os.path.realpath(repo) == project_root
+    except OSError:
+        return False
+
+
+def _webhook_death_eligible(project_root: str, record: dict[str, Any]) -> bool:
+    """Same gate ``command_start`` uses before ``recover_host_death_wake``.
+
+    Host role, not ``stopped``, holder pid dead, and neither the recorded
+    agent pid nor the recorded agent pgid still alive. A live holder pid,
+    including one reused by another process, is not this scan: that case is
+    still the next ``start`` or dead-holder ``stop``. ``status`` does not
+    probe argv.
+    """
+    holder_instance_id = record.get("holder_instance_id")
+    if (not _webhook_same_project(record, project_root)
+            or record.get("session_role") != "host"
+            or record.get("state") == "stopped"
+            or not isinstance(holder_instance_id, str)
+            or not holder_instance_id):
+        return False
+    if pid_alive(record.get("agent_pid")) or pid_alive(record.get("agent_pgid")):
+        return False
+    return not pid_alive(record.get("holder_pid"))
+
+
+def _webhook_scan_holder_lost(project_root: str) -> dict[str, Any]:
+    """One pass over record files. Does not schedule a later pass.
+
+    The Delegator cron inquiry is what calls ``status``. This function only
+    runs when that command runs, and only for an enabled project entry.
+    """
+    leg = "delegator-webhook status"
+    try:
+        paths = acp_paths.record_paths("*/*/*/record.json")
+    except acp_paths.RecordRootMismatch:
+        return {"scan": "incomplete", "leg": leg, "wakes": []}
+    wakes: list[dict[str, Any]] = []
+    for path in paths:
+        directory = path.parent
+        try:
+            record = read_record(directory)
+        except OSError:
+            continue
+        if not isinstance(record, dict) or not _webhook_death_eligible(project_root, record):
+            continue
+        wake = recover_host_death_wake(directory, record)
+        wakes.append({
+            "session": record.get("session"),
+            "holder_instance_id": record.get("holder_instance_id"),
+            "delegator_death_wake": wake,
+        })
+    return {"scan": "complete", "leg": leg, "wakes": wakes}
+
+
+def _webhook_attach_holder_lost(project_root: str, receipt: dict[str, Any]) -> None:
+    """Scan only an enabled, valid entry. A skipped scan writes no death event."""
+    if receipt.get("error"):
+        receipt["holder_lost"] = {
+            "scan": "skipped", "leg": "delegator-webhook status",
+            "reason": receipt["error"], "wakes": [],
+        }
+        return
+    if receipt.get("enabled") is not True:
+        receipt["holder_lost"] = {
+            "scan": "skipped", "leg": "delegator-webhook status",
+            "reason": "not-enabled", "wakes": [],
+        }
+        return
+    receipt["holder_lost"] = _webhook_scan_holder_lost(project_root)
 
 
 def _webhook_status_receipt(project_root: str) -> dict[str, Any]:
@@ -6684,8 +6872,12 @@ def command_delegator_webhook(argv: list[str]) -> int:
     config_path = delegator_webhook_config_path()
 
     if args.action == "status":
-        print(json.dumps(_webhook_status_receipt(project_root),
-                         ensure_ascii=False, sort_keys=True))
+        receipt = _webhook_status_receipt(project_root)
+        # Issue #311: the cron fallback's inquiry runs this command. It is the
+        # holder-lost detector that does not need a new Host start. ``test``
+        # stays a delivery probe and does not scan.
+        _webhook_attach_holder_lost(project_root, receipt)
+        print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
         return 0
 
     if args.action == "test":

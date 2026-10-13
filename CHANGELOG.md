@@ -4,6 +4,39 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+Seats: restart not required
+
+- **Webhook receipts keep a truncated HTTP error body, HTTP 400 is retried, and cron `status` wakes a lost Host (Issue #311).**
+  An HTTP error attempt stores `response_body` (at most 512 characters after
+  redaction), `response_body_truncated`, and allowlisted `response_headers`.
+  The configured URL and sender key, including each percent-encoded form, are
+  replaced with `[redacted]` before that cut. A 2xx, a timeout, a connection
+  error, and a refused redirect store a null body. The retry set is connection
+  errors, HTTP 400, 408, 429, and 5xx (backoff 1 s, 2 s, 4 s; four attempts).
+  A timeout is not retried. 401, 403, 404, and every other 4xx stay final on
+  attempt 1. This supersedes the #302 rule that HTTP 400 was final.
+  `delegator-webhook status` is the holder-lost detector that does not need a
+  new Host start. When the project entry is enabled, it scans Host records
+  for that project and calls the existing death wake (`reason` `holder_lost`,
+  `delegator_death_wake` dedupe) when the holder pid, the agent pid, and the
+  agent pgid are dead and `state` is not `stopped`. `test` and `configure` do
+  not scan. A disabled or invalid config skips the scan and writes no death
+  event. A live pid, including a reused one, still waits for `start` or a
+  dead-holder `stop`. The CLI does not poll and does not read cadence. The
+  Delegator cron fallback is the leg that runs `status`: each inquiry, at the
+  recorded `cadence.interval_minutes` (the Skill example is 120 minutes).
+  After that Skill is loaded, the wait is one cron interval plus delivery.
+  Restart judgment: `scripts/kaola-acp.py` is a per-call CLI and is outside
+  the operator restart set (`docs/conventions.md`). `scripts/kaola-acp-holder.py`
+  is unchanged. Each `delegator-webhook deliver` and each `status` is a new
+  process. A running Host still emits `holder_lost` only on the next `start`
+  or dead-holder `stop`. The new detection is the next `status`. A symlink
+  install uses the new file on the next process. A copy install uses it only
+  after that copy is replaced. This change does not install. A running
+  Delegator loads the cron instruction only after it reloads `kaola-delegator`.
+
 ## 0.9.9 — 2026-10-12 (all-idle wakes once per transition)
 
 Seats: restart required

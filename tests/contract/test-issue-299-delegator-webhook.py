@@ -49,7 +49,9 @@ PAYLOAD_KEYS = {"schema", "project", "session", "holder_instance_id",
 ATTEMPT_RECEIPT_KEYS = {"ts", "state", "state_detail", "session",
                         "holder_instance_id", "event_seq", "result",
                         "attempt", "max_attempts",
-                        "http_status", "error", "elapsed_ms", "final"}
+                        "http_status", "error", "elapsed_ms", "final",
+                        "response_body", "response_body_truncated",
+                        "response_headers"}
 
 
 def wait_for(predicate, timeout: float, label: str, interval: float = 0.05):
@@ -65,11 +67,19 @@ def wait_for(predicate, timeout: float, label: str, interval: float = 0.05):
 class Endpoint:
     """Loopback sink. ``sleep_seconds`` delays the response. ``/err`` answers
     500, ``/redirect`` answers 302, ``/status/<code>`` answers that code,
-    anything else 200."""
+    anything else 200. An HTTP error writes ``error_body`` plus a small
+    allowlisted header set and one unlisted header."""
 
     def __init__(self, sleep_seconds: float = 0.0):
         self.posts: list[dict] = []
         self.sleep_seconds = sleep_seconds
+        self.error_body = b'{"error":"nope"}'
+        self.error_headers = {
+            "Content-Type": "application/json",
+            "Retry-After": "3",
+            "X-Request-Id": "req-311",
+            "X-Unlisted": "ignore-me",
+        }
         outer = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -97,9 +107,17 @@ class Endpoint:
                     except ValueError:
                         code = 200
                 self.send_response(code)
-                if code in (301, 302, 303, 307, 308):
+                payload = b""
+                if code >= 400:
+                    payload = outer.error_body
+                    for name, value in outer.error_headers.items():
+                        self.send_header(name, value)
+                elif code in (301, 302, 303, 307, 308):
                     self.send_header("Location", "/hook")
+                self.send_header("Content-Length", str(len(payload)))
                 self.end_headers()
+                if payload:
+                    self.wfile.write(payload)
 
             def log_message(self, *args):
                 pass
@@ -212,6 +230,13 @@ class WebhookCase(unittest.TestCase):
         self.config.write_text(json.dumps(
             {"schema": "kaola-delegator-webhook/1", "projects": projects}))
         self.config.chmod(mode)
+
+    def _url_config(self, url: str) -> None:
+        self.write_config({self.project: {
+            "url": url, "sender_key": None,
+            "sender_key_attachment": {"style": "url"},
+            "enabled": True, "owner_agent": "agent-A",
+            "updated_at": "2026-01-01T00:00:00Z"}})
 
     def config_doc(self) -> dict:
         return json.loads(self.config.read_text(encoding="utf-8"))
@@ -515,6 +540,9 @@ class DeliveryCli(WebhookCase):
         self.assertNotIn("skip_reason", receipt)
         self.assertEqual(receipt["http_status"], 200)
         self.assertIsNone(receipt["error"])
+        self.assertIsNone(receipt["response_body"])
+        self.assertIs(receipt["response_body_truncated"], False)
+        self.assertIsNone(receipt["response_headers"])
         self.assertTrue(receipt["final"])
         self.assertEqual(receipt["state"], "test")
         post = wait_for(lambda: self.endpoint.posts[-1] if self.endpoint.posts
@@ -743,13 +771,6 @@ class DeliveryCli(WebhookCase):
         kaola_dir = self.repo / ".kaola"
         self.assertFalse(list(kaola_dir.glob("*.tmp")))
 
-    def _url_config(self, url: str) -> None:
-        self.write_config({self.project: {
-            "url": url, "sender_key": None,
-            "sender_key_attachment": {"style": "url"},
-            "enabled": True, "owner_agent": "agent-A",
-            "updated_at": "2026-01-01T00:00:00Z"}})
-
     def test_delivered_failed_and_skipped_receipt_fields(self) -> None:
         self.endpoint = Endpoint()
         self._url_config(self.endpoint.url)
@@ -808,7 +829,7 @@ class DeliveryCli(WebhookCase):
         self.assertEqual(skipped["skip_reason"], "not-configured")
         self.assertNotIn("reason", skipped)
 
-        self._url_config(f"http://127.0.0.1:{self.endpoint.port}/status/400")
+        self._url_config(f"http://127.0.0.1:{self.endpoint.port}/status/401")
         failed_payload = dict(payload)
         failed_payload["event_seq"] = 13
         failed_payload["reason"] = "turn_failed"
@@ -817,9 +838,18 @@ class DeliveryCli(WebhookCase):
         failed = self.receipts()[-1]
         self.assertEqual(failed["result"], "failed")
         self.assertEqual(failed["reason"], "turn_failed")
-        self.assertEqual(failed["http_status"], 400)
+        self.assertEqual(failed["http_status"], 401)
+        self.assertEqual(failed["attempt"], 1)
+        self.assertIs(failed["final"], True)
+        self.assertEqual(failed["response_body"], '{"error":"nope"}')
+        self.assertIs(failed["response_body_truncated"], False)
+        self.assertEqual(failed["response_headers"]["content-type"], "application/json")
+        self.assertEqual(failed["response_headers"]["retry-after"], "3")
+        self.assertEqual(failed["response_headers"]["x-request-id"], "req-311")
+        self.assertNotIn("x-unlisted", failed["response_headers"])
         self.assertNotIn("skip_reason", failed)
         self.assertEqual(self.endpoint.posts[-1]["body"]["reason"], "turn_failed")
+        self.assertEqual(len(self.endpoint.posts), 1)
 
     def test_status_reads_pre_304_receipts_unchanged(self) -> None:
         path = self.receipts_path()
@@ -901,7 +931,7 @@ class DeliveryCli(WebhookCase):
         self.assertIsNone(receipt["reason"])
         self.assertIsNone(receipt["state_detail"])
 
-        self._url_config(f"http://127.0.0.1:{self.endpoint.port}/status/400")
+        self._url_config(f"http://127.0.0.1:{self.endpoint.port}/status/404")
         failed = dict(v096)
         failed["event_seq"] = 3639
         proc = self.deliver(failed)
@@ -910,7 +940,9 @@ class DeliveryCli(WebhookCase):
         self.assertEqual(failed_receipt["result"], "failed")
         self.assertIsNone(failed_receipt["reason"])
         self.assertEqual(failed_receipt["error"], "http-status")
-        self.assertEqual(failed_receipt["http_status"], 400)
+        self.assertEqual(failed_receipt["http_status"], 404)
+        self.assertEqual(failed_receipt["attempt"], 1)
+        self.assertIs(failed_receipt["final"], True)
         self.assertNotIn("skip_reason", failed_receipt)
         self.assertNotIn("reason", self.endpoint.posts[-1]["body"])
 
@@ -943,6 +975,177 @@ class DeliveryCli(WebhookCase):
         self.assertEqual(len(self.endpoint.posts), posts_before)
         self.assertEqual(self.receipts()[-1]["error"], "invalid-payload")
         self.assertIsNone(self.receipts()[-1]["reason"])
+
+    def test_http_400_retries_and_stores_a_redacted_truncated_body(self) -> None:
+        import urllib.parse
+        self.endpoint = Endpoint()
+        key = "sek/311"
+        url = f"http://127.0.0.1:{self.endpoint.port}/status/400"
+        encoded = urllib.parse.quote(key, safe="")
+        self.write_config({self.project: {
+            "url": url, "sender_key": key,
+            "sender_key_attachment": {"style": "header", "name": HEADER_NAME,
+                                      "prefix": "Bearer "},
+            "enabled": True, "owner_agent": "agent-A",
+            "updated_at": "2026-01-01T00:00:00Z"}})
+        self.endpoint.error_body = f"{url} {key} {encoded} ".encode() + (b"B" * 700)
+        self.endpoint.error_headers["X-Request-Id"] = key
+        self.endpoint.error_headers["Www-Authenticate"] = "Bearer " + key
+        payload = {"schema": "kaola-delegator-wake/1", "project": self.project,
+                   "session": "s1", "holder_instance_id": "h-400", "event_seq": 40,
+                   "state": "error", "state_detail": "turn_failed",
+                   "reason": "turn_failed", "ts": "2026-01-01T00:00:00Z"}
+        proc = self.deliver(payload, timeout=30)
+        self.assertNotEqual(proc.returncode, 0)
+        matching = [item for item in self.receipts() if item.get("event_seq") == 40]
+        self.assertEqual(len(matching), 4)
+        self.assertTrue(all(item["http_status"] == 400 and item["error"] == "http-status"
+                            for item in matching))
+        self.assertIs(matching[0]["final"], False)
+        self.assertIs(matching[-1]["final"], True)
+        self.assertEqual(len(self.endpoint.posts), 4)
+        for item in matching:
+            blob = json.dumps(item)
+            self.assertIs(item["response_body_truncated"], True)
+            self.assertEqual(len(item["response_body"]), 512)
+            self.assertIn("[redacted]", item["response_body"])
+            self.assertNotIn(key, blob)
+            self.assertNotIn(encoded, blob)
+            self.assertNotIn(url, blob)
+            self.assertEqual(item["response_headers"]["x-request-id"], "[redacted]")
+            self.assertEqual(item["response_headers"]["www-authenticate"], "Bearer [redacted]")
+            self.assertNotIn("x-unlisted", item["response_headers"])
+        raw = self.receipts_path().read_text(encoding="utf-8")
+        self.assertNotIn(key, raw)
+        self.assertNotIn(encoded, raw)
+        self.assertNotIn(url, raw)
+
+
+class HolderLostStatus(WebhookCase):
+    """Issue #311: ``delegator-webhook status`` is the holder-lost detector.
+
+    ``test`` does not scan. A skipped scan does not write the death event.
+    """
+
+    def dead_pid(self) -> int:
+        for _ in range(5):
+            proc = subprocess.Popen(["/bin/sleep", "0"])
+            proc.wait(timeout=5)
+            try:
+                os.kill(proc.pid, 0)
+            except ProcessLookupError:
+                return proc.pid
+            except PermissionError:
+                continue
+        self.fail("could not observe a dead pid")
+
+    def write_record(self, session: str, *, role: str = "host", state: str = "ready",
+                     pid: int | None = None, agent_pid: int | None = None) -> Path:
+        directory = self.record_root / "zcode" / session / "abcd"
+        directory.mkdir(parents=True, exist_ok=True)
+        record = {
+            "repo": self.project,
+            "session": session,
+            "platform": "zcode",
+            "session_role": role,
+            "holder_instance_id": "hid-" + session,
+            "holder_pid": self.dead_pid() if pid is None else pid,
+            "state": state,
+        }
+        if agent_pid is not None:
+            record["agent_pid"] = agent_pid
+        (directory / "record.json").write_text(json.dumps(record), encoding="utf-8")
+        return directory
+
+    def death_lines(self, directory: Path) -> list[dict]:
+        path = directory / "events.jsonl"
+        if not path.is_file():
+            return []
+        rows = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            item = json.loads(line)
+            if isinstance(item, dict) and item.get("kind") == "delegator_death_wake":
+                rows.append(item)
+        return rows
+
+    def test_status_wakes_a_dead_host_once_through_the_mock(self) -> None:
+        self.endpoint = Endpoint()
+        code, out = self.configure(self.endpoint.url)
+        self.assertEqual(code, 0, out)
+        session = "zcode-i311-orchestrator-main"
+        directory = self.write_record(session)
+        self.write_record("zcode-i311-worker", role="elite")
+        self.write_record("zcode-i311-stopped", state="stopped")
+        self.write_record("zcode-i311-agent-alive", agent_pid=os.getpid())
+        self.write_record("zcode-i311-live-holder", pid=os.getpid())
+        code, status = self.hook_json("status", "--project", str(self.repo))
+        self.assertEqual(code, 0)
+        holder_lost = status["holder_lost"]
+        self.assertEqual(holder_lost["scan"], "complete")
+        self.assertEqual(holder_lost["leg"], "delegator-webhook status")
+        self.assertEqual(len(holder_lost["wakes"]), 1, holder_lost)
+        wake = holder_lost["wakes"][0]
+        self.assertEqual(wake["session"], session)
+        self.assertEqual(wake["holder_instance_id"], "hid-" + session)
+        self.assertTrue(wake["delegator_death_wake"]["sent"], wake)
+        post = wait_for(
+            lambda: next((item for item in self.endpoint.posts
+                          if (item["body"] or {}).get("reason") == "holder_lost"), None),
+            15, "holder_lost POST")
+        body = post["body"]
+        self.assertEqual(body["state"], "error")
+        self.assertEqual(body["state_detail"], "holder_lost")
+        self.assertEqual(body["reason"], "holder_lost")
+        self.assertEqual(body["holder_instance_id"], "hid-" + session)
+        self.assertEqual(body["session"], session)
+        self.assertEqual(set(body), PAYLOAD_KEYS)
+        self.assertEqual(len(self.death_lines(directory)), 1)
+        code, again = self.hook_json("status", "--project", str(self.repo))
+        self.assertEqual(code, 0)
+        second = again["holder_lost"]["wakes"][0]["delegator_death_wake"]
+        self.assertFalse(second["sent"])
+        self.assertEqual(second["reason"], "already-recovered")
+        time.sleep(0.4)
+        lost = [item for item in self.endpoint.posts
+                if (item["body"] or {}).get("reason") == "holder_lost"]
+        self.assertEqual(len(lost), 1)
+        raw = json.dumps(status) + json.dumps(again) + self.receipts_path().read_text(encoding="utf-8")
+        self.assertNotIn(SENTINEL_KEY, raw)
+        self.assertNotIn(self.endpoint.url, raw)
+
+    def test_skipped_scan_and_test_do_not_consume_the_death_event(self) -> None:
+        session = "zcode-i311-orchestrator-later"
+        directory = self.write_record(session)
+        code, status = self.hook_json("status", "--project", str(self.repo))
+        self.assertEqual(code, 0)
+        self.assertEqual(status["holder_lost"]["scan"], "skipped")
+        self.assertEqual(status["holder_lost"]["reason"], "not-enabled")
+        self.assertEqual(status["holder_lost"]["wakes"], [])
+        self.assertFalse((directory / "events.jsonl").exists())
+        self.endpoint = Endpoint()
+        self.write_config({self.project: {
+            "url": self.endpoint.url, "sender_key": None,
+            "sender_key_attachment": {"style": "url"},
+            "enabled": False, "owner_agent": "agent-A",
+            "updated_at": "2026-01-01T00:00:00Z"}})
+        code, status = self.hook_json("status", "--project", str(self.repo))
+        self.assertEqual(status["holder_lost"]["reason"], "not-enabled")
+        self.assertFalse((directory / "events.jsonl").exists())
+        code, tested = self.hook_json("test", "--project", str(self.repo))
+        self.assertNotEqual(code, 0)
+        self.assertNotIn("holder_lost", tested)
+        self.assertEqual(tested["result"], "skipped")
+        self.assertFalse((directory / "events.jsonl").exists())
+        self._url_config(self.endpoint.url)
+        code, status = self.hook_json("status", "--project", str(self.repo))
+        self.assertEqual(status["holder_lost"]["scan"], "complete")
+        self.assertTrue(status["holder_lost"]["wakes"][0]["delegator_death_wake"]["sent"])
+        wait_for(lambda: any((item["body"] or {}).get("reason") == "holder_lost"
+                             for item in self.endpoint.posts),
+                 15, "holder_lost POST after enable")
+        self.assertEqual(len(self.death_lines(directory)), 1)
 
 
 def socket_probe_closed_port() -> int:

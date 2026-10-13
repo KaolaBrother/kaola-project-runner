@@ -49,8 +49,8 @@ Relay user changes to that Host: idle `send`; busy `steer` or wait
 (no queue). `--no-wait` admission and Host `end_turn` are not delivery. After
 the first beat, verify work-product evidence and the first dispatch
 receipt against plan and authorization; do not trust the Host's self-description.
-Correct mismatches; do not accept completion. At cadence or [wake](references/webhook-wake.md), read [snapshot (`sweep=` line)](references/snapshot.md), observe/capture and [report](references/inquiry-report.md). Relay pacing if warranted; escalate unresolved decisions. Do not dispatch workers, copy a mission ledger, write the Host heartbeat, create a Routine beyond that wake pair, touch inner sessions, or stop before close-out. An outer Agent change does not stop it.
+Correct mismatches; do not accept completion. At cadence or [wake](references/webhook-wake.md), run `delegator-webhook status --project`, then read [snapshot (`sweep=` line)](references/snapshot.md), observe/capture and [report](references/inquiry-report.md). Relay pacing if warranted; escalate unresolved decisions. Do not dispatch workers, copy a mission ledger, write the Host heartbeat, create a Routine beyond that wake pair, touch inner sessions, or stop before close-out. An outer Agent change does not stop it.
 
 Write in accordance with ASD-STE100.
 
-KPR update: [host-platforms.md](references/host-platforms.md#kpr-updates); a notice proves no updated install or loaded guidance, authorizes no install/restart.
+KPR update: [host-platforms.md](references/host-platforms.md#kpr-updates); a notice authorizes no install or restart.

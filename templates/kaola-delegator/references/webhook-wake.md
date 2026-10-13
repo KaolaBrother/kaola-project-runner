@@ -1,10 +1,9 @@
 # Webhook wake
 
-A webhook wakes you when the Host holder decides you must act, so you do not
-wait for the next heartbeat. It does not wake on every turn end. The Host
-holder sends the signal; a model or a prompt never does. Configure it yourself
-with this procedure. The only owner action is to paste the URL and the sender
-key into the masked secret input one time.
+A webhook wakes you when the Host holder decides you must act. It does not
+wake on every turn end. A model or a prompt never sends it. You configure it.
+The owner pastes the URL and the sender key into the masked secret input
+one time.
 
 ## One Delegator timer
 
@@ -64,10 +63,8 @@ $HOOK remove --project "$PROJECT" --owner-agent "$LABEL"
    - File: `--input-file PATH`, the same JSON, mode `0600`, owned by you.
      Delete the file after `configure`.
    Attachment: `--key-header NAME [--key-prefix TEXT]`, or `--key-in-url`
-   with no sender key. For a Grok Bot routine use
-   `--key-header Authorization --key-prefix 'Bearer '` (step 3). If the
-   bound target cannot read the secret variables, stop and report that
-   blocker.
+   with no sender key. If the bound target cannot read the secret
+   variables, stop and report that blocker.
 5. **Verify.** Run `test`. It sends one signal with `state` `test`. Confirm
    that YOUR webhook routine woke with that test signal. Then record
    `timer_owner.wake_mode` `webhook+heartbeat` and `webhook_routine_id` with
@@ -81,8 +78,8 @@ $HOOK remove --project "$PROJECT" --owner-agent "$LABEL"
    steps 2 to 5 again. `remove` deletes only your own project entry.
 8. **Failure.** If the owner declines the secret input, `test` fails, or your
    routine did not wake, stay heartbeat-only (`wake_mode` `heartbeat`, normal
-   `cadence`). Report the exact blocker to the owner (receipt `result`,
-   `http_status`, `error`). Do not retry blindly.
+   `cadence`). Report the exact blocker (receipt `result`, `http_status`,
+   `error`, truncated `response_body`). Do not retry blindly.
 
 A Host holder sends this hook only after a seat restart on a build that has
 it. If `test` delivers but turns write no receipts, the holder is older than
@@ -91,53 +88,52 @@ the hook. Restart needs its own authorization
 
 ## On a wake
 
-The payload is a signal, not evidence. Re-read receipts before you act. It
-has `schema` `kaola-delegator-wake/1`, `project`, `session`,
-`holder_instance_id`, `event_seq`, `state` (`end_turn`, `blocked`, `error`,
-`stopped` or `test`), `state_detail`, `reason` and `ts` (UTC). It has no
-transcript, prompt, diff or secret. `reason` names why you were woken:
-`permission_required`, `turn_failed`, `agent_exited`, `boot_failure`,
-`exact_stop`, `holder_lost`, `all-idle`, `question_waiting`,
+The payload is a signal, not evidence. Re-read receipts before you act.
+Schema `kaola-delegator-wake/1`: `project`, `session`, `holder_instance_id`,
+`event_seq`, `state` (`end_turn`, `blocked`, `error`, `stopped`, `test`),
+`state_detail`, `reason`, `ts` (UTC). No transcript, prompt, diff, or secret.
+`reason` is `permission_required`, `turn_failed`, `agent_exited`,
+`boot_failure`, `exact_stop`, `holder_lost`, `all-idle`, `question_waiting`,
 `delivery_review`, `needs_decision`, `host_stopped_pending`, or `test`.
-`state_detail` is separate from `reason`: the agent's stop reason on
-`end_turn`, else `permission_required`, `turn_failed`, `agent_exit`,
+That list is every wake. `state_detail` is not `reason`: the agent's stop
+reason on `end_turn`, else `permission_required`, `turn_failed`, `agent_exit`,
 `boot_failure`, `holder_lost`, `exact_stop`, or `test`.
 
-You are not woken when the Host ends a turn and continues by itself. You are
-not woken when the turn end is your own send or steer and a worker seat is
-still working. `all-idle` fires once per transition to idle: the Host is idle
-and no dispatched seat is working, whether or not pending work is recorded.
-A turn you admitted does not open that episode and does not wake by itself,
-unless that turn stops the last working seat. A self turn with no new worker
-event sends no second `all-idle`. You
-are also woken for a permission, a failure, an agent exit, a failed boot, an
-exact stop, a recovered holder death, a waiting question, a delivery that
-needs review, a decision, or a Host that stopped with pending work while a
-seat is still working. A clean idle turn with a seat still working does not wake
-you. A Sideagent node is not a seat, and a holder in `agent_exited`,
-`stopping`, or `stopped` is not working.
-After the Host's last turn, confirmed `sideagent_node_stopped` or the last
-worker's `terminated` re-checks one non-blocking `all-idle` (`state`
-`end_turn`, `state_detail` `end_turn`) when the Host is idle and no seat is
-working. A live seat, an active turn, a follow-up, an unconfirmed node stop,
-or exact stop does not. One episode, one wake. It re-opens when a non-exempt
-seat is working, a non-exempt worker stops, or a self turn delivers worker
-events. Your send does not re-open it. No time throttle.
+No wake when the Host continues by itself, or when your send or steer ends
+while a worker seat still works. `all-idle` is once per idle transition: the
+Host is idle and no dispatched seat is working, pending work or not. A turn
+you admitted does not open that episode and does not wake by itself, unless
+it stops the last working seat. A self turn with no new worker event sends
+no second `all-idle`. A Sideagent node is not a seat. A holder in
+`agent_exited`, `stopping`, or `stopped` is not working. After the Host's
+last turn, confirmed `sideagent_node_stopped` or the last worker's
+`terminated` re-checks one non-blocking `all-idle` (`state` `end_turn`,
+`state_detail` `end_turn`) when the Host is idle and no seat is working. A
+live seat, an active turn, a follow-up, an unconfirmed node stop, or exact
+stop does not. One episode, one wake. It re-opens when a non-exempt seat is
+working, a non-exempt worker stops, or a self turn delivers worker events.
+Your send does not re-open it. No time throttle.
 
-If a Host holder dies without a signal, the next `start` or `stop` of that
-session sends one `error` wake with `reason` `holder_lost`, the dead
-`holder_instance_id` and a new `event_seq`. That recovered wake is not a
-duplicate.
+A dead holder with no signal gets one `error`/`holder_lost` wake for that
+`holder_instance_id` and a new `event_seq`. `start` or a dead-holder `stop`
+sends it. The cron fallback sends it with no new Host start: each inquiry
+runs `$HOOK status --project "$PROJECT"`. `test` does not scan. `status`
+wakes a Host record of this project when the holder pid, agent pid, and
+agent pgid are dead and `state` is not `stopped`, through the same sender
+and `delegator_death_wake` dedupe. A live pid, reused or not, waits for
+`start` or `stop`. Nothing else polls. The wait is one `cadence.interval_minutes` (example
+120 minutes). `status` does not read that interval and does not schedule itself.
 
-On each wake: re-read the Accepted line, locate, attest the session, and
-read `status`, `observe`, and `capture`. The payload does not prove those
-facts. Then run the standard inquiry. If `project` or `session` is not your
-recorded `host`, report it and do not act on it.
+On each wake, re-read the Accepted line, locate, attest the session, and
+read `status`, `observe`, and `capture`. Then run the standard inquiry. If
+`project` or `session` is not your recorded `host`, report it and do not act.
 
-Dedupe on `holder_instance_id` + `event_seq`. The sender drops a second POST
-of that pair. A wake you already handled causes no action. Duplicate and
-out-of-order wakes are harmless; `watch` rules prevent a second relay.
-`blocked` is one owned permission. The cron fallback finds a lost delivery.
-One attempt waits 12 s. A timeout is not
-retried. Connection errors, HTTP 5xx, 408 and 429 are retried. Receipts are
-in `<repo>/.kaola/delegator-webhook-receipts.json` (the last 32).
+Dedupe is `holder_instance_id` + `event_seq`. The sender drops a second POST.
+A handled wake causes no action. Duplicate and out-of-order wakes are
+harmless; `watch` prevents a second relay. `blocked` is one owned
+permission. One attempt waits 12 s. A timeout is not retried. Connection
+errors and HTTP 400, 408, 429, and 5xx are retried. 401, 403, 404, and any
+other 4xx are final. An HTTP error stores a truncated `response_body` and
+headers `content-type`, `retry-after`, `www-authenticate`, `x-request-id`,
+`x-correlation-id`. The URL and the sender key never appear in a receipt.
+Receipts: `<repo>/.kaola/delegator-webhook-receipts.json` (last 32).

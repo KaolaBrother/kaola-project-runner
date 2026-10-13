@@ -418,7 +418,10 @@ class WakeGate(issue299.WebhookCase):
         self.assertIs(connection[0]["final"], False)
         self.assertIs(connection[-1]["final"], True)
 
-        for code, attempts in ((500, 4), (408, 4), (429, 4), (400, 1)):
+        # Issue #311: 400 joins the delayed retry set. 401, 403 and 404 stay
+        # final on attempt 1. Other 4xx stay final too (422 stands for them).
+        for code, attempts in ((500, 4), (408, 4), (429, 4), (400, 4),
+                               (401, 1), (403, 1), (404, 1), (422, 1)):
             self.endpoint.posts.clear()
             self.configure_endpoint(f"http://127.0.0.1:{self.endpoint.port}/status/{code}")
             proc = self.deliver(self.signal(event_seq=10 + code), timeout=30)
