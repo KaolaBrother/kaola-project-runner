@@ -8,6 +8,33 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 Seats: restart required
 
+- **A resume records whether a tier was requested, and status reads the actual model (Issue #316).**
+  A resume or `--continue` that passes `--tier` applies that preset the same way a fresh
+  start does. A resume that passes no `--tier`, `--model`, or `--effort` still sends no
+  model or effort override and still keeps the saved selection. The null tier is now an
+  explicit fact: `start_selection.tier` stays null and `start_selection.tier_reason` is
+  `resume-without-tier`; `model_selection` carries the same reason and a null tier.
+  `model_selection.preserved` is unchanged.
+  `status` and `observe` read an actual model the session already exposed. A
+  `session_update` the holder stored wins: `_meta.runtime_model` (`id` or `model`,
+  optional `effort`) or `message.model` plus `effort`. Claude Code's bridge does not
+  emit those fields. For Claude only, the next read is the session JSONL
+  (`message.model`, top-level `effort`), using `CLAUDE_CONFIG_DIR` or `~/.claude`, the
+  newest `nativeSessionId`, else `acp_session_id`. Other platforms with no recorded
+  runtime model stay `unknown` / `actual-model-evidence-not-yet-read`. Droid's start
+  echo is left in place when no session model is recorded.
+  When a model is read, the status copy of `start_evidence` and the receipt's
+  `model_verified`, `actual_runtime_model_id`, `actual_parameters`, and
+  `model_mismatch_reason` are set from it. `record.json` is not rewritten. A preserved
+  resume with no Runner target stays `unknown` with
+  `resume-preserved-actual-not-comparable` and the actual id filled, which clears
+  `actual-model-evidence-not-yet-read`. A Claude preset id such as `opus` is not
+  treated as equal to a transcript id such as `claude-opus-5-5`.
+  Seats: restart not required for this change. `scripts/kaola-acp.py` is per-call.
+  `scripts/kaola-acp-holder.py` is unchanged. The next `start` records `tier_reason`.
+  The next `status` or `observe` reads the model. A running holder does not restart.
+  This change does not install.
+
 - **`all-idle` counts a seat only while that seat has an active turn (Issue #314).**
   The all-idle scan (`holders_dispatched_by(..., working=True)`) used to treat
   every dispatched holder as working unless `state` was `agent_exited`,

@@ -2872,6 +2872,17 @@ def parse_model_components(raw: str) -> list[dict[str, Any]] | None:
     return components
 
 
+def resume_without_requested_tier(args: argparse.Namespace) -> bool:
+    """A resume or continue that named no model, effort, or tier.
+
+    That invocation keeps the saved native selection. The null tier is then
+    the fact ``resume-without-tier``, not the fresh-start word ``default``.
+    """
+    return bool(args.resume or args.use_continue) and not (
+        args.model or args.effort or args.tier
+    )
+
+
 def selection_basis(args: argparse.Namespace) -> dict[str, Any]:
     """What this invocation asked to launch, plus the preset display facts.
 
@@ -2881,15 +2892,14 @@ def selection_basis(args: argparse.Namespace) -> dict[str, Any]:
     ``*_model_id`` match; that label does not assign the preset or its effort.
     A resume/continue without tier/model/effort preserves the native session
     and carries no display: a current name is a live option read, not inherited
-    launch metadata. Omitting those flags does not by itself claim that a prior
+    launch metadata. That path records no tier (``tier`` is null). It does not
+    fill ``default``. Omitting those flags does not by itself claim that a prior
     applied model or effort is still effective; ``selection_continuity`` is that
     claim. Component metadata never becomes the launch effort.
     """
     manifest = args.manifest
     tier = args.tier or "default"
-    preserve = bool(args.resume or args.use_continue) and not (
-        args.model or args.effort or args.tier
-    )
+    preserve = resume_without_requested_tier(args)
     if args.model:
         return {
             "source": "user",
@@ -2908,7 +2918,9 @@ def selection_basis(args: argparse.Namespace) -> dict[str, Any]:
             "requested": "native saved session selection",
             "candidate": "",
             "effort": "",
-            "tier": tier,
+            # No tier was requested. ``None`` stays null in the receipt; it is
+            # not the fresh-start ``default`` fill above.
+            "tier": None,
             "display_name": None,
             "preset_id": None,
             "preset_effort": None,
@@ -2956,7 +2968,9 @@ def resolve_selection(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     native session selection (no Runner model override).
     """
     basis = selection_basis(args)
-    tier = basis["tier"]
+    # A preserved resume has no tier. Pass an empty flag so the policy helper
+    # records null, not the fresh-start word ``default``.
+    tier = basis["tier"] if isinstance(basis["tier"], str) else ""
     source = basis["source"]
     requested = basis["requested"]
     candidate = basis["candidate"]
@@ -2992,7 +3006,7 @@ def resolve_selection(args: argparse.Namespace, repo: str) -> dict[str, Any]:
         policy = {
             "requested_model_source": source,
             "requested_model_name": requested,
-            "requested_tier": tier,
+            "requested_tier": tier or None,
             "requested_fast": fast_intent(args),
             "resolved_runtime_model_id": candidate,
             "resolved_runtime_model_display": None,
@@ -3000,7 +3014,7 @@ def resolve_selection(args: argparse.Namespace, repo: str) -> dict[str, Any]:
             "resolved_fast": "unknown",
             "model_evidence_provenance": {
                 "requested": {"source": source, "name": requested},
-                "selection": {"source": source, "tier": tier},
+                "selection": {"source": source, "tier": tier or None},
                 "resolution": {
                     "state": "policy-helper-unavailable",
                     "candidate_id": candidate or None,
@@ -3038,6 +3052,10 @@ def merge_policy_evidence(receipt: dict[str, Any], policy: dict[str, Any]) -> No
         "preserved": False,
         "override_omitted": policy.get("requested_model_source") == "resume-preserved",
     }
+    # Issue #316: a preserved resume omitted --tier. Say so. A silent null is
+    # not a record that nobody requested a tier.
+    if receipt["model_selection"]["override_omitted"]:
+        receipt["model_selection"]["tier_reason"] = "resume-without-tier"
 
 
 def parse_acp_model_map(raw: str) -> dict[str, str]:
@@ -3814,6 +3832,324 @@ def echo_model_verification(
             return result
     result["model_verified"] = True
     return result
+
+
+# Issue #316: a later status/observe reads an actual model the session already
+# exposed. The holder record is not rewritten. A platform with nothing readable
+# keeps ``actual-model-evidence-not-yet-read``.
+_SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,200}$")
+_CLAUDE_TRANSCRIPT_TAIL = 2_000_000
+_EVENT_EVIDENCE_TAIL = 1_500_000
+_SESSION_EVIDENCE_SCALARS = (
+    "model_verified", "model_mismatch_reason",
+    "actual_runtime_model_id", "actual_parameters",
+)
+
+
+def session_model_verdict(
+    evidence: dict[str, Any], actual_id: str, actual_parameters: dict[str, Any],
+) -> dict[str, Any]:
+    """Compare one observed model to the selection this start recorded.
+
+    The target is ``model_selection.resolved_model`` and, when that selection
+    pinned one, ``resolved_effort``. No alias is applied: Claude's preset id
+    ``opus`` is not the transcript id ``claude-opus-5-5``. An empty target on
+    a preserved resume stays unknown and names the actual id
+    (``resume-preserved-actual-not-comparable``).
+    """
+    selection = evidence.get("model_selection")
+    selection = selection if isinstance(selection, dict) else {}
+    expected_id = selection.get("resolved_model") or ""
+    if not isinstance(expected_id, str):
+        expected_id = ""
+    expected_effort = selection.get("resolved_effort")
+    parameters = dict(actual_parameters) if isinstance(actual_parameters, dict) else {}
+    result: dict[str, Any] = {
+        "actual_runtime_model_id": actual_id or None,
+        "actual_parameters": parameters,
+        "model_verified": "unknown",
+        "model_mismatch_reason": None,
+    }
+    if not actual_id:
+        result["actual_runtime_model_id"] = None
+        result["actual_parameters"] = None
+        result["model_mismatch_reason"] = "actual-model-evidence-unreadable"
+        return result
+    if not expected_id:
+        result["model_mismatch_reason"] = (
+            "resume-preserved-actual-not-comparable"
+            if selection.get("source") == "resume-preserved"
+            else "native-default-model-not-comparable"
+        )
+        return result
+    if actual_id != expected_id:
+        result["model_verified"] = False
+        result["model_mismatch_reason"] = f"actual-model-mismatch:{actual_id}"
+        return result
+    if isinstance(expected_effort, str) and expected_effort:
+        if "effort" not in parameters:
+            result["model_mismatch_reason"] = "actual-effort-evidence-unreadable"
+            return result
+        if parameters["effort"] != expected_effort:
+            result["model_verified"] = False
+            result["model_mismatch_reason"] = f"actual-effort-mismatch:{parameters['effort']}"
+            return result
+    result["model_verified"] = True
+    return result
+
+
+def claude_project_slug(repo: str) -> str:
+    """Claude project-directory name for this cwd.
+
+    Claude encodes the session cwd by writing each separator as ``-``. The
+    runner repo is already a realpath; ``abspath`` keeps that spelling.
+    """
+    return os.path.abspath(repo).replace(os.sep, "-")
+
+
+def claude_transcript_path(
+    repo: str, session_id: Any, config_dir: str | None = None,
+) -> Path | None:
+    """``<config>/projects/<slug>/<session-id>.jsonl``, or None when unsafe.
+
+    ``config_dir`` wins. Otherwise ``CLAUDE_CONFIG_DIR``, otherwise ``~/.claude``.
+    The session id is a single path segment. It is never joined raw.
+    """
+    if not isinstance(session_id, str) or not _SESSION_ID_RE.fullmatch(session_id):
+        return None
+    if ".." in session_id:
+        return None
+    if config_dir:
+        root = Path(config_dir)
+    else:
+        env_dir = os.environ.get("CLAUDE_CONFIG_DIR")
+        root = Path(env_dir) if env_dir else Path.home() / ".claude"
+    return root / "projects" / claude_project_slug(repo) / f"{session_id}.jsonl"
+
+
+def _tail_text(path: Path, limit: int) -> str | None:
+    """The file's tail as text. A seek drops the partial first line.
+
+    None when the file is missing or unreadable. The caller keeps model id
+    and effort only.
+    """
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return None
+    try:
+        with open(path, "rb") as handle:
+            if size > limit:
+                handle.seek(size - limit)
+                raw = handle.read(limit)
+                newline = raw.find(b"\n")
+                raw = raw[newline + 1:] if newline >= 0 else b""
+            else:
+                raw = handle.read()
+    except OSError:
+        return None
+    return raw.decode("utf-8", errors="replace")
+
+
+def _claude_assistant_model(entry: Any) -> tuple[str, dict[str, Any]] | None:
+    if not isinstance(entry, dict) or entry.get("type") != "assistant":
+        return None
+    message = entry.get("message")
+    if not isinstance(message, dict):
+        return None
+    model = message.get("model")
+    if not isinstance(model, str) or not model or model == "<synthetic>":
+        return None
+    parameters: dict[str, Any] = {}
+    effort = entry.get("effort")
+    if isinstance(effort, str) and effort:
+        parameters["effort"] = effort
+    return model, parameters
+
+
+def claude_transcript_model(path: Path) -> dict[str, Any] | None:
+    """Last non-synthetic assistant model in the transcript tail.
+
+    None when the file cannot be read. ``id`` is empty when the file was read
+    and named no model. Only ``id`` and top-level ``effort`` are kept.
+    """
+    text = _tail_text(path, _CLAUDE_TRANSCRIPT_TAIL)
+    if text is None:
+        return None
+    found_id = ""
+    found_parameters: dict[str, Any] = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        parsed = _claude_assistant_model(entry)
+        if parsed is None:
+            continue
+        found_id, found_parameters = parsed
+    return {"id": found_id, "parameters": found_parameters}
+
+
+def _runtime_model_from_update(update: Any) -> tuple[str, dict[str, Any]] | None:
+    """A closed model object on a session update, or None.
+
+    ``_meta.runtime_model`` is ``{id|model, effort?}``. A Claude-shaped
+    ``message.model`` plus top-level ``effort`` is accepted when a runtime
+    puts that object on an update the holder already stored. Prose,
+    ``currentValue``, and ``<synthetic>`` are not evidence.
+    """
+    if not isinstance(update, dict):
+        return None
+    meta = update.get("_meta")
+    runtime = meta.get("runtime_model") if isinstance(meta, dict) else None
+    if isinstance(runtime, dict):
+        model = runtime.get("id") if isinstance(runtime.get("id"), str) else runtime.get("model")
+        if not isinstance(model, str) or not model or model == "<synthetic>":
+            return None
+        parameters: dict[str, Any] = {}
+        effort = runtime.get("effort")
+        if isinstance(effort, str) and effort:
+            parameters["effort"] = effort
+        return model, parameters
+    message = update.get("message")
+    if isinstance(message, dict):
+        model = message.get("model")
+        if isinstance(model, str) and model and model != "<synthetic>":
+            parameters = {}
+            effort = update.get("effort")
+            if isinstance(effort, str) and effort:
+                parameters["effort"] = effort
+            return model, parameters
+    return None
+
+
+def read_holder_session_evidence(
+    directory: Path,
+) -> tuple[tuple[str, dict[str, Any]] | None, str | None]:
+    """Last runtime model and last ``nativeSessionId`` in the event tail.
+
+    ``events.jsonl.1`` is read before the live file, so a newer line wins.
+    Older rotations are not scanned.
+    """
+    model: tuple[str, dict[str, Any]] | None = None
+    native: str | None = None
+    for path in (directory / "events.jsonl.1", directory / "events.jsonl"):
+        text = _tail_text(path, _EVENT_EVIDENCE_TAIL)
+        if text is None:
+            continue
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(entry, dict) or entry.get("kind") != "session_update":
+                continue
+            update = entry.get("update")
+            if not isinstance(update, dict):
+                continue
+            found = _runtime_model_from_update(update)
+            if found is not None:
+                model = found
+            if update.get("sessionUpdate") == "native_session_identity":
+                native_id = update.get("nativeSessionId")
+                if (isinstance(native_id, str) and _SESSION_ID_RE.fullmatch(native_id)
+                        and ".." not in native_id):
+                    native = native_id
+    return model, native
+
+
+def _apply_session_verdict(
+    receipt: dict[str, Any], evidence: dict[str, Any], verdict: dict[str, Any],
+    actual: dict[str, Any],
+) -> None:
+    """Replace the receipt's evidence copy. The holder record object stays."""
+    copied = dict(evidence)
+    for key in _SESSION_EVIDENCE_SCALARS:
+        copied[key] = verdict[key]
+    provenance = copied.get("model_evidence_provenance")
+    provenance = dict(provenance) if isinstance(provenance, dict) else {}
+    provenance["actual"] = actual
+    copied["model_evidence_provenance"] = provenance
+    receipt["start_evidence"] = copied
+    for key in _SESSION_EVIDENCE_SCALARS:
+        receipt[key] = verdict[key]
+
+
+def _unreadable_model_verdict() -> dict[str, Any]:
+    return {
+        "actual_runtime_model_id": None,
+        "actual_parameters": None,
+        "model_verified": "unknown",
+        "model_mismatch_reason": "actual-model-evidence-unreadable",
+    }
+
+
+def annotate_session_model_evidence(
+    receipt: dict[str, Any], platform: str, repo: str, directory: Path | None,
+) -> None:
+    """Overlay a live model verdict onto this status or observe receipt.
+
+    A runtime model the holder already recorded wins. Claude Code, and only
+    Claude Code, then reads its session JSONL. No evidence leaves the start
+    snapshot as it was, including a Droid echo and
+    ``actual-model-evidence-not-yet-read``. This does not write ``record.json``.
+    """
+    if directory is None or not isinstance(receipt, dict):
+        return
+    evidence = receipt.get("start_evidence")
+    if not isinstance(evidence, dict):
+        return
+    found, native_id = read_holder_session_evidence(directory)
+    if found is not None:
+        actual_id, actual_parameters = found
+        verdict = session_model_verdict(evidence, actual_id, actual_parameters)
+        _apply_session_verdict(receipt, evidence, verdict, {
+            "source": "acp-session-update",
+            "model_id": verdict["actual_runtime_model_id"],
+            "parameters": verdict["actual_parameters"],
+        })
+        return
+    if platform != "claude-code" or not isinstance(repo, str) or not repo:
+        return
+    session_ids: list[str] = []
+    if native_id:
+        session_ids.append(native_id)
+    acp_id = evidence.get("acp_session_id")
+    if not isinstance(acp_id, str) or not acp_id:
+        acp_id = receipt.get("acp_session_id")
+    if isinstance(acp_id, str) and acp_id and acp_id not in session_ids:
+        session_ids.append(acp_id)
+    chosen: Path | None = None
+    for session_id in session_ids:
+        path = claude_transcript_path(repo, session_id)
+        if path is not None and path.is_file():
+            chosen = path
+            break
+    if chosen is None:
+        return
+    loaded = claude_transcript_model(chosen)
+    if not isinstance(loaded, dict) or not loaded.get("id"):
+        verdict = _unreadable_model_verdict()
+        _apply_session_verdict(receipt, evidence, verdict, {
+            "source": "claude-session-jsonl",
+            "model_id": None,
+            "parameters": None,
+        })
+        return
+    verdict = session_model_verdict(
+        evidence, str(loaded["id"]), loaded.get("parameters") or {},
+    )
+    _apply_session_verdict(receipt, evidence, verdict, {
+        "source": "claude-session-jsonl",
+        "model_id": verdict["actual_runtime_model_id"],
+        "parameters": verdict["actual_parameters"],
+    })
 
 
 # Issue #268: authority order for a continuation. The chosen tier is
@@ -5582,19 +5918,24 @@ def command_start(args: argparse.Namespace, repo: str,
     role = session_role_value(args, selection_basis(args), prior_record, repo)
     receipt["session_role"] = role
     holder_argv += ["--session-role", role or ""]
-    holder_argv += ["--start-selection", json.dumps({
+    # Issue #181: effective values, not raw flags. Absent --fast means the
+    # seat runs with Fast off, and an omitted --mode means the platform
+    # default resolved above; recording either as None would make
+    # drain-restart lose a state this start really applied.
+    start_selection = {
         "model": args.model,
         "effort": args.effort,
         "tier": args.tier,
-        # Issue #181: effective values, not raw flags. Absent --fast means the
-        # seat runs with Fast off, and an omitted --mode means the platform
-        # default resolved above; recording either as None would make
-        # drain-restart lose a state this start really applied.
         "fast": fast_intent(args),
         "mode": mode_value,
         "session_role": role,
         "launch_backend": resolved_launch_backend(args),
-    }, sort_keys=True)]
+    }
+    # Issue #316: a preserved resume omitted --tier. Record that. A resume
+    # that passed --tier keeps the tier word and does not get this reason.
+    if resume_without_requested_tier(args):
+        start_selection["tier_reason"] = "resume-without-tier"
+    holder_argv += ["--start-selection", json.dumps(start_selection, sort_keys=True)]
     cli_version = cli_version_fact(args, holder_env)
     if cli_version is not None:
         holder_argv += ["--cli-version", json.dumps(cli_version, sort_keys=True)]
@@ -6059,7 +6400,7 @@ def apply_recorded_selection(args: argparse.Namespace, record: dict[str, Any]) -
             args, tier_agent_command(args) or args.manifest.get("acp_command") or ""
         ) or args.agent_command
         args.agent_command, args.agent_command_facts = resolve_agent_command(args.agent_command)
-    return {
+    selection = {
         "source": "caller" if any(explicit.values()) else "record",
         "model": args.model,
         "effort": args.effort,
@@ -6067,6 +6408,9 @@ def apply_recorded_selection(args: argparse.Namespace, record: dict[str, Any]) -
         "fast": args.fast,
         "mode": args.mode,
     }
+    if resume_without_requested_tier(args):
+        selection["tier_reason"] = "resume-without-tier"
+    return selection
 
 
 def _note_post_stop_result(started: dict[str, Any], old_id: Any,
@@ -7581,6 +7925,12 @@ def main() -> int:
             receipt.update(seat_freshness(merged))
         # Emission copy only. The holder object and receipt["record"] stay native.
         stamp_quota_emission(receipt, args.platform)
+        # Issue #316: read a model the session already exposed. The on-disk
+        # start snapshot is left as the start wrote it.
+        evidence_repo = repo
+        if isinstance(record, dict) and isinstance(record.get("repo"), str) and record["repo"]:
+            evidence_repo = record["repo"]
+        annotate_session_model_evidence(receipt, args.platform, evidence_repo, directory)
         receipt = bound_state_receipt(receipt)
     elif args.command == "capture":
         receipt = op_or_holder_lost(

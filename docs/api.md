@@ -1853,8 +1853,17 @@ ACP `fast-mode` configId, Cursor parameterized `fast` option, the Claude bridge'
 vendored bridge turns into a per-turn `--settings '{"fastMode": ...}'` — the native CLI determines model support and effective reports `unknown` without
 native evidence). Where no
 native mechanism or advertised fast variant exists, the request is reported `resolved_fast:
-"unsupported"`, never silently claimed. `--resume`/`--continue` without tier/model/effort sends no model or effort override
-(`resume-preserved`); supplying any of them re-applies that selection.
+"unsupported"`, never silently claimed. `--resume`/`--continue` with `--tier` applies that
+preset the same way a fresh start does (`model_selection.source` is `runner-<tier>`, and the
+platform's model and effort options are sent). `--model` or `--effort` on a resume applies that
+explicit selection (`source` `user`). A resume or `--continue` that passes none of `--tier`,
+`--model`, or `--effort` sends no model or effort override (`resume-preserved`,
+`model_selection.override_omitted` true) and keeps the saved native selection.
+The omitted tier is recorded, not silent: `start_selection.tier` stays `null` and
+`start_selection.tier_reason` is `resume-without-tier`; `model_selection.tier` stays `null`
+and `model_selection.tier_reason` is the same word. A resume that passed `--tier` does not
+set `tier_reason`. `model_selection.preserved` stays false until a fresh readback proves
+continuity with the prior applied selection.
 There is no automatic escalation based on complexity, failures, or elapsed time. Omitting
 those flags does not by itself mean the prior applied model or effort is still in effect.
 `selection_continuity` on the `start` receipt (and on `start_evidence`) is the comparison.
@@ -1917,6 +1926,48 @@ the agent never adopted verifies `false` instead of comparing the argv value to 
 agent's own current `session_meta.configOptions[].currentValue`. ACP `start` receipts additionally carry
 `model_selection` and per-option `config_application` receipts; a rejected or unadvertised
 `set_config_option` is reported as a limitation and leaves the session usable.
+
+### Session model evidence
+
+Issue #316. `start` still reports `model_verified: "unknown"` and
+`model_mismatch_reason: actual-model-evidence-not-yet-read` unless the platform verifies from
+its own echo (Droid, above). `status` and `observe` then read an actual model the session
+already exposed. They do not write `record.json`. The on-disk `start_evidence` stays the start
+snapshot. When a model is read, the status copy of `start_evidence` and four top-level fields
+(`model_verified`, `model_mismatch_reason`, `actual_runtime_model_id`, `actual_parameters`)
+are set from it, and `model_evidence_provenance.actual` names the read. No readable evidence
+leaves those start values alone, so `actual-model-evidence-not-yet-read` stays until a read
+succeeds. `configOptions.currentValue` is not that read.
+
+The holder record wins over a new file read. A `session_update` the holder already stored
+counts when it carries `_meta.runtime_model` (`id` or `model`, and `effort` when the runtime
+sends one) or a Claude-shaped `message.model` plus top-level `effort`. The source is
+`acp-session-update`. Prose is not scraped. `<synthetic>` is skipped. The scan is the tail of
+`events.jsonl.1` and then `events.jsonl`.
+
+Per platform:
+
+| Platform | Actual-model evidence | When that evidence is absent |
+|---|---|---|
+| claude-code | Recorded session update, as above. The vendored bridge does not emit model or effort on `session/update` today, so the usual read is the session JSONL: `$CLAUDE_CONFIG_DIR` or `~/.claude`, then `projects/<cwd-with-separators-as-dashes>/<session-id>.jsonl`. The session id is the newest `native_session_identity.nativeSessionId` in that event tail, else `acp_session_id`, and only when that file exists. The last non-synthetic assistant `message.model` and top-level `effort` win (`claude-session-jsonl`). | A missing file leaves `actual-model-evidence-not-yet-read`. A file that was read and named no model is `actual-model-evidence-unreadable`. |
+| droid | The start-time `acp-config-echo` verdict. A later recorded runtime model replaces it. | The echo verdict stands. Absence does not clear it. |
+| codex, cursor-cli, devin, dsh, grok, kimi-cli, opencode, zcode | A recorded session-update runtime model only. Devin's launch argv and any advertised `currentValue` stay application evidence, not `model_verified`. | `unknown` / `actual-model-evidence-not-yet-read`. |
+
+Comparison uses `model_selection.resolved_model` and, when that selection pinned an effort,
+`model_selection.resolved_effort`. A match is `model_verified: true` and a null reason. A
+different id is `false` and `actual-model-mismatch:<id>`. A pinned effort with no observed
+effort is `unknown` and `actual-effort-evidence-unreadable`. A different effort is `false` and
+`actual-effort-mismatch:<value>`. An empty resolved id on a preserved resume is `unknown` and
+`resume-preserved-actual-not-comparable`, and the actual id and effort are still set, which
+clears `actual-model-evidence-not-yet-read`. Any other empty resolved id is
+`native-default-model-not-comparable`. No alias map is applied. Claude's preset id `opus` is
+not the transcript id `claude-opus-5-5`: a `--tier default` session whose transcript says
+`claude-opus-5-5` verifies `false` and still reports that id and its effort.
+
+A preserved resume can be read on the next `status` before a new turn, because the transcript
+already exists. A fresh session before its first turn has no native transcript yet, so the
+reason stays `actual-model-evidence-not-yet-read`. The read is per call in `kaola-acp.py`.
+The holder is not part of it.
 
 ### Consumer model name and effort
 
@@ -2066,8 +2117,12 @@ receipt's `model_selection`, `model_display`, `requested_effort`, `config_applic
 when the start receipt had it, plus `acp_session_id`, `resumed`, and `recorded_at`. It is evidence
 from that start or resume, not a fresh observation: the current selection is
 `session_meta.configOptions`, an applied option or launch argument is application evidence, and
-only an existing verified fact (`model_verified: true`) is verified. `start_selection` stays the
-caller's raw flags, so an omitted `--tier` is `null`. A resume or `--continue` whose adopted
+only an existing verified fact (`model_verified: true`) is verified. `status` and `observe`
+may overlay a live verdict onto the reported copy of `start_evidence` when session evidence
+exists (Issue #316, above). The file in `record.json` stays the start snapshot. `start_selection` stays the
+caller's raw flags, so an omitted `--tier` is `null`. A resume or `--continue` that also omitted
+`--model` and `--effort` adds `tier_reason: "resume-without-tier"` on that object and on
+`model_selection`. A resume or `--continue` whose adopted
 `acp_session_id` equals the one the previous record for the same platform/session/repo ran and
 recorded its evidence under keeps that evidence as `start_evidence.inherited` (`source:
 "prior-holder-record"`, `holder_instance_id`, `acp_session_id`, `recorded_at`), also echoed as the

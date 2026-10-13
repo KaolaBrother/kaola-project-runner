@@ -896,6 +896,33 @@ class MockAgent:
             )
             log_event({"event": "tool_call_only_emitted"})
             return
+        if scenario == "runtime_model":
+            # Issue #316: a closed model object on the session update the
+            # holder already records. ``MOCK_ACP_RUNTIME_MODEL`` is
+            # ``{"id": "...", "effort": "..."}``. Effort is omitted when absent.
+            spec: dict[str, Any] = {"id": "gpt-6.1-sol", "effort": "high"}
+            raw = os.environ.get("MOCK_ACP_RUNTIME_MODEL", "")
+            if raw:
+                try:
+                    parsed = json.loads(raw)
+                except json.JSONDecodeError:
+                    parsed = None
+                if isinstance(parsed, dict):
+                    spec = parsed
+            runtime: dict[str, Any] = {}
+            model = spec.get("id") if isinstance(spec.get("id"), str) else spec.get("model")
+            if isinstance(model, str) and model:
+                runtime["id"] = model
+            effort = spec.get("effort")
+            if isinstance(effort, str) and effort:
+                runtime["effort"] = effort
+            session_update(session_id, {
+                "sessionUpdate": "agent_message_chunk",
+                "content": {"type": "text", "text": "MOCK-REPLY"},
+                "_meta": {"runtime_model": runtime},
+            })
+            self.finish_turn(request_id)
+            return
         self.emit_prelude(session_id)
         if self.turn_ms:
             time.sleep(self.turn_ms / 1000.0)
