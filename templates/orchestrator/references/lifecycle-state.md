@@ -60,17 +60,19 @@ The Host gets outcomes, capacity and pending decisions.
   exceptions. Read, acknowledged or in progress is not resolved. Once handled,
   use `retire --expect-rev REV --evidence ORIGINAL`.
 - `decisions` (`owner` `host|delegator|user`, `question`): open owner answers.
-  Host settles with `update --set status/evidence ORIGINAL` or, judged
-  handled, `retire --evidence ORIGINAL`. A Sideagent copy needs
-  `--host-turn`, stays pending Host adoption, never judges currentness. No row: Host `retire --kind decisions --id ID --absent --evidence E` (receipt; stores nothing).
+  A Delegator decision is a row here (`owner` `delegator` or `user`, `status`
+  `pending`). The runner reads `state.decisions` and wakes `needs_decision`.
+  A note only in `.kaola/run/*.md` or the turn text does not. Host settles
+  with `update --set status/evidence ORIGINAL` or `retire --evidence ORIGINAL`.
+  A Sideagent copy needs `--host-turn` and stays pending Host adoption. No row:
+  `retire --kind decisions --id ID --absent --evidence E` (receipt; stores nothing).
 
-Views and injected bodies use the stored current collection. Keep no
-handled row or retrospective text in another field. Unfinished effects remain
-concrete current duties. Revoked/expired grants leave eligibility; current stop
-restrictions and live links stay. A stopped process does not finish a task.
-Refusals give id, revision and removal command. Do not create an absent row. Keep genuinely unresolved original evidence on the
-current decision/reconciliation route until its proper type is established.
-Unknown is not resolved; Agents judge semantic currentness.
+Views use the stored current collection. Keep no handled row elsewhere.
+Unfinished effects stay current duties. Revoked grants leave eligibility;
+stop limits and live links stay. A stopped process does not finish a task.
+Refusals name id, revision and the removal command. Do not create an absent
+row. Unresolved evidence stays on the current decision route. Unknown is not
+resolved.
 
 ## Touchpoints
 

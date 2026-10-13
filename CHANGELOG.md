@@ -38,6 +38,32 @@ Seats: restart required
   Restart detail: the holder changed (`scripts/kaola-acp-holder.py`); a
   running seat keeps counting a ready idle worker as working until it restarts.
 
+- **A registered Delegator decision wakes, and a silent turn falls back to `all-idle` (Issue #315).**
+  A Delegator decision is a `state.decisions` row (`owner` `delegator` or
+  `user`). The runner reads that record. A note only in `.kaola/run/*.md` or
+  in the turn text does not wake. At a Host turn end, when no seat has an
+  active turn, an open row (`status` is not `settled`; a missing status is
+  open) or any other undelivered attention row is classified first. The reason
+  is `needs_decision`, `question_waiting`, or `delivery_review`, not
+  `all-idle`. The once-per-episode latch does not suppress it. The same check
+  runs after a compaction reload. `compact_reload_delivered` is an ordinary
+  self prompt. The reload does not clear the latch and does not skip the
+  turn-end check. A verified maintenance checkpoint does not either. Each
+  later turn end with no active seat wakes again while the row stays pending.
+  When no seat has an active turn and nothing is registered, the turn falls
+  back to the existing `all-idle` wake, including a length stop or a refusal.
+  The #307 latch still sends that wake once per idle episode. No new wake
+  kind. A seat with an active turn keeps the current rule: a Delegator send
+  or steer stays quiet, and a delegator-owned decision is not merged into
+  that turn. The node-stop and last-seat re-check still send only `all-idle`.
+  Restart judgment: `scripts/kaola-acp-holder.py` changed. It is in the
+  operator restart set (`docs/conventions.md`). A running Host keeps the
+  previous predicate until that Host restarts. This change does not install.
+
+  Restart detail: the holder changed (`scripts/kaola-acp-holder.py`); a
+  running seat does not read `state.decisions`, and does not fall back to
+  `all-idle` on a silent turn, until it restarts.
+
 ## 0.9.10 — 2026-10-13 (recovery routes, wake and seat diagnostics, install payload bytecode)
 
 Seats: restart required

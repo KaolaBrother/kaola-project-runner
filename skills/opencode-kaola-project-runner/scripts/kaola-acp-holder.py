@@ -306,6 +306,55 @@ DELEGATOR_WAKE_REASONS = frozenset({
 DELEGATOR_LENGTH_STOPS = frozenset({"max_tokens", "max_turn_requests", "length"})
 # Host-view attention ``why`` values that mean a delivery needs review.
 DELEGATOR_DELIVERY_WHYS = frozenset({"awaiting-verdict", "delivery-open", "verdict-missing"})
+# Issue #315: owners whose open ``state.decisions`` row is not already an
+# attention item. ``owner`` ``host`` is ``why`` ``host-decision`` in the view.
+DELEGATOR_DECISION_OWNERS = frozenset({"delegator", "user"})
+
+
+def open_registered_decision_rows(doc: Any) -> list[dict[str, Any]]:
+    """Pending ``state.decisions`` the host view does not already list.
+
+    A row that is still stored is open unless ``status`` is ``settled``
+    (cleanup removes a settled decision). ``owner`` ``host`` is already an
+    attention row when the view is current. ``owner`` ``delegator`` or
+    ``user`` is the typed record a Delegator decision lives in, and the view
+    does not put it in ``attention``. ``why`` ``registered-decision`` is not
+    ``host-decision``, so the classifier reports ``needs_decision``.
+    """
+    if not isinstance(doc, dict):
+        return []
+    state = doc.get("state")
+    decisions = state.get("decisions") if isinstance(state, dict) else None
+    if not isinstance(decisions, dict):
+        return []
+    rows: list[dict[str, Any]] = []
+    for decision_id, decision in decisions.items():
+        if not isinstance(decision_id, str) or not decision_id:
+            continue
+        if not isinstance(decision, dict) or decision.get("status") == "settled":
+            continue
+        if decision.get("owner") not in DELEGATOR_DECISION_OWNERS:
+            continue
+        rows.append({"kind": "decisions", "id": decision_id,
+                     "why": "registered-decision"})
+    return rows
+
+
+def classify_delegator_attention(rows: list | None) -> str | None:
+    """Map undelivered host-view attention to one wake reason.
+
+    Empty means nothing in this list. Callers decide what an empty list means.
+    """
+    found = rows or []
+    if any(isinstance(row, dict) and row.get("kind") == "decisions"
+           and row.get("why") == "host-decision" for row in found):
+        return "question_waiting"
+    if any(isinstance(row, dict) and row.get("kind") == "tasks"
+           and row.get("why") in DELEGATOR_DELIVERY_WHYS for row in found):
+        return "delivery_review"
+    if found:
+        return "needs_decision"
+    return None
 
 
 def delegator_turn_wake_reason(
@@ -336,29 +385,40 @@ def delegator_turn_wake_reason(
       (``session_role`` ``sideagent`` or legacy ``sidekick``, including the
       bound Sideagent node), a record whose ``state`` is ``agent_exited``,
       ``stopping``, or ``stopped``, and a record with no active turn
-      (Issue #314). A ready seat held for acceptance does not block. The
-      Host is idle and nobody is in a turn.
-      ``all-idle`` is once per transition into that state, whether or not
-      attention or other pending work is recorded. Owner rule, Yanlei
-      2026-10-11 16:49. ``all_idle_due`` is true only when this idle episode
-      has not yet sent ``all-idle`` (the latch is clear). A Delegator-admitted
-      turn returns ``None`` unless that transition is still due, so a later
-      send or steer does not wake by itself (Issue #307). When the latch is
-      clear, including a Delegator turn in which the last working seat
-      stopped, the one wake is still ``all-idle``. A self turn still reports
-      ``all-idle``; ``_emit_delegator_all_idle`` drops a second POST.
+      (Issue #314). A ready seat held for acceptance does not block.
+      Undelivered attention, including a pending ``state.decisions`` row the
+      caller merged in, is classified first (Issue #315). That reason is not
+      ``all-idle``, and the episode latch does not suppress it. A compaction
+      reload is an ordinary self prompt; this same check runs when that turn
+      ends. When the list is empty the turn would otherwise be silent,
+      including a length stop or a refusal, and the wake is ``all-idle``,
+      once per transition. Owner rule, Yanlei 2026-10-11 16:49, narrowed
+      2026-10-13 for a registered decision. ``all_idle_due`` is true only when
+      this idle episode has not yet sent ``all-idle`` (the latch is clear).
+      A Delegator-admitted turn returns ``None`` unless that transition is
+      still due, so a later send or steer does not wake by itself
+      (Issue #307). When the latch is clear, including a Delegator turn in
+      which the last working seat stopped, the one wake is still ``all-idle``.
+      A self turn still reports ``all-idle``; ``_emit_delegator_all_idle``
+      drops a second POST.
     * ``prompt_source == "delegator"`` — this turn was admitted by a socket
       prompt or by steer, and a seat is still live. The Delegator is already
       there. No wake.
     * undelivered Host attention (heartbeat body is a host view whose
-      fingerprint is not ``host_attention_seen``), classified from the rows:
-      a ``decisions``/``host-decision`` row is ``question_waiting``; a
+      fingerprint is not ``host_attention_seen``), plus a pending
+      ``state.decisions`` row the caller merged when no seat is in a turn.
+      A ``decisions``/``host-decision`` row is ``question_waiting``; a
       ``tasks`` row whose ``why`` is awaiting-verdict, delivery-open or
-      verdict-missing is ``delivery_review``; any other row is
-      ``needs_decision``.
+      verdict-missing is ``delivery_review``; any other row, including
+      ``why`` ``registered-decision``, is ``needs_decision``. With no seat
+      in a turn this classification runs before the ``all-idle`` fallback.
+      With a seat still in a turn it runs only after the Delegator-source
+      check above.
     * staged worker events with no prompt fingerprint, or an unconfirmed
       overflow, or a length stop (``max_tokens``, ``max_turn_requests``,
-      ``length``) is ``host_stopped_pending``.
+      ``length``) is ``host_stopped_pending`` when a seat is still in a
+      turn. With no seat in a turn and no attention row, those facts stay
+      inside the ``all-idle`` fallback.
     * ``refusal``, or an unrequested cancel, is ``needs_decision``.
     * a clean ``end_turn`` with nothing pending, while a seat is still live,
       is idle. No wake.
@@ -372,24 +432,23 @@ def delegator_turn_wake_reason(
         return None
     if self_continuing:
         return None
-    # Nobody is working. Pending attention does not pick a different reason.
-    # A Delegator-admitted turn reports all-idle only when the busy -> idle
-    # transition is still due (the episode latch is clear). Issue #307.
+    # No active seat turn. A registered decision or undelivered attention
+    # wins over all-idle, including when the episode latch is set and
+    # including the turn that follows a compaction reload (Issue #315).
+    # An empty list keeps the #302/#307 all-idle fallback: a length stop or
+    # a refusal does not pick a different reason while nobody is in a turn.
     if not live_seats:
+        attention = classify_delegator_attention(attention_rows)
+        if attention is not None:
+            return attention
         if (prompt_source or "delegator") == "delegator" and not all_idle_due:
             return None
         return "all-idle"
     if (prompt_source or "delegator") == "delegator":
         return None
-    rows = attention_rows or []
-    if any(isinstance(row, dict) and row.get("kind") == "decisions"
-           and row.get("why") == "host-decision" for row in rows):
-        return "question_waiting"
-    if any(isinstance(row, dict) and row.get("kind") == "tasks"
-           and row.get("why") in DELEGATOR_DELIVERY_WHYS for row in rows):
-        return "delivery_review"
-    if rows:
-        return "needs_decision"
+    attention = classify_delegator_attention(attention_rows)
+    if attention is not None:
+        return attention
     if staged_undelivered or (
             isinstance(stop_reason, str) and stop_reason in DELEGATOR_LENGTH_STOPS):
         return "host_stopped_pending"
@@ -3212,12 +3271,17 @@ class Holder:
             with self.undelivered_wakes_lock:
                 self.undelivered_wakes.pop(IDLE_WAKE_KEY, None)
 
-    def _delegator_pending_facts(self) -> tuple[bool, list | None]:
-        """Staged undelivered worker events, and undelivered host-view rows.
+    def _delegator_pending_facts(self) -> tuple[bool, list | None, list]:
+        """Staged events, undelivered attention, and open registered decisions.
 
         Attention is undelivered when the heartbeat body is a host view whose
         fingerprint differs from the one last delivered to this Host. A body
-        that is not a host view contributes no rows.
+        that is not a host view contributes no attention rows.
+
+        The third value is every pending ``state.decisions`` row with owner
+        ``delegator`` or ``user`` (Issue #315). Those rows are not in the
+        host-view ``attention`` list, so the attention fingerprint does not
+        see them. The caller merges them only when no seat has an active turn.
         """
         with self.worker_events_lock:
             staged = any(
@@ -3229,27 +3293,33 @@ class Holder:
             )
             seen = self.host_attention_seen
         source = Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"
-        _doc, body, _defect = read_heartbeat_file(source)
+        doc, body, _defect = read_heartbeat_file(source)
+        decisions = open_registered_decision_rows(doc)
         fingerprint = attention_fingerprint(body)
         if fingerprint is None or fingerprint == seen:
-            return staged, None
+            return staged, None, decisions
         try:
             view = json.loads(body or "")
         except ValueError:
-            return staged, None
+            return staged, None, decisions
         rows = view.get("attention") if isinstance(view, dict) else None
         if not isinstance(rows, list):
-            return staged, None
-        return staged, rows
+            return staged, None, decisions
+        return staged, rows, decisions
 
     def _delegator_turn_end_reason(self, turn: dict[str, Any]) -> str | None:
         """Issue #302 predicate for one ended turn. See ``delegator_turn_wake_reason``."""
-        staged, rows = self._delegator_pending_facts()
+        staged, rows, decisions = self._delegator_pending_facts()
         # Outside the holder locks: this scans ps and other holders' records.
         # Working seats only (#305, #314): agent_exited / stopping / stopped
         # are not live, and neither is a held seat with no active turn.
         # Seat-exempt Sideagent records are already absent (#303).
         live_seats = bool(holders_dispatched_by(self.holder_instance_id, working=True))
+        # Issue #315: a Delegator-owned decision is invisible in attention.
+        # Merge it only when no seat is in a turn, so a live seat keeps the
+        # current wake (a Delegator send stays quiet).
+        if not live_seats and decisions:
+            rows = [*(rows or []), *decisions]
         # Issue #302 deadlock repair: never take ``self.lock`` here. This runs
         # inside ``on_prompt_response``, and ``cancel_turn`` holds ``self.lock``
         # across the wait for the turn to settle — a steer/cancel settling the

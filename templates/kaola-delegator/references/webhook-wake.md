@@ -1,9 +1,8 @@
 # Webhook wake
 
 A webhook wakes you when the Host holder decides you must act. It does not
-wake on every turn end. A model or a prompt never sends it. You configure it.
-The owner pastes the URL and the sender key into the masked secret input
-one time.
+wake on every turn end. A model or a prompt never sends it. The owner pastes
+the URL and the sender key into the masked secret input once.
 
 ## One Delegator timer
 
@@ -46,25 +45,18 @@ $HOOK remove --project "$PROJECT" --owner-agent "$LABEL"
 2. **Create the wake pair.** One webhook routine for this project. Make the
    existing heartbeat the low-frequency cron fallback, or keep it if it is
    already low. No third routine. Both bodies are the canonical timer body.
-3. **Get the URL and the sender key without seeing them.** Ask the owner one
-   time to paste the routine's webhook URL and sender key from the routine
-   panel into the Grok Bot masked secret input. Never ask for them in chat.
-   They arrive as environment variables. Use them only by variable name.
-   Also ask how the panel attaches the key: a header name plus any prefix,
-   or a key already in the URL. Do not guess.
-   Owner-verified for Grok Bot (live, 2026-10-10): `Authorization: Bearer <key>`,
-   so use `--key-header Authorization --key-prefix 'Bearer '`. A bare key
-   gets HTTP 401.
-4. **Configure.** Give the values by variable name, from stdin, or from a file.
-   Never put a value on a command line and never echo it.
-   - Variable names: `--url-env URL_VAR [--key-env KEY_VAR]`.
-   - Stdin: `--stdin`, with one JSON object `{"url": ..., "sender_key": ...}`
-     made by a tool that does not put the values in a process argument list.
-   - File: `--input-file PATH`, the same JSON, mode `0600`, owned by you.
-     Delete the file after `configure`.
-   Attachment: `--key-header NAME [--key-prefix TEXT]`, or `--key-in-url`
-   with no sender key. If the bound target cannot read the secret
-   variables, stop and report that blocker.
+3. **Get the URL and the sender key without seeing them.** Ask the owner once
+   to paste the routine's webhook URL and sender key into the masked secret
+   input. Never ask in chat. They arrive as environment variables; use them
+   only by name. Ask how the panel attaches the key (header plus prefix, or
+   a key already in the URL). Do not guess. Grok Bot, verified 2026-10-10:
+   `--key-header Authorization --key-prefix 'Bearer '`. A bare key is HTTP 401.
+4. **Configure.** Pass values by variable name, stdin, or a mode `0600` file
+   you own. Never put a value on a command line and never echo it.
+   `--url-env URL_VAR [--key-env KEY_VAR]`, or `--stdin` / `--input-file PATH`
+   with `{"url","sender_key"}`. Delete the file after `configure`.
+   Attachment: `--key-header NAME [--key-prefix TEXT]`, or `--key-in-url`.
+   If the target cannot read the variables, stop and report that blocker.
 5. **Verify.** Run `test`. It sends one signal with `state` `test`. Confirm
    that YOUR webhook routine woke with that test signal. Then record
    `timer_owner.wake_mode` `webhook+heartbeat` and `webhook_routine_id` with
@@ -101,20 +93,24 @@ reason on `end_turn`, else `permission_required`, `turn_failed`, `agent_exit`,
 `boot_failure`, `holder_lost`, `exact_stop`, or `test`.
 
 No wake when the Host continues by itself, or when your send or steer ends
-while a worker seat still works. `all-idle` is once per idle transition: the
-Host is idle and no dispatched seat is working, pending work or not. A turn
-you admitted does not open that episode and does not wake by itself, unless
-it stops the last working seat. A self turn with no new worker event sends
-no second `all-idle`. A Sideagent node is not a seat. Only an active
-turn is working. Idle held seats, `agent_exited`, `stopping`, and `stopped`
-are not. After the Host's
-last turn, confirmed `sideagent_node_stopped` or the last worker's
-`terminated` re-checks one non-blocking `all-idle` (`state` `end_turn`,
-`state_detail` `end_turn`) when the Host is idle and no seat is working. An
-active turn, a follow-up, an unconfirmed node stop, or exact
-stop does not. One episode, one wake. It re-opens when a non-exempt seat is
-working, a non-exempt worker stops, or a self turn delivers worker events.
-Your send does not re-open it. No time throttle.
+while a worker seat still has an active turn. A pending Delegator decision
+wakes `needs_decision` only from `state.decisions` (`owner` `delegator` or
+`user`, `status` `pending`). A `.kaola/run` file or turn text does not. That
+wake is not `all-idle`, and the idle latch does not block it, including the
+turn after a compaction reload. With no registered decision or attention row
+and no active seat turn, a silent turn falls back to `all-idle`, once per
+idle episode. A turn you admitted does not open that episode and does not
+wake by itself, unless it stops the last working seat. A self turn with no
+new worker event sends no second `all-idle`. A Sideagent node is not a seat.
+Only an active turn is working. Idle held seats, `agent_exited`, `stopping`,
+and `stopped` are not. After the Host's last turn, confirmed
+`sideagent_node_stopped` or the last worker's `terminated` re-checks one
+non-blocking `all-idle` (`state` `end_turn`, `state_detail` `end_turn`) when
+the Host is idle and no seat is working. An active turn, a follow-up, an
+unconfirmed node stop, or exact stop does not. One episode, one `all-idle`.
+It re-opens when a non-exempt seat is working, a non-exempt worker stops, or
+a self turn delivers worker events. Your send does not re-open it. No time
+throttle.
 
 A dead holder with no signal gets one `error`/`holder_lost` wake for that
 `holder_instance_id` and a new `event_seq`. `start` or a dead-holder `stop`

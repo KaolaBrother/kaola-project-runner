@@ -85,18 +85,21 @@ class Predicate(unittest.TestCase):
             ({"outcome": "turn_canceled", "stop_requested": True}, None),
             ({"outcome": "turn_failed"}, None),
             ({"prompt_source": "delegator", "stop_reason": "max_tokens"}, None),
-            # Owner rule 2026-10-11 16:49: nobody left working wakes all-idle
-            # even when pending attention is recorded. all_idle_due defaults
-            # true, so a Delegator turn whose episode latch is still clear
-            # reports the one transition. Issue #307: once this episode has
-            # sent all-idle, a Delegator turn returns None. A self turn still
+            # Owner rule 2026-10-11 16:49, narrowed 2026-10-13 (#315):
+            # nobody in a turn wakes all-idle only when no attention row is
+            # pending. A registered row wins, and the episode latch does not
+            # suppress it. all_idle_due defaults true, so a Delegator turn
+            # whose latch is still clear reports the one transition.
+            # Issue #307: once this episode has sent all-idle, a Delegator
+            # turn with nothing registered returns None. A self turn still
             # names all-idle; the emit latch drops the duplicate POST.
-            # A live seat with nothing owed stays quiet. A Host that already
-            # continued does not wake.
+            # A length stop or a refusal with no row stays inside that
+            # fallback. A live seat with nothing owed stays quiet. A Host
+            # that already continued does not wake.
             ({"live_seats": False}, "all-idle"),
             ({"live_seats": False, "prompt_source": "delegator"}, "all-idle"),
             ({"live_seats": False, "attention_rows": question,
-              "prompt_source": "delegator"}, "all-idle"),
+              "prompt_source": "delegator"}, "question_waiting"),
             ({"live_seats": False, "prompt_source": "delegator",
               "all_idle_due": True}, "all-idle"),
             ({"live_seats": False, "prompt_source": "delegator",
@@ -106,7 +109,12 @@ class Predicate(unittest.TestCase):
             ({"live_seats": False, "prompt_source": "delegator",
               "all_idle_due": False}, None),
             ({"live_seats": False, "attention_rows": question,
-              "prompt_source": "delegator", "all_idle_due": False}, None),
+              "prompt_source": "delegator", "all_idle_due": False},
+             "question_waiting"),
+            ({"live_seats": False, "attention_rows": other,
+              "all_idle_due": False}, "needs_decision"),
+            ({"live_seats": False, "attention_rows": delivery,
+              "prompt_source": "delegator"}, "delivery_review"),
             ({"live_seats": False, "prompt_source": "self",
               "all_idle_due": False}, "all-idle"),
             ({"live_seats": False, "stop_reason": "max_tokens"}, "all-idle"),
@@ -573,12 +581,13 @@ class WakeGate(issue299.WebhookCase):
         self.assertFalse(self.receipts())
 
     def test_zero_live_seats_wakes_all_idle(self) -> None:
-        # No dispatched holder is live. The turn is the Delegator's and a
-        # question is recorded; the wake is still all-idle.
+        # No dispatched holder is live and nothing is registered. The turn
+        # is the Delegator's; the fallback is one all-idle. A recorded
+        # decision is needs_decision instead (Issue #315).
         self.endpoint = Endpoint()
         code, out = self.configure(self.endpoint.url)
         self.assertEqual(code, 0, out)
-        self.write_heartbeat(host_view([{"kind": "decisions", "why": "host-decision"}]))
+        self.write_heartbeat(host_view([]))
         self.start_host("alone", scenario="normal")
         self.acp("send", "--text", "idle", "--wait")
         post = wait_for(lambda: (self.posts_with_reason("all-idle") or [None])[-1],

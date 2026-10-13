@@ -188,7 +188,9 @@ sink, and write ownership.
    the doc-impact call in its prompt, plus whether Workflow is on. That prompt
    carries the assignment only: never orchestration policy or the seat roster.
    The worker must not self-finalize before acceptance; irreversible or value
-   choices print `HUMAN_DECISION_REQUIRED` and wait. A worktree or ledger alone
+   choices print `HUMAN_DECISION_REQUIRED` and wait. Register each Delegator
+   decision in `state.decisions` (`owner` `delegator` or `user`). A `.kaola/run`
+   note or the turn text does not wake the runner. A worktree or ledger alone
    is not write authorization. Same-file collaboration needs explicit
    coordination and an integrator, not a blanket disjointness rule. Do not
    expand the authorized goal or duplicate claims. Pass still-valid candidate
@@ -241,13 +243,11 @@ sink, and write ownership.
 
 ## Ending a run
 
-When ending a project run, finish every in-hand authorized task and each
-claimed/in-flight issue of this run; merge their worktrees/branches, remove
-branch tails, and clean the workspace per Kaola Workflow close-out. Do not park
-unfinished branches as the normal end.
+When ending a project run, finish every in-hand authorized task and merge branches,
+remove tails, and clean the workspace. Do not park unfinished branches as the normal end.
 
 Do not accept or dispatch new tasks after the stop boundary. Do not claim or
-start new issues. After time-up, still finish in-hand and merge/clean.
+start new issues. After time-up, still finish in-hand work and merge/clean.
 
 The time/condition boundary is not the scoped pause. Only an explicit owner
 "stop here and continue later" with stated scope skips cleanup and permits
@@ -259,6 +259,6 @@ Use the user's report format; otherwise one compact current-work table plus
 outstanding close-out and pending QA items. Include task/progress, meaningful
 model mismatches, blockers, and next action. For non-pool seats, per platform report `live N /
 authorized M` and the seats stopped this beat; N > M with no stop that beat
-violates the cap. Pool seats report live seats marked exempt. Drop stale stopped rows from reports. Keep duties traceable in
-existing records and reuse existing Runner `stop`/`start`: no session state
-machine, quota engine, or close-out dashboard or ledger.
+violates the cap. Pool seats report live seats marked exempt. Drop stale stopped rows. Keep duties in
+existing records and reuse existing Runner `stop`/`start`: no session-state
+machine or quota engine.

@@ -794,10 +794,13 @@ the string `kaola-acp-holder` (process scans match that name).
 
 The holder decides from facts it can see: the ended turn's prompt source, whether
 the next beat is already admitted or a Delegator after-turn steer is queued,
-undelivered Host attention in `.kaola/heartbeat-prompt.json`, staged worker events,
-and the turn's stop or exit state. Prompt source is `delegator` for a socket
-prompt or a steer, and `self` for a worker-event delivery, a compact reload, or
-a compact notice. A socket client cannot set that source.
+undelivered Host attention in `.kaola/heartbeat-prompt.json`, pending
+`state.decisions` rows in that same file, staged worker events, and the turn's
+stop or exit state. Prompt source is `delegator` for a socket prompt or a steer,
+and `self` for a worker-event delivery, a compact reload, or a compact notice.
+A socket client cannot set that source. A Delegator decision has to be a
+`state.decisions` row (`owner` `delegator` or `user`). A note only in
+`.kaola/run/*.md`, or only in the turn text, is not that row and does not wake.
 
 Always wake (a real stop must not end silently):
 
@@ -821,15 +824,16 @@ Delegator is not already there and the Host did not continue by itself:
 | what the holder saw | reason |
 | --- | --- |
 | next beat already admitted, or a Delegator after-turn steer is queued | no wake |
-| no working dispatched seat, and this idle episode has not yet sent `all-idle` | `all-idle` |
-| no working dispatched seat, this episode already sent `all-idle`, and the prompt source is `delegator` | no wake |
-| prompt source `delegator` (this send or steer) and a seat is still live | no wake |
+| no active seat turn, and an undelivered attention row or an open `state.decisions` row is pending | the attention reason below; not `all-idle` |
+| no active seat turn, that list is empty, and this idle episode has not yet sent `all-idle` | `all-idle` |
+| no active seat turn, that list is empty, this episode already sent `all-idle`, and the prompt source is `delegator` | no wake |
+| prompt source `delegator` (this send or steer) and a seat still has an active turn | no wake |
 | undelivered host-view row `kind=decisions`, `why=host-decision` | `question_waiting` |
 | undelivered host-view row `kind=tasks` and `why` one of `awaiting-verdict`, `delivery-open`, `verdict-missing` | `delivery_review` |
-| any other undelivered host-view attention row | `needs_decision` |
-| staged worker event with no prompt fingerprint, unconfirmed overflow, or stop `max_tokens` / `max_turn_requests` / `length` | `host_stopped_pending` |
-| stop `refusal`, or an unrequested cancel with nothing above | `needs_decision` |
-| clean `end_turn` with nothing pending, while a seat is still live | no wake |
+| any other undelivered attention row, including `why` `registered-decision` | `needs_decision` |
+| a seat still has an active turn, and a staged worker event has no prompt fingerprint, an overflow is unconfirmed, or the stop is `max_tokens` / `max_turn_requests` / `length` | `host_stopped_pending` |
+| a seat still has an active turn, and the stop is `refusal` or the cancel was not requested | `needs_decision` |
+| clean `end_turn` with nothing pending, while a seat still has an active turn | no wake |
 
 Undelivered attention means the heartbeat body is a host view (`view` `host`,
 `attention` a list) whose fingerprint is not the one last delivered on a
@@ -851,9 +855,21 @@ JSON object, or a `mutation_status` outside that set, including `unknown` and
 JSON null — and still blocks. A false `all-idle` would say nobody is working
 while that seat's turn cannot be read. Stop preservation uses the scan
 without this turn filter, so an idle held seat is still kept. The bound
-Sideagent node is not a seat. When that scan is empty, `all-idle` is once per
-transition into all-idle, even if attention or other pending work is recorded
-(owner rule, Yanlei 2026-10-11 16:49). The episode latch starts clear, so the
+Sideagent node is not a seat. An open `state.decisions` row has `owner`
+`delegator` or `user` and `status` other than `settled` (a missing status is
+open). `owner` `host` is already attention (`why` `host-decision`) and is not
+added again. When no seat has an active turn, the holder merges each open
+delegator or user row as `why` `registered-decision` and classifies that list
+before the `all-idle` fallback (Issue #315). The episode latch does not
+suppress that reason. A compaction reload does not skip it:
+`compact_reload_delivered` admits an ordinary self prompt, and a verified
+maintenance checkpoint does not bypass the turn-end check. The reload does
+not clear the latch. Each later Host turn that ends with no active seat wakes
+again while the row stays pending. There is no once-per-decision latch.
+When that list is empty, the turn would otherwise be silent, including a
+length stop or a refusal, and the wake is `all-idle`, once per idle episode.
+Owner rule, Yanlei 2026-10-11 16:49, narrowed 2026-10-13 for a registered
+decision or an undelivered attention row. The episode latch starts clear, so the
 first time
 the holder observes that state it wakes once. A Delegator-admitted turn
 (socket `send` or steer) does not open an idle episode and does not wake by
@@ -889,7 +905,10 @@ worker events. A Delegator-admitted turn does not clear it. A later
 non-exempt worker termination can wake again. The stop-time payload is `state`
 `end_turn`, `state_detail` `end_turn`, `reason` `all-idle`. The Host is
 already idle, and this stop is not a new turn and not an exact Host stop, so
-`stopped` / `exact_stop` stay reserved for `op_stop`. A turn-end `all-idle`
+`stopped` / `exact_stop` stay reserved for `op_stop`. That stop re-check
+sends only `all-idle`. It does not read `state.decisions`. A registered
+decision is classified at the next Host turn end, and the latch does not
+suppress that reason. A turn-end `all-idle`
 whose agent stop reason was `end_turn` has the same shape. Dedupe is still
 `holder_instance_id` + `event_seq`. A second deliver of that pair does not
 POST, and a later stop in the same idle episode does not POST again.
