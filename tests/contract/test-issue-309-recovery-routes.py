@@ -197,7 +197,10 @@ class RecoveryRoutes(unittest.TestCase):
     def test_broker_dead_end_is_gone_and_holder_is_not_stamped(self) -> None:
         broker = (REPO / "scripts" / "kaola-launchd-broker.py").read_text(encoding="utf-8")
         self.assertNotIn("reconcile it", broker)
-        self.assertIn("Exact-stop it, attest, then start --resume", broker)
+        # After the #308 composition the broker carries #308's richer route
+        # (exact-stop -> this broker's reconcile mode -> retry start --resume)
+        # wherever it applies; the generic phrasing was the pre-#308 form.
+        self.assertIn("reconcile mode, then retry start --resume", broker)
         self.assertIn("def _emit", broker)
         holder = (REPO / "scripts" / "kaola-acp-holder.py").read_text(encoding="utf-8")
         self.assertNotIn("kaola-recovery-routes", holder)
