@@ -61,3 +61,10 @@ Files this branch changed outside the kaola-workflow/ run-state band:
 ## Final readiness
 
 Ready: verified-not-real with a pinning test; close with evidence.
+
+## Sink Findings
+
+post_rebase_tests: skipped
+
+archived_paths:
+- kaola-workflow/archive/issue-321/finalization-summary.md
