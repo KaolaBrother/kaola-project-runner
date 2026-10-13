@@ -44,6 +44,51 @@ try:
 finally:
     sys.dont_write_bytecode = _paths_bytecode
 
+
+def _load_recovery_routes():
+    """Issue #309. A partial script copy without the table still returns the old receipt."""
+    cached = getattr(_load_recovery_routes, "module", None)
+    if cached is not None:
+        return cached or None
+    path = Path(__file__).resolve().with_name("kaola-recovery-routes.py")
+    if not path.is_file():
+        _load_recovery_routes.module = False
+        return None
+    spec = importlib.util.spec_from_file_location("kaola_recovery_routes", path)
+    if spec is None or spec.loader is None:
+        _load_recovery_routes.module = False
+        return None
+    module = importlib.util.module_from_spec(spec)
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous
+    _load_recovery_routes.module = module
+    return module
+
+
+def _stamp_recovery(payload: dict[str, Any]) -> dict[str, Any]:
+    module = _load_recovery_routes()
+    if module is None or not isinstance(payload, dict):
+        return payload
+    return module.stamp(payload)
+
+
+def _emit_receipt(payload: dict[str, Any]) -> None:
+    """Print one receipt. Stamp a copy so a stored object stays unchanged."""
+    printed = payload
+    module = _load_recovery_routes()
+    if module is not None and isinstance(payload, dict):
+        printed = dict(payload)
+        lost = printed.get("holder_lost")
+        if isinstance(lost, dict):
+            printed["holder_lost"] = dict(lost)
+        printed = module.stamp(printed)
+    print(json.dumps(printed, ensure_ascii=False, sort_keys=True))
+
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 HOLDER = SCRIPT_DIR / "kaola-acp-holder.py"
 LAUNCH_BROKER = SCRIPT_DIR / "kaola-launchd-broker.py"
@@ -827,10 +872,10 @@ def input_error_receipt(message: str, platform: str | None = None,
                         action: str | None = None, repo: str | None = None,
                         session: str | None = None) -> dict[str, Any]:
     """Input failed before any transport mutation; no holder was contacted."""
-    return {"schema_version": 3, "platform": platform, "action": action,
+    return _stamp_recovery({"schema_version": 3, "platform": platform, "action": action,
             "repo": repo, "session": session, "transport": {"selected": "acp"},
             "error": {"code": "invalid-input", "message": message},
-            "mutation_status": "not_started", "mutation_performed": False}
+            "mutation_status": "not_started", "mutation_performed": False})
 
 
 def die(message: str, code: int = 2) -> None:
@@ -1323,7 +1368,7 @@ def command_model_package(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def view_error(code: str, message: str) -> dict[str, Any]:
-    return {"schema": VIEW_SCHEMA, "error": {"code": code, "message": message}}
+    return _stamp_recovery({"schema": VIEW_SCHEMA, "error": {"code": code, "message": message}})
 
 
 # Ordinary receipts are bounded (progressive disclosure): capture through
@@ -1475,7 +1520,7 @@ def command_view(args: argparse.Namespace, repo: str, directory: Path) -> dict[s
 
 
 def follow_error_line(code: str, message: str) -> dict[str, Any]:
-    return {"kind": "error", "error": {"code": code, "message": message}}
+    return _stamp_recovery({"kind": "error", "error": {"code": code, "message": message}})
 
 
 class FollowTextPrinter:
@@ -1541,6 +1586,9 @@ def emit_follow_line(raw: bytes, printer: FollowTextPrinter | None) -> str | Non
         event = json.loads(text)
     except ValueError:
         event = None
+    if isinstance(event, dict) and event.get("kind") == "error":
+        event = _stamp_recovery(event)
+        text = json.dumps(event, ensure_ascii=False)
     if printer is None or not isinstance(event, dict):
         print(text, flush=True)
     else:
@@ -1938,7 +1986,7 @@ def holder_lost_receipt(args: argparse.Namespace, repo: str,
     }
     receipt["state"] = record.get("state")
     receipt["record"] = record
-    return receipt
+    return _stamp_recovery(receipt)
 
 
 def _holder_event_log(path: Path):
@@ -6201,6 +6249,19 @@ DELEGATOR_WEBHOOK_MAX_ATTEMPTS = 1 + len(DELEGATOR_WEBHOOK_BACKOFF)
 # sibling 200s of the same shape has been transient. 401, 403 and 404 stay
 # final on attempt 1, and so does every other 4xx that is not listed here.
 DELEGATOR_WEBHOOK_RETRY_STATUS = frozenset({400, 408, 429})
+# Issue #309: deliver and status refusal codes. stamp() reads this tuple.
+DELEGATOR_WEBHOOK_ERROR_CODES = (
+    "timeout",
+    "connection",
+    "http-status",
+    "redirect-refused",
+    "config-mode",
+    "invalid-config",
+    "invalid-payload",
+    "not-enabled",
+    "not-configured",
+    "duplicate",
+)
 # Read cap, then the stored cap. Redaction runs on the read window before the
 # stored cut, so a secret that begins inside the stored prefix is removed whole
 # when it fits in the read window. The stored body is at most 512 characters.
@@ -6570,6 +6631,8 @@ def _webhook_attempt_receipt(payload: dict[str, Any], attempt: int, result: str,
     else:
         raw_reason = payload.get("reason")
         receipt["reason"] = raw_reason if isinstance(raw_reason, str) else None
+    if result == "failed":
+        receipt = _stamp_recovery(receipt)
     return receipt
 
 
@@ -6917,8 +6980,8 @@ def _webhook_status_receipt(project_root: str) -> dict[str, Any]:
 
 
 def _webhook_refusal(reason: str, detail: str, **extra: Any) -> tuple[int, dict[str, Any]]:
-    receipt = {"result": "refused", "reason": reason, "detail": detail, **extra}
-    print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
+    receipt = _stamp_recovery({"result": "refused", "reason": reason, "detail": detail, **extra})
+    _emit_receipt(receipt)
     return 2, receipt
 
 
@@ -6987,7 +7050,7 @@ def command_delegator_webhook(argv: list[str]) -> int:
         # holder-lost detector that does not need a new Host start. ``test``
         # stays a delivery probe and does not scan.
         _webhook_attach_holder_lost(project_root, receipt)
-        print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
+        _emit_receipt(receipt)
         return 0
 
     if args.action == "test":
@@ -7140,26 +7203,26 @@ def command_delegator_webhook(argv: list[str]) -> int:
                                     f"config write failed: {type(exc).__name__}")[0]
     receipt = _webhook_status_receipt(project_root)
     receipt["result"] = "configured"
-    print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
+    _emit_receipt(receipt)
     return 0
 
 
 def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "list":
         payload = command_list(parse_list_args(sys.argv[2:]))
-        print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+        _emit_receipt(payload)
         return 0
     if len(sys.argv) > 1 and sys.argv[1] == "survey":
         payload = command_survey(parse_survey_args(sys.argv[2:]))
-        print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+        _emit_receipt(payload)
         return 0
     if len(sys.argv) > 1 and sys.argv[1] == "packages":
         payload = command_packages(parse_packages_args(sys.argv[2:]))
-        print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+        _emit_receipt(payload)
         return 0
     if len(sys.argv) > 1 and sys.argv[1] == "model-package":
         payload = command_model_package(parse_model_package_args(sys.argv[2:]))
-        print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+        _emit_receipt(payload)
         return 0
     if len(sys.argv) > 1 and sys.argv[1] == "delegator-webhook":
         return command_delegator_webhook(sys.argv[2:])
@@ -7221,7 +7284,7 @@ def main() -> int:
     args.manifest = load_manifest(args.platform)
     repo = resolve_repo(args.repo)
     if not tier_declared(args.manifest, args.tier):
-        print(json.dumps(tier_refusal(args, repo), ensure_ascii=False, sort_keys=True))
+        _emit_receipt(tier_refusal(args, repo))
         return 1
     if args.command != "preflight":
         if not args.session or not SESSION_PATTERN.match(args.session):
@@ -7242,28 +7305,28 @@ def main() -> int:
 
     if args.command == "preflight":
         receipt = command_preflight(args, repo)
-        print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
+        _emit_receipt(receipt)
         return 0
     directory = record_dir(args, repo) if args.session else None
     if args.command == "start":
         receipt = command_start(args, repo)
-        print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
+        _emit_receipt(receipt)
         # A typed refusal is a pre-mutation decision, exit 1 like the shell's
         # canonical-root refusal; transport errors stay exit-0 receipts.
         return 1 if receipt.get("result") == "refused" else 0
     if args.command == "drain-restart":
         receipt = command_drain_restart(args, repo)
-        print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
+        _emit_receipt(receipt)
         return 1 if receipt.get("result") == "refused" else 0
     if args.command == "rebind-host":
         receipt = command_rebind_host(args, repo, directory)
-        print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
+        _emit_receipt(receipt)
         return 1 if receipt.get("result") == "refused" else 0
     if args.command == "view":
         if directory is None:
             die("invalid or missing --session name")
         receipt = command_view(args, repo, directory)
-        print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
+        _emit_receipt(receipt)
         return 0
     if args.command == "follow":
         if directory is None:
@@ -7493,7 +7556,7 @@ def main() -> int:
                 attach_broker_reconcile(receipt, args, repo, directory)
     else:
         die(f"unhandled command {args.command}")
-    print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
+    _emit_receipt(receipt)
     return 0
 
 
@@ -7501,14 +7564,14 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except acp_paths.RecordRootUnsafe as exc:
-        print(json.dumps({"result": "refused", "reason": "record-root-unsafe",
-                          "error": {"code": "record-root-unsafe", "message": str(exc)},
-                          "mutation_performed": False, "mutation_status": "not_started"}))
+        _emit_receipt({"result": "refused", "reason": "record-root-unsafe",
+                       "error": {"code": "record-root-unsafe", "message": str(exc)},
+                       "mutation_performed": False, "mutation_status": "not_started"})
         raise SystemExit(1)
     except acp_paths.RecordRootMismatch as exc:
-        print(json.dumps({"result": "refused", "reason": "record-root-mismatch",
-                          "error": {"code": "record-root-mismatch", "message": str(exc)},
-                          "mutation_performed": False, "mutation_status": "not_started"}))
+        _emit_receipt({"result": "refused", "reason": "record-root-mismatch",
+                       "error": {"code": "record-root-mismatch", "message": str(exc)},
+                       "mutation_performed": False, "mutation_status": "not_started"})
         raise SystemExit(1)
     except InputError as exc:
         argv = sys.argv[1:]
@@ -7523,5 +7586,5 @@ if __name__ == "__main__":
             str(exc), argv[0] if argv else None,
             argv[1] if len(argv) > 1 and argv[0] in PLATFORMS else None,
             argument_value("--repo"), argument_value("--session"))
-        print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
+        _emit_receipt(receipt)
         raise SystemExit(exc.code)

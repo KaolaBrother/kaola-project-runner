@@ -85,8 +85,7 @@ uniquely adopted live nonstandard name — never any other session. Refuse any
    is backend-dependent; `session/close` may not spend it.
    On proven failure (`Session not found` or no attested id) a **new**
    `$HOST` is allowed after step 4. That is a new ACP session and a new
-   holder — say so. Rebuild the frontier from Git, Workflow claim / ledger,
-   Issues, and run receipts — never re-claim, re-dispatch, or redo.
+   holder — say so. Failed resume: [host-restart.md](host-restart.md).
 4. A new Host (first start, or after failed `--resume`) needs current
    authorization **before** `start`: authorization per SKILL §Extract once,
    confirmed with the user. Do not open a blank Host. A live Host A→B attach

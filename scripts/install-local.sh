@@ -15,10 +15,29 @@ orchestrator_skill_name="kaola-project-runner"
 external_skill_name="kaola-delegator"
 installer_python="${PYTHON_BIN:-python3}"
 
-command -v "$installer_python" >/dev/null 2>&1 || {
-  printf 'python3 executable not found: %s\n' "$installer_python" >&2
-  exit 1
+# Issue #309: a refusal keeps its message and adds the route from
+# scripts/kaola-recovery-routes.py. The code token is the contract id.
+refuse() {
+  local status="$1"
+  local code="$2"
+  local route="$3"
+  shift 3
+  : "$code"
+  printf '%s\nroute: %s\n' "$*" "$route" >&2
+  exit "$status"
 }
+ROUTE_INSTALL_USAGE='Fix the named flag and rerun the same install-local.sh command. Do not continue a partial install.'
+ROUTE_INSTALL_PYTHON='Install python3 or set PYTHON_BIN to an executable, then rerun the same command.'
+ROUTE_INSTALL_GROK='Use --platform grok for the worker, or --runtime grok-cli for a Grok CLI Host. Grok Bot has no installer destination.'
+ROUTE_INSTALL_RENDER='Run ./scripts/render-skills.py --write in this checkout, then rerun this install. Do not install a skewed tree.'
+ROUTE_INSTALL_FOREIGN='Do not delete this path. Pick another --skills-dir, or uninstall only a copy this installer owns.'
+ROUTE_INSTALL_KEEP='Do not force-delete user edits. Review the edit, restore the recorded bytes, or remove the path by hand only if it is yours, then rerun.'
+ROUTE_INSTALL_TEMP='Remove the named temporary path only if it is yours, then rerun. Do not continue a partial install.'
+ROUTE_INSTALL_HOOK='Read the named blocker, fix hooks.json or the compact-recovery entry, then rerun. Do not write Skills after this refusal.'
+ROUTE_INSTALL_BIN='Read the refs-tool error above, fix the bin-link ledger, then rerun.'
+ROUTE_INSTALL_VERIFY='Read the per-destination failure above and rerun. Do not treat this install as complete.'
+
+command -v "$installer_python" >/dev/null 2>&1 || refuse 1 install-python-missing "$ROUTE_INSTALL_PYTHON" "python3 executable not found: $installer_python"
 
 usage() {
   printf '%s\n' \
@@ -188,10 +207,7 @@ append_selection() {
   local raw="$1" item
   IFS=',' read -r -a items < <(printf '%s\n' "$raw")
   for item in "${items[@]}"; do
-    skill_name_for "$item" >/dev/null || {
-      printf 'unknown platform: %s\n' "$item" >&2
-      exit 2
-    }
+    skill_name_for "$item" >/dev/null || refuse 2 install-unknown-platform "$ROUTE_INSTALL_USAGE" "unknown platform: $item"
     selection+=("$item")
   done
 }
@@ -199,35 +215,35 @@ append_selection() {
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --platform)
-      [[ $# -ge 2 ]] || { printf '%s\n' '--platform needs a value' >&2; exit 2; }
+      [[ $# -ge 2 ]] || refuse 2 install-platform-needs-value "$ROUTE_INSTALL_USAGE" "--platform needs a value"
       append_selection "$2"
       platform_given=true
       shift 2
       ;;
     --runtime)
-      [[ $# -ge 2 ]] || { printf '%s\n' '--runtime needs a value' >&2; exit 2; }
+      [[ $# -ge 2 ]] || refuse 2 install-runtime-needs-value "$ROUTE_INSTALL_USAGE" "--runtime needs a value"
       if [[ "$2" == grok ]]; then
-        printf 'unknown runtime: grok\nGrok CLI is worker platform id grok (--platform grok); a Grok CLI Host installs with --runtime grok-cli ($HOME/.grok/skills). Grok Bot is a bridge host with no installer destination (see docs/grok-bot-host.md).\n' >&2
-        exit 2
+        refuse 2 install-unknown-runtime-grok "$ROUTE_INSTALL_GROK" \
+          "$(printf '%s\n%s' 'unknown runtime: grok' 'Grok CLI is worker platform id grok (--platform grok); a Grok CLI Host installs with --runtime grok-cli ($HOME/.grok/skills). Grok Bot is a bridge host with no installer destination (see docs/grok-bot-host.md).')"
       fi
       if [[ "$2" == grok-bot || "$2" == grokbot ]]; then
-        printf 'unknown runtime: %s\nGrok Bot is a bridge host, not an installer destination: save hosts/grok-bot/kaola-delegator.md on the account and register the locator with scripts/kaola-locate.py register on the execution target (see docs/grok-bot-host.md). --platform grok is the Grok CLI worker.\n' "$2" >&2
-        exit 2
+        refuse 2 install-unknown-runtime-grok-bot "$ROUTE_INSTALL_GROK" \
+          "$(printf 'unknown runtime: %s\nGrok Bot is a bridge host, not an installer destination: save hosts/grok-bot/kaola-delegator.md on the account and register the locator with scripts/kaola-locate.py register on the execution target (see docs/grok-bot-host.md). --platform grok is the Grok CLI worker.' "$2")"
       fi
-      runtime_skills_dir "$2" >/dev/null || { printf 'unknown runtime: %s\n' "$2" >&2; exit 2; }
-      [[ -z "$runtime_alias" ]] || { printf '%s\n' '--runtime may be given once' >&2; exit 2; }
+      runtime_skills_dir "$2" >/dev/null || refuse 2 install-unknown-runtime "$ROUTE_INSTALL_USAGE" "unknown runtime: $2"
+      [[ -z "$runtime_alias" ]] || refuse 2 install-runtime-once "$ROUTE_INSTALL_USAGE" "--runtime may be given once"
       runtime_alias="$2"
       shift 2
       ;;
     --skills-dir)
-      [[ $# -ge 2 ]] || { printf '%s\n' '--skills-dir needs a value' >&2; exit 2; }
-      [[ -z "$skills_dir" ]] || { printf '%s\n' '--skills-dir may be given once' >&2; exit 2; }
+      [[ $# -ge 2 ]] || refuse 2 install-skills-dir-needs-value "$ROUTE_INSTALL_USAGE" "--skills-dir needs a value"
+      [[ -z "$skills_dir" ]] || refuse 2 install-skills-dir-once "$ROUTE_INSTALL_USAGE" "--skills-dir may be given once"
       skills_dir="$2"
       shift 2
       ;;
     --method)
-      [[ $# -ge 2 ]] || { printf '%s\n' '--method needs a value' >&2; exit 2; }
-      case "$2" in link|copy) ;; *) printf 'unknown method: %s\n' "$2" >&2; exit 2 ;; esac
+      [[ $# -ge 2 ]] || refuse 2 install-method-needs-value "$ROUTE_INSTALL_USAGE" "--method needs a value"
+      case "$2" in link|copy) ;; *) refuse 2 install-unknown-method "$ROUTE_INSTALL_USAGE" "unknown method: $2" ;; esac
       method="$2"
       shift 2
       ;;
@@ -236,17 +252,16 @@ while [[ $# -gt 0 ]]; do
     --no-bin-links) bin_links_request=off; shift ;;
     --uninstall) mode=uninstall; shift ;;
     -h|--help) usage; exit 0 ;;
-    *) printf 'unknown argument: %s\n' "$1" >&2; usage >&2; exit 2 ;;
+    *) usage >&2; refuse 2 install-unknown-argument "$ROUTE_INSTALL_USAGE" "unknown argument: $1" ;;
   esac
 done
 
 if [[ -n "$runtime_alias" && -n "$skills_dir" ]]; then
-  printf '%s\n' '--runtime and --skills-dir are mutually exclusive' >&2
-  exit 2
+  refuse 2 install-runtime-skills-dir-exclusive "$ROUTE_INSTALL_USAGE" "--runtime and --skills-dir are mutually exclusive"
 fi
 
 if [[ -n "$skills_dir" ]]; then
-  [[ "$skills_dir" == /* ]] || { printf '%s\n' '--skills-dir must be an absolute path' >&2; exit 2; }
+  [[ "$skills_dir" == /* ]] || refuse 2 install-skills-dir-absolute "$ROUTE_INSTALL_USAGE" "--skills-dir must be an absolute path"
   base_parent="$skills_dir"
   base_runtime=generic
 elif [[ -n "$runtime_alias" ]]; then
@@ -336,12 +351,11 @@ install_verify_failed=false
 if [[ "$mode" == install ]]; then
   render_tool="$repo_root/scripts/render-skills.py"
   if [[ ! -f "$render_tool" ]]; then
-    printf 'refusing to install: %s is missing, so this checkout cannot prove its generated Skills match their templates; run the installer from a complete accepted checkout\n' "$render_tool" >&2
-    exit 1
+    refuse 1 install-render-missing "$ROUTE_INSTALL_RENDER" "refusing to install: $render_tool is missing, so this checkout cannot prove its generated Skills match their templates; run the installer from a complete accepted checkout"
   fi
   if ! render_report="$("$installer_python" "$render_tool" --check 2>&1)"; then
-    printf 'refusing to install: the generated Skills in this checkout do not match their templates:\n%s\nrun ./scripts/render-skills.py --write in this checkout first, then re-run this install\n' "$render_report" >&2
-    exit 1
+    refuse 1 install-render-mismatch "$ROUTE_INSTALL_RENDER" \
+      "$(printf 'refusing to install: the generated Skills in this checkout do not match their templates:\n%s\nrun ./scripts/render-skills.py --write in this checkout first, then re-run this install' "$render_report")"
   fi
 fi
 
@@ -681,10 +695,7 @@ plan_skill() {
   }
 
   if [[ "$mode" == install ]]; then
-    [[ -f "$source/SKILL.md" && -f "$source/.generated-by-kaola-project-runner" ]] || {
-      printf 'generated Skill is missing; run ./scripts/render-skills.py --write: %s\n' "$source" >&2
-      exit 1
-    }
+    [[ -f "$source/SKILL.md" && -f "$source/.generated-by-kaola-project-runner" ]] || refuse 1 install-skill-missing "$ROUTE_INSTALL_RENDER" "generated Skill is missing; run ./scripts/render-skills.py --write: $source"
     if [[ "$method" == link ]]; then
       if [[ -L "$target" ]]; then
         current="$(canonical_existing_target "$target" || true)"
@@ -698,8 +709,7 @@ plan_skill() {
         elif [[ "$platform" == grok && -n "$current" && "$current" -ef "$repo_root" ]]; then
           actions+=("migrate|$name|$source|$target|$(refs_with_owner "$(skill_refs "$name" 1)")")
         else
-          printf 'refusing to replace existing symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
-          exit 1
+          refuse 1 install-foreign-symlink "$ROUTE_INSTALL_FOREIGN" "refusing to replace existing symlink: $target -> $(readlink "$target")"
         fi
       elif [[ -d "$target" ]]; then
         recorded="$(receipt_digest "$receipts_dir/$name.json" "$name")"
@@ -710,12 +720,10 @@ plan_skill() {
         elif [[ -n "$recorded" ]]; then
           actions+=("relink-drift|$name|$source|$target|$refs")
         else
-          printf 'refusing to replace foreign directory without ownership receipt: %s\n' "$target" >&2
-          exit 1
+          refuse 1 install-foreign-directory "$ROUTE_INSTALL_FOREIGN" "refusing to replace foreign directory without ownership receipt: $target"
         fi
       elif [[ -e "$target" ]]; then
-        printf 'refusing to replace existing path: %s\n' "$target" >&2
-        exit 1
+        refuse 1 install-existing-path "$ROUTE_INSTALL_FOREIGN" "refusing to replace existing path: $target"
       else
         actions+=("install|$name|$source|$target|$(refs_with_owner "$(skill_refs "$name")")")
       fi
@@ -725,14 +733,12 @@ plan_skill() {
         if [[ -n "$current" && ( "$current" -ef "$source" || ( "$platform" == grok && "$current" -ef "$repo_root" ) ) ]]; then
           actions+=("copy-over-link|$name|$source|$target|$(refs_with_owner "$(skill_refs "$name" 1)")")
         else
-          printf 'refusing to replace existing symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
-          exit 1
+          refuse 1 install-foreign-symlink "$ROUTE_INSTALL_FOREIGN" "refusing to replace existing symlink: $target -> $(readlink "$target")"
         fi
       elif [[ -d "$target" ]]; then
         recorded="$(receipt_digest "$receipts_dir/$name.json" "$name")"
         if [[ -z "$recorded" ]]; then
-          printf 'refusing to replace foreign directory without ownership receipt: %s\n' "$target" >&2
-          exit 1
+          refuse 1 install-foreign-directory "$ROUTE_INSTALL_FOREIGN" "refusing to replace foreign directory without ownership receipt: $target"
         fi
         refs="$(skill_refs "$name")"
         actual="$(tree_digest "$target")"
@@ -750,8 +756,7 @@ plan_skill() {
           actions+=("update|$name|$source|$target|$(refs_with_owner "$refs")")
         fi
       elif [[ -e "$target" ]]; then
-        printf 'refusing to replace existing path: %s\n' "$target" >&2
-        exit 1
+        refuse 1 install-existing-path "$ROUTE_INSTALL_FOREIGN" "refusing to replace existing path: $target"
       else
         actions+=("install|$name|$source|$target|$(refs_with_owner "$(skill_refs "$name")")")
       fi
@@ -772,28 +777,24 @@ plan_skill() {
           actions+=("uninstall|$name|$source|$target|")
         fi
       else
-        printf 'refusing to remove foreign symlink: %s -> %s\n' "$target" "$(readlink "$target")" >&2
-        exit 1
+        refuse 1 install-foreign-symlink-remove "$ROUTE_INSTALL_FOREIGN" "refusing to remove foreign symlink: $target -> $(readlink "$target")"
       fi
     elif [[ -d "$target" ]]; then
       recorded="$(receipt_digest "$receipts_dir/$name.json" "$name")"
       if [[ -z "$recorded" ]]; then
-        printf 'refusing to remove foreign directory without ownership receipt: %s\n' "$target" >&2
-        exit 1
+        refuse 1 install-foreign-directory-remove "$ROUTE_INSTALL_FOREIGN" "refusing to remove foreign directory without ownership receipt: $target"
       fi
       remaining="$(drop_ref "$(skill_refs "$name")" "$self_ref")"
       if [[ -n "$remaining" ]]; then
         actions+=("release|$name|$source|$target|$remaining")
       else
         if [[ "$(tree_digest "$target")" != "$recorded" ]]; then
-          printf 'refusing to remove modified installed copy (user edits preserved): %s\n' "$target" >&2
-          exit 1
+          refuse 1 install-modified-copy "$ROUTE_INSTALL_KEEP" "refusing to remove modified installed copy (user edits preserved): $target"
         fi
         actions+=("uninstall-copy|$name|$source|$target|")
       fi
     elif [[ -e "$target" ]]; then
-      printf 'refusing to remove non-symlink path: %s\n' "$target" >&2
-      exit 1
+      refuse 1 install-nonsymlink-remove "$ROUTE_INSTALL_FOREIGN" "refusing to remove non-symlink path: $target"
     else
       remaining="$(drop_ref "$(skill_refs "$name")" "$self_ref")"
       if [[ -n "$remaining" ]]; then
@@ -908,7 +909,7 @@ destination_plan() {
     # ledger beside them; an existing link to a usable target is referenced,
     # not refused, and uninstall keeps a link while anything still refers to it.
     bin_plan="$(refs_tool bin-plan "$mode" "$bin_dir" "$self_ref" "$repo_root" \
-      "${bin_specs[@]/|/=}")" || exit 1
+      "${bin_specs[@]/|/=}")" || refuse 1 install-bin-plan-failed "$ROUTE_INSTALL_BIN" "bin-plan failed"
     while IFS= read -r row; do
       if [[ "$row" == ledger\|* ]]; then
         bin_ledger="${row#ledger|}"
@@ -927,16 +928,10 @@ destination_plan() {
     # install.
     want_user_hook=true
     if [[ -d "$codex_home" ]]; then
-      hook_status="$("$installer_python" "$hook_tool" user-status --codex-home "$codex_home")" || {
-        printf 'refusing: Codex user-level hooks.json cannot be merged: %s\n' "$hook_status" >&2
-        exit 1
-      }
+      hook_status="$("$installer_python" "$hook_tool" user-status --codex-home "$codex_home")" || refuse 1 install-codex-hooks-unmergeable "$ROUTE_INSTALL_HOOK" "refusing: Codex user-level hooks.json cannot be merged: ${hook_status}"
       if [[ "$mode" == install ]]; then
         hook_blockers="$("$installer_python" -c 'import json,sys; print("\n".join(json.loads(sys.argv[1]).get("install_blockers") or []))' "$hook_status")"
-        [[ -z "$hook_blockers" ]] || {
-          printf 'refusing: Codex user-level compact-recovery hook cannot be installed:\n%s\n' "$hook_blockers" >&2
-          exit 1
-        }
+        [[ -z "$hook_blockers" ]] || refuse 1 install-codex-hook-blocked "$ROUTE_INSTALL_HOOK" "$(printf 'refusing: Codex user-level compact-recovery hook cannot be installed:\n%s' "$hook_blockers")"
       fi
     elif [[ "$mode" == uninstall ]]; then
       want_user_hook=false
@@ -1006,13 +1001,11 @@ destination_apply() {
       else
         backup="$target_parent/.${name}.old.$$"
       fi
-      [[ ! -e "$temp" && ! -L "$temp" && ! -e "$backup" && ! -L "$backup" ]] || {
-        printf 'temporary path exists: %s\n' "$temp" >&2; exit 1; }
+      [[ ! -e "$temp" && ! -L "$temp" && ! -e "$backup" && ! -L "$backup" ]] || refuse 1 install-temp-path "$ROUTE_INSTALL_TEMP" "temporary path exists: $temp"
       if [[ "$method" == copy ]]; then
         if ! stage_copy "$source" "$temp"; then
           rm -rf "$temp" 2>/dev/null || true
-          printf 'staging copy failed: %s\n' "$source" >&2
-          exit 1
+          refuse 1 install-staging-failed "$ROUTE_INSTALL_TEMP" "staging copy failed: $source"
         fi
         new_digest="$(tree_digest "$temp")"
       else
@@ -1020,8 +1013,7 @@ destination_apply() {
       fi
       if ! place_staged "$temp" "$target" "$backup" "$keep_previous"; then
         rm -rf "$temp" 2>/dev/null || true
-        printf 'atomic replacement failed: %s\n' "$target" >&2
-        exit 1
+        refuse 1 install-atomic-replace-failed "$ROUTE_INSTALL_TEMP" "atomic replacement failed: $target"
       fi
       if [[ "$method" == copy ]]; then
         write_receipt "$name" "$source" copy "$new_digest" "$refs"
@@ -1043,13 +1035,11 @@ destination_apply() {
       else
         backup="$target_parent/.${name}.old.$$"
       fi
-      [[ ! -e "$temp" && ! -L "$temp" && ! -e "$backup" && ! -L "$backup" ]] || {
-        printf 'temporary path exists: %s\n' "$temp" >&2; exit 1; }
+      [[ ! -e "$temp" && ! -L "$temp" && ! -e "$backup" && ! -L "$backup" ]] || refuse 1 install-temp-path "$ROUTE_INSTALL_TEMP" "temporary path exists: $temp"
       ln -s "$source" "$temp"
       if ! place_staged "$temp" "$target" "$backup" "$keep_previous"; then
         rm -rf "$temp" 2>/dev/null || true
-        printf 'atomic replacement failed: %s\n' "$target" >&2
-        exit 1
+        refuse 1 install-atomic-replace-failed "$ROUTE_INSTALL_TEMP" "atomic replacement failed: $target"
       fi
       write_receipt "$name" "$source" link "" "$refs"
       if [[ "$action" == relink-drift ]]; then
@@ -1102,17 +1092,11 @@ destination_apply() {
 
   if [[ "$want_user_hook" == true ]]; then
     if [[ "$mode" == install ]]; then
-      hook_receipt="$("$installer_python" "$hook_tool" user-install --codex-home "$codex_home")" || {
-        printf 'Codex user-level compact-recovery hook install failed: %s\n' "$hook_receipt" >&2
-        exit 1
-      }
+      hook_receipt="$("$installer_python" "$hook_tool" user-install --codex-home "$codex_home")" || refuse 1 install-codex-hook-install-failed "$ROUTE_INSTALL_HOOK" "Codex user-level compact-recovery hook install failed: ${hook_receipt}"
       printf 'codex user hook: %s\n' "$hook_receipt"
       printf 'codex user hook: review and trust the new entry in /hooks; it loads from the next Codex session\n'
     else
-      hook_receipt="$("$installer_python" "$hook_tool" user-uninstall --codex-home "$codex_home")" || {
-        printf 'Codex user-level compact-recovery hook uninstall failed: %s\n' "$hook_receipt" >&2
-        exit 1
-      }
+      hook_receipt="$("$installer_python" "$hook_tool" user-uninstall --codex-home "$codex_home")" || refuse 1 install-codex-hook-uninstall-failed "$ROUTE_INSTALL_HOOK" "Codex user-level compact-recovery hook uninstall failed: ${hook_receipt}"
       printf 'codex user hook: %s\n' "$hook_receipt"
     fi
   fi
@@ -1131,14 +1115,13 @@ destination_apply() {
       ;;
     install)
       temp="$bin_dir/.${target##*/}.tmp.$$"
-      [[ ! -e "$temp" && ! -L "$temp" ]] || { printf 'temporary path exists: %s\n' "$temp" >&2; exit 1; }
+      [[ ! -e "$temp" && ! -L "$temp" ]] || refuse 1 install-temp-path "$ROUTE_INSTALL_TEMP" "temporary path exists: $temp"
       ln -s "$source" "$temp"
       if ! "$installer_python" -c 'import os, sys
 os.replace(sys.argv[1], sys.argv[2])' "$temp" "$target"
       then
         unlink "$temp" 2>/dev/null || true
-        printf 'atomic symlink replacement failed: %s\n' "$target" >&2
-        exit 1
+        refuse 1 install-atomic-symlink-failed "$ROUTE_INSTALL_TEMP" "atomic symlink replacement failed: $target"
       fi
       printf 'install: %s -> %s\n' "$target" "$source"
       ;;
@@ -1302,8 +1285,7 @@ for plan_prefix in "${plan_prefixes[@]}"; do
   destination_apply "$plan_prefix"
 done
 if [[ "$install_verify_failed" == true ]]; then
-  printf 'install-local: requested payloads did not verify at every destination; this run is NOT complete\n' >&2
-  exit 1
+  refuse 1 install-verify-incomplete "$ROUTE_INSTALL_VERIFY" "install-local: requested payloads did not verify at every destination; this run is NOT complete"
 fi
 # Payloads and ACP readiness are different facts. This footer names where the
 # executing agent continues; it does not claim a survey, version read, or ACP check.

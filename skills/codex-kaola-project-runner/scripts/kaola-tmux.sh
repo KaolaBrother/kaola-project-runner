@@ -39,7 +39,12 @@ Transport is ACP only (Issue #130); a request for the pty transport is refused (
 die() {
   local error_python
   printf 'kaola-tmux[%s]: %s\n' "${platform:-unknown}" "$*" >&2
-  error_python="$(resolve_tool "${PYTHON_BIN:-python3}")" || { printf '%s\n' 'python3 executable not found' >&2; exit 1; }
+  error_python="$(resolve_tool "${PYTHON_BIN:-python3}")" || {
+    # runner-python-missing
+    printf '%s\n' 'python3 executable not found' >&2
+    printf '%s\n' 'route: Install python3 or set PYTHON_BIN to an executable, then rerun the same command.' >&2
+    exit 1
+  }
   "$error_python" -c 'import json,runpy,sys
 receipt=runpy.run_path(sys.argv[1])["input_error_receipt"]
 print(json.dumps(receipt(*sys.argv[2:]),ensure_ascii=False,sort_keys=True))' \
@@ -80,11 +85,11 @@ source "$adapter_file"
 command_name="${1:-}"; [[ -n "$command_name" ]] || die "missing command"; shift
 [[ "$command_name" != -h && "$command_name" != --help ]] || { usage; exit 0; }
 if [[ "$command_name" == view ]]; then
-  printf '%s\n' '{"error":{"code":"view-unsupported","message":"view is not a Runner command; use kaola-acp"},"schema":"kaola-acp-view/1"}'
+  printf '%s\n' '{"error":{"code":"view-unsupported","message":"view is not a Runner command; use kaola-acp"},"route":"view is not a Runner command. Run kaola-acp.py PLATFORM view --repo REPO --session SESSION.","schema":"kaola-acp-view/1"}'
   exit 1
 fi
 if [[ "$command_name" == follow ]]; then
-  printf '%s\n' '{"error":{"code":"follow-unsupported","message":"follow is not a Runner command; use kaola-acp"},"kind":"error"}'
+  printf '%s\n' '{"error":{"code":"follow-unsupported","message":"follow is not a Runner command; use kaola-acp"},"kind":"error","route":"follow is not a Runner command. Run kaola-acp.py PLATFORM follow --repo REPO --session SESSION."}'
   exit 1
 fi
 case "$command_name" in preflight|start|observe|status|capture|send|steer|wait|permit|cancel|key|answer|stop|drain-restart|rebind-host) ;; *) die "unknown command: $command_name" ;; esac
@@ -136,6 +141,7 @@ if [[ "$transport_given" == true && "$transport" == pty ]]; then
   emit_json "n:schema_version:3" "s:result:refused" "s:reason:transport-pty-retired" \
     "s:action:$command_name" "s:platform:$platform" "s:session:$session" "s:repo:$repo" \
     "s:detail:PTY transport is retired (Issue #130); this Runner is ACP-only. Re-run without --transport (or with --transport acp)." \
+    "s:route:Re-run without --transport (or with --transport acp)." \
     "b:mutation_performed:false" "j:transport:{\"requested\":\"pty\",\"supported\":[\"acp\"]}"
   exit 1
 fi
@@ -153,10 +159,16 @@ fi
 # guards against accidental dispatch drift; it is not protection against a
 # hostile controlling host, and it is not a second Workflow classifier.
 refuse_canonical_root() {
-  local reason="$1" requested="$2" bound="$3"
+  local reason="$1" requested="$2" bound="$3" self_route
+  if [[ "$reason" == canonical-root-invalid ]]; then
+    self_route="The bound canonical root is not a Git top-level. Fix KAOLA_PROJECT_RUNNER_CANONICAL_REPO to that top-level, or unset it for a standalone run. Do not start a session on the refused path."
+  else
+    self_route="The requested --repo is not the bound canonical root. Re-run start with --repo set to canonical_repo, or observe and stop the existing session at its own repo. Do not start a second Host."
+  fi
   emit_json "n:schema_version:3" "s:result:refused" "s:reason:$reason" \
     "s:action:$command_name" "s:platform:$platform" "s:session:$session" \
-    "s:repo:$requested" "s:canonical_repo:$bound" "b:mutation_performed:false"
+    "s:repo:$requested" "s:canonical_repo:$bound" "s:self_route:$self_route" \
+    "b:mutation_performed:false"
   exit 1
 }
 canonical_binding="${KAOLA_PROJECT_RUNNER_CANONICAL_REPO:-}"

@@ -508,6 +508,33 @@ Resume wait. The holder sends `session/resume` (or `session/load` when that is t
 - The client passes that number to the holder as `--resume-timeout`. The broker does not forward `KAOLA_RESUME_*`.
 
 The client keeps polling for 20 seconds after that wait (`RESUME_RECOVERY_GRACE`). On the outside-caller path the broker `--ready-timeout` is the resume wait plus the same grace, so the grace is inside the window that would otherwise kill the holder. A fresh session does not change the broker's 90 second default. A resume that becomes `ready` inside the wait returns immediately. A `session/resume` success that arrives after the wait, while the holder is still alive, clears `resume-failed`, sets the holder `ready`, and appends an event `resume_recovered`. The start receipt is then a ready session, not `resume-failed`. A success that arrives after the holder has been killed cannot be recorded. This wait is the load wait. The runner does not compact on resume, and it does not call `session/compact` while loading a session.
+## Recovery routes (Issue #309)
+
+No failure the runner reports is a dead end. Every refusal either carries a
+recovery route (the next command or step) or tells the agent to route itself
+and gives the context that choice needs. Error text that only names a problem
+is a bug.
+
+The table is [`scripts/kaola-recovery-routes.py`](../scripts/kaola-recovery-routes.py)
+(`ROUTES`: each code maps to `route` or `self-route`). `stamp` attaches one
+JSON field, `route` or `self_route`, on a failure envelope (`result` `refused`,
+`error`, or `failed`, a follow `kind` of `error`, a skipped webhook scan, and
+the same shape). A non-empty `recovery` is kept and is itself the route.
+Success results are left alone. Correlation-index gap strings stay strings, so
+a stored index stays compatible; when that code is the receipt `reason` or
+`error.code`, the printed envelope carries the field.
+
+The holder process is unchanged. The CLI, launch broker, locator, dispatch
+entry, installer, and Grok Bot verifier attach the field on the next process.
+A direct holder-socket client does not see it. The agent path is the CLI.
+
+A Host that cannot be resumed (timeout, `resume-failed`, `holder-lost`, an
+unowned exited launchd job) is exact-stopped, attested, then `start --resume`.
+If resume still fails, start a fresh Host and hand it the summary from
+`status`, `capture --lines 200`, `list --repo --include-dead`, and
+`delegator view`. The new Host re-adopts live seats from that list. This build
+does not auto-reap the leftover job. The Delegator procedure is
+`templates/kaola-delegator/references/host-restart.md`.
 
 ## Dispatch and collect (`kaola-dispatch.py`)
 

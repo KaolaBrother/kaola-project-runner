@@ -601,6 +601,11 @@ def expected_orchestrator_files(manifests: list[dict[str, str]]) -> dict[str, by
     if not paths_script.is_file():
         raise ValueError(f"missing record path helper: {paths_script}")
     result["scripts/kaola-acp-paths.py"] = paths_script.read_bytes()
+    # Issue #309: dispatch stamps refusals from the sibling route table.
+    routes_script = ROOT / "scripts" / "kaola-recovery-routes.py"
+    if not routes_script.is_file():
+        raise ValueError(f"missing recovery routes: {routes_script}")
+    result["scripts/kaola-recovery-routes.py"] = routes_script.read_bytes()
     return result
 
 
@@ -719,6 +724,7 @@ def expected_files(manifest: dict[str, str], main_build: bytes) -> dict[str, byt
         (shared_root / "kaola-model-policy.py", "scripts/kaola-model-policy.py"),
         (shared_root / "kaola-quota.py", "scripts/kaola-quota.py"),
         (shared_root / "kaola-record-contract.py", "scripts/kaola-record-contract.py"),
+        (shared_root / "kaola-recovery-routes.py", "scripts/kaola-recovery-routes.py"),
         (adapter, f"scripts/adapters/{adapter.name}"),
     )
     for source, target in shared_sources:

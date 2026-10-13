@@ -78,6 +78,31 @@ try:
 finally:
     sys.dont_write_bytecode = _paths_bytecode
 
+
+def _load_recovery_routes():
+    """Issue #309. Attest still prints if the route table is absent."""
+    cached = getattr(_load_recovery_routes, "module", None)
+    if cached is not None:
+        return cached or None
+    path = Path(__file__).resolve().with_name("kaola-recovery-routes.py")
+    if not path.is_file():
+        _load_recovery_routes.module = False
+        return None
+    spec = importlib.util.spec_from_file_location("kaola_recovery_routes", path)
+    if spec is None or spec.loader is None:
+        _load_recovery_routes.module = False
+        return None
+    module = importlib.util.module_from_spec(spec)
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous
+    _load_recovery_routes.module = module
+    return module
+
+
 SCHEMA = "kaola-project-runner-locator/1"
 REGISTRATION_SCHEMA = "kaola-project-runner-locator-registration/1"
 LOCATOR_COMMAND = "kaola-project-runner-locate"
@@ -364,10 +389,21 @@ def superseded(root: Path, expect: str | None, accepted: object) -> bool:
 
 
 def emit(receipt: dict[str, object]) -> int:
+    module = _load_recovery_routes()
+    if module is not None:
+        receipt = module.fit_locate(receipt, RECEIPT_LIMIT)
     line = json.dumps(receipt, ensure_ascii=False, sort_keys=True)
     if len(line.encode("utf-8")) > RECEIPT_LIMIT:
-        receipt = {"schema": SCHEMA, "result": "refused", "reasons": ["receipt-too-large"]}
-        line = json.dumps(receipt, sort_keys=True)
+        receipt = {
+            "schema": SCHEMA,
+            "result": "refused",
+            "reasons": ["receipt-too-large"],
+            "route": (
+                "Rerun attest with fewer selectors. Fix each remaining reason. "
+                "Do not register a refused target."
+            ),
+        }
+        line = json.dumps(receipt, ensure_ascii=False, sort_keys=True)
     print(line)
     return 0 if receipt.get("result") == "ok" else 1
 

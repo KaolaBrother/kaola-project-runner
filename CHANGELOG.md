@@ -93,6 +93,21 @@ Seats: restart required
   this line is restart required.
 
 
+- **Every reported failure carries a recovery route or an explicit self-route (Issue #309).**
+  `scripts/kaola-recovery-routes.py` maps each audited error code to the next
+  command (`route`) or to an agent self-route that names the context
+  (`self_route`). The CLI, launch broker, locator, and dispatch entry attach
+  that field when they print a failure. A non-empty `recovery` is kept.
+  Delivered and skipped webhook receipts are unchanged. An unowned exited
+  launchd job is exact-stopped, attested, then `start --resume`; if resume
+  still fails, the Delegator starts a fresh Host and hands it the summary from
+  `status`, `capture --lines 200`, `list --repo --include-dead`, and
+  `delegator view` (`templates/kaola-delegator/references/host-restart.md`).
+  This build does not auto-reap that job. The holder process is unchanged, so
+  a running seat does not restart for this text. A symlink install picks up
+  the CLI on the next call. A copy install picks it up only after that copy
+  is replaced. This change does not install.
+
 ## 0.9.9 — 2026-10-12 (all-idle wakes once per transition)
 
 Seats: restart required

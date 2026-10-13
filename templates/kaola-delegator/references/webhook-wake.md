@@ -79,7 +79,8 @@ $HOOK remove --project "$PROJECT" --owner-agent "$LABEL"
 8. **Failure.** If the owner declines the secret input, `test` fails, or your
    routine did not wake, stay heartbeat-only (`wake_mode` `heartbeat`, normal
    `cadence`). Report the exact blocker (receipt `result`, `http_status`,
-   `error`, truncated `response_body`). Do not retry blindly.
+   `error`, truncated `response_body`). A failed receipt carries `route` or
+   `self_route`. Do not retry blindly.
 
 A Host holder sends this hook only after a seat restart on a build that has
 it. If `test` delivers but turns write no receipts, the holder is older than

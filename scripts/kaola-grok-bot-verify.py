@@ -381,6 +381,10 @@ def validate(bundle: Path, repo: Path | None, require_pinned: bool = False) -> l
     return findings
 
 
+# verify-finding: the next step on every verifier refusal (issue #309).
+VERIFY_FINDING_ROUTE = "Fix the named source in templates/ or hosts/grok-bot/, rerun ./scripts/render-skills.py --write, then rerun this verifier. Do not hand-edit skills/ or hosts/grok-bot/."
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("bundle", type=Path)
@@ -390,7 +394,10 @@ def main() -> int:
     findings = validate(args.bundle.resolve(), args.repo.resolve() if args.repo else None, args.require_pinned)
     if findings:
         for finding in findings:
-            print(finding, file=sys.stderr)
+            line = finding
+            if "route:" not in line and "self-route:" not in line:
+                line = f"{line} route: {VERIFY_FINDING_ROUTE}"
+            print(line, file=sys.stderr)
         return 1
     size = (args.bundle / BRIDGE_FILE).stat().st_size
     stage = bundle_stage(args.bundle)

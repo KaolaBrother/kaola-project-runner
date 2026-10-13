@@ -16,10 +16,6 @@ holder under the per-user service manager instead:
   best-effort records the child identity, and exits.
 * **cleanup** removes this session's owned leftover job/run dir. It never
   unloads a running job; the Runner owns holder stop.
-* **reconcile** reaps a stale exited one-shot for this session when no live
-  holder or native agent owns it, so a later ``start --resume`` can bootstrap.
-  It never unloads a running job, and it never unloads an exited job whose
-  recorded holder or native agent is still alive.
 
 Hard rules:
 
@@ -47,7 +43,6 @@ import json
 import os
 import plistlib
 import secrets
-import shlex
 import shutil
 import signal
 import stat
@@ -67,6 +62,38 @@ try:
     _paths_spec.loader.exec_module(acp_paths)
 finally:
     sys.dont_write_bytecode = _paths_bytecode
+
+
+def _load_recovery_routes():
+    """Issue #309. Missing beside an isolated copy: refusals stay unstamped."""
+    cached = getattr(_load_recovery_routes, "module", None)
+    if cached is not None:
+        return cached or None
+    path = Path(__file__).resolve().with_name("kaola-recovery-routes.py")
+    if not path.is_file():
+        _load_recovery_routes.module = False
+        return None
+    spec = importlib.util.spec_from_file_location("kaola_recovery_routes", path)
+    if spec is None or spec.loader is None:
+        _load_recovery_routes.module = False
+        return None
+    module = importlib.util.module_from_spec(spec)
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous
+    _load_recovery_routes.module = module
+    return module
+
+
+def _emit(receipt: dict) -> None:
+    module = _load_recovery_routes()
+    if module is not None and isinstance(receipt, dict):
+        receipt = module.stamp(receipt)
+    print(json.dumps(receipt, sort_keys=True))
+
 
 SCHEMA = "kaola-launch-broker/3"
 NONCE_BYTES = 16
@@ -109,12 +136,18 @@ class BrokerError(Exception):
     def receipt(self) -> dict:
         out = {"schema": SCHEMA, "result": "refused", "reason": self.code,
                "detail": self.message, "holder_may_exist": bool(self.spawned), **self.facts}
-        # An explicit recovery fact is the route for this refusal. The generic
-        # spawned text only fills the gap when the caller did not name one.
-        if self.spawned and "recovery" not in out:
-            out["recovery"] = ("An own holder or native agent may still run. Exact-stop this "
-                               "session through the Runner. Cleanup removes artifacts only and "
-                               "cannot reclaim a live effect.")
+        if self.spawned:
+            out["recovery"] = (
+                "An own holder or native agent may still run. Exact-stop this session "
+                "(stop --repo REPO --session SESSION --expected-holder-instance-id ID), "
+                "attest, then start --resume NATIVE_ID. If resume still fails, start a fresh "
+                "Host and hand it the summary from status, capture --lines 200, "
+                "list --repo --include-dead, and delegator view. Cleanup removes artifacts "
+                "only and cannot reclaim a live effect."
+            )
+        module = _load_recovery_routes()
+        if module is not None:
+            out = module.stamp(out)
         return out
 
 
@@ -410,14 +443,10 @@ def os_bootstrap(backend: str, label: str, plist_path: Path, spec_path: Path) ->
         domain = f"gui/{owner_uid()}"
         state = os_job_state(backend, label)
         if state == "running":
-            route = (
-                "a job for this exact session is already running. Exact-stop this "
-                "session through the Runner; after the one-shot job has exited, run "
-                "this broker's reconcile mode, then retry start --resume. Do not run "
-                "launchctl or systemctl by hand."
-            )
-            raise BrokerError("launch-in-progress", route, spawned=True, label=label,
-                              recovery=route)
+            raise BrokerError("launch-in-progress",
+                              "a job for this exact session is already running. Exact-stop it, "
+                              "attest, then start --resume or start a fresh Host",
+                              spawned=True, label=label)
         # An exited job is handled by do_submit with this attempt's identity.
         result = launchctl("bootstrap", domain, str(plist_path))
         if result.returncode != 0:
@@ -452,38 +481,6 @@ def os_unload(backend: str, label: str) -> None:
     elif backend == "systemd-user":
         systemctl("stop", unit_for(label))
         systemctl("reset-failed", unit_for(label))
-
-
-def recovery_command(platform: str, session: str, repo: str,
-                     record_dir: str | None = None, run_base: str | None = None,
-                     backend: str | None = None) -> str:
-    """The exact reconcile invocation for this session. No shell metacharacters."""
-    parts = [sys.executable, os.path.realpath(__file__), "reconcile",
-             "--platform", platform, "--session", session, "--repo", repo]
-    if record_dir:
-        parts += ["--record-dir", record_dir]
-    if run_base:
-        parts += ["--run-base", run_base]
-    if backend and backend not in ("", "auto"):
-        parts += ["--backend", backend]
-    return " ".join(shlex.quote(part) for part in parts)
-
-
-def recovery_route(label: str, command: str, *, running: bool) -> str:
-    """Issue #308 / #309: the refusal names the next command. No dead end."""
-    if running:
-        return (
-            f"Job {label} is still running. It is a one-shot (KeepAlive false); "
-            "reconcile reaps it only after it has exited. Exact-stop this session "
-            f"through the Runner, then run {command}, then retry start --resume. "
-            "Do not run launchctl or systemctl by hand."
-        )
-    return (
-        f"Job {label} is exited and not owned by this attempt. Exact-stop this "
-        "session through the Runner; when the one-shot job has exited, run "
-        f"{command}, then retry start --resume. Do not run launchctl or systemctl "
-        "by hand."
-    )
 
 
 def os_wait_stopped(backend: str, label: str, timeout: float) -> None:
@@ -652,33 +649,17 @@ def do_submit(args: argparse.Namespace) -> dict:
                           "or pass the direct backend explicitly.", backend=detail)
 
     label = label_for(platform, session, repo)
-    run_base = Path(args.run_base) if args.run_base else default_run_base()
-    run_dir = run_dir_for(run_base, label)
-    command = recovery_command(platform, session, repo, str(record_dir), str(run_base), args.backend)
+    run_dir = run_dir_for(Path(args.run_base) if args.run_base else default_run_base(), label)
 
     # Reconcile, never kill, a concurrent or partial start for this exact session.
-    # A running job here belongs to another attempt: this attempt has not bootstrapped.
     if os_job_state(backend, label) == "running":
         verified = wait_verified(record_dir, platform, session, repo, float(args.ready_timeout))
         if verified is not None:
             return {"schema": SCHEMA, "result": "existing", "reconciled": True, **ready_facts(verified)}
-        route = recovery_route(label, command, running=True)
-        raise BrokerError("launch-in-progress", route, spawned=True, label=label, recovery=route)
-
-    # An exited leftover is stale when no live holder or native agent owns the
-    # session. A new attempt's spec path can never own a previous attempt's job,
-    # so ownership is the live effect, not os_job_owns.
-    stale_reaped = False
-    state = os_job_state(backend, label)
-    if state == "exited":
-        _reap_exited_job(backend, label, record_dir, platform, session, repo, run_dir, command)
-        stale_reaped = True
-    elif state == "unknown":
-        route = recovery_route(label, command, running=False)
-        raise BrokerError(
-            "job-state-unknown",
-            "the service-manager state is unreadable; the job stays loaded. " + route,
-            label=label, os_state=state, recovery=route)
+        raise BrokerError("launch-in-progress",
+                          "a job for this exact session is already running. Exact-stop it, "
+                          "attest, then start --resume or start a fresh Host",
+                          spawned=True, label=label)
 
     argv = list(args.argv or [])
     socket = Path(args.socket) if args.socket else sock_path_for(record_dir)
@@ -706,25 +687,17 @@ def do_submit(args: argparse.Namespace) -> dict:
     bootstrapped = False
     unresolved = False
     try:
-        # A job that appeared after the pre-check. This attempt's spec is new, so
-        # it does not own a leftover; reap only a stale exited job.
+        # Pre-bootstrap: an exited job is unloaded only when this attempt owns it.
         state = os_job_state(backend, label)
         if state == "exited":
-            # This attempt's directory already exists; do not delete it while
-            # reaping a leftover that raced in.
-            _reap_exited_job(backend, label, record_dir, platform, session, repo, run_dir,
-                             command, drop_attempts=False)
-            stale_reaped = True
-        elif state == "running":
-            route = recovery_route(label, command, running=True)
-            raise BrokerError("launch-in-progress", route, spawned=True, label=label,
-                              recovery=route)
-        elif state == "unknown":
-            route = recovery_route(label, command, running=False)
-            raise BrokerError(
-                "job-state-unknown",
-                "the service-manager state is unreadable; the job stays loaded. " + route,
-                label=label, os_state=state, recovery=route)
+            if os_job_owns(backend, label, spec_path):
+                os_unload(backend, label)
+            else:
+                raise BrokerError("job-occupied",
+                                  "an exited job for this session is not owned by this attempt. "
+                                  "Exact-stop it, attest, then start --resume. If resume fails, "
+                                  "start a fresh Host and hand it the previous-session summary",
+                                  label=label, os_state=state)
         write_private_exclusive(spec_path, json.dumps(spec, sort_keys=True).encode())
         write_private_exclusive(armed_path, json.dumps({"schema": SCHEMA, "nonce": nonce}).encode())
         if backend == "launchd":
@@ -763,8 +736,6 @@ def do_submit(args: argparse.Namespace) -> dict:
             os_unload(backend, label)
         out = {"schema": SCHEMA, "result": "ready", "reconciled": False,
                "label": label, "backend": backend, **ready_facts(verified)}
-        if stale_reaped:
-            out["stale_job_reaped"] = True
         if receipt.get("child_record") is not None:
             # The internal startup wrote the custody line; carry its proof so
             # the caller's start receipt reports the same child_record fact a
@@ -849,101 +820,6 @@ def _own_holder_effect_remains(record_dir: Path, platform: str, session: str, re
             or pid_alive(record.get("agent_pgid")))
 
 
-def _live_session_effect(record_dir: Path | None, platform: str, session: str, repo: str) -> bool:
-    """True when this session's record still has a live holder or native agent.
-
-    No record, or a record for a different session, is not a live owner.
-    """
-    if record_dir is None:
-        return False
-    return _own_holder_effect_remains(record_dir, platform, session, repo)
-
-
-def _drop_unreferenced_attempts(backend: str, label: str, run_dir: Path) -> None:
-    """Remove attempt dirs the loaded job no longer names."""
-    if not run_dir.exists():
-        return
-    for attempt in sorted(run_dir.glob("attempt-*")):
-        spec = attempt / "spec.json"
-        if backend != "unsupported" and spec.exists() and os_job_owns(backend, label, spec):
-            continue
-        remove_quiet(attempt)
-    try:
-        if run_dir.exists() and not any(run_dir.iterdir()):
-            remove_quiet(run_dir)
-    except OSError:
-        pass
-
-
-def _reap_exited_job(backend: str, label: str, record_dir: Path | None, platform: str,
-                     session: str, repo: str, run_dir: Path, command: str,
-                     *, drop_attempts: bool = True) -> None:
-    """Unload an exited job that no live holder or native agent owns.
-
-    Retries bootout once. A job that stays exited, or a live effect, is refused
-    with the reconcile route and is not treated as reaped.
-    """
-    route = recovery_route(label, command, running=False)
-    if _live_session_effect(record_dir, platform, session, repo):
-        raise BrokerError("job-occupied", route, spawned=True, label=label,
-                          os_state="exited", recovery=route)
-    os_unload(backend, label)
-    state = os_job_state(backend, label)
-    if state == "exited":
-        os_unload(backend, label)
-        state = os_job_state(backend, label)
-    if state == "absent":
-        if drop_attempts:
-            _drop_unreferenced_attempts(backend, label, run_dir)
-        return
-    if state == "running" or _live_session_effect(record_dir, platform, session, repo):
-        running_route = recovery_route(label, command, running=True)
-        raise BrokerError("job-occupied", running_route, spawned=True, label=label,
-                          os_state=state, recovery=running_route)
-    if state == "unknown":
-        raise BrokerError("job-state-unknown", route, label=label, os_state=state, recovery=route)
-    raise BrokerError("job-occupied", route, label=label, os_state=state, recovery=route)
-
-
-def do_reconcile(args: argparse.Namespace) -> dict:
-    """Reap a stale exited one-shot. Never unload a running job or a live effect.
-
-    Absent is already reconciled. A running job is refused immediately, without
-    waiting for a holder: explicit reconcile does not adopt someone else's job.
-    """
-    backend, detail = backend_for(args.backend)
-    if backend == "unsupported":
-        raise BrokerError("launch-backend-unsupported",
-                          f"no supported outside-caller launch backend here ({detail}). "
-                          "Start the Host from an independent terminal on this target, "
-                          "or pass the direct backend explicitly.", backend=detail)
-    platform, session, repo = args.platform, args.session, args.repo
-    label = label_for(platform, session, repo)
-    run_base = Path(args.run_base) if args.run_base else default_run_base()
-    run_dir = run_dir_for(run_base, label)
-    record_dir = Path(args.record_dir) if getattr(args, "record_dir", None) else None
-    command = recovery_command(platform, session, repo,
-                               str(record_dir) if record_dir else None,
-                               str(run_base), args.backend)
-    state = os_job_state(backend, label)
-    if state == "absent":
-        return {"schema": SCHEMA, "result": "reconciled", "reaped": False,
-                "label": label, "os_state": state}
-    if state == "unknown":
-        route = recovery_route(label, command, running=False)
-        raise BrokerError(
-            "job-state-unknown",
-            "the service-manager state is unreadable; the job stays loaded. " + route,
-            label=label, os_state=state, recovery=route)
-    if state == "running":
-        route = recovery_route(label, command, running=True)
-        raise BrokerError("job-occupied", route, spawned=True, label=label,
-                          os_state=state, recovery=route)
-    _reap_exited_job(backend, label, record_dir, platform, session, repo, run_dir, command)
-    return {"schema": SCHEMA, "result": "reconciled", "reaped": True,
-            "label": label, "os_state": "absent"}
-
-
 def do_cleanup(args: argparse.Namespace) -> dict:
     """Remove this session's proven completed own attempt artifacts.
 
@@ -963,8 +839,9 @@ def do_cleanup(args: argparse.Namespace) -> dict:
                           "through the Runner first", label=label)
     if state == "unknown":
         raise BrokerError("job-state-unknown",
-                          "the service-manager state is unreadable; the owned job and its "
-                          "artifacts stay untouched", label=label)
+                          "the service-manager state is unreadable. Do not unload the job. "
+                          "Read the label with the service manager, then retry cleanup only "
+                          "after that state is readable", label=label)
     attempts = sorted(run_dir.glob("attempt-*")) if run_dir.exists() else []
     if attempts:
         # A leftover attempt means submit did not complete it. Keep it while this
@@ -982,13 +859,11 @@ def do_cleanup(args: argparse.Namespace) -> dict:
         owned = any(os_job_owns(backend, label, spec) for spec in
                     (attempt / "spec.json" for attempt in attempts))
         if not owned:
-            raise BrokerError(
-                "job-not-owned",
-                "an exited job for this session is not owned by a recorded attempt; "
-                "leave it. Exact-stop this session through the Runner, run this "
-                "broker's reconcile mode, then retry start --resume. Do not run "
-                "launchctl or systemctl by hand.",
-                label=label)
+            raise BrokerError("job-not-owned",
+                              "an exited job for this session is not owned by a recorded "
+                              "attempt. Do not unload it here. Exact-stop the holder if it is "
+                              "alive, attest, then start --resume or start a fresh Host",
+                              label=label)
         os_unload(backend, label)
     # Remove only attempt dirs no loaded job references any more.
     removed = 0
@@ -1013,7 +888,7 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Outside-caller holder launcher (issue #266)")
     parser.add_argument("--internal-run", action="store_true")
     parser.add_argument("--spec")
-    parser.add_argument("mode", nargs="?", choices=["submit", "cleanup", "reconcile"])
+    parser.add_argument("mode", nargs="?", choices=["submit", "cleanup"])
     parser.add_argument("--platform")
     parser.add_argument("--session")
     parser.add_argument("--repo")
@@ -1033,19 +908,16 @@ def main(argv: list[str]) -> int:
             if not ns.spec:
                 raise BrokerError("spec-required", "--internal-run requires --spec")
             receipt = do_internal_run(Path(ns.spec))
-            print(json.dumps(receipt, sort_keys=True))
+            _emit(receipt)
             return 0 if receipt.get("result") == "ready" else 1
         for name in ("platform", "session", "repo"):
             if not getattr(ns, name):
                 raise BrokerError("argument-required", f"--{name} is required")
         if ns.mode == "cleanup":
-            print(json.dumps(do_cleanup(ns), sort_keys=True))
-            return 0
-        if ns.mode == "reconcile":
-            print(json.dumps(do_reconcile(ns), sort_keys=True))
+            _emit(do_cleanup(ns))
             return 0
         if ns.mode != "submit":
-            raise BrokerError("mode-required", "choose submit, cleanup, or reconcile")
+            raise BrokerError("mode-required", "choose submit or cleanup")
         if not ns.record_dir or not ns.log:
             raise BrokerError("argument-required", "--record-dir and --log are required for submit")
         argv_list: list[str] = []
@@ -1055,10 +927,10 @@ def main(argv: list[str]) -> int:
         ns.argv = argv_list
         ns.env_from = dict(os.environ)
         receipt = do_submit(ns)
-        print(json.dumps(receipt, sort_keys=True))
+        _emit(receipt)
         return 0 if receipt.get("result") in ("ready", "existing") else 1
     except BrokerError as exc:
-        print(json.dumps(exc.receipt(), sort_keys=True))
+        _emit(exc.receipt())
         return 1
 
 

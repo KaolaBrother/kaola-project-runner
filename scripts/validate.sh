@@ -322,6 +322,7 @@ python_suites_all=(
   "test-issue-299-delegator-webhook.py"
   "test-issue-302-delegator-wake-gate.py"
   "test-issue-308-resume-reconcile.py"
+  "test-issue-309-recovery-routes.py"
   "test-issue-289-dead-holder-stop.py"
   "test-issue-274-package-closure.py"
   "test-issue-271-dispatch-help.py"
@@ -434,6 +435,7 @@ python_suites_b=(
   "test-issue-299-delegator-webhook.py"
   "test-issue-302-delegator-wake-gate.py"
   "test-issue-308-resume-reconcile.py"
+  "test-issue-309-recovery-routes.py"
   "test-issue-289-dead-holder-stop.py"
 )
 

@@ -68,6 +68,38 @@ try:
 finally:
     sys.dont_write_bytecode = _paths_bytecode
 
+
+def _load_recovery_routes():
+    """Issue #309. Missing beside an isolated copy: refusals stay unstamped."""
+    cached = getattr(_load_recovery_routes, "module", None)
+    if cached is not None:
+        return cached or None
+    path = Path(__file__).resolve().with_name("kaola-recovery-routes.py")
+    if not path.is_file():
+        _load_recovery_routes.module = False
+        return None
+    spec = importlib.util.spec_from_file_location("kaola_recovery_routes", path)
+    if spec is None or spec.loader is None:
+        _load_recovery_routes.module = False
+        return None
+    module = importlib.util.module_from_spec(spec)
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous
+    _load_recovery_routes.module = module
+    return module
+
+
+def _emit(receipt: dict) -> None:
+    module = _load_recovery_routes()
+    if module is not None and isinstance(receipt, dict):
+        receipt = module.stamp(receipt)
+    print(json.dumps(receipt, sort_keys=True))
+
+
 SCHEMA = "kaola-launch-broker/3"
 NONCE_BYTES = 16
 DEFAULT_READY_TIMEOUT = 90.0
@@ -110,11 +142,20 @@ class BrokerError(Exception):
         out = {"schema": SCHEMA, "result": "refused", "reason": self.code,
                "detail": self.message, "holder_may_exist": bool(self.spawned), **self.facts}
         # An explicit recovery fact is the route for this refusal. The generic
-        # spawned text only fills the gap when the caller did not name one.
+        # spawned text only fills the gap when the caller did not name one;
+        # the #309 stamp then covers any code still without a route.
         if self.spawned and "recovery" not in out:
-            out["recovery"] = ("An own holder or native agent may still run. Exact-stop this "
-                               "session through the Runner. Cleanup removes artifacts only and "
-                               "cannot reclaim a live effect.")
+            out["recovery"] = (
+                "An own holder or native agent may still run. Exact-stop this session "
+                "(stop --repo REPO --session SESSION --expected-holder-instance-id ID), "
+                "attest, then start --resume NATIVE_ID. If resume still fails, start a fresh "
+                "Host and hand it the summary from status, capture --lines 200, "
+                "list --repo --include-dead, and delegator view. Cleanup removes artifacts "
+                "only and cannot reclaim a live effect."
+            )
+        module = _load_recovery_routes()
+        if module is not None:
+            out = module.stamp(out)
         return out
 
 
@@ -963,8 +1004,9 @@ def do_cleanup(args: argparse.Namespace) -> dict:
                           "through the Runner first", label=label)
     if state == "unknown":
         raise BrokerError("job-state-unknown",
-                          "the service-manager state is unreadable; the owned job and its "
-                          "artifacts stay untouched", label=label)
+                          "the service-manager state is unreadable. Do not unload the job. "
+                          "Read the label with the service manager, then retry cleanup only "
+                          "after that state is readable", label=label)
     attempts = sorted(run_dir.glob("attempt-*")) if run_dir.exists() else []
     if attempts:
         # A leftover attempt means submit did not complete it. Keep it while this
@@ -1033,13 +1075,13 @@ def main(argv: list[str]) -> int:
             if not ns.spec:
                 raise BrokerError("spec-required", "--internal-run requires --spec")
             receipt = do_internal_run(Path(ns.spec))
-            print(json.dumps(receipt, sort_keys=True))
+            _emit(receipt)
             return 0 if receipt.get("result") == "ready" else 1
         for name in ("platform", "session", "repo"):
             if not getattr(ns, name):
                 raise BrokerError("argument-required", f"--{name} is required")
         if ns.mode == "cleanup":
-            print(json.dumps(do_cleanup(ns), sort_keys=True))
+            _emit(do_cleanup(ns))
             return 0
         if ns.mode == "reconcile":
             print(json.dumps(do_reconcile(ns), sort_keys=True))
@@ -1055,10 +1097,10 @@ def main(argv: list[str]) -> int:
         ns.argv = argv_list
         ns.env_from = dict(os.environ)
         receipt = do_submit(ns)
-        print(json.dumps(receipt, sort_keys=True))
+        _emit(receipt)
         return 0 if receipt.get("result") in ("ready", "existing") else 1
     except BrokerError as exc:
-        print(json.dumps(exc.receipt(), sort_keys=True))
+        _emit(exc.receipt())
         return 1
 
 

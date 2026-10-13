@@ -122,8 +122,41 @@ TIMER_LOCATOR = ("Kaola-Delegator inquiry: read {repo}/.kaola/delegator-heartbea
                  "on target {target} and run the loaded Skill's standard inquiry.")
 
 
+def _load_recovery_routes():
+    """Issue #309. An isolated copy without the table still emits the old payload."""
+    cached = getattr(_load_recovery_routes, "module", None)
+    if cached is not None:
+        return cached or None
+    path = Path(__file__).resolve().with_name("kaola-recovery-routes.py")
+    if not path.is_file():
+        _load_recovery_routes.module = False
+        return None
+    spec = importlib.util.spec_from_file_location("kaola_recovery_routes", path)
+    if spec is None or spec.loader is None:
+        _load_recovery_routes.module = False
+        return None
+    module = importlib.util.module_from_spec(spec)
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous
+    _load_recovery_routes.module = module
+    return module
+
+
 def emit(payload: dict[str, Any], code: int = 0) -> int:
-    sys.stdout.write(json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2))
+    module = _load_recovery_routes()
+    printed: Any = payload
+    if module is not None and isinstance(payload, dict):
+        # Stamp a copy. The caller's object may still be written to disk.
+        printed = dict(payload)
+        lost = printed.get("holder_lost")
+        if isinstance(lost, dict):
+            printed["holder_lost"] = dict(lost)
+        printed = module.stamp(printed)
+    sys.stdout.write(json.dumps(printed, ensure_ascii=False, sort_keys=True, indent=2))
     sys.stdout.write("\n")
     return code
 
