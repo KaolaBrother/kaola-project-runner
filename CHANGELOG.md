@@ -4,7 +4,9 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.9.11 — 2026-10-14 (wake rules: all-ended auto-wake, Host-initiated wake, lost-wake recovery)
+
+v0.9.10 was released but never installed. v0.9.11 supersedes it: installing v0.9.11 also brings every v0.9.10 change (#308–#313, listed under 0.9.10 below). #321 was verified and closed as not planned (no change).
 
 Seats: restart required
 
