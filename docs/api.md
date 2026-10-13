@@ -1266,6 +1266,46 @@ The ZCode adapter (Issue #62) reports three separately trackable session identit
 
 Human watch is not an L0 receipt. `kaola-acp list [--platform P] [--repo ROOT]` and `kaola-acp survey` (below) are the only commands without a required platform positional or `--repo`; stdout is one `kaola-acp-list/1` object of live holders; `--include-dead` (Issue #132) adds records whose holder PID is gone. Each row also carries `identity` (`verified` | `dead` | `unreachable` | `mismatch`: record, live PID, answering admin socket, and a `state` reply whose `holder_instance_id` equals the record's, probed with a 5 s bound), `host_class` (the standard Host name `<platform>-<CODE>-orchestrator-<purpose>`), `dispatcher` (the dispatching holder identity the holder inherited from `KAOLA_ACP_DISPATCHER`, or `null`), and the binding fact `heartbeat_host` / `heartbeat_host_known`. `kaola-acp <platform> view --repo ROOT --session NAME [--since CURSOR]` stdout is one `kaola-acp-view/1` object. Its timing and permission-outcome fields (Issue #257) are holder-clock facts in Unix seconds with millisecond precision; ACP itself carries no timestamps. Each `messages[]` entry has `received_at` (float | null): the holder receipt time of the message's first chunk, equal to that chunk's `events.jsonl` `ts`, and `null` for the prompt message the holder itself wrote (that message has no event-log line). `turn` adds `started_at` (the time the holder wrote the `session/prompt` frame, the record's `last_prompt.written_at`) and `ended_at` (the `ts` of the `turn_ended` event, or of `process_exited` when the agent died mid-turn), each `null` while unknown. `turns[]` lists every prompt turn this holder process wrote, oldest first and capped at 200: `{started_at, ended_at, outcome, stop_reason, start_cursor, end_cursor}`, where `start_cursor` is the turn's prompt-message `cursor` and `end_cursor` the ending event's cursor, so a message whose `cursor` falls in `[start_cursor, end_cursor]` belongs to that turn. `answered_permissions[]` lists, in answer order and capped at 200, every permission answer the Runner wrote to the agent (`permit`, plus the `cancelled` answer `cancel`/`stop` writes for a pending request): `{request_id, title, tool_call_id, options, chosen_option, outcome, answered_at, cursor}`. `options` matches `pending_permissions[].options`; `chosen_option` is `{optionId, name, kind}` (only `optionId` set when the agent never offered that id) or `null` for `cancelled`; `outcome` is `approved` for an `allow_*` kind, `denied` for a `reject_*` kind, `cancelled`, or `unknown` for any other kind; `answered_at` is when the answer was written (for `permit`, the `permission_answered` event `ts`); `cursor` is the newest event cursor at that moment. A request the agent withdrew (`$/cancel_request`) or that vanished with the agent was not answered by the Runner and is not listed. These lists live in the holder's in-memory projection and start empty when a holder restarts; a dropped turn or answer sets `truncated`. Terminal and command output bodies are not added: they already arrive as tool `content`. `kaola-acp <platform> follow --repo ROOT --session NAME [--since CURSOR] [--format text]` keeps the Unix socket open and writes NDJSON `{kind:snapshot|delta|heartbeat|eof|error}` lines; snapshot/delta payloads reuse `kaola-acp-view/1`. After the first `follow` op that FD is read-only (`prompt`/`permit`/`cancel`/`stop` reply `kind=error` and must use another short connection). A slow follower whose queue exceeds 256 lines gets `follow-dropped` and disconnects; other followers, `view`, and agent stdio continue. Killing the follow CLI does not stop holder/agent. Agent exit emits `kind=eof`, after which the holder closes that connection and the CLI exits; a dead holder emits `kind=error` `holder-lost`. View caps are enforced, not only flagged: thinking keeps an 8 KiB tail, one tool's content is clipped to 32 KiB, the timeline keeps the newest 200 messages, and a view over 256 KiB drops its oldest tools, then oldest messages, answered permissions, and turns (`truncated=true`). Chunks without `messageId` join the previous same-role message until a tool call, new prompt, or turn end. `--format text` joins message/tool titles into tty text (not a TUI). Runtime facts use `error.code` in `holder-lost` / `holder-unreachable` / `no-session`. `kaola-tmux.sh PLATFORM view` prints `{"error":{"code":"view-unsupported","message":"view is not a Runner command; use kaola-acp"},"schema":"kaola-acp-view/1"}`, exit 1; `follow` is likewise `follow-unsupported` (`"kind":"error"`). `install-local.sh --bin-links` (default on for the Codex runtime destination) also installs owned `$HOME/.local/bin/kaola-acp`, `kaola-acp-holder`, and `kaola-project-runner-locate` symlinks.
 
+### Issue-name advisory (Issue #313)
+
+`start` and `list` add an advisory for issue-named worker sessions. The field is
+`issue_name`. Its only values are `ok`, `malformed`, `platform-token-mismatch`, and
+`no-active-run`. The command does not refuse, rename, or restart a session because of
+this field. The 1-80 `--session` syntax remains the only name validator. There is no
+registry and no new Workflow state field.
+
+`ok` means the session name is `<exact-platform-id>-<PROJECT>-i<ISSUE>-<purpose>` and
+the repo's main checkout has at least one non-archived
+`kaola-workflow/<run>/workflow-state.md` whose `status` is `active`, whose
+`issue_number` is that issue, and which has a `claim_repository_id`. The exact platform
+id is required. It is the manifest `id` derived from `platforms/*.yaml`
+`session_prefix` by removing the `-kaola` suffix (`claude-code`, `cursor-cli`, ...).
+A short alias does not count: `claude-PROJ-i123-x` on platform `claude-code` is
+`platform-token-mismatch`, and `cursor-` on `cursor-cli` is the same class. Another
+platform's prefix is the same class. `malformed` means the name has no `i<ISSUE>`
+field or does not parse, and it is not a host, sideagent, or seat name
+(`claude-PROJ-haiku-1749-x`). `no-active-run` means the name parses and that scan
+found no active claim (`grok-PROJ-i123-x` with no active run for issue 123).
+
+`issue_name` `ok` is not the consumer join. The join needs the name to parse and
+exactly one such active claim whose `claim_repository_id` matches the Runner record
+repository identity. Two active runs, or a repository mismatch, stay unbound there.
+The join rule and the representative names are
+`tests/contract/kaola-terminal-name-contract.json`, stated in
+`docs/issue-dispatch-display.md`.
+
+A host name (`<platform>-<CODE>-orchestrator-<purpose>`), a `sideagent` or legacy
+`sidekick` name, or a `seat` name omits `issue_name`. The receipt sets `name_role` to
+`host`, `sideagent`, or `seat` instead. That marker is not `session_role` and it does
+not change seat accounting. An issue-named worker sets `name_role` to `worker` next
+to `issue_name`. `list` puts the same fields on each row.
+
+The lookup reads `kaola-workflow/<run>/workflow-state.md` in the main checkout only
+(one directory level; `archive` is not a run). It reads `status`, `issue_number`, and
+`claim_repository_id` from that file. The folder name is not a claim. `kaola-acp.py`
+is a per-call CLI. A running holder does not gain this field until the next `start`
+or `list` process. Existing sessions are left as they are.
+
 ### Session role
 
 `session_role` (Issue #245) is one additive session identity on the holder record and on `list`, `status`/`observe`, and `view`/`follow`. Known values are `host`, `sideagent`, `expert`, `elite`, and `worker`. JSON `null` means the identity is not established. A legacy record that lacks the key is the same as `null`; nothing rewrites or restarts that seat to fill it. `host_class` stays the boolean name-pattern fact (`<platform>-<CODE>-orchestrator-<purpose>`, with the existing `-i<digits>-` worker exclusion) and is not replaced by this field.

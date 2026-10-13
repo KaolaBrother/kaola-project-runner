@@ -725,6 +725,7 @@ def expected_files(manifest: dict[str, str], main_build: bytes) -> dict[str, byt
         (shared_root / "kaola-quota.py", "scripts/kaola-quota.py"),
         (shared_root / "kaola-record-contract.py", "scripts/kaola-record-contract.py"),
         (shared_root / "kaola-recovery-routes.py", "scripts/kaola-recovery-routes.py"),
+        (shared_root / "kaola-session-names.py", "scripts/kaola-session-names.py"),
         (adapter, f"scripts/adapters/{adapter.name}"),
     )
     for source, target in shared_sources:

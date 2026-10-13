@@ -145,6 +145,26 @@ registry, daemon, or Workflow state field is added, and a running session is nev
 restarted to adopt the rule. Whether any consumer displays issue-run progress from these names
 is outside this repository and is not verified here.
 
+The exact platform id is required. `platform` is the manifest `id` in `platforms/*.yaml`,
+which is that file's `session_prefix` with the `-kaola` suffix removed: `claude-code-`,
+`cursor-cli-`, `kimi-cli-`, and the other manifest ids. A short alias does not count as a
+valid name. `claude-` is not `claude-code-`. `cursor-` is not `cursor-cli-`. A prefix that
+is another platform's id is not this session's name either.
+
+`start` and `list` report that fact as an advisory. They do not block a start, do not
+rename a session, and do not keep a registry. For an issue-named worker, the receipt field
+`issue_name` is one of `ok`, `malformed`, `platform-token-mismatch`, or `no-active-run`.
+`ok` means the name uses the exact platform id and the repo's main checkout has at least
+one non-archived active `workflow-state.md` claim for that issue. `malformed` means there
+is no `i<ISSUE>` field, or the name does not parse, and the name is not a host, sideagent,
+or seat name. `platform-token-mismatch` means the name parses except the prefix is a short
+alias or another platform's prefix. `no-active-run` means the name parses and no active
+claim for that issue was read. A host (`orchestrator`), sideagent (including the legacy
+`sidekick` spelling), or seat name omits `issue_name` and sets `name_role` to `host`,
+`sideagent`, or `seat`. The consumer join is stricter than `issue_name` `ok`; it is stated
+in `docs/issue-dispatch-display.md` and encoded in
+`tests/contract/kaola-terminal-name-contract.json`.
+
 ## Release notes
 
 ### State-format updates and migration

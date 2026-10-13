@@ -64,6 +64,29 @@ Seats: restart not required
   install uses the new file on the next process. A copy install uses it only
   after that copy is replaced. This change does not install. A running
   Delegator loads the cron instruction only after it reloads `kaola-delegator`.
+
+Seats: restart not required
+
+- **Issue-named worker sessions carry an advisory `issue_name` (Issue #313).**
+  `start` and `list` report `issue_name` for an issue-named worker:
+  `ok`, `malformed`, `platform-token-mismatch`, or `no-active-run`. The exact
+  platform id is required (`claude-code-`, `cursor-cli-`, and the other ids
+  derived from `platforms/*.yaml` `session_prefix`). A short alias (`claude-`,
+  `cursor-`) is `platform-token-mismatch`. A name with no `i<ISSUE>` field,
+  such as `claude-PROJ-haiku-1749-x`, is `malformed`. A parsed name with no
+  active `workflow-state.md` claim for that issue is `no-active-run`. A host,
+  sideagent, or seat name omits `issue_name` and sets `name_role` to `host`,
+  `sideagent`, or `seat`. Start still succeeds for every value. Nothing
+  renames a session or adds a registry. The consumer join is
+  `tests/contract/kaola-terminal-name-contract.json`.
+  Restart judgment: `scripts/kaola-acp.py` is a per-call CLI and is outside
+  the operator restart set (`docs/conventions.md`). `scripts/kaola-acp-holder.py`
+  is unchanged. The next `start` and the next `list` are new processes and
+  report the field. A running holder is not restarted and its session is not
+  renamed. A symlink install uses the new file on the next process. A copy
+  install uses it only after that copy is replaced. This change does not
+  install.
+
 Seats: restart required
 
 - **Stale exited launch jobs can be reconciled, and a slow resume is not a failed resume (Issue #308).**

@@ -1,0 +1,628 @@
+{
+  "schema": "kaola-terminal-name-contract/1",
+  "grammar": "<platform>-<PROJECT>-i<ISSUE>-<purpose>",
+  "exact_platform_id_required": true,
+  "short_aliases_are_not_platform_ids": ["claude", "cursor"],
+  "advisory_field": "issue_name",
+  "advisory_values": ["ok", "malformed", "platform-token-mismatch", "no-active-run"],
+  "advisory_blocks_start": false,
+  "name_role_field": "name_role",
+  "name_role_values": ["worker", "host", "sideagent", "seat"],
+  "non_worker_omits_issue_name": true,
+  "join_rule": "name parses AND the repo's active run claims that issue number => bound; else unbound. Parses means classification ok: the name is <platform>-<PROJECT>-i<ISSUE>-<purpose> and platform is the exact platform id derived from platforms/*.yaml session_prefix (the id, such as claude-code or cursor-cli, not a short alias such as claude or cursor). The repo's active run is exactly one non-archived kaola-workflow/<run>/workflow-state.md in that repo's main checkout whose status is active, whose issue_number equals that ISSUE, and whose claim_repository_id matches the Runner record repository identity. A short alias, another platform's prefix, a malformed name, a host, sideagent, or seat name, no active run, a repository mismatch, and two active runs for one issue are unbound.",
+  "advisory_note": "issue_name ok means classification ok and at least one non-archived active workflow-state.md claim for that issue_number, with a claim_repository_id present. It does not require exactly one claim and it does not compare claim_repository_id to the Runner record. Those checks are the join rule. issue_name never blocks start.",
+  "rows": [
+    {
+      "name": "claude-code-PROJ-i123-x",
+      "platform_id": "claude-code",
+      "active_claim_count": 1,
+      "record_repository_id": "https://github.com/example/consumer.git",
+      "claims": [
+        {
+          "status": "active",
+          "issue_number": 123,
+          "claim_repository_id": "https://github.com/example/consumer.git",
+          "archived": false
+        }
+      ],
+      "parsed": {
+        "classification": "ok",
+        "name_role": "worker",
+        "platform_id": "claude-code",
+        "name_token": "claude-code",
+        "project": "PROJ",
+        "issue": 123,
+        "purpose": "x",
+        "mismatch_kind": null
+      },
+      "issue_name": "ok",
+      "join": {
+        "platform_id": "claude-code",
+        "project": "PROJ",
+        "issue": 123,
+        "purpose": "x",
+        "bound": true
+      }
+    },
+    {
+      "name": "grok-PROJ-i123-x",
+      "platform_id": "grok",
+      "active_claim_count": 0,
+      "record_repository_id": "https://github.com/example/consumer.git",
+      "claims": [],
+      "parsed": {
+        "classification": "ok",
+        "name_role": "worker",
+        "platform_id": "grok",
+        "name_token": "grok",
+        "project": "PROJ",
+        "issue": 123,
+        "purpose": "x",
+        "mismatch_kind": null
+      },
+      "issue_name": "no-active-run",
+      "join": {
+        "platform_id": "grok",
+        "project": "PROJ",
+        "issue": 123,
+        "purpose": "x",
+        "bound": false
+      }
+    },
+    {
+      "name": "claude-PROJ-i123-x",
+      "platform_id": "claude-code",
+      "active_claim_count": 1,
+      "record_repository_id": "https://github.com/example/consumer.git",
+      "claims": [
+        {
+          "status": "active",
+          "issue_number": 123,
+          "claim_repository_id": "https://github.com/example/consumer.git",
+          "archived": false
+        }
+      ],
+      "parsed": {
+        "classification": "platform-token-mismatch",
+        "name_role": "worker",
+        "platform_id": "claude-code",
+        "name_token": "claude",
+        "project": "PROJ",
+        "issue": 123,
+        "purpose": "x",
+        "mismatch_kind": "short-alias"
+      },
+      "issue_name": "platform-token-mismatch",
+      "join": {
+        "platform_id": "claude-code",
+        "project": "PROJ",
+        "issue": 123,
+        "purpose": "x",
+        "bound": false
+      }
+    },
+    {
+      "name": "claude-PROJ-haiku-1749-x",
+      "platform_id": "claude-code",
+      "active_claim_count": 0,
+      "record_repository_id": null,
+      "claims": [],
+      "parsed": {
+        "classification": "malformed",
+        "name_role": "worker",
+        "platform_id": "claude-code",
+        "name_token": null,
+        "project": null,
+        "issue": null,
+        "purpose": null,
+        "mismatch_kind": null
+      },
+      "issue_name": "malformed",
+      "join": {
+        "platform_id": "claude-code",
+        "project": null,
+        "issue": null,
+        "purpose": null,
+        "bound": false
+      }
+    },
+    {
+      "name": "cursor-PROJ-i1733-joints",
+      "platform_id": "cursor-cli",
+      "active_claim_count": 0,
+      "record_repository_id": null,
+      "claims": [],
+      "parsed": {
+        "classification": "platform-token-mismatch",
+        "name_role": "worker",
+        "platform_id": "cursor-cli",
+        "name_token": "cursor",
+        "project": "PROJ",
+        "issue": 1733,
+        "purpose": "joints",
+        "mismatch_kind": "short-alias"
+      },
+      "issue_name": "platform-token-mismatch",
+      "join": {
+        "platform_id": "cursor-cli",
+        "project": "PROJ",
+        "issue": 1733,
+        "purpose": "joints",
+        "bound": false
+      }
+    },
+    {
+      "name": "codex-PROJ-i123-x",
+      "platform_id": "claude-code",
+      "active_claim_count": 0,
+      "record_repository_id": null,
+      "claims": [],
+      "parsed": {
+        "classification": "platform-token-mismatch",
+        "name_role": "worker",
+        "platform_id": "claude-code",
+        "name_token": "codex",
+        "project": "PROJ",
+        "issue": 123,
+        "purpose": "x",
+        "mismatch_kind": "other-platform"
+      },
+      "issue_name": "platform-token-mismatch",
+      "join": {
+        "platform_id": "claude-code",
+        "project": "PROJ",
+        "issue": 123,
+        "purpose": "x",
+        "bound": false
+      }
+    },
+    {
+      "name": "claude-code-PROJ-i123-other",
+      "platform_id": "grok",
+      "active_claim_count": 0,
+      "record_repository_id": null,
+      "claims": [],
+      "parsed": {
+        "classification": "platform-token-mismatch",
+        "name_role": "worker",
+        "platform_id": "grok",
+        "name_token": "claude-code",
+        "project": "PROJ",
+        "issue": 123,
+        "purpose": "other",
+        "mismatch_kind": "other-platform"
+      },
+      "issue_name": "platform-token-mismatch",
+      "join": {
+        "platform_id": "grok",
+        "project": "PROJ",
+        "issue": 123,
+        "purpose": "other",
+        "bound": false
+      }
+    },
+    {
+      "name": "claude-code-kaola-PROJ-i123-x",
+      "platform_id": "claude-code",
+      "active_claim_count": 0,
+      "record_repository_id": null,
+      "claims": [],
+      "parsed": {
+        "classification": "platform-token-mismatch",
+        "name_role": "worker",
+        "platform_id": "claude-code",
+        "name_token": "claude-code-kaola",
+        "project": "PROJ",
+        "issue": 123,
+        "purpose": "x",
+        "mismatch_kind": "other-token"
+      },
+      "issue_name": "platform-token-mismatch",
+      "join": {
+        "platform_id": "claude-code",
+        "project": "PROJ",
+        "issue": 123,
+        "purpose": "x",
+        "bound": false
+      }
+    },
+    {
+      "name": "zcode-vrpai-orchestrator-main",
+      "platform_id": "zcode",
+      "active_claim_count": 0,
+      "record_repository_id": null,
+      "claims": [],
+      "parsed": {
+        "classification": "not-issue-named",
+        "name_role": "host",
+        "platform_id": "zcode",
+        "name_token": "zcode",
+        "project": "vrpai",
+        "issue": null,
+        "purpose": "main",
+        "mismatch_kind": null
+      },
+      "issue_name": null,
+      "join": {
+        "platform_id": "zcode",
+        "project": "vrpai",
+        "issue": null,
+        "purpose": "main",
+        "bound": false
+      }
+    },
+    {
+      "name": "claude-vrpai-orchestrator-main",
+      "platform_id": "claude-code",
+      "active_claim_count": 0,
+      "record_repository_id": null,
+      "claims": [],
+      "parsed": {
+        "classification": "not-issue-named",
+        "name_role": "host",
+        "platform_id": "claude-code",
+        "name_token": "claude",
+        "project": "vrpai",
+        "issue": null,
+        "purpose": "main",
+        "mismatch_kind": null
+      },
+      "issue_name": null,
+      "join": {
+        "platform_id": "claude-code",
+        "project": "vrpai",
+        "issue": null,
+        "purpose": "main",
+        "bound": false
+      }
+    },
+    {
+      "name": "grok-PROJ-sideagent-batch",
+      "platform_id": "grok",
+      "active_claim_count": 0,
+      "record_repository_id": null,
+      "claims": [],
+      "parsed": {
+        "classification": "not-issue-named",
+        "name_role": "sideagent",
+        "platform_id": "grok",
+        "name_token": "grok",
+        "project": "PROJ",
+        "issue": null,
+        "purpose": "batch",
+        "mismatch_kind": null
+      },
+      "issue_name": null,
+      "join": {
+        "platform_id": "grok",
+        "project": "PROJ",
+        "issue": null,
+        "purpose": "batch",
+        "bound": false
+      }
+    },
+    {
+      "name": "grok-PROJ-sidekick-old",
+      "platform_id": "grok",
+      "active_claim_count": 0,
+      "record_repository_id": null,
+      "claims": [],
+      "parsed": {
+        "classification": "not-issue-named",
+        "name_role": "sideagent",
+        "platform_id": "grok",
+        "name_token": "grok",
+        "project": "PROJ",
+        "issue": null,
+        "purpose": "old",
+        "mismatch_kind": null
+      },
+      "issue_name": null,
+      "join": {
+        "platform_id": "grok",
+        "project": "PROJ",
+        "issue": null,
+        "purpose": "old",
+        "bound": false
+      }
+    },
+    {
+      "name": "grok-PROJ-seat-diag",
+      "platform_id": "grok",
+      "active_claim_count": 0,
+      "record_repository_id": null,
+      "claims": [],
+      "parsed": {
+        "classification": "not-issue-named",
+        "name_role": "seat",
+        "platform_id": "grok",
+        "name_token": "grok",
+        "project": "PROJ",
+        "issue": null,
+        "purpose": "diag",
+        "mismatch_kind": null
+      },
+      "issue_name": null,
+      "join": {
+        "platform_id": "grok",
+        "project": "PROJ",
+        "issue": null,
+        "purpose": "diag",
+        "bound": false
+      }
+    },
+    {
+      "name": "droid-KT-i274-parser",
+      "platform_id": "droid",
+      "active_claim_count": 1,
+      "record_repository_id": "https://github.com/example/consumer.git",
+      "claims": [
+        {
+          "status": "active",
+          "issue_number": 274,
+          "claim_repository_id": "https://github.com/example/consumer.git",
+          "archived": false
+        }
+      ],
+      "parsed": {
+        "classification": "ok",
+        "name_role": "worker",
+        "platform_id": "droid",
+        "name_token": "droid",
+        "project": "KT",
+        "issue": 274,
+        "purpose": "parser",
+        "mismatch_kind": null
+      },
+      "issue_name": "ok",
+      "join": {
+        "platform_id": "droid",
+        "project": "KT",
+        "issue": 274,
+        "purpose": "parser",
+        "bound": true
+      }
+    },
+    {
+      "name": "kimi-cli-KT-i274-review-2",
+      "platform_id": "kimi-cli",
+      "active_claim_count": 1,
+      "record_repository_id": "https://github.com/example/consumer.git",
+      "claims": [
+        {
+          "status": "active",
+          "issue_number": 274,
+          "claim_repository_id": "https://github.com/example/consumer.git",
+          "archived": false
+        }
+      ],
+      "parsed": {
+        "classification": "ok",
+        "name_role": "worker",
+        "platform_id": "kimi-cli",
+        "name_token": "kimi-cli",
+        "project": "KT",
+        "issue": 274,
+        "purpose": "review-2",
+        "mismatch_kind": null
+      },
+      "issue_name": "ok",
+      "join": {
+        "platform_id": "kimi-cli",
+        "project": "KT",
+        "issue": 274,
+        "purpose": "review-2",
+        "bound": true
+      }
+    },
+    {
+      "name": "droid-KT-i274-retry-i999",
+      "platform_id": "droid",
+      "active_claim_count": 0,
+      "record_repository_id": "https://github.com/example/consumer.git",
+      "claims": [],
+      "parsed": {
+        "classification": "ok",
+        "name_role": "worker",
+        "platform_id": "droid",
+        "name_token": "droid",
+        "project": "KT",
+        "issue": 274,
+        "purpose": "retry-i999",
+        "mismatch_kind": null
+      },
+      "issue_name": "no-active-run",
+      "join": {
+        "platform_id": "droid",
+        "project": "KT",
+        "issue": 274,
+        "purpose": "retry-i999",
+        "bound": false
+      }
+    },
+    {
+      "name": "cursor-cli-PROJ-i7-joints",
+      "platform_id": "cursor-cli",
+      "active_claim_count": 1,
+      "record_repository_id": "https://github.com/example/consumer.git",
+      "claims": [
+        {
+          "status": "active",
+          "issue_number": 7,
+          "claim_repository_id": "https://github.com/example/consumer.git",
+          "archived": false
+        }
+      ],
+      "parsed": {
+        "classification": "ok",
+        "name_role": "worker",
+        "platform_id": "cursor-cli",
+        "name_token": "cursor-cli",
+        "project": "PROJ",
+        "issue": 7,
+        "purpose": "joints",
+        "mismatch_kind": null
+      },
+      "issue_name": "ok",
+      "join": {
+        "platform_id": "cursor-cli",
+        "project": "PROJ",
+        "issue": 7,
+        "purpose": "joints",
+        "bound": true
+      }
+    },
+    {
+      "name": "claude-code-PROJ-i124-two",
+      "platform_id": "claude-code",
+      "active_claim_count": 2,
+      "record_repository_id": "https://github.com/example/consumer.git",
+      "claims": [
+        {
+          "status": "active",
+          "issue_number": 124,
+          "claim_repository_id": "https://github.com/example/consumer.git",
+          "archived": false
+        },
+        {
+          "status": "active",
+          "issue_number": 124,
+          "claim_repository_id": "https://github.com/example/consumer.git",
+          "archived": false
+        }
+      ],
+      "parsed": {
+        "classification": "ok",
+        "name_role": "worker",
+        "platform_id": "claude-code",
+        "name_token": "claude-code",
+        "project": "PROJ",
+        "issue": 124,
+        "purpose": "two",
+        "mismatch_kind": null
+      },
+      "issue_name": "ok",
+      "join": {
+        "platform_id": "claude-code",
+        "project": "PROJ",
+        "issue": 124,
+        "purpose": "two",
+        "bound": false
+      }
+    },
+    {
+      "name": "claude-code-PROJ-i321-x",
+      "platform_id": "claude-code",
+      "active_claim_count": 1,
+      "record_repository_id": "https://github.com/example/other.git",
+      "claims": [
+        {
+          "status": "active",
+          "issue_number": 321,
+          "claim_repository_id": "https://github.com/example/consumer.git",
+          "archived": false
+        }
+      ],
+      "parsed": {
+        "classification": "ok",
+        "name_role": "worker",
+        "platform_id": "claude-code",
+        "name_token": "claude-code",
+        "project": "PROJ",
+        "issue": 321,
+        "purpose": "x",
+        "mismatch_kind": null
+      },
+      "issue_name": "ok",
+      "join": {
+        "platform_id": "claude-code",
+        "project": "PROJ",
+        "issue": 321,
+        "purpose": "x",
+        "bound": false
+      }
+    },
+    {
+      "name": "grok-PROJ-i456-x",
+      "platform_id": "grok",
+      "active_claim_count": 0,
+      "record_repository_id": "https://github.com/example/consumer.git",
+      "claims": [
+        {
+          "status": "active",
+          "issue_number": 456,
+          "claim_repository_id": "https://github.com/example/consumer.git",
+          "archived": true
+        }
+      ],
+      "parsed": {
+        "classification": "ok",
+        "name_role": "worker",
+        "platform_id": "grok",
+        "name_token": "grok",
+        "project": "PROJ",
+        "issue": 456,
+        "purpose": "x",
+        "mismatch_kind": null
+      },
+      "issue_name": "no-active-run",
+      "join": {
+        "platform_id": "grok",
+        "project": "PROJ",
+        "issue": 456,
+        "purpose": "x",
+        "bound": false
+      }
+    },
+    {
+      "name": "claude-vrpai-haiku-1730repair",
+      "platform_id": "claude-code",
+      "active_claim_count": 0,
+      "record_repository_id": null,
+      "claims": [],
+      "parsed": {
+        "classification": "malformed",
+        "name_role": "worker",
+        "platform_id": "claude-code",
+        "name_token": null,
+        "project": null,
+        "issue": null,
+        "purpose": null,
+        "mismatch_kind": null
+      },
+      "issue_name": "malformed",
+      "join": {
+        "platform_id": "claude-code",
+        "project": null,
+        "issue": null,
+        "purpose": null,
+        "bound": false
+      }
+    },
+    {
+      "name": "droid-KT-274-parser",
+      "platform_id": "droid",
+      "active_claim_count": 0,
+      "record_repository_id": null,
+      "claims": [],
+      "parsed": {
+        "classification": "malformed",
+        "name_role": "worker",
+        "platform_id": "droid",
+        "name_token": null,
+        "project": null,
+        "issue": null,
+        "purpose": null,
+        "mismatch_kind": null
+      },
+      "issue_name": "malformed",
+      "join": {
+        "platform_id": "droid",
+        "project": null,
+        "issue": null,
+        "purpose": null,
+        "bound": false
+      }
+    }
+  ]
+}

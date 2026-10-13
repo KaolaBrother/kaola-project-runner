@@ -89,6 +89,61 @@ def _emit_receipt(payload: dict[str, Any]) -> None:
     print(json.dumps(printed, ensure_ascii=False, sort_keys=True))
 
 
+def _load_session_names():
+    """Issue #313. A copy without the helper still starts; the advisory is absent."""
+    cached = getattr(_load_session_names, "module", None)
+    if cached is not None:
+        return cached or None
+    path = Path(__file__).resolve().with_name("kaola-session-names.py")
+    if not path.is_file():
+        _load_session_names.module = False
+        return None
+    spec = importlib.util.spec_from_file_location("kaola_session_names", path)
+    if spec is None or spec.loader is None:
+        _load_session_names.module = False
+        return None
+    module = importlib.util.module_from_spec(spec)
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.dont_write_bytecode = previous
+        _load_session_names.module = False
+        return None
+    sys.dont_write_bytecode = previous
+    _load_session_names.module = module
+    return module
+
+
+def stamp_issue_name_receipt(receipt: dict[str, Any], platform: str, session: str,
+                             repo: str) -> dict[str, Any]:
+    """Add the Issue #313 advisory. Never changes the start result.
+
+    Issue-named workers get ``issue_name`` (ok, malformed,
+    platform-token-mismatch, or no-active-run) and ``name_role`` worker.
+    A host, sideagent, or seat name omits ``issue_name`` and sets
+    ``name_role`` to that role. A missing helper or a lookup error leaves
+    the receipt unchanged.
+    """
+    module = _load_session_names()
+    if module is None or not isinstance(receipt, dict):
+        return receipt
+    if not isinstance(platform, str) or not isinstance(session, str) or not isinstance(repo, str):
+        return receipt
+    try:
+        advice = module.advise(session, platform, repo)
+    except Exception:
+        return receipt
+    role = advice.get("name_role")
+    if role in module.NAME_ROLES:
+        receipt["name_role"] = role
+    issue_name = advice.get("issue_name")
+    if issue_name in module.ISSUE_NAME_VALUES:
+        receipt["issue_name"] = issue_name
+    return receipt
+
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 HOLDER = SCRIPT_DIR / "kaola-acp-holder.py"
 LAUNCH_BROKER = SCRIPT_DIR / "kaola-launchd-broker.py"
@@ -1085,6 +1140,9 @@ def command_list(args: argparse.Namespace) -> dict[str, Any]:
             # older holders, which is unknown, never support.
             rows[-1]["holder_features"] = record["holder_features"]
         attach_binding_fact(rows[-1], record)
+        # Issue #313: the same non-blocking name advisory as start. A host,
+        # sideagent, or seat row has name_role and no issue_name.
+        stamp_issue_name_receipt(rows[-1], str(row_platform), str(row_session), repo)
     return {"schema": LIST_SCHEMA, "rows": rows}
 
 
@@ -7310,6 +7368,9 @@ def main() -> int:
     directory = record_dir(args, repo) if args.session else None
     if args.command == "start":
         receipt = command_start(args, repo)
+        # Issue #313: advisory only. Every issue_name value still returns the
+        # start result this command already decided.
+        stamp_issue_name_receipt(receipt, args.platform, args.session, repo)
         _emit_receipt(receipt)
         # A typed refusal is a pre-mutation decision, exit 1 like the shell's
         # canonical-root refusal; transport errors stay exit-0 receipts.
