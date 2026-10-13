@@ -334,8 +334,10 @@ def delegator_turn_wake_reason(
     * ``live_seats`` is false — the caller found no working dispatched holder.
       ``holders_dispatched_by(..., working=True)`` skips a seat-exempt record
       (``session_role`` ``sideagent`` or legacy ``sidekick``, including the
-      bound Sideagent node) and a record whose ``state`` is ``agent_exited``,
-      ``stopping``, or ``stopped``. The Host is idle and nobody is working.
+      bound Sideagent node), a record whose ``state`` is ``agent_exited``,
+      ``stopping``, or ``stopped``, and a record with no active turn
+      (Issue #314). A ready seat held for acceptance does not block. The
+      Host is idle and nobody is in a turn.
       ``all-idle`` is once per transition into that state, whether or not
       attention or other pending work is recorded. Owner rule, Yanlei
       2026-10-11 16:49. ``all_idle_due`` is true only when this idle episode
@@ -633,6 +635,54 @@ HOLDER_RECORD_DIR_ARG = re.compile(r" --record-dir (.+?) --socket ")
 # Issue #305: these records are no longer working. Stop preservation still
 # counts them (the default scan). The all-idle scan does not.
 _HOLDER_NOT_WORKING_STATES = frozenset({"agent_exited", "stopping", "stopped"})
+# Issue #314: record.json has no turn_active. Admission writes
+# last_prompt.mutation_status "in_progress" under the prompt lock and leaves
+# it there until the turn ends, including after the in-memory status moves to
+# "accepted". "accepted" in the record is the same fact if a writer stored it.
+_ACTIVE_TURN_MUTATIONS = frozenset({"in_progress", "accepted"})
+# A finished turn, or a prompt the holder never wrote.
+_IDLE_TURN_MUTATIONS = frozenset({"completed", "not_started"})
+
+
+def seat_turn_blocks_all_idle(record: Any) -> bool:
+    """Whether this dispatched record's turn blocks all-idle (Issue #314).
+
+    True for an active turn, and for a turn state this scan cannot classify.
+    A ready seat with no active turn does not block. The caller has already
+    dropped ``agent_exited``, ``stopping``, and ``stopped``.
+
+    The scan reads the holder's own ``record.json``. There is no socket read
+    and no new IPC. That file stores ``last_prompt.mutation_status``:
+
+    * ``in_progress`` — the prompt was admitted and the turn has not ended.
+    * ``accepted`` — the turn accepted work and has not completed.
+    * ``completed`` / ``not_started`` — the turn is over, or was never written.
+    * no ``last_prompt`` key, or a prompt object with no ``mutation_status`` —
+      no turn has been recorded. That is idle, including a fresh ready seat.
+      Admission writes the status in the same locked update that marks the
+      turn active, so a missing status is not an unreadable in-flight turn.
+
+    Anything else is unknown: ``last_prompt`` is not a JSON object (including
+    JSON null), or ``mutation_status`` is outside the set above, including
+    ``unknown`` and JSON null. Unknown blocks. Emitting ``all-idle`` would
+    tell the Delegator that nobody is working while this seat's turn cannot
+    be read. Silence for that one seat is the previous behavior.
+    """
+    if not isinstance(record, dict):
+        return True
+    if "last_prompt" not in record:
+        return False
+    last = record.get("last_prompt")
+    if not isinstance(last, dict):
+        return True
+    if "mutation_status" not in last:
+        return False
+    status = last.get("mutation_status")
+    if status in _IDLE_TURN_MUTATIONS:
+        return False
+    if status in _ACTIVE_TURN_MUTATIONS:
+        return True
+    return True
 
 
 def own_holder_record(pid: int) -> dict[str, Any] | None:
@@ -713,12 +763,15 @@ def holders_dispatched_by(holder_instance_id: Any, *, working: bool = False,
     persists that role. A worker record (``expert``, ``elite``, ``worker``,
     or no role) stays in the set, so preserving its process tree is unchanged.
 
-    ``working=True`` is the all-idle scan (Issue #305). It also skips a record
-    whose ``state`` is ``agent_exited``, ``stopping``, or ``stopped``: ``stop``
-    writes ``stopping`` before the process exits, and a crash notifies
-    ``terminated`` before it writes ``agent_exited``. The default stays
-    inclusive so ``dispatched_worker_groups`` still preserves those trees.
-    ``ignore_sessions`` drops named sessions for this one call. The
+    ``working=True`` is the all-idle scan (Issue #305, #314). It skips a
+    record whose ``state`` is ``agent_exited``, ``stopping``, or ``stopped``:
+    ``stop`` writes ``stopping`` before the process exits, and a crash
+    notifies ``terminated`` before it writes ``agent_exited``. It also skips
+    a record that :func:`seat_turn_blocks_all_idle` says is not in an active
+    turn. A ready seat awaiting acceptance does not block. An unknown turn
+    state still blocks. The default (``working=False``) stays inclusive so
+    ``dispatched_worker_groups`` still preserves idle, exited, and stopping
+    trees. ``ignore_sessions`` drops named sessions for this one call. The
     just-terminated worker uses it while its record still says ``ready``.
     """
     if not isinstance(holder_instance_id, str) or not holder_instance_id:
@@ -742,6 +795,8 @@ def holders_dispatched_by(holder_instance_id: Any, *, working: bool = False,
         if not isinstance(record, dict) or _seat_exempt_record(record):
             continue
         if working and record.get("state") in _HOLDER_NOT_WORKING_STATES:
+            continue
+        if working and not seat_turn_blocks_all_idle(record):
             continue
         if ignore_sessions and record.get("session") in ignore_sessions:
             continue
@@ -3191,8 +3246,9 @@ class Holder:
         """Issue #302 predicate for one ended turn. See ``delegator_turn_wake_reason``."""
         staged, rows = self._delegator_pending_facts()
         # Outside the holder locks: this scans ps and other holders' records.
-        # Working seats only (#305): agent_exited / stopping / stopped are not
-        # live. Seat-exempt Sideagent records are already absent (#303).
+        # Working seats only (#305, #314): agent_exited / stopping / stopped
+        # are not live, and neither is a held seat with no active turn.
+        # Seat-exempt Sideagent records are already absent (#303).
         live_seats = bool(holders_dispatched_by(self.holder_instance_id, working=True))
         # Issue #302 deadlock repair: never take ``self.lock`` here. This runs
         # inside ``on_prompt_response``, and ``cancel_turn`` holds ``self.lock``

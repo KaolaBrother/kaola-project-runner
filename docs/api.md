@@ -836,11 +836,25 @@ Undelivered attention means the heartbeat body is a host view (`view` `host`,
 worker-event prompt. Checked in that order. Self-continuation wins over
 everything below it (no wake): the Host has not gone idle. A working seat is
 a running holder whose record names this Host instance as `dispatcher`, whose
-`session_role` is not `sideagent` or legacy `sidekick`, and whose `state` is
-not `agent_exited`, `stopping`, or `stopped`. The bound Sideagent node is not
-a seat. When that scan is empty, `all-idle` is once per transition into
-all-idle, even if attention or other pending work is recorded (owner rule,
-Yanlei 2026-10-11 16:49). The episode latch starts clear, so the first time
+`session_role` is not `sideagent` or legacy `sidekick`, whose `state` is
+not `agent_exited`, `stopping`, or `stopped`, and whose record shows an
+active turn (Issue #314). `record.json` does not store `turn_active`. The
+scan reads `last_prompt.mutation_status` from that file, with no socket read.
+The holder writes `in_progress` in the same locked admission that starts the
+turn, and `completed` when the turn ends. An in-memory move to `accepted`
+does not rewrite `last_prompt`, so `in_progress` stays the active-turn mark
+for the whole turn. `accepted` stored in `last_prompt` counts as active too.
+`completed`, `not_started`, a missing `last_prompt`, and a prompt object with
+no `mutation_status` are not an active turn: a ready seat held for acceptance
+does not block `all-idle`. Any other `last_prompt` shape is unknown — not a
+JSON object, or a `mutation_status` outside that set, including `unknown` and
+JSON null — and still blocks. A false `all-idle` would say nobody is working
+while that seat's turn cannot be read. Stop preservation uses the scan
+without this turn filter, so an idle held seat is still kept. The bound
+Sideagent node is not a seat. When that scan is empty, `all-idle` is once per
+transition into all-idle, even if attention or other pending work is recorded
+(owner rule, Yanlei 2026-10-11 16:49). The episode latch starts clear, so the
+first time
 the holder observes that state it wakes once. A Delegator-admitted turn
 (socket `send` or steer) does not open an idle episode and does not wake by
 itself: if this episode already sent `all-idle`, the turn returns no wake.

@@ -119,6 +119,26 @@ class Predicate(unittest.TestCase):
         for kwargs, expected in cases:
             self.assertEqual(self.reason(**kwargs), expected, kwargs)
 
+    def test_issue_314_turn_state_classification(self) -> None:
+        # record.json has no turn_active. last_prompt.mutation_status is the
+        # scan's turn fact. Unknown shapes block; a missing turn does not.
+        block = holder.seat_turn_blocks_all_idle
+        self.assertFalse(block({"state": "ready"}))
+        self.assertFalse(block({"last_prompt": {}}))
+        self.assertFalse(block({"last_prompt": {"fingerprint": "fp"}}))
+        self.assertFalse(block({"last_prompt": {"mutation_status": "completed"}}))
+        self.assertFalse(block({"last_prompt": {"mutation_status": "not_started"}}))
+        self.assertTrue(block({"last_prompt": {"mutation_status": "in_progress"}}))
+        self.assertTrue(block({"last_prompt": {"mutation_status": "accepted"}}))
+        self.assertTrue(block({"last_prompt": None}))
+        self.assertTrue(block({"last_prompt": "in_progress"}))
+        self.assertTrue(block({"last_prompt": []}))
+        self.assertTrue(block({"last_prompt": {"mutation_status": "unknown"}}))
+        self.assertTrue(block({"last_prompt": {"mutation_status": None}}))
+        self.assertTrue(block({"last_prompt": {"mutation_status": "running"}}))
+        self.assertTrue(block({"last_prompt": {"mutation_status": 1}}))
+        self.assertTrue(block("not-a-record"))
+
 
 class WakeGate(issue299.WebhookCase):
     def mock_command(self, scenario: str = "normal", turn_ms: int = 0) -> str:
@@ -174,7 +194,8 @@ class WakeGate(issue299.WebhookCase):
         self.assertEqual(receipt.get("session_role"), "host", receipt)
         return self.session
 
-    def start_worker(self, suffix: str, scenario: str = "normal") -> str:
+    def start_worker(self, suffix: str, scenario: str = "normal",
+                     turn_ms: int = 0) -> str:
         self.worker = f"grok-i302-worker-{suffix}"
         host = self.session
         _, status = self.acp("status")
@@ -184,7 +205,7 @@ class WakeGate(issue299.WebhookCase):
         # The Host counts a live seat from holders whose record names it as
         # dispatcher. The heartbeat target and the dispatcher must name the
         # same Host or start refuses the binding.
-        _, receipt = self.acp("start", scenario=scenario, extra_env={
+        _, receipt = self.acp("start", scenario=scenario, turn_ms=turn_ms, extra_env={
             "KAOLA_ACP_HEARTBEAT_HOST": json.dumps({
                 "platform": "grok", "session": host, "repo": str(self.repo),
             }),
@@ -309,8 +330,14 @@ class WakeGate(issue299.WebhookCase):
                 if (post["body"] or {}).get("reason") == reason
                 and (post["body"] or {}).get("holder_instance_id") == holder_id]
 
-    def spawn_seat(self, session: str, role: str, state: str, dispatcher_id: str):
-        """A live process whose argv matches the holder scan, plus its record."""
+    def spawn_seat(self, session: str, role: str, state: str, dispatcher_id: str,
+                   last_prompt: dict | None = None, include_last_prompt: bool = False):
+        """A live process whose argv matches the holder scan, plus its record.
+
+        ``include_last_prompt`` writes ``last_prompt`` even when it is None,
+        which is an unknown turn and blocks all-idle. Omitting it is a seat
+        with no recorded turn.
+        """
         digest = hashlib.sha256(self.project.encode()).hexdigest()[:16]
         record_dir = self.record_root / "grok" / session / digest
         record_dir.mkdir(parents=True)
@@ -327,8 +354,42 @@ class WakeGate(issue299.WebhookCase):
             "state": state,
             "dispatcher": {"holder_instance_id": dispatcher_id},
         }
+        if include_last_prompt or last_prompt is not None:
+            record["last_prompt"] = last_prompt
         (record_dir / "record.json").write_text(json.dumps(record), encoding="utf-8")
         return proc, record_dir
+
+    def begin_active_turn(self, session: str) -> None:
+        """Admit one prompt on a worker started with a long ``turn_ms``.
+
+        The record must still say ``in_progress`` after a short pause. A
+        worker whose mock turn is instant would already be idle, and an idle
+        held seat does not block all-idle.
+        """
+        current = self.session
+        self.session = session
+        self.acp("send", "--text", "hold-turn", "--no-wait")
+
+        def in_progress():
+            record = self.holder_record()
+            last = record.get("last_prompt") if isinstance(record.get("last_prompt"), dict) else {}
+            if (record.get("state") == "ready"
+                    and last.get("mutation_status") == "in_progress"):
+                return record
+            return None
+
+        wait_for(in_progress, 15, f"{session} active turn")
+        time.sleep(0.15)
+        record = self.holder_record()
+        last = record.get("last_prompt") if isinstance(record.get("last_prompt"), dict) else {}
+        self.assertEqual(last.get("mutation_status"), "in_progress", record.get("last_prompt"))
+        self.session = current
+
+    def write_seat_prompt(self, record_dir: Path, mutation_status) -> None:
+        record = json.loads((record_dir / "record.json").read_text(encoding="utf-8"))
+        record["state"] = "ready"
+        record["last_prompt"] = {"mutation_status": mutation_status}
+        (record_dir / "record.json").write_text(json.dumps(record), encoding="utf-8")
 
     def write_heartbeat(self, body: str) -> None:
         path = self.repo / ".kaola" / "heartbeat-prompt.json"
@@ -493,15 +554,17 @@ class WakeGate(issue299.WebhookCase):
         self.assertNotIn("skip_reason", self.receipts()[-1])
 
     def test_delegator_send_does_not_wake(self) -> None:
-        # A live dispatched seat is still running, and these turns are the
+        # A dispatched seat is in an active turn, and these turns are the
         # Delegator's own sends. Nothing else needs the Delegator, so the
-        # recorded question does not wake either.
+        # recorded question does not wake either. An idle held seat would
+        # not keep this quiet (Issue #314).
         self.endpoint = Endpoint()
         code, out = self.configure(self.endpoint.url)
         self.assertEqual(code, 0, out)
         self.write_heartbeat(host_view([{"kind": "decisions", "why": "host-decision"}]))
         self.start_host("delegator", scenario="stop_reason")
-        self.start_worker("delegator")
+        worker = self.start_worker("delegator", turn_ms=30000)
+        self.begin_active_turn(worker)
         self.session = self.host_session
         for text in ("end_turn", "max_tokens", "refusal"):
             self.acp("send", "--text", text, "--wait", scenario="stop_reason")
@@ -532,6 +595,12 @@ class WakeGate(issue299.WebhookCase):
         self.write_heartbeat("KAOLA_STOP_REASON:max_tokens\n")
         host = self.start_host("chain", scenario="stop_marker", turn_ms=4000)
         worker = self.start_worker("chain")
+        # The notifier's own turns end before the Host continuation does.
+        # A second seat stays in a turn, so the length stop is still
+        # host_stopped_pending rather than all-idle.
+        busy = self.start_worker("chain-busy", turn_ms=90000)
+        self.extra_sessions = [worker]
+        self.begin_active_turn(busy)
         self.session = worker
         self.acp("send", "--text", "first", "--wait")
         self.session = host
@@ -559,6 +628,11 @@ class WakeGate(issue299.WebhookCase):
         self.assertEqual(code, 0, out)
         host = self.start_host("attn", scenario="normal", turn_ms=2000)
         worker = self.start_worker("attn")
+        # Attention wins only while some seat is still in a turn. The
+        # notifier's turn has already ended when the Host turn ends.
+        busy = self.start_worker("attn-busy", turn_ms=120000)
+        self.extra_sessions = [worker]
+        self.begin_active_turn(busy)
         cycles = [
             ([{"kind": "decisions", "why": "host-decision"}], "question_waiting"),
             ([{"kind": "tasks", "why": "awaiting-verdict"}], "delivery_review"),
@@ -596,6 +670,9 @@ class WakeGate(issue299.WebhookCase):
         self.write_heartbeat("KAOLA_STOP_REASON:refusal\n")
         host = self.start_host("refuse", scenario="stop_marker", turn_ms=200)
         worker = self.start_worker("refuse")
+        busy = self.start_worker("refuse-busy", turn_ms=60000)
+        self.extra_sessions = [worker]
+        self.begin_active_turn(busy)
         self.session = worker
         self.acp("send", "--text", "refuse", "--wait")
         self.session = host
@@ -752,7 +829,8 @@ class WakeGate(issue299.WebhookCase):
         code, out = self.configure(self.endpoint.url)
         self.assertEqual(code, 0, out)
         self.start_host("last-seat")
-        worker = self.start_worker("last-seat")
+        worker = self.start_worker("last-seat", turn_ms=30000)
+        self.begin_active_turn(worker)
         self.session = self.host_session
         self.acp("send", "--text", "work", "--wait")
         time.sleep(0.5)
@@ -776,9 +854,11 @@ class WakeGate(issue299.WebhookCase):
         code, out = self.configure(self.endpoint.url)
         self.assertEqual(code, 0, out)
         self.start_host("two")
-        first = self.start_worker("two-a")
+        first = self.start_worker("two-a", turn_ms=40000)
+        self.begin_active_turn(first)
+        second = self.start_worker("two-b", turn_ms=40000)
         self.extra_sessions = [first]
-        second = self.start_worker("two-b")
+        self.begin_active_turn(second)
         self.session = self.host_session
         self.acp("send", "--text", "work", "--wait")
         time.sleep(0.4)
@@ -803,8 +883,9 @@ class WakeGate(issue299.WebhookCase):
         self.assertEqual(len(self.posts_with_reason("all-idle")), 1)
 
     def test_node_stop_skips_while_a_worker_seat_is_working(self) -> None:
-        # (d) in-process: a ready worker blocks the node-stop re-check.
-        # stopping still counts for preservation and does not count as working.
+        # (d) in-process: a ready worker in an active turn blocks the
+        # node-stop re-check. stopping still counts for preservation and
+        # does not count as working.
         self.endpoint = Endpoint()
         self.configure_endpoint()
         proc = None
@@ -812,7 +893,8 @@ class WakeGate(issue299.WebhookCase):
             host = self.idle_host("seat")
             try:
                 proc, record_dir = self.spawn_seat(
-                    "grok-i305-worker-seat", "expert", "ready", host.holder_instance_id)
+                    "grok-i305-worker-seat", "expert", "ready", host.holder_instance_id,
+                    last_prompt={"mutation_status": "in_progress"})
                 found = wait_for(
                     lambda: holder.holders_dispatched_by(host.holder_instance_id) or None,
                     5, "spawned seat visible")
@@ -886,7 +968,8 @@ class WakeGate(issue299.WebhookCase):
         code, out = self.configure(self.endpoint.url)
         self.assertEqual(code, 0, out)
         self.start_host("exact")
-        self.start_worker("exact")
+        worker = self.start_worker("exact", turn_ms=30000)
+        self.begin_active_turn(worker)
         self.session = self.host_session
         self.acp("send", "--text", "work", "--wait")
         time.sleep(0.4)
@@ -1040,6 +1123,176 @@ class WakeGate(issue299.WebhookCase):
             posts = self.posts_for(host.holder_instance_id)
             self.assertEqual(len(posts), 2)
             self.assertTrue(all(post["body"]["reason"] == "all-idle" for post in posts))
+
+    def test_issue_314_idle_held_seat_wakes_all_idle_once(self) -> None:
+        # (a) Real holders. The only live seat is ready and its turn has
+        # ended (awaiting acceptance). The Host turn that observes that
+        # ends with exactly one all-idle. A later Delegator send does not
+        # add another. Nothing else is pending.
+        self.endpoint = Endpoint()
+        code, out = self.configure(self.endpoint.url)
+        self.assertEqual(code, 0, out)
+        self.start_host("held")
+        worker = self.start_worker("held")
+        self.session = worker
+        self.acp("send", "--text", "accepted-work", "--wait")
+        status = self.acp("status")[1]
+        self.assertEqual(status.get("state"), "ready", status)
+        self.assertIs(status.get("turn_active"), False, status)
+        record = self.holder_record()
+        last = record.get("last_prompt") if isinstance(record.get("last_prompt"), dict) else {}
+        self.assertEqual(last.get("mutation_status"), "completed", last)
+        self.session = self.host_session
+        wait_for(lambda: self.acp("status")[1].get("turn_active") is False,
+                 15, "host idle after the worker turn")
+        if not self.posts_with_reason("all-idle"):
+            # The worker's idle notice may already have ended a Host turn.
+            # If it did not, this Delegator turn is the observation.
+            self.acp("send", "--text", "host-observes-idle-seat", "--wait")
+        post = wait_for(lambda: (self.posts_with_reason("all-idle") or [None])[-1],
+                        20, "all-idle for the idle held seat")
+        self.assertEqual(post["body"]["state"], "end_turn")
+        self.assertEqual(post["body"]["reason"], "all-idle")
+        self.assertEqual(set(post["body"]), PAYLOAD_KEYS)
+        self.acp("send", "--text", "still-idle", "--wait")
+        time.sleep(0.6)
+        self.assertEqual(len(self.posts_with_reason("all-idle")), 1)
+        self.assertFalse(self.posts_with_reason("needs_decision"))
+        self.assertFalse(self.posts_with_reason("question_waiting"))
+
+    def test_issue_314_completed_record_one_all_idle_in_process(self) -> None:
+        # (a) The record shape, without a second Host prompt: ready, last
+        # prompt completed, no attention. One all-idle, then the latch holds.
+        self.endpoint = Endpoint()
+        self.configure_endpoint()
+        proc = None
+        with self.webhook_process_env():
+            host = self.idle_host("held-record")
+            try:
+                proc, _record_dir = self.spawn_seat(
+                    "grok-i314-held", "expert", "ready", host.holder_instance_id,
+                    last_prompt={"mutation_status": "completed"})
+                found = wait_for(
+                    lambda: holder.holders_dispatched_by(host.holder_instance_id) or None,
+                    5, "idle held seat visible")
+                self.assertEqual(found, [proc.pid])
+                self.assertEqual(
+                    holder.holders_dispatched_by(host.holder_instance_id, working=True), [])
+                self.assertEqual(self.end_turn_wake(host, "delegator"), "all-idle")
+                wait_for(lambda: self.posts_for(host.holder_instance_id) or None,
+                         15, "all-idle for completed seat")
+                self.assertIsNone(self.end_turn_wake(host, "delegator"))
+                self.assertEqual(self.end_turn_wake(host, "self"), "all-idle")
+                time.sleep(0.6)
+                self.assertEqual(len(self.posts_for(host.holder_instance_id)), 1)
+            finally:
+                if proc is not None and proc.poll() is None:
+                    proc.kill()
+                    proc.wait(timeout=5)
+
+    def test_issue_314_active_turn_blocks_until_it_ends(self) -> None:
+        # (b) A real worker turn still in progress blocks the Host's idle
+        # transition. When that turn ends, the next Host observation wakes
+        # once.
+        self.endpoint = Endpoint()
+        code, out = self.configure(self.endpoint.url)
+        self.assertEqual(code, 0, out)
+        self.start_host("active")
+        worker = self.start_worker("active", turn_ms=12000)
+        self.begin_active_turn(worker)
+        self.session = self.host_session
+        self.acp("send", "--text", "host-while-worker-busy", "--wait")
+        self.session = worker
+        status = self.acp("status")[1]
+        self.assertIs(status.get("turn_active"), True, status)
+        record = self.holder_record()
+        last = record.get("last_prompt") if isinstance(record.get("last_prompt"), dict) else {}
+        self.assertEqual(last.get("mutation_status"), "in_progress", last)
+        self.session = self.host_session
+        self.assertFalse(self.posts_with_reason("all-idle"), self.endpoint.posts)
+        post = wait_for(lambda: (self.posts_with_reason("all-idle") or [None])[-1],
+                        20, "all-idle after the worker turn ends")
+        self.assertEqual(post["body"]["reason"], "all-idle")
+        self.assertEqual(post["body"]["state"], "end_turn")
+        time.sleep(0.6)
+        self.assertEqual(len(self.posts_with_reason("all-idle")), 1)
+
+    def test_issue_314_active_record_blocks_then_completed_wakes_once(self) -> None:
+        # (b) Same transition on the record the scan reads. in_progress
+        # blocks. completed is the one all-idle. The latch holds a repeat.
+        self.endpoint = Endpoint()
+        self.configure_endpoint()
+        proc = None
+        with self.webhook_process_env():
+            host = self.idle_host("active-record")
+            try:
+                proc, record_dir = self.spawn_seat(
+                    "grok-i314-active", "expert", "ready", host.holder_instance_id,
+                    last_prompt={"mutation_status": "in_progress"})
+                found = wait_for(
+                    lambda: holder.holders_dispatched_by(
+                        host.holder_instance_id, working=True) or None,
+                    5, "active seat visible")
+                self.assertEqual(found, [proc.pid])
+                self.assertIsNone(self.end_turn_wake(host, "self"))
+                self.assertFalse(self.posts_for(host.holder_instance_id))
+                self.write_seat_prompt(record_dir, "completed")
+                self.assertEqual(
+                    holder.holders_dispatched_by(host.holder_instance_id, working=True), [])
+                self.assertEqual(self.end_turn_wake(host, "self"), "all-idle")
+                wait_for(lambda: len(self.posts_for(host.holder_instance_id)) == 1,
+                         15, "one all-idle after the turn ended")
+                self.assertEqual(self.end_turn_wake(host, "self"), "all-idle")
+                time.sleep(0.6)
+                self.assertEqual(len(self.posts_for(host.holder_instance_id)), 1)
+            finally:
+                if proc is not None and proc.poll() is None:
+                    proc.kill()
+                    proc.wait(timeout=5)
+
+    def test_issue_314_unknown_turn_blocks_all_idle(self) -> None:
+        # (d) Unknown blocks. A false all-idle would claim nobody is working
+        # while this seat's turn cannot be read. A later known-idle status
+        # is the one transition.
+        self.endpoint = Endpoint()
+        self.configure_endpoint()
+        proc = None
+        with self.webhook_process_env():
+            host = self.idle_host("unknown-turn")
+            try:
+                proc, record_dir = self.spawn_seat(
+                    "grok-i314-unknown", "expert", "ready", host.holder_instance_id,
+                    last_prompt={"mutation_status": "unknown"})
+                found = wait_for(
+                    lambda: holder.holders_dispatched_by(
+                        host.holder_instance_id, working=True) or None,
+                    5, "unknown-turn seat visible")
+                self.assertEqual(found, [proc.pid])
+                self.assertEqual(
+                    holder.holders_dispatched_by(host.holder_instance_id), [proc.pid])
+                self.assertIsNone(self.end_turn_wake(host, "delegator"))
+                self.assertFalse(self.posts_for(host.holder_instance_id))
+                record = json.loads((record_dir / "record.json").read_text(encoding="utf-8"))
+                record["last_prompt"] = None
+                (record_dir / "record.json").write_text(json.dumps(record), encoding="utf-8")
+                self.assertEqual(
+                    holder.holders_dispatched_by(host.holder_instance_id, working=True),
+                    [proc.pid])
+                self.assertIsNone(self.end_turn_wake(host, "self"))
+                self.assertFalse(self.posts_for(host.holder_instance_id))
+                self.write_seat_prompt(record_dir, "completed")
+                self.assertEqual(
+                    holder.holders_dispatched_by(host.holder_instance_id, working=True), [])
+                self.assertEqual(self.end_turn_wake(host, "delegator"), "all-idle")
+                wait_for(lambda: len(self.posts_for(host.holder_instance_id)) == 1,
+                         15, "all-idle once the unknown turn is completed")
+                self.assertIsNone(self.end_turn_wake(host, "delegator"))
+                time.sleep(0.5)
+                self.assertEqual(len(self.posts_for(host.holder_instance_id)), 1)
+            finally:
+                if proc is not None and proc.poll() is None:
+                    proc.kill()
+                    proc.wait(timeout=5)
 
 
 if __name__ == "__main__":

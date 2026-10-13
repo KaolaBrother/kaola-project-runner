@@ -4,6 +4,40 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+Seats: restart required
+
+- **`all-idle` counts a seat only while that seat has an active turn (Issue #314).**
+  The all-idle scan (`holders_dispatched_by(..., working=True)`) used to treat
+  every dispatched holder as working unless `state` was `agent_exited`,
+  `stopping`, or `stopped`. A `ready` seat with no active turn, including one
+  held for acceptance, blocked the wake. A Host that went idle with only that
+  seat stayed silent. The scan now blocks only on an active turn.
+  `record.json` does not store `turn_active`. The holder writes
+  `last_prompt.mutation_status` `in_progress` when it admits a prompt and
+  `completed` when the turn ends. That `in_progress` value stays for the whole
+  turn: an in-memory `accepted` update does not rewrite `last_prompt`.
+  `accepted` in the record also counts as active. `completed`, `not_started`,
+  a missing `last_prompt`, and a prompt object with no `mutation_status` do
+  not block. Any other `last_prompt` shape is unknown and still blocks, so an
+  unreadable turn does not emit a false `all-idle`. `agent_exited`,
+  `stopping`, and `stopped` still do not count. Seat-exempt Sideagent records
+  still do not count. The default scan, used for stop preservation, is
+  unchanged and still keeps an idle held seat. The once-per-episode latch,
+  Delegator-turn rules, and the node / last-seat stop re-checks are unchanged
+  (#307, #305). Those call sites now read this liveness fact. An idle held
+  seat on the Host's idle transition emits one `all-idle`. A seat with an
+  active turn still blocks until that turn is no longer active; the next
+  observation of the same path then wakes once.
+  Restart judgment: `scripts/kaola-acp-holder.py` changed. It is in the
+  operator restart set (`docs/conventions.md`). A running Host keeps the
+  previous scan and does not wake `all-idle` for an idle held seat until that
+  Host restarts. This change does not install.
+
+  Restart detail: the holder changed (`scripts/kaola-acp-holder.py`); a
+  running seat keeps counting a ready idle worker as working until it restarts.
+
 ## 0.9.10 — 2026-10-13 (recovery routes, wake and seat diagnostics, install payload bytecode)
 
 Seats: restart required

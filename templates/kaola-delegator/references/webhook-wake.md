@@ -105,12 +105,13 @@ while a worker seat still works. `all-idle` is once per idle transition: the
 Host is idle and no dispatched seat is working, pending work or not. A turn
 you admitted does not open that episode and does not wake by itself, unless
 it stops the last working seat. A self turn with no new worker event sends
-no second `all-idle`. A Sideagent node is not a seat. A holder in
-`agent_exited`, `stopping`, or `stopped` is not working. After the Host's
+no second `all-idle`. A Sideagent node is not a seat. Only an active
+turn is working. Idle held seats, `agent_exited`, `stopping`, and `stopped`
+are not. After the Host's
 last turn, confirmed `sideagent_node_stopped` or the last worker's
 `terminated` re-checks one non-blocking `all-idle` (`state` `end_turn`,
-`state_detail` `end_turn`) when the Host is idle and no seat is working. A
-live seat, an active turn, a follow-up, an unconfirmed node stop, or exact
+`state_detail` `end_turn`) when the Host is idle and no seat is working. An
+active turn, a follow-up, an unconfirmed node stop, or exact
 stop does not. One episode, one wake. It re-opens when a non-exempt seat is
 working, a non-exempt worker stops, or a self turn delivers worker events.
 Your send does not re-open it. No time throttle.
