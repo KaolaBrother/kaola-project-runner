@@ -28,6 +28,13 @@ WEBHOOK_LOST_WAKE = (
 )
 WEBHOOK_ROTATE_KEY = "Rotate the sender key (webhook-wake.md step 7), then test."
 WEBHOOK_RECONFIGURE_URL = "Reconfigure the URL, then test."
+# Issue #320. The wake child never started. This is not a dead Host session.
+# ``acp-spawn-failed`` keeps the session restart. ``spawn-failed`` used to
+# repeat that restart; that action is wrong for this failure.
+WAKE_SPAWN_FAILED = (
+    "The wake was not attempted; run delegator-webhook test; if that delivers, "
+    "continue the inquiry now."
+)
 _WEBHOOK_DELIVERY_ERRORS = frozenset({"http-status", "connection", "timeout"})
 
 ROUTES: dict[str, tuple[str, str]] = {
@@ -92,6 +99,7 @@ ROUTES: dict[str, tuple[str, str]] = {
     "continue-unsupported": ("route", "Exact-stop this session (stop --repo REPO --session SESSION --expected-holder-instance-id ID), attest, then start --resume NATIVE_ID. If resume still fails, start a fresh Host session and hand it the summary from status, capture --lines 200, list --repo --include-dead, and delegator view (goals, decisions, in-flight tasks, live seats and holders, pending items). The new Host re-adopts live seats from that list. Do not retry the dead session. This build does not auto-reap an unowned exited job."),
     "current-task-source-unavailable": ("route", "Live list failed. Rerun list --repo REPO --include-dead. Do not guess which seats are alive."),
     "cursor-range-incomplete": ("route", "Read status for this session, then capture --repo REPO --session SESSION --lines 200 again. Do not treat the truncated capture as the whole turn."),
+    "death-wake-unrecorded": ("route", "The death wake was not recorded. Read the holder event log, then run delegator-webhook status and test. If test delivers, continue the inquiry now. Do not treat the omitted wake as delivered."),
     "delegator-field-invalid": ("route", "Read detail and the current revision. Run the state command detail names (init, migrate, update, or retire) with that revision. Do not write a second file or retry the same patch unchanged."),
     "delegator-migration-needed": ("route", "Read detail and the current revision. Run the state command detail names (init, migrate, update, or retire) with that revision. Do not write a second file or retry the same patch unchanged."),
     "dirty": ("route", "Commit or stash the checkout changes, then rerun this attest. Do not register a dirty tree."),
@@ -300,6 +308,7 @@ ROUTES: dict[str, tuple[str, str]] = {
     "verified-past-revision": ("self-route", "The returned input is covered by a later verified checkpoint and is settled. Read that checkpoint record; do not re-file the input or retry the same registration."),
     "wake-not-host": ("self-route", "Only the Host holder sends Delegator wakes. Re-run the wake command from the Host session (its shell or the orchestrator Skill), not from a worker or an unbound shell. Do not start a second Host for it."),
     "wake-reason-refused": ("route", "Pass --reason with one of needs_decision, question_waiting, or delivery_review. Read the receipt's allowed list; do not invent a reason string."),
+    "wake-spawn-failed": ("route", WAKE_SPAWN_FAILED),
     "script-missing": ("route", "Run ./scripts/render-skills.py --write so the worker script exists, then rerun attest."),
     "script-not-executable": ("route", "Make the worker runtime-tmux.sh executable, then rerun attest."),
     "script-outside-root": ("route", "Use the worker script inside this checkout. Do not attest a script outside the root."),
@@ -314,7 +323,7 @@ ROUTES: dict[str, tuple[str, str]] = {
     "signal-unverified": ("route", "Read detail and the current revision. Run the state command detail names (init, migrate, update, or retire) with that revision. Do not write a second file or retry the same patch unchanged."),
     "snapshot-unstable": ("route", "Read detail and the current revision. Run the state command detail names (init, migrate, update, or retire) with that revision. Do not write a second file or retry the same patch unchanged."),
     "source-required": ("route", "Read detail and the current revision. Run the state command detail names (init, migrate, update, or retire) with that revision. Do not write a second file or retry the same patch unchanged."),
-    "spawn-failed": ("route", "Exact-stop this session (stop --repo REPO --session SESSION --expected-holder-instance-id ID), attest, then start --resume NATIVE_ID. If resume still fails, start a fresh Host session and hand it the summary from status, capture --lines 200, list --repo --include-dead, and delegator view (goals, decisions, in-flight tasks, live seats and holders, pending items). The new Host re-adopts live seats from that list. Do not retry the dead session. This build does not auto-reap an unowned exited job."),
+    "spawn-failed": ("route", WAKE_SPAWN_FAILED),
     "spec-foreign-owner": ("route", "Fix the named argument in detail and rerun the same command. Do not start a second session or bootstrap a partial job."),
     "spec-missing": ("route", "Fix the named argument in detail and rerun the same command. Do not start a second session or bootstrap a partial job."),
     "spec-nonce": ("route", "Fix the named argument in detail and rerun the same command. Do not start a second session or bootstrap a partial job."),
@@ -445,7 +454,11 @@ def _failure(payload: dict[str, Any]) -> bool:
         return True
     if payload.get("kind") == "error":
         return True
-    if payload.get("scan") == "skipped" and isinstance(payload.get("reason"), str):
+    if payload.get("scan") in {"skipped", "incomplete"} and isinstance(payload.get("reason"), str):
+        return True
+    # Issue #320: a death-wake dict reports failure as ``sent: false``.
+    # ``already-recovered`` is one of those and keeps its own self-route.
+    if payload.get("sent") is False and result not in SUCCESS:
         return True
     if payload.get("delivered") is False and isinstance(payload.get("reason"), str):
         return True
@@ -462,9 +475,15 @@ def stamp(payload: dict[str, Any]) -> dict[str, Any]:
     """Attach ``route`` or ``self_route``. Idempotent. Does not drop ``recovery``."""
     if not isinstance(payload, dict):
         return payload
-    nested = payload.get("holder_lost")
-    if isinstance(nested, dict):
-        payload["holder_lost"] = stamp(nested)
+    # Issue #320: a failed wake is nested under the start/stop receipt and
+    # under each status-scan wake. Walk those before the parent success check.
+    for key in ("holder_lost", "delegator_death_wake"):
+        nested = payload.get(key)
+        if isinstance(nested, dict):
+            payload[key] = stamp(nested)
+    wakes = payload.get("wakes")
+    if isinstance(wakes, list):
+        payload["wakes"] = [stamp(item) if isinstance(item, dict) else item for item in wakes]
     if _already(payload) or not _failure(payload):
         return payload
     codes = _codes(payload)

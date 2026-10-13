@@ -318,6 +318,58 @@ HOST_INITIATED_WAKE_REASONS = frozenset({
     "question_waiting",
     "delivery_review",
 })
+# Issue #320. The deliver child's stderr is copied into the event log, bounded.
+# A longer child write is drained so the pipe cannot block the child.
+WAKE_CHILD_STDERR_CAP = 1024
+
+
+def _bounded_stream_text(stream: Any, cap: int = WAKE_CHILD_STDERR_CAP) -> str:
+    """Read ``stream`` to EOF. Keep at most ``cap`` bytes. Never raise."""
+    if stream is None:
+        return ""
+    kept = bytearray()
+    try:
+        while True:
+            block = stream.read(4096)
+            if not block:
+                break
+            if len(kept) < cap:
+                kept.extend(block[: cap - len(kept)])
+    except Exception:
+        pass
+    finally:
+        try:
+            stream.close()
+        except Exception:
+            pass
+    return bytes(kept).decode("utf-8", "replace").strip()
+
+
+def _wake_receipt_module() -> Any:
+    """The sibling ``kaola-acp.py``, loaded once, for the spawn-failed receipt.
+
+    The holder does not import the route table by name. The CLI stamps the row.
+    """
+    cached = getattr(_wake_receipt_module, "module", None)
+    if cached is not None:
+        return cached or None
+    path = Path(__file__).resolve().with_name("kaola-acp.py")
+    spec = importlib.util.spec_from_file_location("kaola_acp_wake_receipt", path)
+    if spec is None or spec.loader is None:
+        _wake_receipt_module.module = False
+        return None
+    module = importlib.util.module_from_spec(spec)
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        _wake_receipt_module.module = False
+        return None
+    finally:
+        sys.dont_write_bytecode = previous
+    _wake_receipt_module.module = module
+    return module
 
 
 def open_registered_decision_rows(doc: Any) -> list[dict[str, Any]]:
@@ -3375,10 +3427,12 @@ class Holder:
         reason + ts). ``reason`` names why the Delegator must act. The detached
         ``kaola-acp.py delegator-webhook deliver`` child reads the config,
         validates, POSTs and writes receipts, so the holder never blocks on the
-        network and the delivery survives holder exit. A spawn failure is one
-        event-log line with the exception class name only. ``inline`` spawns
-        without a thread or a wait for the op_stop path that exits right after
-        its reply. A reason outside the closed vocabulary is not sent.
+        network and the delivery survives holder exit. A spawn failure writes
+        one ``failed`` receipt (``error`` ``spawn-failed``) when the project
+        directory can take it, and one event. The child's stderr is copied
+        into the event log, bounded (#320). ``inline`` starts the child on
+        this thread and does not wait, for the op_stop path that exits right
+        after its reply. A reason outside the closed vocabulary is not sent.
         """
         if self.session_role != "host":
             return
@@ -3399,32 +3453,106 @@ class Holder:
                 str(Path(__file__).resolve().with_name("kaola-acp.py")),
                 "delegator-webhook", "deliver"]
         body = json.dumps(payload).encode("utf-8")
+        # The child must not also append the diagnostic: this holder copies
+        # stderr itself. A parent-set log path would write the line twice.
+        env = os.environ.copy()
+        env.pop("KAOLA_DELEGATOR_WAKE_EVENT_LOG", None)
 
-        def spawn(wait: bool) -> None:
+        def start() -> subprocess.Popen[bytes] | None:
             try:
                 proc = subprocess.Popen(
                     argv, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL, start_new_session=True,
-                    close_fds=True, cwd=self.args.repo)
-                try:
-                    assert proc.stdin is not None
-                    proc.stdin.write(body)
-                    proc.stdin.close()
-                except OSError:
-                    pass
-                if wait:
-                    proc.wait()
+                    stderr=subprocess.PIPE, start_new_session=True,
+                    close_fds=True, cwd=self.args.repo, env=env)
             except Exception as exc:
+                self._note_wake_spawn_failed(payload, exc)
+                return None
+            try:
+                assert proc.stdin is not None
+                proc.stdin.write(body)
+                proc.stdin.close()
+            except OSError:
+                pass
+            return proc
+
+        def finish(proc: subprocess.Popen[bytes] | None, wait: bool) -> None:
+            if proc is None:
+                return
+            text = _bounded_stream_text(proc.stderr)
+            if wait:
                 try:
-                    self.events.append({"kind": "delegator_wake_spawn_failed",
-                                        "error": type(exc).__name__})
+                    proc.wait()
                 except Exception:
                     pass
+            self._note_wake_child_stderr(text)
 
         if inline:
-            spawn(wait=False)
+            proc = start()
+            if proc is not None:
+                threading.Thread(target=finish, args=(proc, False), daemon=True).start()
         else:
-            threading.Thread(target=spawn, args=(True,), daemon=True).start()
+            def background() -> None:
+                finish(start(), True)
+            threading.Thread(target=background, daemon=True).start()
+
+    def _note_wake_spawn_failed(self, payload: dict[str, Any], exc: BaseException) -> None:
+        """Receipt when the project can take one; otherwise the event is the reader.
+
+        ``error`` on the row is ``spawn-failed``. The CLI stamps that code
+        with the wake-spawn-failed instruction. A missing project directory
+        cannot hold the receipts file; the event then carries the
+        project-unresolved self-route.
+        """
+        sentence = (
+            "The wake was not attempted; run delegator-webhook test; "
+            "if that delivers, continue the inquiry now."
+        )
+        event: dict[str, Any] = {
+            "kind": "delegator_wake_spawn_failed",
+            "error": type(exc).__name__,
+        }
+        try:
+            module = _wake_receipt_module()
+            project = None
+            if module is not None:
+                routes = module._load_recovery_routes()
+                if routes is not None and isinstance(getattr(routes, "WAKE_SPAWN_FAILED", None), str):
+                    sentence = routes.WAKE_SPAWN_FAILED
+                project = module._webhook_realpath_project(payload.get("project"))
+            if project is not None and module is not None:
+                receipt = module._webhook_attempt_receipt(
+                    payload, 0, "failed", None, "spawn-failed", None, 0, True)
+                if not module._webhook_append_receipts(project, [receipt], announce=False):
+                    event["self_route"] = sentence
+            else:
+                line = getattr(module, "PROJECT_UNRESOLVED_LINE", "") if module is not None else ""
+                marker = "Self-route:"
+                event["self_route"] = (
+                    line.split(marker, 1)[1].strip() if isinstance(line, str) and marker in line
+                    else sentence)
+        except Exception:
+            event["self_route"] = sentence
+        else:
+            if "self_route" not in event:
+                event["self_route"] = sentence
+        try:
+            self.events.append(event)
+        except Exception:
+            pass
+
+    def _note_wake_child_stderr(self, text: str) -> None:
+        """One event for a non-empty deliver-child stderr, bounded."""
+        if not text:
+            return
+        clipped = text[:WAKE_CHILD_STDERR_CAP]
+        event: dict[str, Any] = {"kind": "delegator_wake_child_stderr", "text": clipped}
+        marker = "Self-route:"
+        if marker in clipped:
+            event["self_route"] = clipped.split(marker, 1)[1].strip()
+        try:
+            self.events.append(event)
+        except Exception:
+            pass
 
     def _note_delegator_working_again(self) -> None:
         """A real working-again fact ended the idle episode. Not a timer.

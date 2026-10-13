@@ -8,6 +8,35 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 Seats: restart required
 
+- **A failed Delegator wake names the next step (Issue #320).**
+  Six failures that used to end with no reader now end with a stamped route
+  or an explicit self-route. The holder writes a `failed` receipt with
+  `error` `spawn-failed` when it cannot spawn `delegator-webhook deliver`,
+  so `status.last_receipt` shows that row. `spawn-failed` and
+  `wake-spawn-failed` both say the wake was not attempted: run
+  `delegator-webhook test`; if that delivers, continue the inquiry now.
+  That replaces the session-restart paragraph. `acp-spawn-failed` still
+  says to exact-stop and restart the session. `stamp` walks
+  `delegator_death_wake` and each status-scan wake, and treats `sent: false`
+  as a failure, so a nested spawn failure gets the test sentence.
+  `already-recovered` keeps its own self-route. A lock or event-log error
+  in death recovery returns `reason` `death-wake-unrecorded` instead of
+  omitting the wake. A record-root mismatch on the status scan sets
+  `reason` `record-root-mismatch`, and the existing self-route attaches.
+  A receipt-write failure prints one stderr line and does not crash the
+  child. The holder copies that stderr into the event log, bounded at 1024
+  bytes. A deliver whose project directory is gone writes no fallback
+  receipts file (`status --project` refuses a missing directory). The
+  record is the stderr line, and the holder event
+  `delegator_wake_child_stderr` or `delegator_wake_spawn_failed`.
+  Death recovery still does not wait on the network. The child appends the
+  diagnostic line to the dead holder's event log.
+  Seats: restart required for this change. `scripts/kaola-acp-holder.py`
+  changed, and it is in the operator restart set (`docs/conventions.md`).
+  A running holder still discards the deliver child's stderr and does not
+  write the spawn-failed receipt until that holder restarts.
+  `delegator-webhook deliver` and `status` are per-call. This change does
+  not install.
 - **A resume records whether a tier was requested, and status reads the actual model (Issue #316).**
   A resume or `--continue` that passes `--tier` applies that preset the same way a fresh
   start does. A resume that passes no `--tier`, `--model`, or `--effort` still sends no

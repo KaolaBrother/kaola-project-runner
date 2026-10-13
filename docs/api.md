@@ -518,15 +518,24 @@ is a bug.
 The table is [`scripts/kaola-recovery-routes.py`](../scripts/kaola-recovery-routes.py)
 (`ROUTES`: each code maps to `route` or `self-route`). `stamp` attaches one
 JSON field, `route` or `self_route`, on a failure envelope (`result` `refused`,
-`error`, or `failed`, a follow `kind` of `error`, a skipped webhook scan, and
-the same shape). A non-empty `recovery` is kept and is itself the route.
-Success results are left alone. Correlation-index gap strings stay strings, so
-a stored index stays compatible; when that code is the receipt `reason` or
-`error.code`, the printed envelope carries the field.
+`error`, or `failed`, a follow `kind` of `error`, a skipped or incomplete
+webhook scan that carries a string `reason`, a death wake with `sent` false,
+and the same shape). It walks `holder_lost`, `delegator_death_wake`, and each
+`wakes` entry before it decides the parent, so a successful start, stop, or
+status receipt still stamps a failed nested wake. A non-empty `recovery` is
+kept and is itself the route. Success results are left alone.
+Correlation-index gap strings stay strings, so a stored index stays
+compatible; when that code is the receipt `reason` or `error.code`, the
+printed envelope carries the field.
 
-The holder process is unchanged. The CLI, launch broker, locator, dispatch
-entry, installer, and Grok Bot verifier attach the field on the next process.
-A direct holder-socket client does not see it. The agent path is the CLI.
+The CLI, launch broker, locator, dispatch entry, installer, and Grok Bot
+verifier attach the field on the next process. A direct holder-socket reply
+is not stamped. The agent path is the CLI. Issue #320 is the holder-side
+exception: when the holder cannot spawn the deliver child, it writes a
+`failed` receipt through the webhook receipt writer, which stamps
+`error` `spawn-failed` before the row is stored. `status.last_receipt`
+returns that row. The holder also copies the deliver child's stderr into
+its event log. A running holder does neither until it restarts.
 A webhook delivery failure splits that route by HTTP class and by whether the
 row is final. The split is in the delegator-webhook receipt section below.
 
@@ -964,7 +973,17 @@ wake's `event_seq` (the EventLog cursor continues across holders in one record
 dir), so the recovered wake is a new event and not a duplicate of an earlier
 wake from that holder. The start/stop receipt names the outcome under
 `delegator_death_wake` (`sent`, `holder_instance_id`, `event_seq`, or a
-`reason` of `already-recovered`/`spawn-failed`).
+`reason` of `already-recovered`/`spawn-failed`/`death-wake-unrecorded`).
+`stamp` treats `sent: false` as a failure and attaches the route on that
+nested object. `spawn-failed` says the wake was not attempted: run
+`delegator-webhook test`; if that delivers, continue the inquiry now.
+`wake-spawn-failed` is the same sentence. That is not a Host session
+restart. `acp-spawn-failed` still is. `already-recovered` keeps its
+self-route. A lock or event-log `OSError` used to omit the key. It now
+returns `sent: false` and `reason` `death-wake-unrecorded`: the death wake
+was not recorded; read the holder event log, then run `delegator-webhook
+status` and `test`. If test delivers, continue the inquiry. Do not treat
+the omitted wake as delivered. The exception text is not stored.
 
 `delegator-webhook status` is a third caller (#311). It does not replace or
 retire the record, and it does not need a new Host start. The Delegator's
@@ -998,8 +1017,12 @@ else in the runner polls webhook state. The cadence bound is the Delegator's
 recorded cron interval. The Skill's example interval is 120 minutes. After
 the Delegator has loaded the cadence line, the wait from a holder death to
 this wake is at most one cron interval, plus delivery. A record-root mismatch
-(`RecordRootMismatch`) returns `holder_lost.scan` `incomplete` and an empty
-`wakes` list. `leg` is always `delegator-webhook status`.
+(`RecordRootMismatch`) returns `holder_lost.scan` `incomplete`, `reason`
+`record-root-mismatch`, and an empty `wakes` list. `stamp` attaches the
+existing self-route: pass one private `--record-root` you own, or unset
+`KAOLA_ACP_RECORD_ROOT`. Do not write session files on the refused root.
+`leg` is always `delegator-webhook status`. The scan does not wait for the
+network.
 
 Payload (signal only, no transcript, prompt, diff or secret). A current
 holder (v0.9.7 and later) sends `reason`, one of the tokens in the tables
@@ -1144,7 +1167,11 @@ the newest stored receipt whose `state` is `test`. Readiness stays
 receipt whose `reason` is `not-configured` or `duplicate` as that skip cause.
 
 `error` is one of `timeout`, `connection`, `http-status`, `redirect-refused`,
-`invalid-config`, `config-mode`, `invalid-payload`, or null.
+`invalid-config`, `config-mode`, `invalid-payload`, `spawn-failed`, or null.
+`spawn-failed` is the row the holder writes when the deliver child does not
+start. Its `route` is the test-and-continue sentence, the same text as
+`wake-spawn-failed`. The payload wake reason stays in `reason` and does not
+replace that route.
 
 A failed delivery row carries `route` only when `final` is true (#318).
 HTTP 401 and 403: rotate the sender key
@@ -1171,7 +1198,29 @@ Receipts land in
 `<repo>/.kaola/delegator-webhook-receipts.json`
 (`{"schema": "kaola-delegator-webhook-receipts/1", "limit": 32, "receipts": [...]}`,
 last 32 attempts oldest-first, mode 0600, atomic replace under a sidecar flock).
-Receipt-write failures are swallowed.
+A receipt-write failure prints one line on the deliver child's stderr and
+does not crash the child. The line is the self-route: the POST may have
+succeeded and this receipt was not stored; run `delegator-webhook status`
+and `test`; if test delivers, continue the inquiry now; do not treat a
+stale `last_receipt` as this wake. The line has no exception text and no
+secret. The holder copies that stderr into its event log as
+`delegator_wake_child_stderr`, keeping at most 1024 bytes, and copies a
+`Self-route:` tail onto the event. Empty stderr adds no event. The holder
+does not also append that line itself. Death recovery does not wait for
+the child and still discards the child's stderr. It sets
+`KAOLA_DELEGATOR_WAKE_EVENT_LOG` to the dead holder's `events.jsonl`, and
+the child appends the same kind of line there. That line has no EventLog
+cursor. It is still a readable record.
+
+A deliver whose `project` is not an existing directory writes no receipts
+file. `status --project` cannot read one: it refuses a missing directory.
+The record is that stderr line (`project-unresolved`). When a holder is
+the parent, the same instruction is an event: `delegator_wake_child_stderr`
+when the child started, or `delegator_wake_spawn_failed` with that
+self-route when the project directory was already gone and the child could
+not start. Read the holder event log. Run `delegator-webhook test` in the
+project's current directory. If test delivers, continue the inquiry now.
+Do not start a second Host for the missing directory.
 
 Config lives at `~/.config/kaola/delegator-webhook.json` (override with
 `KAOLA_DELEGATOR_WEBHOOK_CONFIG`, for tests). The directory is created 0700 and the
@@ -1215,9 +1264,12 @@ exit 0 on success):
   sender_key_attachment (style/name/prefix), sender_key_present, a 12-hex
   `fingerprint` of url+key, last_receipt, last_test, receipts_path, and
   `holder_lost`. Never the URL or key. `holder_lost` is `{scan, leg, wakes}`
-  and, when `scan` is `skipped`, `reason`. `leg` is `delegator-webhook status`.
-  `scan` is `complete`, `incomplete`, or `skipped`. Each wake is
-  `{session, holder_instance_id, delegator_death_wake}`. Exit stays 0.
+  and, when `scan` is `skipped` or `incomplete`, `reason`. `leg` is
+  `delegator-webhook status`. `scan` is `complete`, `incomplete`, or
+  `skipped`. An incomplete record-root scan has `reason`
+  `record-root-mismatch` and the self-route above. Each wake is
+  `{session, holder_instance_id, delegator_death_wake}`. A `sent: false`
+  death wake on that object carries `route` or `self_route`. Exit stays 0.
   Eligibility, the skipped-scan rule, and the cron cadence bound are in the
   death-recovery paragraphs above.
 - `test --project ROOT` sends one `state: "test"` payload through the same

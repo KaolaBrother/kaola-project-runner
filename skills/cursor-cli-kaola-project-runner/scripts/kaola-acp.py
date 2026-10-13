@@ -2119,7 +2119,8 @@ def recover_host_death_wake(directory: Path | None,
                 "state_detail": "holder_lost",
             })
     except OSError:
-        return None
+        # Issue #320: omitting the key left the lock/log failure with no reader.
+        return {"sent": False, "reason": "death-wake-unrecorded"}
     payload = {
         "schema": "kaola-delegator-wake/1",
         "project": record.get("repo"),
@@ -2132,12 +2133,18 @@ def recover_host_death_wake(directory: Path | None,
         "ts": _utc_stamp(),
     }
     try:
+        # The parent returns without waiting. Stderr stays discarded here; the
+        # child appends a diagnostic line to this record's event log when the
+        # env var is set. The live holder captures stderr itself (#320).
+        child_env = os.environ.copy()
+        child_env[WAKE_DIAG_EVENT_ENV] = str(directory / "events.jsonl")
         proc = subprocess.Popen(
             [sys.executable, str(Path(__file__).resolve()),
              "delegator-webhook", "deliver"],
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL, start_new_session=True,
-            close_fds=True, cwd=record.get("repo") or None)
+            close_fds=True, cwd=record.get("repo") or None,
+            env=child_env)
         assert proc.stdin is not None
         proc.stdin.write(json.dumps(payload).encode("utf-8"))
         proc.stdin.close()
@@ -6679,6 +6686,24 @@ DELEGATOR_WEBHOOK_RESPONSE_HEADER_NAMES = (
     "x-correlation-id",
 )
 DELEGATOR_WEBHOOK_USER_AGENT = "kaola-delegator-wake/1"
+# Issue #320. One stderr line, no exception text and no secret. The holder
+# copies it into the event log. A death-recovery parent does not wait, so it
+# sets KAOLA_DELEGATOR_WAKE_EVENT_LOG and the child appends the same line.
+RECEIPT_WRITE_FAILED_LINE = (
+    "delegator-webhook: receipt-write-failed. "
+    "Self-route: the POST may have succeeded and this receipt was not stored. "
+    "Run delegator-webhook status and test. If test delivers, continue the inquiry now. "
+    "Do not treat a stale last_receipt as this wake."
+)
+PROJECT_UNRESOLVED_LINE = (
+    "delegator-webhook: project-unresolved. "
+    "Self-route: the project directory is gone, so no receipts file was written. "
+    "Read the holder event log. Run delegator-webhook test in the project's current "
+    "directory. If test delivers, continue the inquiry now. Do not start a second Host "
+    "for the missing directory."
+)
+WAKE_DIAG_EVENT_ENV = "KAOLA_DELEGATOR_WAKE_EVENT_LOG"
+WAKE_DIAG_TEXT_CAP = 1024
 DELEGATOR_WEBHOOK_PAYLOAD_SCHEMA = "kaola-delegator-wake/1"
 # Keys every shipped wake shape carried: the first #299 sender, v0.9.5/v0.9.6
 # (which added state_detail), and v0.9.7 (which added reason).
@@ -7117,15 +7142,61 @@ def _webhook_append_receipts_unlocked(project_root: str, receipts: list[dict[str
     _webhook_atomic_json(path, doc)
 
 
-def _webhook_append_receipts(project_root: str, receipts: list[dict[str, Any]]) -> None:
-    """Append to the bounded receipts file; every write failure is swallowed
-    (deliver must never crash the detached child over bookkeeping)."""
+def _webhook_diag(line: str) -> None:
+    """One bounded diagnostic. Stderr always; the event log when the parent set it.
+
+    The line is a fixed sentence. It carries no exception text, URL, or key.
+    """
+    text = " ".join(line.split())
+    if len(text) > WAKE_DIAG_TEXT_CAP:
+        text = text[:WAKE_DIAG_TEXT_CAP]
+    try:
+        print(text, file=sys.stderr, flush=True)
+    except Exception:
+        pass
+    raw = os.environ.get(WAKE_DIAG_EVENT_ENV)
+    if not isinstance(raw, str) or not raw:
+        return
+    marker = "Self-route:"
+    entry: dict[str, Any] = {
+        "kind": "delegator_wake_child_stderr",
+        "text": text,
+        "ts": round(time.time(), 3),
+    }
+    if marker in text:
+        entry["self_route"] = text.split(marker, 1)[1].strip()
+    blob = (json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
+    try:
+        fd = os.open(raw, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
+    except OSError:
+        return
+    try:
+        os.write(fd, blob)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+def _webhook_append_receipts(project_root: str, receipts: list[dict[str, Any]],
+                             announce: bool = True) -> bool:
+    """Append to the bounded receipts file. A write failure prints one stderr line.
+
+    Deliver must not crash the detached child over bookkeeping. False means the
+    row was not stored. The line is the self-route for that case (#320).
+    ``announce`` is false when the caller is the holder recording a spawn
+    failure: the POST never started, so the receipt-write sentence would be
+    the wrong instruction. That caller puts the spawn sentence on its event.
+    """
     try:
         _webhook_under_lock(
             project_root,
             lambda: _webhook_append_receipts_unlocked(project_root, receipts))
     except Exception:
-        pass
+        if announce:
+            _webhook_diag(RECEIPT_WRITE_FAILED_LINE)
+        return False
+    return True
 
 
 def _webhook_claims_path(project_root: str) -> Path:
@@ -7338,7 +7409,9 @@ def _webhook_scan_holder_lost(project_root: str) -> dict[str, Any]:
     try:
         paths = acp_paths.record_paths("*/*/*/record.json")
     except acp_paths.RecordRootMismatch:
-        return {"scan": "incomplete", "leg": leg, "wakes": []}
+        # Issue #320: ``reason`` lets stamp attach the record-root-mismatch route.
+        return {"scan": "incomplete", "leg": leg,
+                "reason": "record-root-mismatch", "wakes": []}
     wakes: list[dict[str, Any]] = []
     for path in paths:
         directory = path.parent
@@ -7463,9 +7536,13 @@ def command_delegator_webhook(argv: list[str]) -> int:
                 given = payload if isinstance(payload, dict) else {}
                 _webhook_append_receipts(project_root, [_webhook_attempt_receipt(
                     given, 0, "failed", None, "invalid-payload", None, 0, True)])
+            else:
+                # No project directory, so the receipts file has nowhere to go.
+                _webhook_diag(PROJECT_UNRESOLVED_LINE)
             return 1
         project_root = _webhook_realpath_project(payload["project"])
         if project_root is None:
+            _webhook_diag(PROJECT_UNRESOLVED_LINE)
             return 1
         receipts = _webhook_deliver(project_root, payload)
         return 0 if receipts[-1]["result"] in ("delivered", "skipped") else 1
