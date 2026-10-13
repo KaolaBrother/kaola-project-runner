@@ -578,8 +578,10 @@ and the `update --index` mirror write the index under one exclusive file lock, r
 merge by item and field: a field this writer changed since its own read is its own, every
 other field and every row another writer added stay as on disk.
 
-Plan items may carry `task_id`, `output`, and `requires` (`{"class": ..., "presets": [...]}`, a
-requirement the Host stated for that item). All three are copied onto the index row. An
+Plan items may carry `task_id`, `output`, `requires` (`{"class": ..., "presets": [...]}`, a
+requirement the Host stated for that item), and `issue` (a positive integer, or a decimal
+string of one). `task_id`, `output`, `requires`, and a normalized `issue` are copied onto
+the index row. `issue` does not admit or refuse the item. An
 unmet `requires` is `not-run` / `requirement-unmet` before any Runner call; an item without
 one is not compared. The index records `dispatcher` (the caller's `KAOLA_ACP_DISPATCHER`)
 apart from each row's `notify_target` (the start receipt's `heartbeat_host`).
@@ -1305,6 +1307,44 @@ The lookup reads `kaola-workflow/<run>/workflow-state.md` in the main checkout o
 `claim_repository_id` from that file. The folder name is not a claim. `kaola-acp.py`
 is a per-call CLI. A running holder does not gain this field until the next `start`
 or `list` process. Existing sessions are left as they are.
+
+### Seat issue drift (Issue #312)
+
+`project --seats` (`kaola-dispatch-seats/1`) and the Delegator seat summary report
+`issue_drift`. The list is always present. It is empty when nothing drifted or when
+the session-name helper is not beside `kaola-dispatch.py`. The field is computed when
+the view is read. It is not written into the index, the live list, the heartbeat
+file, or a registry. `execute` does not refuse because of it. `state check` `ok`
+does not flip because of it. The holder and the injected heartbeat body still have
+no seat table.
+
+A row is one live seat. Stopped seats, the Host, and the bound Sideagent are not
+rows. `advisories` is `dispatch-issue-mismatch`, `no-active-run`, or both, with
+the mismatch first. `dispatch-issue-mismatch` means the session name yielded an
+issue and a current dispatch issue differs from it. A current dispatch item is
+`in-flight` or `unknown`, or `returned` while acceptance is not `accepted`,
+`cancelled`, `superseded`, or `handed-off`. An item that names a different
+`holder_instance_id` is not this seat's item. `no-active-run` is the same fact as
+`issue_name` `no-active-run`: the name classifies `ok` and that issue has no
+active claim. A short alias keeps its start advisory and is not also called
+`no-active-run` here. A name that does not yield an issue is not a drift row.
+A matching name and dispatch issue with an active claim is not a row.
+
+`name_issue` is the issue in the session name. `dispatch_issue` is that one
+current issue, or null when the seat has none or several. Several current issues
+also set `dispatch_issues` to those integers, sorted. `suggestion` is:
+
+```text
+At the next safe point, exact-stop this seat and start a fresh standard-named session. Never retarget this live seat to another issue.
+```
+
+The same advisory object is `issue_drift` on that session row and, when the seat
+is occupied, on its occupied row. The suggestion is the next safe point. The view
+does not exact-stop, rename, or retarget the live seat.
+
+```json
+{"advisories": ["dispatch-issue-mismatch"], "dispatch_issue": 1758, "holder_instance_id": "h1", "name_issue": 1720, "platform": "codex", "session": "codex-PROJ-i1720-work", "suggestion": "At the next safe point, exact-stop this seat and start a fresh standard-named session. Never retarget this live seat to another issue."}
+```
 
 ### Session role
 

@@ -87,6 +87,27 @@ Seats: restart not required
   install uses it only after that copy is replaced. This change does not
   install.
 
+Seats: restart not required
+
+- **A live seat whose dispatch issue differs from its name is an advisory (Issue #312).**
+  `project --seats` and the Delegator seat summary report `issue_drift` when a
+  live seat's current dispatch issue is not the `i<ISSUE>` in its session name
+  (`dispatch-issue-mismatch`), or when that name's issue has no active run
+  (`no-active-run`). The row names the safe point: exact-stop, then a fresh
+  standard-named session. The view does not block, rename, retarget, or stop
+  the seat. A matching name and dispatch issue with an active claim is not
+  flagged. Plan item `issue` is copied onto the index row and does not admit
+  or refuse. The check is not written into the index, the live list, or a
+  registry. The injected heartbeat body still has no seat table.
+  Restart judgment: `scripts/kaola-dispatch.py` and
+  `scripts/kaola-session-names.py` are per-call CLIs and are outside the
+  operator restart set (`docs/conventions.md`). `scripts/kaola-acp-holder.py`
+  is unchanged. The next `project --seats` and the next Delegator seat view
+  report the field. A running holder is not restarted and its session is not
+  renamed. A symlink install uses the new files on the next process. A copy
+  install uses them only after that copy is replaced. This change does not
+  install.
+
 Seats: restart required
 
 - **Stale exited launch jobs can be reconciled, and a slow resume is not a failed resume (Issue #308).**

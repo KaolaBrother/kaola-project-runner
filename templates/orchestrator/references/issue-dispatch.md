@@ -30,9 +30,10 @@ Record the constructed name as the item's `session` and verify it in the start r
 it). The same rule applies on
 later heartbeat dispatches and when restarting a stopped worker for the same issue. A worker
 reassigned to a different issue is exact-stopped and a new-named session is started - never
-a live rename and never a chained prompt. **Otherwise existing active session names are left
-alone** - never stop or restart a live session solely to rename it, and the native ACP
-session id is unchanged by this rule.
+a live rename and never a chained prompt. new issue => new session; never retarget a live
+seat to another issue (exact-stop at a safe point, then a fresh standard-named session).
+**Otherwise existing active session names are left alone** - never stop or restart a live
+session solely to rename it, and the native ACP session id is unchanged by this rule.
 
 The outer orchestrator Host itself is not an issue-backed worker. Transport-only diagnostics
 and genuinely issue-less tasks have no mission ledger and must never be given one by name.

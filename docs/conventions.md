@@ -165,6 +165,13 @@ claim for that issue was read. A host (`orchestrator`), sideagent (including the
 in `docs/issue-dispatch-display.md` and encoded in
 `tests/contract/kaola-terminal-name-contract.json`.
 
+A live seat view (`project --seats`, and the Delegator seat summary) reports
+advisory `issue_drift` when a live seat's current dispatch issue is not the
+`i<ISSUE>` in its name, or when that name's issue has no active run. The
+suggestion is to exact-stop at the next safe point and start a fresh
+standard-named session. The view does not block, rename, retarget, or stop the
+seat, and it does not store the field. Detail is in `docs/api.md`.
+
 ## Release notes
 
 ### State-format updates and migration

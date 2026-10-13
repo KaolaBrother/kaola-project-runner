@@ -131,10 +131,11 @@ class ActivationBoundaries(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in scripts.iterdir()),
                          ["kaola-acp-paths.py", "kaola-compact-recovery.py",
                           "kaola-dispatch.py", "kaola-record-contract.py",
-                          "kaola-recovery-routes.py"],
+                          "kaola-recovery-routes.py", "kaola-session-names.py"],
                          "control plane ships the dispatch entry, its record contract, the "
                          "compact-recovery helper (#274 package closure), the shared record "
-                         "path helper (#292), the recovery-route table (#309), and no transport scripts")
+                         "path helper (#292), the recovery-route table (#309), the session-name "
+                         "helper (#312), and no transport scripts")
         self.assertIn("Load one selected worker Skill only at dispatch", text)
         external = (PROJECT / "skills" / EXTERNAL_ID / "SKILL.md").read_bytes()
         self.assertLessEqual(len(external), BUDGETS["external_skill_bytes"])

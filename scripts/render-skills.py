@@ -606,6 +606,11 @@ def expected_orchestrator_files(manifests: list[dict[str, str]]) -> dict[str, by
     if not routes_script.is_file():
         raise ValueError(f"missing recovery routes: {routes_script}")
     result["scripts/kaola-recovery-routes.py"] = routes_script.read_bytes()
+    # Issue #312: seat drift reuses the session-name parser beside this file.
+    names_script = ROOT / "scripts" / "kaola-session-names.py"
+    if not names_script.is_file():
+        raise ValueError(f"missing session-name helper: {names_script}")
+    result["scripts/kaola-session-names.py"] = names_script.read_bytes()
     return result
 
 

@@ -15,6 +15,10 @@ Two closed vocabularies:
   ``issue_name``. Their honest marker is ``name_role``
   (``host`` | ``sideagent`` | ``seat``). A worker's ``name_role`` is
   ``worker``.
+* ``seat_issue_drift`` (Issue #312) is the live-seat advisory. Its
+  ``advisories`` are ``dispatch-issue-mismatch`` and ``no-active-run``.
+  ``None`` means the seat is not flagged. The function does not stop,
+  rename, or refuse.
 
 ``classification`` ``ok`` means the name is
 ``<platform>-<PROJECT>-i<ISSUE>-<purpose>`` and ``platform`` is the exact
@@ -47,6 +51,15 @@ ISSUE_NAME_VALUES = (
     "no-active-run",
 )
 NAME_ROLES = ("worker", "host", "sideagent", "seat")
+# Live-seat drift. Not a start refusal and not a second name validator.
+DRIFT_ADVISORIES = (
+    "dispatch-issue-mismatch",
+    "no-active-run",
+)
+SAFE_POINT_SUGGESTION = (
+    "At the next safe point, exact-stop this seat and start a fresh "
+    "standard-named session. Never retarget this live seat to another issue."
+)
 PARSED_KEYS = (
     "classification",
     "name_role",
@@ -419,6 +432,60 @@ def join_bound(parsed: dict[str, Any], claims: list[dict[str, Any]],
     if len(matching) != 1:
         return False
     return matching[0].get("claim_repository_id") == record_repository_id
+
+
+def _positive_issues(values: list[int] | tuple[int, ...] | None) -> list[int]:
+    found: list[int] = []
+    for value in values or []:
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            continue
+        if value not in found:
+            found.append(value)
+    found.sort()
+    return found
+
+
+def seat_issue_drift(name: str, platform_id: str,
+                     dispatch_issues: list[int] | tuple[int, ...] | None = None,
+                     *,
+                     repo: str | None = None,
+                     active_claim_count: int | None = None,
+                     platforms_dir: Path | None = None) -> dict[str, Any] | None:
+    """Advisory for one live seat, or None when nothing is flagged.
+
+    The caller decides that the seat is live. ``dispatch_issues`` are the
+    issues on its current execute items. A name issue that differs from any
+    of them is ``dispatch-issue-mismatch``. ``no-active-run`` is the same
+    fact as ``issue_name`` ``no-active-run``: classification ``ok`` and no
+    active claim. A short alias keeps its start advisory and is not also
+    called ``no-active-run`` here. This function does not rename, stop, or
+    refuse the seat.
+    """
+    parsed = parse_session_name(name, platform_id, platforms_dir)
+    name_issue = parsed.get("issue")
+    if isinstance(name_issue, bool) or not isinstance(name_issue, int):
+        name_issue = None
+    current = _positive_issues(dispatch_issues)
+    advisories: list[str] = []
+    if name_issue is not None and any(issue != name_issue for issue in current):
+        advisories.append("dispatch-issue-mismatch")
+    if parsed.get("classification") == "ok" and name_issue is not None:
+        count = active_claim_count
+        if count is None and isinstance(repo, str) and repo:
+            count = find_active_claims(repo, name_issue)["count"]
+        if isinstance(count, int) and not isinstance(count, bool) and count < 1:
+            advisories.append("no-active-run")
+    if not advisories:
+        return None
+    body: dict[str, Any] = {
+        "advisories": advisories,
+        "name_issue": name_issue,
+        "dispatch_issue": current[0] if len(current) == 1 else None,
+        "suggestion": SAFE_POINT_SUGGESTION,
+    }
+    if len(current) > 1:
+        body["dispatch_issues"] = current
+    return body
 
 
 def advise(name: str, platform_id: str, repo: str | None = None,

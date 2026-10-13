@@ -146,6 +146,36 @@ def _load_recovery_routes():
     return module
 
 
+def _load_session_names():
+    """Issue #312. A package copy without the helper still projects seats."""
+    cached = getattr(_load_session_names, "module", None)
+    if cached is not None:
+        return cached or None
+    path = Path(__file__).resolve().with_name("kaola-session-names.py")
+    if not path.is_file():
+        _load_session_names.module = False
+        return None
+    spec = importlib.util.spec_from_file_location("kaola_session_names", path)
+    if spec is None or spec.loader is None:
+        _load_session_names.module = False
+        return None
+    module = importlib.util.module_from_spec(spec)
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        _load_session_names.module = False
+        return None
+    finally:
+        sys.dont_write_bytecode = previous
+    if not callable(getattr(module, "seat_issue_drift", None)):
+        _load_session_names.module = False
+        return None
+    _load_session_names.module = module
+    return module
+
+
 def emit(payload: dict[str, Any], code: int = 0) -> int:
     module = _load_recovery_routes()
     printed: Any = payload
@@ -663,6 +693,117 @@ def observed_at() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# A current dispatch is an open assignment. A settled return is not.
+_OPEN_DISPATCH = frozenset({"in-flight", "unknown"})
+_CLOSED_ACCEPTANCE = frozenset({"accepted", "cancelled", "superseded", "handed-off"})
+
+
+def normalize_issue(value: Any) -> int | None:
+    """A positive issue number, or None. Bool and other types are not issues."""
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value if value >= 1 else None
+    if isinstance(value, str) and value.isascii() and value.isdecimal():
+        number = int(value)
+        return number if number >= 1 else None
+    return None
+
+
+def current_dispatch_issues(items: dict[str, dict[str, Any]], session: str,
+                            holder: str) -> list[int]:
+    """Issues on this seat's current execute items. Sorted, unique."""
+    found: list[int] = []
+    for item in items.values():
+        if not isinstance(item, dict) or item.get("session") != session:
+            continue
+        item_holder = item.get("holder_instance_id")
+        if isinstance(item_holder, str) and item_holder and item_holder != holder:
+            continue
+        status = item.get("status")
+        if status in _OPEN_DISPATCH:
+            open_item = True
+        elif status == "returned" and item.get("acceptance") not in _CLOSED_ACCEPTANCE:
+            open_item = True
+        else:
+            open_item = False
+        if not open_item:
+            continue
+        issue = normalize_issue(item.get("issue"))
+        if issue is not None and issue not in found:
+            found.append(issue)
+    found.sort()
+    return found
+
+
+def _issue_drift_fields(row: dict[str, Any] | None) -> dict[str, Any]:
+    """The advisory object for one seat row. Empty when the seat is not flagged."""
+    if not row:
+        return {}
+    body: dict[str, Any] = {
+        "advisories": list(row.get("advisories") or []),
+        "name_issue": row.get("name_issue"),
+        "dispatch_issue": row.get("dispatch_issue"),
+        "suggestion": row.get("suggestion"),
+    }
+    if "dispatch_issues" in row:
+        body["dispatch_issues"] = list(row["dispatch_issues"])
+    return {"issue_drift": body}
+
+
+def collect_issue_drift(bound: list[dict[str, Any]], items: dict[str, dict[str, Any]],
+                        repo: str, platforms_dir: Path | None = None) -> list[dict[str, Any]]:
+    """Advisory rows for live seats. Empty when the name helper is absent.
+
+    Computed when the seat view is read. This does not write the index, the
+    live list, or a registry, and it does not stop a seat.
+    """
+    module = _load_session_names()
+    if module is None:
+        return []
+    claims: dict[int, int] = {}
+    rows: list[dict[str, Any]] = []
+    for row in bound:
+        session = row.get("session")
+        platform = row.get("platform")
+        holder = row.get("holder_instance_id")
+        if not isinstance(session, str) or not isinstance(platform, str) or not isinstance(holder, str):
+            continue
+        issues = current_dispatch_issues(items, session, holder)
+        count = None
+        try:
+            parsed = module.parse_session_name(session, platform, platforms_dir)
+        except Exception:
+            continue
+        name_issue = parsed.get("issue") if isinstance(parsed, dict) else None
+        if (isinstance(parsed, dict) and parsed.get("classification") == "ok"
+                and isinstance(name_issue, int) and not isinstance(name_issue, bool)):
+            if name_issue not in claims:
+                try:
+                    found = module.find_active_claims(repo, name_issue)
+                    raw = found.get("count") if isinstance(found, dict) else 0
+                    claims[name_issue] = raw if isinstance(raw, int) and not isinstance(raw, bool) else 0
+                except Exception:
+                    claims[name_issue] = 0
+            count = claims[name_issue]
+        try:
+            drift = module.seat_issue_drift(
+                session, platform, issues, repo=repo, active_claim_count=count,
+                platforms_dir=platforms_dir,
+            )
+        except Exception:
+            continue
+        if not drift:
+            continue
+        rows.append({
+            "session": session,
+            "holder_instance_id": holder,
+            "platform": platform,
+            **drift,
+        })
+    return rows
+
+
 def seat_projection(args: argparse.Namespace, auth: dict[str, Any],
                   grants: list[dict[str, Any]], catalog: dict[str, dict[str, Any]],
                   binding: dict[str, Any] | None = None,
@@ -717,6 +858,10 @@ def seat_projection(args: argparse.Namespace, auth: dict[str, Any],
     if state != "known":
         unknown.append("live-source-unavailable")
     listed = None if args.live else acp_runner(Path(__file__), skills)
+    raw_platforms = getattr(args, "platforms", None)
+    platforms_dir = Path(raw_platforms) if isinstance(raw_platforms, str) and Path(raw_platforms).is_dir() else None
+    drift_rows = collect_issue_drift(bound, items, repo, platforms_dir)
+    drift_by = {(row["session"], row["holder_instance_id"]): row for row in drift_rows}
     projection = {
         "schema": "kaola-dispatch-seats/1", "repo": repo,
         "source": {"authorization": args.authorization, "live": args.live or (str(listed) if listed else None),
@@ -730,9 +875,11 @@ def seat_projection(args: argparse.Namespace, auth: dict[str, Any],
         "sessions": [{"session": row["session"], "platform": row.get("platform"),
                       "holder_instance_id": row["holder_instance_id"], "state": row.get("state"),
                       "preset": resolved.get(row["session"]),
-                      **({"role": row["session_role"]} if row.get("session_role") in SIDEAGENT_ROLES else {})}
+                      **({"role": row["session_role"]} if row.get("session_role") in SIDEAGENT_ROLES else {}),
+                      **_issue_drift_fields(drift_by.get((row["session"], row["holder_instance_id"])))}
                      for row in bound],
         "bound_sideagent": sideagent_rows or None,
+        "issue_drift": drift_rows,
     }
     projection["summary"] = seat_summary(projection, args, auth, grants, catalog, bound, items, document)
     return projection
@@ -767,6 +914,8 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
     candidates, withheld = eligibility(catalog, auth, effective, availability)
     reasons = {item["id"]: item["reason"] for item in withheld}
     resolved = {row["session"]: row.get("preset") for row in projection["sessions"]}
+    drift_by = {(row["session"], row["holder_instance_id"]): row
+                for row in projection.get("issue_drift") or [] if isinstance(row, dict)}
     occupied = []
     for row in rows:
         preset = resolved.get(row["session"])
@@ -791,7 +940,8 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
                   "idle-but-unreclaimed" if mutation in ("completed", "accepted") else "unknown")
         occupied.append({"session": row["session"], "holder_instance_id": row["holder_instance_id"],
                          "preset": preset, "tasks": sorted(links), "state": status,
-                         **({"links": "unknown"} if not links and mutation != "not_started" else {})})
+                         **({"links": "unknown"} if not links and mutation != "not_started" else {}),
+                         **_issue_drift_fields(drift_by.get((row["session"], row["holder_instance_id"])))})
     groups: dict[str, dict[str, Any]] = {}
     worker_seats: set[str] = set()
 
@@ -914,6 +1064,7 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
             "idle_available_total": sum(group["idle_available"] for group in groups.values())
                 if all(group["idle_available"] is not None for group in groups.values()) else None,
             "unknown_reasons": unknown_sources,
+            "issue_drift": list(projection.get("issue_drift") or []),
             "resource_limits": {key: auth[key] for key in ("account_token_quotas", "exclusions") if key in auth},
             "scope": "current project; external target/account capacity requires its original resource receipt",
             "source": projection["source"]}
@@ -1431,11 +1582,18 @@ def caller_dispatcher() -> dict[str, str] | None:
 
 def dispatch_links(row: dict[str, Any], item: dict[str, Any],
                    mark: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Carry the plan's task association, output location and stated
-    requirement onto the index row, whatever its admission result."""
+    """Carry the plan's task association, output location, stated
+    requirement, and issue onto the index row, whatever its admission result.
+
+    ``issue`` is copied only when it is a positive integer. It does not
+    admit or refuse the item.
+    """
     for key in ("task_id", "output", "requires", "prompt_source"):
         if item.get(key) is not None and row.get(key) is None:
             row[key] = item[key]
+    issue = normalize_issue(item.get("issue"))
+    if issue is not None and row.get("issue") is None:
+        row["issue"] = issue
     item = mark or {}
     if item.get("_helper_counted"):
         evidence = dict(row.get("evidence") or {})

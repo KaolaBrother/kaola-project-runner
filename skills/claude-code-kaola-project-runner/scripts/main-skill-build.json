@@ -1,5 +1,5 @@
 {
-  "build": "145341c9cda3",
+  "build": "d91a16339823",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "e87411af5a117aa5edaa26ed935059ff381db776857767f70009b6fcad66e6ca",
@@ -10,7 +10,7 @@
     "references/heartbeat-skeleton.md": "9e7db23e0f1ef15655e5aafc5d648784f260deaaa1ae2d9958d5a2daaa7d6786",
     "references/host-entry-matrix.md": "0c81c9b9be00c7d009d9027f9a8860e20e005c77b811759255b4b71b86fa55fe",
     "references/host-startup.md": "897028f4fdf61ea34f96675f98cbf5dc1dc4d7b2d8fc0b386ae749c0b6557637",
-    "references/issue-dispatch.md": "a3ce7085ce16fef3d6a850806af10fe0cedd83cda41e1ab3f32d4121cdbb1aa4",
+    "references/issue-dispatch.md": "6407f91879482c6645c37eb439bd5ec09285bbe1f4860fbaf260ac9b715a4bda",
     "references/lifecycle-state.md": "3869b1a854d39da9acf494a082858cbd24951b144d4dc97d419b6120211e1078",
     "references/profile-catalog.md": "92c8b03a3f12673f8e53de4b29c9b6a3417e5461bcb091dcaf7b03b0d9875ed2",
     "references/public-research.md": "86e2ad1cd11840fd58900cde429e9b45457f149b67fa91a32e5fe6429a58407c",
@@ -24,9 +24,10 @@
     "references/zcode-native-skill-entry.md": "22f5e4ce50d92a0e264c71252616a9c2db8473817be1c5eb99d0a415f814918f",
     "scripts/kaola-acp-paths.py": "e435b3aeab7979fb1bff8d18b25087021ca1daf9a0015831fde46126d24261ac",
     "scripts/kaola-compact-recovery.py": "c45662a4297047bd860a46157e950b4aac460b3e9df1a889abe99ca687e90f27",
-    "scripts/kaola-dispatch.py": "f890e41c64980889e5c018963644c4b6d1339e5feb4dd3ae0c907321886d0945",
+    "scripts/kaola-dispatch.py": "eb0bf9cf411db331dfec13d645693ad8eb1606b01ae9765aa4b445d18249ed13",
     "scripts/kaola-record-contract.py": "ad46090a0a5821e517adbf240ccaaf14b8a4d623696a994e73dbaa6585ad8c8a",
-    "scripts/kaola-recovery-routes.py": "7d36e551082cbb3ca3c315ab0d5e69b1f0cf4e5f91578924dbf193885f23a23c"
+    "scripts/kaola-recovery-routes.py": "7d36e551082cbb3ca3c315ab0d5e69b1f0cf4e5f91578924dbf193885f23a23c",
+    "scripts/kaola-session-names.py": "28cf886b38c0bdba325d1c0fe03f3c13532d3cbf0dc24b1cf6628fd7b7bffaa3"
   },
   "skill": "kaola-project-runner"
 }
