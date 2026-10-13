@@ -298,6 +298,8 @@ ROUTES: dict[str, tuple[str, str]] = {
     "schema-unsupported": ("route", "Read detail and the current revision. Run the state command detail names (init, migrate, update, or retire) with that revision. Do not write a second file or retry the same patch unchanged."),
     "scoped-checkpoint-already-settled": ("route", "Read detail and the current revision. Run the state command detail names (init, migrate, update, or retire) with that revision. Do not write a second file or retry the same patch unchanged."),
     "verified-past-revision": ("self-route", "The returned input is covered by a later verified checkpoint and is settled. Read that checkpoint record; do not re-file the input or retry the same registration."),
+    "wake-not-host": ("self-route", "Only the Host holder sends Delegator wakes. Re-run the wake command from the Host session (its shell or the orchestrator Skill), not from a worker or an unbound shell. Do not start a second Host for it."),
+    "wake-reason-refused": ("route", "Pass --reason with one of needs_decision, question_waiting, or delivery_review. Read the receipt's allowed list; do not invent a reason string."),
     "script-missing": ("route", "Run ./scripts/render-skills.py --write so the worker script exists, then rerun attest."),
     "script-not-executable": ("route", "Make the worker runtime-tmux.sh executable, then rerun attest."),
     "script-outside-root": ("route", "Use the worker script inside this checkout. Do not attest a script outside the root."),
