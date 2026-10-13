@@ -117,9 +117,9 @@ A dead holder with no signal gets one `error`/`holder_lost` wake for that
 `holder_instance_id` and a new `event_seq`. `start` or a dead-holder `stop`
 sends it. The cron fallback sends it with no new Host start: each inquiry
 runs `$HOOK status --project "$PROJECT"`. `test` does not scan. `status`
-wakes a Host record of this project when the holder pid, agent pid, and
-agent pgid are dead and `state` is not `stopped`, through the same sender
-and `delegator_death_wake` dedupe. A live pid, reused or not, waits for
+wakes a Host record of this project when the holder pid is dead and
+`state` is not `stopped`, even if the agent lives, via the same sender
+and `delegator_death_wake` dedupe. A live holder pid, reused or not, waits for
 `start` or `stop`. Nothing else polls. The wait is one `cadence.interval_minutes` (example
 120 minutes). `status` does not read that interval and does not schedule itself.
 

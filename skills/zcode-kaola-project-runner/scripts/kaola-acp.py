@@ -5869,14 +5869,17 @@ def command_start(args: argparse.Namespace, repo: str,
                 return attach_binding_fact(receipt, record)
             receipt["replaced_record"] = {"holder_pid": holder_pid, "pid_reused": True,
                                           "holder_instance_id": record.get("holder_instance_id")}
-        if pid_alive(record.get("agent_pgid")) or pid_alive(record.get("agent_pid")):
-            receipt.update(holder_lost_receipt(args, repo, record))
-            return receipt
-        # Issue #299: this start replaces a dead (or proven pid-reused)
-        # holder that never signalled — emit its holder_lost wake first.
+        # Issue #299/#319: wake eligibility is this dead or proven
+        # pid-reused holder. A live agent does not suppress the wake.
+        # It only blocks replacement: the record stays until the caller
+        # exact-stops that orphan. The receipt carries the agent pids
+        # and the holder-lost route; the wake payload does not.
         death_wake = recover_host_death_wake(directory, record)
         if death_wake is not None:
             receipt["delegator_death_wake"] = death_wake
+        if pid_alive(record.get("agent_pgid")) or pid_alive(record.get("agent_pid")):
+            receipt.update(holder_lost_receipt(args, repo, record))
+            return receipt
     acp_paths.prepare_record_directory(directory, directory.parent.parent.parent)
     if receipt.get("replaced_record"):
         try:
@@ -7379,13 +7382,14 @@ def _webhook_same_project(record: dict[str, Any], project_root: str) -> bool:
 
 
 def _webhook_death_eligible(project_root: str, record: dict[str, Any]) -> bool:
-    """Same gate ``command_start`` uses before ``recover_host_death_wake``.
+    """Host holder death for ``delegator-webhook status`` (#311, #319).
 
-    Host role, not ``stopped``, holder pid dead, and neither the recorded
-    agent pid nor the recorded agent pgid still alive. A live holder pid,
-    including one reused by another process, is not this scan: that case is
-    still the next ``start`` or dead-holder ``stop``. ``status`` does not
-    probe argv.
+    Host role, not ``stopped``, this project, and the holder pid dead.
+    A live ``agent_pid`` or ``agent_pgid`` still wakes. That liveness only
+    blocks ``command_start`` from replacing the record. A live holder pid,
+    including one reused by another process, is not this scan: ``status``
+    does not probe argv, so that case stays with the next ``start`` or
+    dead-holder ``stop``.
     """
     holder_instance_id = record.get("holder_instance_id")
     if (not _webhook_same_project(record, project_root)
@@ -7393,8 +7397,6 @@ def _webhook_death_eligible(project_root: str, record: dict[str, Any]) -> bool:
             or record.get("state") == "stopped"
             or not isinstance(holder_instance_id, str)
             or not holder_instance_id):
-        return False
-    if pid_alive(record.get("agent_pid")) or pid_alive(record.get("agent_pgid")):
         return False
     return not pid_alive(record.get("holder_pid"))
 

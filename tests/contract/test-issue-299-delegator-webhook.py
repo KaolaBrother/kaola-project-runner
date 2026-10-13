@@ -1124,7 +1124,8 @@ class HolderLostStatus(WebhookCase):
         directory = self.write_record(session)
         self.write_record("zcode-i311-worker", role="elite")
         self.write_record("zcode-i311-stopped", state="stopped")
-        self.write_record("zcode-i311-agent-alive", agent_pid=os.getpid())
+        # A live agent does not suppress the wake (#319). That case is
+        # test_surviving_agent_wakes_holder_lost_and_start_keeps_the_record.
         self.write_record("zcode-i311-live-holder", pid=os.getpid())
         code, status = self.hook_json("status", "--project", str(self.repo))
         self.assertEqual(code, 0)
@@ -1192,6 +1193,123 @@ class HolderLostStatus(WebhookCase):
                              for item in self.endpoint.posts),
                  15, "holder_lost POST after enable")
         self.assertEqual(len(self.death_lines(directory)), 1)
+
+    def test_surviving_agent_wakes_holder_lost_and_start_keeps_the_record(self) -> None:
+        """Issue #319: holder death with an agent that outlives the holder.
+
+        ``mock-acp-agent.py`` exits on stdin EOF, so it is not this agent.
+        A ``sleep`` in its own session is the recorded agent. The status
+        scan and ``start`` both emit ``holder_lost``. ``start`` does not
+        replace the record while that process lives. The payload has no
+        agent pids. The start receipt carries them and the holder-lost route.
+        """
+        self.endpoint = Endpoint()
+        code, out = self.configure(self.endpoint.url)
+        self.assertEqual(code, 0, out)
+        status_agent = subprocess.Popen(
+            ["sleep", "300"], start_new_session=True)
+        start_agent: subprocess.Popen | None = None
+        try:
+            session = "zcode-i319-orchestrator-status"
+            directory = self.write_record(session, agent_pid=status_agent.pid)
+            record_path = directory / "record.json"
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            record["agent_pgid"] = status_agent.pid
+            record_path.write_text(json.dumps(record), encoding="utf-8")
+            before = record_path.read_bytes()
+            code, status = self.hook_json("status", "--project", str(self.repo))
+            self.assertEqual(code, 0, status)
+            wakes = status["holder_lost"]["wakes"]
+            self.assertEqual(len(wakes), 1, status["holder_lost"])
+            wake = wakes[0]
+            self.assertEqual(wake["session"], session)
+            self.assertTrue(wake["delegator_death_wake"]["sent"], wake)
+            self.assertEqual(
+                set(wake["delegator_death_wake"]),
+                {"sent", "holder_instance_id", "event_seq"})
+            self.assertIsNone(status_agent.poll(), "status agent was signalled")
+            self.assertEqual(record_path.read_bytes(), before)
+            post = wait_for(
+                lambda: next((item for item in self.endpoint.posts
+                              if (item["body"] or {}).get("session") == session
+                              and (item["body"] or {}).get("reason") == "holder_lost"),
+                             None),
+                15, "status holder_lost POST")
+            body = post["body"]
+            self.assertEqual(body["state"], "error")
+            self.assertEqual(body["state_detail"], "holder_lost")
+            self.assertEqual(body["reason"], "holder_lost")
+            self.assertEqual(set(body), PAYLOAD_KEYS)
+            self.assertNotIn("agent_pid", body)
+            self.assertNotIn("agent_pgid", body)
+            self.assertNotIn(status_agent.pid, body.values())
+
+            start_agent = subprocess.Popen(
+                ["sleep", "300"], start_new_session=True)
+            self.start_host("survive")
+            live = self.holder_record()
+            holder_pid = live["holder_pid"]
+            mock_pid = live.get("agent_pid")
+            os.kill(holder_pid, signal.SIGKILL)
+            wait_for(lambda: self.pid_dead(holder_pid) and self.pid_dead(mock_pid),
+                     5, "holder and mock agent dead")
+            path = next((self.record_root / "grok" / self.session).rglob("record.json"))
+            stored = json.loads(path.read_text(encoding="utf-8"))
+            stored["agent_pid"] = start_agent.pid
+            stored["agent_pgid"] = start_agent.pid
+            path.write_text(json.dumps(stored), encoding="utf-8")
+            held_id = stored["holder_instance_id"]
+            self.assertIsNone(start_agent.poll(), "start agent died with the holder")
+            code, receipt = self.acp("start", check=False)
+            self.assertEqual(receipt.get("outcome"), "holder_lost", receipt)
+            self.assertEqual(receipt["error"]["code"], "holder-lost")
+            self.assertEqual(receipt["error"]["agent_pgid"], start_agent.pid)
+            self.assertEqual(receipt["record"]["agent_pid"], start_agent.pid)
+            self.assertEqual(receipt["record"]["agent_pgid"], start_agent.pid)
+            self.assertTrue(receipt["delegator_death_wake"]["sent"], receipt)
+            self.assertEqual(receipt["delegator_death_wake"]["holder_instance_id"], held_id)
+            route = receipt.get("route") or ""
+            self.assertIn("Exact-stop", route)
+            self.assertIn("start --resume", route)
+            self.assertIn("fresh Host", route)
+            self.assertIn("summary", route)
+            kept = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(kept["holder_instance_id"], held_id)
+            self.assertEqual(kept["holder_pid"], holder_pid)
+            self.assertEqual(kept["agent_pid"], start_agent.pid)
+            self.assertEqual(kept["agent_pgid"], start_agent.pid)
+            self.assertIsNone(start_agent.poll(), "start replaced the record and signalled the agent")
+            started = wait_for(
+                lambda: next((item for item in self.endpoint.posts
+                              if (item["body"] or {}).get("holder_instance_id") == held_id
+                              and (item["body"] or {}).get("reason") == "holder_lost"),
+                             None),
+                15, "start holder_lost POST")
+            started_body = started["body"]
+            self.assertEqual(started_body["state_detail"], "holder_lost")
+            self.assertEqual(set(started_body), PAYLOAD_KEYS)
+            self.assertNotIn("agent_pid", started_body)
+            self.assertNotIn("agent_pgid", started_body)
+            self.assertNotIn(start_agent.pid, started_body.values())
+            code, again = self.acp("start", check=False)
+            self.assertEqual(again.get("outcome"), "holder_lost", again)
+            self.assertFalse(again["delegator_death_wake"]["sent"], again)
+            self.assertEqual(again["delegator_death_wake"]["reason"], "already-recovered")
+            self.assertIn("Exact-stop", again.get("route") or "")
+            still = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(still["holder_instance_id"], held_id)
+            self.assertEqual(still["holder_pid"], holder_pid)
+            self.assertIsNone(start_agent.poll())
+            time.sleep(0.4)
+            lost = [item for item in self.endpoint.posts
+                    if (item["body"] or {}).get("holder_instance_id") == held_id
+                    and (item["body"] or {}).get("reason") == "holder_lost"]
+            self.assertEqual(len(lost), 1)
+        finally:
+            for proc in (status_agent, start_agent):
+                if proc is not None and proc.poll() is None:
+                    proc.kill()
+                    proc.wait(timeout=5)
 
 
 def socket_probe_closed_port() -> int:

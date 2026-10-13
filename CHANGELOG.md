@@ -37,6 +37,25 @@ Seats: restart required
   write the spawn-failed receipt until that holder restarts.
   `delegator-webhook deliver` and `status` are per-call. This change does
   not install.
+- **A dead holder wakes `holder_lost` while its agent is still alive (Issue #319).**
+  `delegator-webhook status` and `start` emit one `error` / `holder_lost` wake
+  when the holder pid is dead, including when `agent_pid` or `agent_pgid` is
+  still alive. The wake payload stays `state_detail` `holder_lost` and does
+  not carry those pids. `start` still refuses to replace the record while
+  either recorded agent pid is alive. That receipt keeps the record, names
+  `record.agent_pid`, `record.agent_pgid`, and `error.agent_pgid`, and carries
+  the `holder-lost` route: exact-stop the orphaned agent, then resume or start
+  a fresh Host with the summary. A later `start` after that exact stop
+  replaces the record. A live holder pid, including a reused pid, is unchanged:
+  `status` does not probe argv.
+  Seats: restart not required for this change. `scripts/kaola-acp.py` is
+  per-call and outside the operator restart set (`docs/conventions.md`).
+  `scripts/kaola-acp-holder.py` is unchanged. The next `start` and the next
+  `delegator-webhook status` use the new eligibility. A running holder does
+  not emit this wake and does not need a restart. The Delegator reads the
+  updated `webhook-wake.md` sentence after it reloads `kaola-delegator`.
+  This change does not install.
+
 - **A resume records whether a tier was requested, and status reads the actual model (Issue #316).**
   A resume or `--continue` that passes `--tier` applies that preset the same way a fresh
   start does. A resume that passes no `--tier`, `--model`, or `--effort` still sends no

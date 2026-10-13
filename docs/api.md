@@ -984,6 +984,28 @@ returns `sent: false` and `reason` `death-wake-unrecorded`: the death wake
 was not recorded; read the holder event log, then run `delegator-webhook
 status` and `test`. If test delivers, continue the inquiry. Do not treat
 the omitted wake as delivered. The exception text is not stored.
+CLI, not the holder. `start` on a dead or pid-reused record, and a dead-holder
+`stop` (`force_kill_from_record`, the pid-reused branch of
+`force_stop_unreachable`), emit exactly one `error`/`holder_lost` wake on the
+dead instance's behalf. Wake eligibility is the dead holder (Issue #319). A
+live `agent_pid` or `agent_pgid` does not suppress that wake. `stop` emits it
+and then sweeps the recorded agent. `start` emits it and replaces the record
+only when both recorded agent pids are dead. While either recorded agent pid
+is alive, `start` leaves the record in place and returns `outcome`
+`holder_lost`. That receipt's `record` carries `agent_pid` and `agent_pgid`,
+and `error.agent_pgid` repeats the group id. The wake payload does not carry
+those pids. The receipt's `route` is the `holder-lost` route: exact-stop the
+orphaned agent (`stop --repo REPO --session SESSION
+--expected-holder-instance-id ID`), attest, then `start --resume NATIVE_ID`.
+If resume fails, start a fresh Host and hand it the summary from `status`,
+`capture --lines 200`, `list --repo --include-dead`, and delegator view.
+Exactly-once across process death is a `delegator_death_wake` event appended
+under an flock on `delegator-death-wake.lock` in the record dir; the event's
+cursor is the wake's `event_seq` (the EventLog cursor continues across holders
+in one record dir), so the recovered wake is a new event and not a duplicate
+of an earlier wake from that holder. The start/stop receipt names the outcome
+under `delegator_death_wake` (`sent`, `holder_instance_id`, `event_seq`, or a
+`reason` of `already-recovered`/`spawn-failed`).
 
 `delegator-webhook status` is a third caller (#311). It does not replace or
 retire the record, and it does not need a new Host start. The Delegator's
@@ -997,11 +1019,13 @@ The scan runs only when the project entry exists, validates, and `enabled`
 is true. It walks record files for that project and calls
 `recover_host_death_wake` when all of these hold: `session_role` is `host`,
 `state` is not `stopped`, `holder_instance_id` is a non-empty string, the
-record repo is this project, and `holder_pid`, `agent_pid`, and `agent_pgid`
-are all dead (`pid_alive` is false for a missing pid). The same
-`delegator_death_wake` flock and event apply, so a second `status` returns
-`already-recovered` and does not POST again. `status` returns as soon as the
-deliver child is spawned. It does not wait for the network.
+record repo is this project, and `holder_pid` is dead (`pid_alive` is false
+for a missing pid). A live `agent_pid` or `agent_pgid` stays eligible
+(Issue #319). The wake payload stays `state` `error`, `state_detail`
+`holder_lost`, `reason` `holder_lost`, and does not include those pids.
+The same `delegator_death_wake` flock and event apply, so a second `status`
+returns `already-recovered` and does not POST again. `status` returns as soon
+as the deliver child is spawned. It does not wait for the network.
 
 A missing config, `enabled: false`, `config-mode`, or `invalid-config` sets
 `holder_lost.scan` to `skipped` with `reason` `not-enabled` or that config
@@ -1009,8 +1033,11 @@ error, and `wakes` empty. A skipped scan writes no death event, so a later
 enabled `status` can still send the wake. A live `holder_pid` is not woken
 here, including a pid whose argv is no longer the holder: `status` does not
 probe argv. That reused-pid case stays with the next `start` or dead-holder
-`stop`. A live `agent_pid` or `agent_pgid` also suppresses the scan wake.
-That is the same gate `command_start` uses before it will replace the record.
+`stop`. Record replacement is separate, and only `command_start` does it.
+A live `agent_pid` or `agent_pgid` blocks that replacement. The start receipt
+then carries the live agent pids (`record.agent_pid`, `record.agent_pgid`,
+`error.agent_pgid`) and the `holder-lost` route. The record stays until an
+exact stop of the orphaned agent.
 
 The CLI does not poll and does not read `cadence.interval_minutes`. Nothing
 else in the runner polls webhook state. The cadence bound is the Delegator's
