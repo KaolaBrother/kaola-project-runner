@@ -45,9 +45,17 @@ package. Package tokens and rule targets are checked when the manifest loads.
 
 from __future__ import annotations
 
+import argparse
 import copy
 import json
+import os
 import re
+import shutil
+import signal
+import subprocess
+import sys
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -517,3 +525,413 @@ def view_models(session_meta: Any, catalog: Catalog) -> dict[str, Any]:
         if isinstance(option, dict) and option.get("id") == catalog.model_config_id
     ]
     return {"availableModels": available, "options": model_options}
+
+
+ANTIGRAVITY_USAGE_ARGS: tuple[str, ...] = ("-p", "/usage", "--output-format", "json")
+ANTIGRAVITY_GEMINI_GROUP = "Gemini Models"
+ANTIGRAVITY_3P_GROUP = "Claude and GPT models"
+ANTIGRAVITY_WINDOW_PRIORITY: tuple[str, ...] = ("weekly", "5h")
+_ANTIGRAVITY_BUCKET_WINDOWS: dict[str, str] = {
+    "gemini-weekly": "weekly",
+    "gemini-5h": "5h",
+    "3p-weekly": "weekly",
+    "3p-5h": "5h",
+}
+
+
+def antigravity_group_for_model(model_id: str | None) -> str:
+    """Return the Antigravity ``/usage`` group name that governs ``model_id``.
+
+    Verified live on ``agy 1.3.5`` (Issue #329): ``agy -p /usage --output-format json``
+    reports two quota groups under ``antigravity:account``:
+    ``Gemini Models`` (``gemini-weekly``, ``gemini-5h``) for both verified presets
+    ``antigravity/default`` (``gemini-4-argon-medium``) and ``antigravity/xhigh``
+    (``gemini-4-argon-high``) plus ``gemini-3-flash-agent``, and
+    ``Claude and GPT models`` (``3p-weekly``, ``3p-5h``) for third-party
+    Anthropic/OpenAI models (``claude-*``, ``gpt-*``).
+    """
+    text = (model_id or "").strip().lower()
+    if text.startswith(("claude-", "gpt-", "o1-", "o3-", "o4-")):
+        return ANTIGRAVITY_3P_GROUP
+    return ANTIGRAVITY_GEMINI_GROUP
+
+
+def _antigravity_bucket_window(bucket_id: str, label: str) -> str | None:
+    if bucket_id in _ANTIGRAVITY_BUCKET_WINDOWS:
+        return _ANTIGRAVITY_BUCKET_WINDOWS[bucket_id]
+    lowered = f"{bucket_id} {label}".lower()
+    if "weekly" in lowered or "week" in lowered or "7d" in lowered:
+        return "weekly"
+    if "5h" in lowered or "5-hour" in lowered or "5 hour" in lowered:
+        return "5h"
+    if "monthly" in lowered or "month" in lowered:
+        return "monthly"
+    return None
+
+
+def _normalize_antigravity_bucket(bucket: dict[str, Any], group_name: str) -> dict[str, Any] | None:
+    bucket_id = bucket.get("id")
+    if not isinstance(bucket_id, str) or not bucket_id.strip():
+        return None
+    raw_name = bucket.get("name") if isinstance(bucket.get("name"), str) and bucket.get("name").strip() else None
+    raw_label = bucket.get("label") if isinstance(bucket.get("label"), str) and bucket.get("label").strip() else None
+    label = raw_name or raw_label or bucket_id.strip()
+    explicit_window = bucket.get("window")
+    if isinstance(explicit_window, str) and explicit_window.strip() in ("5h", "weekly", "monthly"):
+        window: str | None = explicit_window.strip()
+    else:
+        window = _antigravity_bucket_window(bucket_id.strip(), label)
+    if window is None:
+        return None
+    raw_rem = bucket.get("remaining_fraction")
+    if not isinstance(raw_rem, (int, float)) or isinstance(raw_rem, bool):
+        return None
+    rem_fraction = max(0.0, min(1.0, float(raw_rem)))
+    used_fraction = max(0.0, min(1.0, 1.0 - rem_fraction))
+    rem_pct = round(rem_fraction * 100.0, 2)
+    used_pct = round(used_fraction * 100.0, 2)
+    reset_time = bucket.get("reset_time")
+    reset_at = reset_time.strip() if isinstance(reset_time, str) and reset_time.strip() else None
+    return {
+        "bucket_id": bucket_id.strip(),
+        "label": label,
+        "group": group_name,
+        "window": window,
+        "used": used_pct,
+        "limit": 100.0,
+        "used_percent": used_pct,
+        "remaining_percent": rem_pct,
+        "remaining_fraction": rem_fraction,
+        "used_fraction": used_fraction,
+        "reset_at": reset_at,
+    }
+
+
+def _select_primary_window(windows: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+    for period in ANTIGRAVITY_WINDOW_PRIORITY:
+        if period in windows:
+            return dict(windows[period])
+    for entry in windows.values():
+        return dict(entry)
+    return None
+
+
+def parse_antigravity_usage(
+    raw: str,
+    model: str | None = None,
+    stderr: str = "",
+) -> dict[str, Any]:
+    """Parse ``agy -p /usage --output-format json`` output into standard quota shape.
+
+    Returns a dictionary with:
+    - ``platform``: ``"antigravity"``
+    - ``packageId``: ``"antigravity:account"``
+    - ``status``: ``"ok"`` | ``"login_required"`` | ``"unavailable"`` | ``"error"``
+    - ``model``: requested model id (or None)
+    - ``selected_group``: group name used for top-level ``quota`` and ``windows``
+    - ``quota``: primary window dict (``used``, ``limit``, ``used_percent``,
+      ``remaining_percent``, ``remaining_fraction``, ``reset_at``, ``window``)
+      selecting ``weekly`` when both ``weekly`` and ``5h`` exist, or ``None``
+    - ``windows``: ``{"5h": {...}, "weekly": {...}}`` for ``selected_group``
+    - ``groups``: ``{"Gemini Models": {"windows": {...}, "quota": {...}}, ...}``
+    """
+    selected_group = antigravity_group_for_model(model)
+    base: dict[str, Any] = {
+        "platform": "antigravity",
+        "packageId": "antigravity:account",
+        "model": model,
+        "selected_group": selected_group,
+        "status": "error",
+        "quota": None,
+        "windows": {},
+        "groups": {},
+    }
+    stderr_text = (stderr or "").strip()
+    raw_text = (raw or "").strip()
+    payload: dict[str, Any] | None = None
+    if raw_text:
+        for line in reversed(raw_text.splitlines()):
+            candidate = line.strip()
+            if candidate.startswith("{") and candidate.endswith("}"):
+                try:
+                    parsed = json.loads(candidate)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(parsed, dict):
+                    payload = parsed
+                    break
+        if payload is None:
+            try:
+                parsed = json.loads(raw_text)
+                if isinstance(parsed, dict):
+                    payload = parsed
+            except json.JSONDecodeError:
+                payload = None
+
+    if payload is None:
+        if "Authentication required" in stderr_text or "Please visit the URL to log in" in stderr_text:
+            base["status"] = "login_required"
+            base["error"] = "authentication required"
+            return base
+        base["status"] = "error"
+        base["error"] = stderr_text or "invalid JSON output from agy -p /usage"
+        return base
+
+    error_field = payload.get("error")
+    error_text = error_field.strip() if isinstance(error_field, str) else ""
+    if payload.get("status") != "SUCCESS" or error_text:
+        combined = f"{error_text} {stderr_text}".lower()
+        if "authentication" in combined or "log in" in combined or "not logged in" in combined:
+            base["status"] = "login_required"
+        elif "quota data is not available" in combined or "not eligible" in combined:
+            base["status"] = "unavailable"
+        else:
+            base["status"] = "error"
+        base["error"] = error_text or stderr_text or "agy /usage returned non-success status"
+        return base
+
+    inner: dict[str, Any] | None = None
+    command_obj = payload.get("command")
+    if isinstance(command_obj, dict) and isinstance(command_obj.get("data"), dict):
+        inner = command_obj["data"]
+    else:
+        response_raw = payload.get("response")
+        if isinstance(response_raw, str) and response_raw.strip():
+            try:
+                parsed_inner = json.loads(response_raw)
+                if isinstance(parsed_inner, dict):
+                    inner = parsed_inner
+            except json.JSONDecodeError as exc:
+                base["status"] = "error"
+                base["error"] = f"invalid inner response JSON: {exc}"
+                return base
+
+    if not isinstance(inner, dict):
+        base["status"] = "unavailable"
+        base["error"] = "missing command.data or JSON response in agy /usage payload"
+        return base
+
+    inner_error = inner.get("error")
+    if isinstance(inner_error, str) and inner_error.strip():
+        lowered = inner_error.lower()
+        if "not logged in" in lowered or "authentication" in lowered:
+            base["status"] = "login_required"
+        else:
+            base["status"] = "unavailable"
+        base["error"] = inner_error.strip()
+        return base
+
+    raw_groups = inner.get("groups")
+    if not isinstance(raw_groups, list) or not raw_groups:
+        base["status"] = "unavailable"
+        base["error"] = "no quota groups in agy /usage response"
+        return base
+
+    groups: dict[str, dict[str, Any]] = {}
+    for item in raw_groups:
+        if not isinstance(item, dict):
+            continue
+        group_name = item.get("name") if isinstance(item.get("name"), str) and item.get("name").strip() else item.get("group")
+        if not isinstance(group_name, str) or not group_name.strip():
+            continue
+        raw_buckets = item.get("buckets")
+        if not isinstance(raw_buckets, list):
+            continue
+        group_windows: dict[str, dict[str, Any]] = {}
+        buckets_list: list[dict[str, Any]] = []
+        for bucket in raw_buckets:
+            if not isinstance(bucket, dict):
+                continue
+            normalized = _normalize_antigravity_bucket(bucket, group_name.strip())
+            if normalized is None:
+                continue
+            buckets_list.append(normalized)
+            group_windows[normalized["window"]] = normalized
+        if group_windows:
+            groups[group_name.strip()] = {
+                "group": group_name.strip(),
+                "windows": group_windows,
+                "quota": _select_primary_window(group_windows),
+                "buckets": buckets_list,
+            }
+
+    if not groups:
+        base["status"] = "unavailable"
+        base["error"] = "no usable quota buckets in agy /usage response"
+        return base
+
+    chosen = groups.get(selected_group) or next(iter(groups.values()))
+    base["status"] = "ok"
+    base["selected_group"] = chosen["group"]
+    base["groups"] = groups
+    base["windows"] = dict(chosen["windows"])
+    base["quota"] = dict(chosen["quota"]) if isinstance(chosen.get("quota"), dict) else None
+    return base
+
+
+def probe_antigravity_usage(
+    binary: str | None = None,
+    model: str | None = None,
+    timeout: float = 20.0,
+    cwd: str | Path | None = None,
+    env: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Run ``agy -p /usage --output-format json`` and return parsed quota facts.
+
+    Handles ``agy``'s unsigned-account OAuth prompt on stderr by interrupting
+    the child with ``SIGINT`` immediately instead of waiting for its 60s
+    browser-login timeout, and reads stdout line-by-line so background child
+    file descriptors do not block after the JSON line is emitted.
+    """
+    exe = binary or shutil.which("agy") or "agy"
+    cmd = [exe, *ANTIGRAVITY_USAGE_ARGS]
+    if isinstance(model, str) and model.strip():
+        cmd.extend(["--model", model.strip()])
+    run_env = dict(os.environ if env is None else env)
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(cwd) if cwd is not None else None,
+            env=run_env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except OSError as exc:
+        return {
+            "platform": "antigravity",
+            "packageId": "antigravity:account",
+            "model": model,
+            "selected_group": antigravity_group_for_model(model),
+            "status": "error",
+            "quota": None,
+            "windows": {},
+            "groups": {},
+            "error": str(exc),
+            "command": cmd,
+        }
+
+    stdout_lines: list[str] = []
+    stderr_lines: list[str] = []
+    got_json_event = threading.Event()
+    auth_prompt_event = threading.Event()
+
+    def _read_stdout() -> None:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            stdout_lines.append(line)
+            stripped = line.strip()
+            if stripped.startswith("{") and stripped.endswith("}"):
+                got_json_event.set()
+                break
+
+    def _read_stderr() -> None:
+        assert proc.stderr is not None
+        for line in proc.stderr:
+            stderr_lines.append(line)
+            if "Authentication required" in line or "Please visit the URL to log in" in line:
+                auth_prompt_event.set()
+                try:
+                    proc.send_signal(signal.SIGINT)
+                except OSError:
+                    pass
+                break
+
+    t_out = threading.Thread(target=_read_stdout, daemon=True)
+    t_err = threading.Thread(target=_read_stderr, daemon=True)
+    t_out.start()
+    t_err.start()
+
+    deadline = time.monotonic() + max(0.5, float(timeout))
+    while time.monotonic() < deadline:
+        if got_json_event.is_set():
+            break
+        if auth_prompt_event.is_set() and proc.poll() is not None:
+            break
+        if proc.poll() is not None and not t_out.is_alive():
+            break
+        time.sleep(0.05)
+
+    timed_out = not got_json_event.is_set() and not auth_prompt_event.is_set() and proc.poll() is None
+    if proc.poll() is None:
+        try:
+            proc.terminate()
+            proc.wait(timeout=1.0)
+        except Exception:
+            try:
+                proc.kill()
+                proc.wait(timeout=1.0)
+            except Exception:
+                pass
+    else:
+        try:
+            proc.wait(timeout=1.0)
+        except Exception:
+            pass
+
+    t_out.join(timeout=0.5)
+    t_err.join(timeout=0.5)
+    for pipe in (proc.stdout, proc.stderr):
+        if pipe is not None:
+            try:
+                pipe.close()
+            except Exception:
+                pass
+    raw_stdout = "".join(stdout_lines)
+    raw_stderr = "".join(stderr_lines)
+    if timed_out and not raw_stdout.strip():
+        return {
+            "platform": "antigravity",
+            "packageId": "antigravity:account",
+            "model": model,
+            "selected_group": antigravity_group_for_model(model),
+            "status": "error",
+            "quota": None,
+            "windows": {},
+            "groups": {},
+            "error": f"timed out after {timeout}s waiting for agy -p /usage",
+            "command": cmd,
+        }
+    result = parse_antigravity_usage(raw_stdout, model=model, stderr=raw_stderr)
+    result["command"] = cmd
+    return result
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Quota package catalog, model->package resolution, and live usage probe."
+    )
+    parser.add_argument("--platform", default="antigravity", choices=PLATFORM_ORDER)
+    parser.add_argument("--model", default=None, help="Optional model id to resolve or select usage group")
+    parser.add_argument("--probe", action="store_true", help="Probe live runtime usage when supported")
+    parser.add_argument("--binary", default=None, help="Override CLI binary path for --probe")
+    parser.add_argument("--timeout", type=float, default=20.0, help="Timeout in seconds for --probe")
+    args = parser.parse_args(argv)
+
+    catalog = load_catalog(args.platform)
+    output: dict[str, Any] = {
+        "platform": args.platform,
+        "packages": catalog.public_packages(),
+    }
+    if args.model is not None:
+        output["resolved"] = resolve_model(catalog, args.model)
+    if args.probe:
+        if args.platform != "antigravity":
+            output["usage"] = {
+                "platform": args.platform,
+                "status": "unsupported",
+                "error": f"live CLI probe in kaola-quota.py is only implemented for antigravity (got {args.platform})",
+            }
+        else:
+            output["usage"] = probe_antigravity_usage(
+                binary=args.binary,
+                model=args.model,
+                timeout=args.timeout,
+            )
+    print(json.dumps(output, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

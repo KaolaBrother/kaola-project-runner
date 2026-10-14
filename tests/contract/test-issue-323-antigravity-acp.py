@@ -706,11 +706,67 @@ class ManifestAndRegistrations(unittest.TestCase):
         quota = load("kaola-quota")
         catalog = quota.load_catalog("antigravity", SCRIPTS)
         self.assertEqual(catalog.public_packages(),
-                         [{"id": "antigravity:account", "name": "Account", "windows": None, "binds_models": True}])
+                         [{"id": "antigravity:account", "name": "Account", "windows": ["5h", "weekly"], "binds_models": True}])
         self.assertEqual(catalog.rule["kind"], "single")
-        for model in ("gemini-4-argon-high", "gemini-4-argon-low", "claude-opus-5-5-high", "gpt-oss-120b-medium"):
+        for model in ("gemini-4-argon-medium", "gemini-4-argon-high", "gemini-4-argon-low",
+                      "claude-opus-5-5-high", "gpt-oss-120b-medium"):
             self.assertEqual(quota.resolve_model(catalog, model),
                              {"packageId": "antigravity:account", "status": "mapped"}, model)
+
+        # Issue #329: both verified tiers (antigravity/default = gemini-4-argon-medium
+        # and antigravity/xhigh = gemini-4-argon-high) map to the "Gemini Models"
+        # quota group (`gemini-weekly` + `gemini-5h`), while 3p models map to
+        # "Claude and GPT models" (`3p-weekly` + `3p-5h`).
+        for scenario_name in ("ok", "inner-json"):
+            for tier_model in ("gemini-4-argon-medium", "gemini-4-argon-high"):
+                probed = quota.probe_antigravity_usage(
+                    binary=str(MOCK),
+                    model=tier_model,
+                    env=hermetic_env(MOCK_AGY_SCENARIO=scenario_name),
+                )
+                self.assertEqual(probed["status"], "ok", (scenario_name, tier_model))
+                self.assertEqual(probed["packageId"], "antigravity:account")
+                self.assertEqual(probed["selected_group"], "Gemini Models")
+                self.assertEqual(set(probed["windows"]), {"5h", "weekly"})
+                self.assertEqual(probed["quota"]["window"], "weekly")
+                self.assertAlmostEqual(probed["quota"]["remaining_fraction"], 0.9455534815788269, places=6)
+                self.assertEqual(probed["quota"]["used"], 5.44)
+                self.assertEqual(probed["quota"]["limit"], 100.0)
+                self.assertEqual(probed["quota"]["remaining_percent"], 94.56)
+                self.assertEqual(probed["quota"]["reset_at"], "2026-10-21T07:35:54Z")
+                self.assertEqual(probed["windows"]["5h"]["bucket_id"], "gemini-5h")
+                self.assertEqual(probed["windows"]["5h"]["used"], 7.21)
+                self.assertEqual(probed["windows"]["5h"]["remaining_percent"], 92.79)
+                self.assertEqual(probed["windows"]["5h"]["reset_at"], "2026-10-14T22:35:54Z")
+
+        probed_3p = quota.probe_antigravity_usage(
+            binary=str(MOCK),
+            model="claude-opus-5-5-high",
+            env=hermetic_env(MOCK_AGY_SCENARIO="ok"),
+        )
+        self.assertEqual(probed_3p["status"], "ok")
+        self.assertEqual(probed_3p["selected_group"], "Claude and GPT models")
+        self.assertEqual(probed_3p["quota"]["bucket_id"], "3p-weekly")
+        self.assertEqual(probed_3p["quota"]["used"], 0.0)
+        self.assertEqual(probed_3p["quota"]["remaining_percent"], 100.0)
+
+        for unsigned_scenario in ("unsigned", "unsigned-oauth-wait"):
+            unsigned = quota.probe_antigravity_usage(
+                binary=str(MOCK),
+                model="gemini-4-argon-medium",
+                timeout=5.0,
+                env=hermetic_env(MOCK_AGY_SCENARIO=unsigned_scenario),
+            )
+            self.assertEqual(unsigned["status"], "login_required", unsigned_scenario)
+            self.assertIsNone(unsigned["quota"])
+
+        ineligible = quota.probe_antigravity_usage(
+            binary=str(MOCK),
+            model="gemini-4-argon-high",
+            env=hermetic_env(MOCK_AGY_SCENARIO="ineligible"),
+        )
+        self.assertEqual(ineligible["status"], "unavailable")
+        self.assertIsNone(ineligible["quota"])
 
     def test_not_a_host_and_stream_json_steering(self) -> None:
         self.assertEqual(self.values["host_skill_entry"], "")
@@ -732,9 +788,10 @@ class ManifestAndRegistrations(unittest.TestCase):
         self.assertEqual(self.acp.SURVEY_RUNTIMES["antigravity"], ("Antigravity", "agy", "AGY_BIN"))
 
     def test_verified_versions_claim_only_the_measured_live_scope(self) -> None:
-        self.assertIn("live-one-turn-two-turn-resume-steer-cancel", self.values["acp_verified_versions"])
+        self.assertIn("live-one-turn-two-turn-resume-steer-cancel-usage", self.values["acp_verified_versions"])
         self.assertNotIn("steer-and-cancel-unverified", self.values["acp_verified_versions"])
         self.assertIn("provisional", self.values["acp_quirks"])
+        self.assertIn("/usage", self.values["acp_quirks"])
 
     def test_the_wrapper_ships_inside_the_worker_skill_only(self) -> None:
         skill = PROJECT / "skills" / "antigravity-kaola-project-runner" / "scripts"

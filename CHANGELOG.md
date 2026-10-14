@@ -8,6 +8,35 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 Seats: restart required
 
+- **Antigravity (`agy`) real account usage verified and exposed via `kaola-quota.py` (Issue #329).**
+  Live probes on `agy 1.3.5` across both verified tiers — `antigravity/default`
+  (`gemini-4-argon-medium`) and `antigravity/xhigh` (`gemini-4-argon-high`) —
+  established that `agy -p /usage --output-format json` (and `/quota`) calls
+  `fetchQuotaSummary` and returns `status: "SUCCESS"` with `command.data.groups`
+  (or an inner JSON `response`) carrying two account quota groups under
+  `antigravity:account`: `Gemini Models` (`gemini-weekly`, `gemini-5h`) for both
+  `gemini-4-argon-medium` and `gemini-4-argon-high` (plus `gemini-3-flash-agent`)
+  and `Claude and GPT models` (`3p-weekly`, `3p-5h`) for Anthropic/OpenAI models,
+  each bucket with `id`, `name`/`label`, `window` (`weekly` / `5h`),
+  `remaining_fraction` (`0..1`), and ISO-8601 `reset_time`, while each completed
+  prompt turn also emits token counters on `result._meta.antigravity.usage`.
+  `platforms/antigravity.yaml` now marks `quota_packages` as
+  `[{"id":"account","name":"Account","windows":["5h","weekly"]}]` and updates
+  `acp_verified_versions` to
+  `cli=1.3.5;protocol=1;condition=live-one-turn-two-turn-resume-steer-cancel-usage`.
+  `scripts/kaola-quota.py` adds `ANTIGRAVITY_USAGE_ARGS`,
+  `antigravity_group_for_model`, `parse_antigravity_usage`,
+  `probe_antigravity_usage`, and a CLI `--probe` entry point that normalizes the
+  `agy -p /usage --output-format json` payload into standard `used`, `limit`,
+  `used_percent`, `remaining_percent`, `remaining_fraction`, `reset_at`, and
+  `window` (`quota` + `windows` + `groups`, selecting `weekly` as the primary
+  window when both `weekly` and `5h` exist) and fails fast (`SIGINT` on stderr
+  `Authentication required.`) when the account is unsigned instead of waiting for
+  `agy`'s 60s OAuth browser timeout. `delegator_turn_wake_reason` ordering and
+  normal queue handling are unchanged. Seats: restart required.
+  `platforms/antigravity.yaml` and `scripts/kaola-quota.py` are in the operator
+  restart set (`docs/conventions.md`). Nothing is installed by this change.
+
 - **Antigravity effort applied through its model id, not a false selection mismatch (Issue #331).**
   An antigravity seat advertises no effort option: its effort is part of the accepted
   `gemini-4-argon-{low,medium,high}` slug. `kaola-acp.py start` used to record that effort as

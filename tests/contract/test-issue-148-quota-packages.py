@@ -110,7 +110,7 @@ class QuotaSchemaTest(unittest.TestCase):
                 "cursor-models": ["monthly"],
                 "other-models": ["monthly"],
             },
-            "antigravity": {"account": None},
+            "antigravity": {"account": ["5h", "weekly"]},
             "devin": {"max": ["weekly"], "overage": None},
             "droid": {
                 "standard": ["5h", "weekly", "monthly"],

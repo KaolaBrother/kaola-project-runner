@@ -123,9 +123,157 @@ def on_sigint(signum, frame) -> None:
     sys.exit(1)
 
 
+USAGE_COMMAND_DATA = {
+    "description": "Within each group, models share a weekly limit and a 5-hour limit.",
+    "groups": [
+        {
+            "name": "Gemini Models",
+            "description": "Models within this group: Gemini Flash, Gemini Pro",
+            "buckets": [
+                {
+                    "id": "gemini-weekly",
+                    "name": "Weekly Limit Remaining",
+                    "window": "weekly",
+                    "remaining_fraction": 0.9455534815788269,
+                    "reset_time": "2026-10-21T07:35:54Z",
+                },
+                {
+                    "id": "gemini-5h",
+                    "name": "Five Hour Limit Remaining",
+                    "window": "5h",
+                    "remaining_fraction": 0.9279129505157471,
+                    "reset_time": "2026-10-14T22:35:54Z",
+                },
+            ],
+        },
+        {
+            "name": "Claude and GPT models",
+            "description": "Models within this group: Claude Opus, Claude Sonnet, GPT-OSS",
+            "buckets": [
+                {
+                    "id": "3p-weekly",
+                    "name": "Weekly Limit Remaining",
+                    "window": "weekly",
+                    "remaining_fraction": 1,
+                    "reset_time": "2026-10-21T18:50:58Z",
+                },
+                {
+                    "id": "3p-5h",
+                    "name": "Five Hour Limit Remaining",
+                    "window": "5h",
+                    "remaining_fraction": 1,
+                    "reset_time": "2026-10-14T23:50:58Z",
+                },
+            ],
+        },
+    ],
+}
+
+USAGE_SUMMARY_LEGACY = {
+    "groups": [
+        {
+            "group": "Gemini Models",
+            "buckets": [
+                {
+                    "id": "gemini-weekly",
+                    "label": "Weekly",
+                    "remaining_fraction": 0.9455534815788269,
+                    "reset_time": "2026-10-21T07:35:54Z",
+                },
+                {
+                    "id": "gemini-5h",
+                    "label": "5-Hour",
+                    "remaining_fraction": 0.9279129505157471,
+                    "reset_time": "2026-10-14T22:35:54Z",
+                },
+            ],
+        },
+        {
+            "group": "Claude and GPT models",
+            "buckets": [
+                {
+                    "id": "3p-weekly",
+                    "label": "Weekly",
+                    "remaining_fraction": 1,
+                    "reset_time": "2026-10-21T18:50:58Z",
+                },
+                {
+                    "id": "3p-5h",
+                    "label": "5-Hour",
+                    "remaining_fraction": 1,
+                    "reset_time": "2026-10-14T23:50:58Z",
+                },
+            ],
+        },
+    ]
+}
+
+
+def handle_prompt_slash(prompt: str) -> int:
+    if SCENARIO == "unsigned":
+        emit(ERROR_UNSIGNED)
+        sys.stderr.write(
+            "Authentication required. Please visit the URL to log in:\n"
+            "  https://accounts.google.com/o/oauth2/v2/auth?mock=1\n"
+            "Error: authentication required. Run 'agy' to log in, then retry.\n"
+            "error: authentication failed or timed out\n"
+        )
+        sys.stderr.flush()
+        return 1
+    if SCENARIO == "unsigned-oauth-wait":
+        def _abort_oauth(signum, frame) -> None:
+            log({"event": "sigint-oauth"})
+            emit(ERROR_UNSIGNED)
+            sys.stderr.write("error: authentication failed or timed out\n")
+            sys.stderr.flush()
+            sys.exit(1)
+
+        signal.signal(signal.SIGINT, _abort_oauth)
+        sys.stderr.write(
+            "Authentication required. Please visit the URL to log in:\n"
+            "  https://accounts.google.com/o/oauth2/v2/auth?mock=1\n"
+        )
+        sys.stderr.flush()
+        time.sleep(30.0)
+        return 1
+    if SCENARIO == "ineligible":
+        emit(ERROR_INELIGIBLE)
+        sys.stderr.write("error: Eligibility check failed\n")
+        sys.stderr.flush()
+        return 1
+    if SCENARIO == "inner-json":
+        emit({
+            "conversation_id": "",
+            "status": "SUCCESS",
+            "response": json.dumps(USAGE_SUMMARY_LEGACY, indent=2),
+            "duration_seconds": 0.72,
+            "num_turns": 0,
+            "usage": {},
+        })
+        return 0
+    emit({
+        "conversation_id": "",
+        "status": "SUCCESS",
+        "response": (
+            "Gemini Models\tWeekly Limit Remaining\t94%\t2026-10-21T07:35:54Z\n"
+            "Gemini Models\tFive Hour Limit Remaining\t92%\t2026-10-14T22:35:54Z\n"
+            "Claude and GPT models\tWeekly Limit Remaining\t100%\t2026-10-21T18:50:58Z\n"
+            "Claude and GPT models\tFive Hour Limit Remaining\t100%\t2026-10-14T23:50:58Z\n"
+        ),
+        "duration_seconds": 0,
+        "num_turns": 0,
+        "usage": {"input_tokens": 0, "output_tokens": 0, "thinking_tokens": 0, "cache_read_tokens": 0, "total_tokens": 0},
+        "command": {"name": "usage", "data": USAGE_COMMAND_DATA},
+    })
+    return 0
+
+
 def main() -> int:
     global TURNS
     log({"event": "spawn", "argv": ARGV, "scenario": SCENARIO})
+    prompt_arg = flag("-p") or flag("--prompt")
+    if prompt_arg in ("/usage", "/quota") and flag("--output-format") == "json":
+        return handle_prompt_slash(prompt_arg)
     signal.signal(signal.SIGINT, on_sigint)
     if SCENARIO == "unsigned":
         refuse(ERROR_UNSIGNED, "Error: authentication required. Run 'agy' to log in, then retry.\n"

@@ -418,11 +418,15 @@ and `references/acp.md`; transport and bridge internals are in the
   agy's review mode. An unsigned or ineligible account is a recoverable
   `login-required` start refusal (it carries the browser verify URL when agy prints
   one), never a crash; `kaola-acp survey` still reports the installed CLI as
-  `present`, because survey runs no binary. Steering is an after-turn queue (agy has
-  no native steer), and it is not a Host (no measured Host entry). A live one-turn,
-  two-turn and resume run is verified on agy 1.3.5 (2026-10-14); steer and cancel are
-  not measured live, and the conversation id announced at start is provisional until the
-  first turn (the last `native_session_identity` is the resumable one).
+  `present`, because survey runs no binary. Account quota (`antigravity:account`,
+  windows `["5h", "weekly"]`) is verified on `agy 1.3.5` via `agy -p /usage
+  --output-format json` (`kaola-quota.py` `parse_antigravity_usage` /
+  `probe_antigravity_usage`), which exposes `Gemini Models` (`gemini-weekly`,
+  `gemini-5h`) for both `antigravity/default` (`gemini-4-argon-medium`) and
+  `antigravity/xhigh` (`gemini-4-argon-high`) and `Claude and GPT models`
+  (`3p-weekly`, `3p-5h`). It is a worker runtime (not a Host), and the conversation id
+  announced at start is provisional until the first turn (the last
+  `native_session_identity` is the resumable one).
 - **dsh** runs its shipped automation-only ACP profile (`dsh --profile acp`); it
   needs no login and has no terminal UI, and the profile must already exist under
   `$DSH_HOME`. It starts with **full access by default** (`danger-full-access`, no
