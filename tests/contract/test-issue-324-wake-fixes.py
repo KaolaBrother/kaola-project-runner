@@ -9,12 +9,17 @@
    batch, so its business writes record no failure and stage no Host turn. A
    node binding whose recipe is unusable fails once; later Host writes do not
    mint a new failure each, and a repaired binding picks the later range up.
+3. A bound node whose runtime fails moves through the eligible Worker chain
+   (default ``zcode/default`` first), never retrying a runtime and never
+   using an excluded preset; an exhausted chain fails once, with no retry.
 """
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
+import os
 import time
 import unittest
 from pathlib import Path
@@ -313,6 +318,127 @@ class CarrierFailure(issue255.HolderNodeMode):
 for _name in dir(issue255.HolderNodeMode):
     if _name.startswith("test_") and _name not in CarrierFailure.__dict__:
         setattr(CarrierFailure, _name, None)
+
+
+FAILING_RUNNER = "#!/bin/sh\nexit 1\n"
+
+
+class NodeRuntimeFallback(issue255.HolderNodeMode):
+    """Issue #324 final scope: the node runtime is not pinned to the binding."""
+
+    SESSION = "KT-maintenance-node"
+
+    def install(self, platform: str, body: str) -> Path:
+        runner = Path(self.tmp.name) / "skills" / f"{platform}-kaola-project-runner" / "scripts" / "runtime-tmux.sh"
+        runner.parent.mkdir(parents=True, exist_ok=True)
+        runner.write_text(body, encoding="utf-8")
+        runner.chmod(0o755)
+        return runner
+
+    def serve(self, platform: str) -> None:
+        """The fake node holder for ``platform``: its record and socket."""
+        digest = hashlib.sha256(str(self.repo).encode()).hexdigest()[:16]
+        directory = self.records / platform / self.SESSION / digest
+        directory.mkdir(parents=True, exist_ok=True)
+        sock = Path("/tmp") / f"kaola-{os.getuid()}-acp" / (
+            hashlib.sha256(str(directory).encode()).hexdigest()[:24] + ".sock")
+        if self.fake:
+            self.fake.close()
+        self.fake = issue255.FakeNode(sock, directory / "record.json")
+        os.environ["FAKE_NODE_RECORD"] = str(directory / "record.json")
+
+    def bind(self, platform: str, exclusions: list[str], revision: int = 4) -> None:
+        runner = Path(self.tmp.name) / "skills" / f"{platform}-kaola-project-runner" / "scripts" / "runtime-tmux.sh"
+        doc = {"schema": "kaola-heartbeat-prompt/2", "host_revision": revision,
+               "body": json.dumps({"view": "host", "attention": []}),
+               "state": {"authorization": {"exclusions": exclusions},
+                         "sideagent": {"platform": platform, "session": self.SESSION, "state": "active",
+                                       "mode": "node", "recipe": {"runner": str(runner), "argv": [
+                                           "start", "--repo", str(self.repo), "--session", self.SESSION,
+                                           "--role", "sideagent", "--model", "bound-model"]}},
+                         "maintenance": {"handled_host_revision": 0},
+                         "section_sources": {"project": {"writer": "host", "host_revision": revision}}}}
+        (self.repo / ".kaola" / "heartbeat-prompt.json").write_text(json.dumps(doc))
+
+    def events_of(self, kind: str) -> list[dict]:
+        log = Path(self.holder.args.record_dir) / "events.jsonl"
+        return [row for row in (json.loads(line) for line in log.read_text().splitlines())
+                if row.get("kind") == kind] if log.exists() else []
+
+    def drive(self, until, what: str) -> None:
+        def step() -> bool:
+            self.holder.turn["active"] = False
+            self.boundary()
+            return until()
+        self.wait_for(step, what, timeout=20)
+
+    def test_failed_runtime_falls_back_through_the_eligible_worker_chain(self) -> None:
+        self.prepare_recovery_host()
+        self.install("claude-code", FAILING_RUNNER)
+        self.install("zcode", FAILING_RUNNER)
+        self.install("dsh", issue255.FAKE_NODE_RUNNER)
+        self.install("opencode", issue255.FAKE_NODE_RUNNER)  # installed but excluded
+        self.serve("dsh")
+        self.bind("claude-code", ["codex/luna", "devin/default", "opencode/default"])
+        self.drive(lambda: len(self.fake.prompts) == 1, "a batch on the first runtime that starts")
+        moves = self.events_of("sideagent_node_fallback")
+        self.assertEqual([(m["from"], m.get("to"), m["chain"]) for m in moves],
+                         [("claude-code", "zcode/default", ["zcode/default", "dsh/default"]),
+                          ("zcode", "dsh/default", ["dsh/default"])],
+                         "the default runtime first, then by id; a failed runtime is not retried")
+        self.assertEqual([row["session"] for row in self.events_of("sideagent_node_start_failed")],
+                         [self.SESSION, self.SESSION])
+        argv = json.loads((Path(self.tmp.name) / "argv").read_text())
+        self.assertEqual(argv, ["start", "--repo", str(self.repo), "--session", self.SESSION,
+                                "--role", "sideagent", "--tier", "default"])
+        self.assertEqual(self.node_count(), 1, "the excluded opencode Runner never ran")
+        self.assertEqual([row for row in self.holder.pending_worker_events if row.get("kind") == "node"], [],
+                         "a move to the next runtime starts no Host turn")
+        self.assertEqual(self.events_of("sideagent_maintenance_failure_recorded"), [])
+        self.assertIn("host revision 1..4", self.fake.prompts[0]["params"]["text"])
+        self.holder._reclaim_node()
+
+    def test_exhausted_chain_fails_once_and_is_not_requeued(self) -> None:
+        self.prepare_recovery_host()
+        self.install("zcode", FAILING_RUNNER)
+        self.install("claude-code", FAILING_RUNNER)
+        self.install("dsh", issue255.FAKE_NODE_RUNNER)  # installed but excluded
+        excluded = ["codex/luna", "devin/default", "dsh/default", "opencode/default"]
+        self.bind("zcode", excluded)
+        self.drive(lambda: self.holder.node.get("failed") is not None, "the exhausted chain")
+        self.wait_for(lambda: len(self.agent.prompts()) == 1, "the Host told once")
+        self.assertIn("no eligible fallback runtime", self.agent.prompts()[0])
+        moves = self.events_of("sideagent_node_fallback")
+        self.assertEqual([(m["from"], m.get("to"), m.get("exhausted")) for m in moves],
+                         [("zcode", "claude-code/haiku", None), ("claude-code", None, True)])
+        self.finish_host_turn()
+        for revision in (5, 6, 7):
+            self.bind("zcode", excluded, revision)
+            # The binding is the same; only Host business changed.
+            self.holder.turn["active"] = False
+            self.boundary()
+        time.sleep(0.5)
+        self.assertEqual(len(self.events_of("sideagent_node_start_failed")), 2, "no runtime is retried")
+        self.assertEqual(len(self.events_of("sideagent_node_fallback")), 2)
+        self.assertEqual(len(self.agent.prompts()), 1, "no Host turn per later write")
+        self.assertEqual(self.node_count(), 0, "the excluded dsh Runner never ran")
+
+    def test_missing_bound_runner_moves_to_the_next_runtime(self) -> None:
+        self.prepare_recovery_host()
+        self.install("claude-code", issue255.FAKE_NODE_RUNNER)
+        self.serve("claude-code")
+        self.bind("zcode", ["codex/luna", "devin/default", "dsh/default", "opencode/default"])
+        self.drive(lambda: len(self.fake.prompts) == 1, "a batch on the installed runtime")
+        self.assertIn("sideagent_node_recipe_refused", self.log_kinds())
+        self.assertEqual([(m["from"], m.get("to")) for m in self.events_of("sideagent_node_fallback")],
+                         [("zcode", "claude-code/haiku")])
+        self.assertEqual(json.loads((Path(self.tmp.name) / "argv").read_text())[-2:], ["--tier", "haiku"])
+        self.holder._reclaim_node()
+
+
+for _name in dir(issue255.HolderNodeMode):
+    if _name.startswith("test_") and _name not in NodeRuntimeFallback.__dict__:
+        setattr(NodeRuntimeFallback, _name, None)
 
 
 if __name__ == "__main__":

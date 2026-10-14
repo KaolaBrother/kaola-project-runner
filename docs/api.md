@@ -733,7 +733,20 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   that input stays in `maintenance-returned`, later Host writes add no failure and no wake.
   The Host's bounded request selects every change past the handled revision, and a repaired
   binding sends the changes after the failed one to a fresh node. A typed recovery input
-  without a usable binding still records its one failure per sequence. A stop is confirmed when the node's holder process is
+  without a usable binding still records its one failure per sequence.
+  The bound runtime is not a pin (Issue #324). When its Runner file is missing, its start
+  fails, or its node does not admit a batch, the carrier moves the node to the next runtime
+  instead of failing: the Worker-class presets that `kaola-dispatch.py project` finds
+  eligible now (grants, exclusions, holds, Delegator ceiling, availability not `absent`),
+  `zcode/default` first and then by id, skipping every runtime already tried for this
+  binding. The fallback start is the same Runner start from the sibling installed Skill
+  (`<root>/<platform>-kaola-project-runner/scripts/<runner>`, or the checkout entrypoint with
+  that platform first), the bound `--session`, this `--repo`, `--role sideagent` and the
+  preset's `--tier`; the bound `--model`/`--effort` are dropped. A preset whose Runner is not
+  on this machine is skipped. Each move is one `sideagent_node_fallback` event (`from`,
+  `to`, `chain`, `tried`) and starts no Host turn. The chosen runtime serves later batches
+  until the Host changes the binding or the holder restarts. Only an exhausted chain
+  (`exhausted: true`) records the failure above, once, and starts nothing further. A stop is confirmed when the node's holder process is
   gone, not by its `stopped` record; while it still runs (`sideagent_node_stop_unconfirmed`)
   no node starts, and once it is gone (`sideagent_node_stop_confirmed_late`) the next Host
   change starts a fresh node. A holder whose stop reply cannot be delivered still exits.

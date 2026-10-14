@@ -278,6 +278,9 @@ HOLDER_FEATURES = ("heartbeat-state/2", "sideagent-relay/1", "preserve-dispatche
 # batch from the binding's exact Runner argv (never a shell string), and
 # exact-stops it after its turn end. Bounds on that one start and stop only.
 NODE_START_TIMEOUT = 180.0
+# Issue #324: the default maintenance node runtime; only the first choice of
+# the Worker fallback chain, never a pin.
+NODE_DEFAULT_PRESET = "zcode/default"
 NODE_STOP_CONFIRM_SECONDS = 30.0
 # A carrier's own stop waits this long for a node start in flight and for the
 # node stop, inside the Runner's 30 s stop request.
@@ -4094,6 +4097,8 @@ class Holder:
         binding = state.get("sideagent") if isinstance(state, dict) else None
         if not isinstance(binding, dict) or binding.get("state") != "active":
             return None
+        if binding.get("mode") == "node":
+            binding = self._node_override(binding)
         platform, session = binding.get("platform"), binding.get("session")
         if (not isinstance(platform, str) or not platform or not isinstance(session, str)
                 or not session or session == self.args.session):
@@ -4331,14 +4336,19 @@ class Holder:
         binding = state.get("sideagent") if isinstance(state, dict) else None
         if not isinstance(binding, dict) or binding.get("mode") != "node" or binding.get("state") != "active":
             return None
+        effective = self._node_override(binding)
+        if effective is not binding:
+            return effective
         recipe = binding.get("recipe") if isinstance(binding.get("recipe"), dict) else {}
         runner, argv = recipe.get("runner"), recipe.get("argv")
         session = binding.get("session")
         problem = None
+        runtime_missing = False
         if not isinstance(binding.get("platform"), str) or not binding["platform"]:
             problem = "binding must name the node platform"
         elif not isinstance(runner, str) or not os.path.isabs(runner) or not os.path.isfile(runner):
             problem = "recipe runner must be an existing absolute path"
+            runtime_missing = isinstance(runner, str) and os.path.isabs(runner)
         elif (not isinstance(argv, list) or not all(isinstance(part, str) for part in argv)
               or not argv or (argv[0] != "start" and argv[:2] != [binding["platform"], "start"])):
             # A platform Runner takes `start ...`; the checkout entrypoint
@@ -4358,8 +4368,128 @@ class Holder:
             if self.node.get("recipe_refused") != key:
                 self.node["recipe_refused"] = key
                 self.events.append({"kind": "sideagent_node_recipe_refused", "detail": problem})
+                if runtime_missing and self._recipe_policy_ok(binding):
+                    # Issue #324: the bound runtime is not installed here.
+                    # That is an unavailable runtime, not a refused policy.
+                    return self._node_fallback(binding, binding["platform"], "runner-missing")
             return None
         return binding
+
+    # -- Issue #324: node runtime fallback --------------------------------------
+
+    def _recipe_policy_ok(self, binding: dict[str, Any]) -> bool:
+        """The recipe argv itself is acceptable; only its runner is missing."""
+        argv = (binding.get("recipe") or {}).get("argv")
+        session = binding.get("session")
+        return (isinstance(argv, list) and all(isinstance(part, str) for part in argv) and bool(argv)
+                and (argv[0] == "start" or argv[:2] == [binding["platform"], "start"])
+                and isinstance(session, str) and session != self.args.session
+                and all(flag in argv for flag in ("--session", "--repo", "--role"))
+                and not any(argv[i] == flag and (i + 1 >= len(argv) or argv[i + 1] != want)
+                            for i in range(len(argv)) for flag, want in
+                            (("--session", session), ("--repo", self.args.repo), ("--role", "sideagent")))
+                and "--continue" not in argv and "--resume" not in argv)
+
+    @staticmethod
+    def _binding_key(binding: dict[str, Any]) -> str:
+        """The stored binding a runtime choice belongs to. A Host edit to the
+        binding is a new key, so its own runtime is tried first again."""
+        return binding.get("fallback_of") or json.dumps(
+            {key: binding.get(key) for key in ("platform", "session", "recipe", "since")}, sort_keys=True)
+
+    def _node_override(self, binding: dict[str, Any]) -> dict[str, Any]:
+        """The stored node binding, or the fallback runtime chosen for it."""
+        runtime = self.node.get("runtime")
+        if (isinstance(runtime, dict) and runtime.get("binding") == self._binding_key(binding)
+                and isinstance(runtime.get("recipe"), dict)):
+            return {**binding, "platform": runtime["platform"], "preset": runtime["preset"],
+                    "recipe": runtime["recipe"], "fallback_of": runtime["binding"]}
+        return binding
+
+    def _fallback_recipe(self, binding: dict[str, Any], platform: str, tier: str) -> dict[str, Any] | None:
+        """The same Runner start for another platform: the sibling installed
+        Skill's Runner (or the checkout entrypoint with that platform first),
+        the bound session, this project, ``--role sideagent`` and the preset's
+        tier. None when that Runner is not on this machine."""
+        recipe = binding.get("recipe") or {}
+        runner, argv, bound = Path(str(recipe.get("runner"))), list(recipe.get("argv") or []), binding["platform"]
+        if argv[:2] == [bound, "start"]:
+            target, head, tail = runner, [platform], argv[1:]
+        elif runner.parent.name == "scripts" and runner.parent.parent.name == f"{bound}-kaola-project-runner":
+            target = runner.parent.parent.parent / f"{platform}-kaola-project-runner" / "scripts" / runner.name
+            head, tail = [], argv
+        else:
+            return None
+        if not target.is_file():
+            return None
+        kept: list[str] = []
+        skip = False
+        for part in tail:
+            if skip:
+                skip = False
+                continue
+            if part in ("--tier", "--model", "--effort"):
+                skip = True
+                continue
+            kept.append(part)
+        return {**{key: value for key, value in recipe.items() if key == "state_tool"},
+                "runner": str(target), "argv": [*head, *kept, "--tier", tier]}
+
+    def _node_chain(self, binding: dict[str, Any], tried: list[str]) -> list[dict[str, Any]]:
+        """Fallback runtimes for the bound node, in order: the default
+        ``zcode/default`` first, then the other Worker presets by id. The
+        list is the existing dispatch eligibility (grants, exclusions, holds,
+        Delegator ceiling, availability) for Worker seats, read now through
+        the state tool, so an excluded or withheld preset is never tried."""
+        tool = self._state_tool()
+        state_file = Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"
+        if tool is None or not state_file.is_file():
+            return []
+        argv = [sys.executable, tool, "project", "--authorization", str(state_file), "--repo", self.args.repo]
+        availability = state_file.parent / "dispatch-availability.json"
+        if availability.is_file():
+            argv += ["--availability", str(availability)]
+        try:
+            run = subprocess.run(argv, cwd=self.args.repo, stdin=subprocess.DEVNULL, capture_output=True,
+                                 text=True, timeout=NODE_START_TIMEOUT)
+            candidates = json.loads(run.stdout).get("candidates") if run.returncode == 0 else None
+        except (OSError, ValueError, subprocess.SubprocessError, AttributeError):
+            candidates = None
+        rows = [row for row in (candidates or []) if isinstance(row, dict)
+                and row.get("class") == "Worker" and row.get("availability") != "absent"
+                and isinstance(row.get("platform"), str) and row["platform"] not in tried
+                and isinstance(row.get("tier"), str) and isinstance(row.get("id"), str)]
+        rows.sort(key=lambda row: (row["id"] != NODE_DEFAULT_PRESET, row["id"]))
+        chain = []
+        for row in rows:
+            recipe = self._fallback_recipe(binding, row["platform"], row["tier"])
+            if recipe is not None:
+                chain.append({"preset": row["id"], "platform": row["platform"], "recipe": recipe})
+        return chain
+
+    def _node_fallback(self, binding: dict[str, Any], failed: str, why: str) -> dict[str, Any] | None:
+        """Move the bound node to the next eligible runtime, never the same
+        one again. Returns the effective binding, or None when the chain is
+        exhausted: the caller then fails once as before. Caller holds
+        ``worker_events_lock``."""
+        key = self._binding_key(binding)
+        runtime = self.node.get("runtime")
+        if not isinstance(runtime, dict) or runtime.get("binding") != key:
+            runtime = {"binding": key, "tried": []}
+        tried = list(dict.fromkeys([*runtime.get("tried", []), failed]))
+        chain = self._node_chain(binding, tried)
+        event: dict[str, Any] = {"kind": "sideagent_node_fallback", "from": failed, "reason": why,
+                                 "tried": tried, "chain": [item["preset"] for item in chain]}
+        if not chain:
+            # Exhausted: keep the last runtime so its recorded failure stands
+            # and nothing restarts the chain until the binding changes.
+            self.node["runtime"] = {**runtime, "tried": tried, "exhausted": True}
+            self.events.append({**event, "exhausted": True})
+            return None
+        self.node["runtime"] = {"binding": key, "tried": tried, **chain[0]}
+        self.node.pop("failed", None)
+        self.events.append({**event, "to": chain[0]["preset"]})
+        return self._node_override({**binding, "fallback_of": key})
 
     def _node_host_pending(self, doc: dict[str, Any] | None, requested: bool = False) -> int | None:
         """The Host revision a new batch would select, when Host business
@@ -4642,15 +4772,16 @@ class Holder:
             reason = (error or {}).get("code") or "relay-unadmitted"
             self.events.append({"kind": "worker_event_relay_failed", "target_session": session,
                                 "receipt": receipt})
-            # Recorded once and not resent: the node is stopped and no other
-            # starts until the binding changes.
-            node.update(failed={"binding": fingerprint, "code": reason})
-            self._maintenance_failure(reason, through, recovery, wake=False)
-            self._node_to_host(binding, f"sideagent node {target['holder_instance_id']} did not admit "
-                                        f"batch {batch} ({reason}); {self._unhandled(through)}")
+            if self._node_fallback(binding, binding["platform"], f"batch-unadmitted:{reason}") is None:
+                # Recorded once and not resent: the node is stopped and no other
+                # starts until the binding changes.
+                node.update(failed={"binding": fingerprint, "code": reason})
+                self._maintenance_failure(reason, through, recovery, wake=False)
+                self._node_to_host(binding, f"sideagent node {target['holder_instance_id']} did not admit "
+                                            f"batch {batch} ({reason}); {self._unhandled(through)}")
             holder = target["holder_instance_id"]
             node.update(phase="stopping", batch=None, fingerprint=None)
-            threading.Thread(target=self._stop_node, args=(holder,), daemon=True).start()
+            threading.Thread(target=self._stop_node, args=(holder, None, binding), daemon=True).start()
             result["receipt"] = {"relayed": 0, "reason": reason}
         return result
 
@@ -4930,20 +5061,29 @@ class Holder:
                     self.events.append({"kind": "sideagent_node_start_refused_live",
                                         "holder": live_holder, "session": binding["session"]})
                 else:
-                    # One failure is recorded, not retried: a later start needs a
-                    # changed binding or recipe from an authorized controller.
-                    self.node.update(phase="stopped", failed={"binding": fingerprint, "code": code})
                     self.events.append({"kind": "sideagent_node_start_failed",
                                         "session": binding["session"], "code": code,
                                         "receipt": receipt if isinstance(receipt, dict) else None})
-                    self._node_to_host(binding, f"sideagent node start failed (exit {code}); "
-                                                f"{self._unhandled(self._node_host_pending(self._lifecycle_state()))}; "
-                                                "no node starts until the binding or recipe changes")
+                    if self._node_fallback(binding, binding["platform"], f"start-failed:{code}") is not None:
+                        # Issue #324: the next eligible runtime starts at the
+                        # next boundary; this runtime is not tried again.
+                        self.node.update(phase="stopped")
+                    else:
+                        # One failure is recorded, not retried: a later start needs a
+                        # changed binding or recipe from an authorized controller.
+                        self.node.update(phase="stopped", failed={"binding": fingerprint, "code": code})
+                        self._node_to_host(binding, f"sideagent node start failed (exit {code}); "
+                                                    f"{self._unhandled(self._node_host_pending(self._lifecycle_state()))}; "
+                                                    "no eligible fallback runtime; "
+                                                    "no node starts until the binding or recipe changes")
         self._kick_worker_events()
 
-    def _stop_node(self, holder: str, wait: float | None = None) -> None:
+    def _stop_node(self, holder: str, wait: float | None = None,
+                   binding: dict[str, Any] | None = None) -> None:
         wait = NODE_STOP_CONFIRM_SECONDS if wait is None else wait
-        binding = self._node_binding() or {}
+        # Issue #324: a caller that just moved to a fallback runtime names the
+        # runtime this holder runs on.
+        binding = binding or self._node_binding() or {}
         receipt: dict[str, Any] = {}
         target = None
         if binding:

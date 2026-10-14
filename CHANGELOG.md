@@ -27,6 +27,15 @@ Seats: restart required (Issue #324 changes the holder; #322 and #323 do not)
   no failure and no wake; the Host's bounded request still selects every change
   past the handled revision, and a repaired binding sends the later changes to
   a fresh node. A typed recovery input keeps its one failure per sequence.
+  The bound node runtime is no longer a pin: a missing Runner, a failed start
+  or a batch the node does not admit moves the node to the next Worker-class
+  preset the existing dispatch eligibility allows (grants, exclusions, holds,
+  Delegator ceiling, availability), `zcode/default` first, never retrying a
+  runtime; each move is one `sideagent_node_fallback` event with no Host turn.
+  Only an exhausted chain records the failure, once. On the KPR install the
+  live chain is empty (every Worker preset excluded, `claude-code/haiku`
+  withheld by the Delegator ceiling), and KPR has no binding, so it now gets
+  no failure and no turn.
   Rows the old loop already wrote stay until the Host retires them. The
   failure's `evidence` pointer is now read after its own
   `sideagent_node_returned` row; it used to name the stream event just before
