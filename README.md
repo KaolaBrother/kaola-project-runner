@@ -334,7 +334,7 @@ roles, not benchmark claims, and they do not change which model a Host itself ru
 |---|---|---|---|
 | **Expert** | 3 | Complex thinking only: difficult analysis, design, objective decomposition, and review judgments. No concrete implementation or execution; not an ordinary worker seat. | Your explicit grant. A task grant (the default) ends with its task. A standing grant, only when you say so, lets the Host use that preset within its stated scope, count and limits until you revoke it or it expires. The Host judges completion and exact-stops the seat; that stop revokes no standing grant, and the same approved task continues across turns and recovery without asking again. |
 | **Worker** | 6 | Cheaper and generally weaker; simpler, bounded work that adds parallel throughput. | Default-authorized: no approval is required for each seat, count, or priority. Actual account, token and service limits and your explicit restrictions still apply. |
-| **Elite** | 13 | The main execution workforce: primary implementation and demanding execution. | Your explicit runtime/preset/count grant, within its caps and seat-switch rules. A valid grant stays valid for its scope; no per-task permission. |
+| **Elite** | 14 | The main execution workforce: primary implementation and demanding execution. | Your explicit runtime/preset/count grant, within its caps and seat-switch rules. A valid grant stays valid for its scope; no per-task permission. |
 
 An Expert review informs the Host; it never replaces the Host's acceptance or its
 ownership of the seat lifecycle.
@@ -364,13 +364,14 @@ explicit `--model` choices, not a separate Fast toggle.
 | Elite | Claude Code | `opus-xhigh` | `claude-code/opus-xhigh` | Opus 5.5 | effort=xhigh | Plans, designs, and reviews difficult, complex work and handles deep reasoning tasks, with particular strength in UI and 3D visual design and review; does not perform implementation. |
 | Elite | Claude Code | `sonnet` | `claude-code/sonnet` | Sonnet | effort=high | All-round execution worker, especially UI and 3D visual implementation. |
 | Elite | Codex CLI | `default` | `codex/default` | GPT-6.1 Sol | effort=high | All-round execution worker, strong at exploring directions, finding problems, and review; good at UI and 3D visual work, with computer-use capability. |
-| Elite | Cursor CLI | `default` | `cursor-cli/default` | Grok 4.7 | effort=xhigh (encoded in model ID), fast=false | Investigates unfamiliar problems, explores solution paths, and autonomously carries them through implementation; well suited to long-running, adaptive work. |
+| Elite | Cursor CLI | `default` | `cursor-cli/default` | Grok 4.7 | effort=high (encoded in model ID), fast=false | Investigates unfamiliar problems, explores solution paths, and autonomously carries them through implementation; well suited to long-running, adaptive work. |
 | Elite | Cursor CLI | `opus` | `cursor-cli/opus` | Claude Opus 5.5 | effort=high (encoded in model ID) | All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation. |
 | Elite | Devin CLI | `opus-fusion` | `devin/opus-fusion` | Opus Fusion | effort=high (encoded in model ID) | All-round execution worker, especially strong at complex execution work. |
 | Elite | Droid | `default` | `droid/default` | Auto Model | no Runner effort override | All-round worker, balanced in every respect, suited to many kinds of tasks. |
 | Elite | Droid | `opus` | `droid/opus` | Opus 5.5 | reasoning_effort=high | All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation. |
 | Elite | Droid | `core` | `droid/core` | Kimi K3 | reasoning_effort=max | Strong at visual design and visual inspection, with good UI and design taste. |
-| Elite | Grok CLI | `default` | `grok/default` | Grok 4.7 | effort=xhigh, fast=false | Suits exploratory, long-running autonomous work; give clear stage goals and exit conditions. |
+| Elite | Grok CLI | `default` | `grok/default` | Grok 4.7 | effort=high, fast=false | Suits exploratory, long-running autonomous work; give clear stage goals and exit conditions. |
+| Elite | Grok CLI | `xhigh` | `grok/xhigh` | Grok 4.7 | effort=xhigh, fast=false | Escalation level: use it when the Grok Build default (Grok 4.7 high) cannot solve the task. |
 | Elite | Kimi CLI | `default` | `kimi-cli/default` | Kimi K3 | thinking=max | Strong at visual design and visual inspection, with good UI and design taste. |
 | Elite | Kimi CLI | `kimi-k2-8` | `kimi-cli/kimi-k2-8` | Kimi K2.8 | thinking=max | All-round implementation worker for every kind of hands-on development and implementation task. |
 | Worker | Claude Code | `haiku` | `claude-code/haiku` | Claude Haiku | effort=high | Fast all-round execution worker, well suited to well-scoped work, especially UI and 3D visual implementation. |

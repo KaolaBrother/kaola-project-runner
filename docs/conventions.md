@@ -348,7 +348,7 @@ transport commands; a test that starts a real holder registers its force-stop cl
 Real runtime tests record version, holder/agent identity, ACP and native session ids, prompt
 delivery, Workflow start evidence, stop result, and zero unintended residual sessions.
 Authentication-blocked command receipt is not reported as successful Workflow execution.
-For Cursor CLI, live experiments must pass the exact non-FAST slug `grok-4.7-xhigh`, capture
-the resulting `Grok 4.7 256K Extra High` footer without `Fast`, then run the prompt/reply proof.
+For Cursor CLI, live experiments must pass the exact non-FAST slug `grok-4.7-high`, capture
+the resulting `Grok 4.7 256K High` footer without `Fast`, then run the prompt/reply proof.
 Do not use native `/model` as a read-only probe: Cursor 2026.08.25 rewrites global picker config even
 when the visible selection is unchanged.

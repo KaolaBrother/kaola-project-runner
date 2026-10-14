@@ -4,6 +4,33 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+Seats: restart not required
+
+- **Grok 4.7 seat tiers change for Grok Build and Cursor (Issue #322).**
+  Owner decision, 2026-10-14. `grok/default` is now Grok 4.7 at
+  `reasoning_effort=high` (it was xhigh). New named tier `grok/xhigh` is
+  Grok 4.7 at `reasoning_effort=xhigh`, class Elite (the same class as
+  `grok/default`; the manifest's `<tier>_model_class` key carries it). Its
+  profile is the only new profile text: the escalation level, used when the
+  Grok Build default cannot solve the task. `cursor-cli/default` moves from
+  `grok-4.7-xhigh` to `grok-4.7-high`; `cursor-cli/opus` is unchanged. No
+  existing profile text changes. `acp_model_map` and `model_package_rule` for
+  Cursor gain `grok-4.7-high` and `grok-4.7-high-fast` and keep the `xhigh`
+  IDs, so an Agent-selected `--model grok-4.7-xhigh` still maps and keeps its
+  package. The README Elite count is 14 and the catalog has 23 preset IDs.
+  Live check: grok 1.0.52 and cursor-agent 2026.10.01 both accept
+  `reasoning_effort=high` over ACP (receipts on the issue).
+  Seats: restart not required for this change. The operator test lists
+  `platforms` and `scripts/adapters` and both changed, but they are catalog
+  data read when a seat is started or dispatched; `scripts/kaola-acp-holder.py`
+  and `scripts/kaola-acp.py` logic are unchanged. A running seat keeps the
+  model and effort it started with. The new tiers apply only to dispatches
+  that start after the new files are used (a symlink install uses them on the
+  next process; a copy install after the copy is replaced). This change does
+  not install.
+
 ## 0.9.11 — 2026-10-14 (wake rules: all-ended auto-wake, Host-initiated wake, lost-wake recovery)
 
 v0.9.10 was released but never installed. v0.9.11 supersedes it: installing v0.9.11 also brings every v0.9.10 change (#308–#313, listed under 0.9.10 below). #321 was verified and closed as not planned (no change).

@@ -2000,7 +2000,7 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual(set(fast.get("values") or []), {"false", "true"})
 
     def test_cursor_default_exact_order_and_semantics(self) -> None:
-        # Grok 4.7 Extra High Fast Off: the picker ID decomposes onto the
+        # Grok 4.7 High Fast Off (issue #322): the picker ID decomposes onto the
         # parameterized surface — native model id, then effort, then the
         # fast STRING "false" — with no semantic substitution.
         receipt = self.start("cursor-cli", caps="cursor-params,strict-config")
@@ -2009,7 +2009,7 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
             self.config_events(),
             [
                 ("model", "grok-4.7"),
-                ("reasoning_effort", "xhigh"),
+                ("reasoning_effort", "high"),
                 ("fast", "false"),
             ],
         )
@@ -2019,17 +2019,17 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertIs(effort.get("advertised"), True)
         self.assertEqual(effort.get("candidates"), ["reasoning_effort", "effort"])
         self.assertEqual(receipt.get("effective_selection"), {
-            "effective_model": "grok-4.7", "effective_effort": "xhigh",
+            "effective_model": "grok-4.7", "effective_effort": "high",
             "effort_config_id": "reasoning_effort"})
         model = application.get("model") or {}
         self.assertTrue(model.get("applied"))
-        self.assertEqual(model.get("requested_id"), "grok-4.7-xhigh")
+        self.assertEqual(model.get("requested_id"), "grok-4.7-high")
         self.assertTrue(model.get("mapped"))
         self.assertNotIn("[", str(model.get("value")))
         self.assertTrue((application.get("effort") or {}).get("applied"))
         self.assertTrue((application.get("fast") or {}).get("applied"))
         selection = receipt.get("model_selection") or {}
-        self.assertEqual(selection.get("resolved_model"), "grok-4.7-xhigh")
+        self.assertEqual(selection.get("resolved_model"), "grok-4.7-high")
         fast = receipt.get("fast") or {}
         self.assertEqual(fast.get("requested"), "off")
         self.assertEqual(fast.get("effective"), "off")
@@ -2171,6 +2171,33 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual(effort.get("candidates"), ["reasoning_effort"])
         self.assertIs(effort.get("advertised"), True)
         self.assertIn(("reasoning_effort", "high"), self.config_events())
+
+    def test_grok_default_and_xhigh_tiers_send_their_declared_effort(self) -> None:
+        # Issue #322: Grok Build default is Grok 4.7 at high; the declared
+        # ``xhigh`` named tier is the same native model at xhigh.
+        receipt = self.start("grok", caps="strict-config")
+        self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
+        self.assertEqual((receipt.get("model_selection") or {}).get("tier"), "default")
+        self.assertIn(("model", "grok-4.7"), self.config_events())
+        self.assertIn(("reasoning_effort", "high"), self.config_events())
+        self.assertNotIn(("reasoning_effort", "xhigh"), self.config_events())
+        self.tearDown()
+        self.setUp()
+        receipt = self.start("grok", "--tier", "xhigh", caps="strict-config")
+        self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
+        selection = receipt.get("model_selection") or {}
+        self.assertEqual(selection.get("tier"), "xhigh")
+        self.assertEqual((receipt.get("model_display") or {}).get("preset_id"), "grok/xhigh")
+        self.assertEqual((receipt.get("model_display") or {}).get("preset_effort"), "xhigh")
+        self.assertIn(("model", "grok-4.7"), self.config_events())
+        self.assertIn(("reasoning_effort", "xhigh"), self.config_events())
+
+    def test_cursor_explicit_xhigh_model_id_still_decomposes(self) -> None:
+        # The default moved to high (issue #322); an explicit xhigh ID remains
+        # a legal Agent-selected model and keeps its mapping and effort.
+        self.start("cursor-cli", "--model", "grok-4.7-xhigh", caps="cursor-params,strict-config")
+        self.assertIn(("model", "grok-4.7"), self.config_events())
+        self.assertIn(("reasoning_effort", "xhigh"), self.config_events())
 
     def test_cursor_fast_on_sends_string_true(self) -> None:
         # Cursor's fast option takes "true"/"false" strings, never the

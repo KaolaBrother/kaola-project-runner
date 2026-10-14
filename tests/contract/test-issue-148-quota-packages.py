@@ -156,6 +156,8 @@ class QuotaSchemaTest(unittest.TestCase):
             ("cursor-cli", "auto", "cursor-cli:cursor-models"),
             ("cursor-cli", "default", "cursor-cli:cursor-models"),
             ("cursor-cli", "grok-4.7", "cursor-cli:cursor-models"),
+            ("cursor-cli", "grok-4.7-high", "cursor-cli:cursor-models"),
+            ("cursor-cli", "grok-4.7-high-fast", "cursor-cli:cursor-models"),
             ("cursor-cli", "grok-4.7-xhigh", "cursor-cli:cursor-models"),
             ("cursor-cli", "grok-4.7-xhigh-fast", "cursor-cli:cursor-models"),
             ("cursor-cli", "claude-opus-5-5", "cursor-cli:other-models"),

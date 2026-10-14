@@ -45,7 +45,7 @@ SESSION="<exact-name>"   # under Project Runner: <platform>-<CODE>-i<ISSUE>-<pur
 ```
 
 The controlling Agent owns model selection for each `start`. This Skill declares its per-run
-presets — `--tier default` (**Grok 4.7**: `grok-4.7-xhigh`, effort=xhigh (encoded in model ID), fast=false) and `--tier opus` (**Claude Opus 5.5**: `claude-opus-5-5-high`, effort=high (encoded in model ID)) — and `default` applies whenever nothing more specific was chosen. Pass
+presets — `--tier default` (**Grok 4.7**: `grok-4.7-high`, effort=high (encoded in model ID), fast=false) and `--tier opus` (**Claude Opus 5.5**: `claude-opus-5-5-high`, effort=high (encoded in model ID)) — and `default` applies whenever nothing more specific was chosen. Pass
 another `--tier` when the human or an existing authorization — the default-authorized Worker pool included —
 names that preset; never infer one from code size, failures, elapsed time, or your own assessment.
 An undeclared name is refused (`tier-not-declared`), never resolved to `default`.
@@ -57,7 +57,7 @@ already encodes effort or Fast (such as a `-fast` variant), pass it as-is; the R
 invent extra effort or Fast configuration for it.
 
 Fast is OFF by default. Pass `--fast on` only on an explicit user request for Fast; this platform's
-Fast support: Fast via the ACP parameterized `fast` option (true/false strings), which applies to any model; a `-fast` catalog id (e.g. grok-4.7-xhigh-fast) decomposes onto that option; an unsupported variant is reported rather than invented. Fast and tier are independent selections. When a native fast model
+Fast support: Fast via the ACP parameterized `fast` option (true/false strings), which applies to any model; a `-fast` catalog id (e.g. grok-4.7-high-fast) decomposes onto that option; an unsupported variant is reported rather than invented. Fast and tier are independent selections. When a native fast model
 ID is what the user explicitly selected, it counts as the explicit Fast selection — report the
 conflict honestly if it is also passed with `--fast off`.
 

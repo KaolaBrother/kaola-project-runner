@@ -726,7 +726,7 @@ class DispatchEntry(unittest.TestCase):
             },
             "cursor-cli-KPR-i244-cap2": {
                 "status": absent(repo),
-                "start": started(repo, "grok-4.7-xhigh"),
+                "start": started(repo, "grok-4.7-high"),
                 "send": sent("fp-cap2"),
             },
             "zcode-KPR-i244-pool": {
@@ -947,7 +947,7 @@ class DispatchEntry(unittest.TestCase):
             "cursor-cli-KPR-i244-map": {
                 "status": absent(repo),
                 "start": started(
-                    repo, "grok-4.7", "xhigh", mapped=True, requested_id="grok-4.7-xhigh",
+                    repo, "grok-4.7", "high", mapped=True, requested_id="grok-4.7-high",
                 ),
                 "send": sent("fp-map"),
             },
@@ -975,7 +975,7 @@ class DispatchEntry(unittest.TestCase):
         self.assertEqual(refused["applied_state"]["model_id"], "unapplied")
         self.assertEqual(by_id["refuse"]["status"], "failed")
         mapped = by_id["mapped"]["selection"]
-        self.assertEqual(mapped["applied"]["model_id"], "grok-4.7-xhigh")
+        self.assertEqual(mapped["applied"]["model_id"], "grok-4.7-high")
         self.assertEqual(mapped["fields"]["model_id"]["applied"], "match")
         self.assertEqual(mapped["fields"]["effort"]["applied"], "match")
         self.assertEqual(by_id["mapped"]["status"], "in-flight")

@@ -239,6 +239,7 @@ def check_no_cross_platform_leakage(assertions: Assertions, package: Path, packa
         # Cursor's user-selected Runner presets are intentionally Cursor Grok /
         # Claude Opus models. Remove only those exact declared model facts
         # before checking for accidental adapter/protocol leakage.
+        text = text.replace("grok-4.7-high", "cursor-default-model-id")
         text = text.replace("grok-4.7-xhigh", "cursor-default-model-id")
         text = text.replace("claude-opus-5-5-high", "cursor-opus-model-id")
         text = text.replace("claude-opus-5-5-medium", "cursor-opus-model-id")

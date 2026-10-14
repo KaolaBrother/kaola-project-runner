@@ -7,8 +7,8 @@ so a declaration change regenerates the rows instead of leaving a handwritten
 mapping behind. This suite pins four things:
 
 * the exact catalog: the README's generated region and the installed
-  ``profile-catalog.md`` table carry the same 22 Preset ID cells in class
-  grouping (Elite 13 / Worker 6 / Expert 3), each ID resolving to its
+  ``profile-catalog.md`` table carry the same 23 Preset ID cells in class
+  grouping (Elite 14 / Worker 6 / Expert 3), each ID resolving to its
   manifest model name on the same row;
 * the similar-name pairs the IDs exist to keep apart — ``cursor-cli/default``
   vs ``grok/default``, ``claude-code/default`` vs ``claude-code/sonnet`` — plus
@@ -49,7 +49,7 @@ README = PROJECT / "README.md"
 ELITE = [
     "claude-code/default", "claude-code/opus-xhigh", "claude-code/sonnet", "codex/default", "cursor-cli/default",
     "cursor-cli/opus", "devin/opus-fusion", "droid/default", "droid/opus", "droid/core",
-    "grok/default", "kimi-cli/default", "kimi-cli/kimi-k2-8",
+    "grok/default", "grok/xhigh", "kimi-cli/default", "kimi-cli/kimi-k2-8",
 ]
 WORKER = [
     "claude-code/haiku", "codex/luna", "devin/default", "dsh/default",
@@ -128,7 +128,7 @@ class PresetCatalogTest(unittest.TestCase):
         for label, rows in (("profile-catalog", self.orchestrator_rows),
                             ("README region", self.readme_rows)):
             self.assertEqual(catalog_ids(rows), EXPECTED_ORDER, label)
-            self.assertEqual(len(set(catalog_ids(rows))), 22, label)
+            self.assertEqual(len(set(catalog_ids(rows))), 23, label)
 
     def test_class_grouping_matches_issue(self) -> None:
         for rows in (self.orchestrator_rows, self.readme_rows):
@@ -211,6 +211,31 @@ class PresetCatalogTest(unittest.TestCase):
             "All-round execution worker, especially strong at complex execution work.")
         self.assertNotIn("UI", rows["devin/opus-fusion"]["profile"])
         self.assertNotIn("3D", rows["devin/opus-fusion"]["profile"])
+        # Issue #322: Grok Build default is high; grok/xhigh is the escalation
+        # preset on the same native model at a higher effort.
+        grok_default, grok_xhigh = rows["grok/default"], rows["grok/xhigh"]
+        self.assertEqual(grok_default["class"], "Elite")
+        self.assertEqual(grok_default["parameters"].strip(), "effort=high, fast=false")
+        self.assertEqual(
+            grok_default["profile"].strip(),
+            "Suits exploratory, long-running autonomous work; give clear stage goals and exit conditions.")
+        self.assertEqual(grok_xhigh["class"], "Elite")
+        self.assertEqual(grok_xhigh["model"].strip(), grok_default["model"].strip())
+        self.assertEqual(grok_xhigh["parameters"].strip(), "effort=xhigh, fast=false")
+        self.assertEqual(
+            grok_xhigh["profile"].strip(),
+            "Escalation level: use it when the Grok Build default (Grok 4.7 high) cannot solve the task.")
+        grok_manifest, _ = self.by_id["grok/default"]
+        self.assertEqual(grok_manifest["default_model_id"], "grok-4.7")
+        self.assertEqual(grok_manifest["xhigh_model_id"], "grok-4.7")
+        self.assertEqual(grok_manifest["default_model_effort"], "high")
+        self.assertEqual(grok_manifest["xhigh_model_effort"], "xhigh")
+        self.assertEqual(grok_manifest["named_tiers"], "xhigh")
+        cursor_default = rows["cursor-cli/default"]
+        self.assertEqual(cursor_default["parameters"].strip(), "effort=high (encoded in model ID), fast=false")
+        cursor_manifest, _ = self.by_id["cursor-cli/default"]
+        self.assertEqual(cursor_manifest["default_model_id"], "grok-4.7-high")
+        self.assertEqual(cursor_manifest["named_tiers"], "opus")
         self.assertNotEqual(default["model"], sonnet["model"])
 
     def test_worker_pool_line_names_exact_ids(self) -> None:
@@ -354,7 +379,7 @@ class AuthorizationNotationTest(unittest.TestCase):
     def test_sonnet_is_elite_without_a_preset_cap_or_pool_seat(self) -> None:
         """Issue #228: Sonnet is Elite at high. Issue #301: six Workers stay exempt."""
         readme = README.read_text(encoding="utf-8")
-        self.assertIn("| **Elite** | 13 |", readme)
+        self.assertIn("| **Elite** | 14 |", readme)
         self.assertIn("| **Worker** | 6 |", readme)
         self.assertIn("| **Expert** | 3 |", readme)
         self.assertIn("no default seat and no preset-specific", readme)

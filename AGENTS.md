@@ -111,7 +111,7 @@ Codex and generic do not.
   and adapters, the main Skill through `templates/orchestrator/`, and Kaola-Delegator through
   `templates/kaola-delegator/`, then run `./scripts/render-skills.py --write` and `--check`.
 - Validate the affected suites through `./scripts/validate.sh --suite <inventory-basename>` for development feedback; run the whole inventory only when actual changes, remaining gaps or a binding requirement justify it; record exact outcomes. Live Cursor experiments use
-  `grok-4.7-xhigh` with Fast disabled and never use `/model` as a read-only probe. A model
+  `grok-4.7-high` with Fast disabled and never use `/model` as a read-only probe. A model
   mismatch remains evidence and must not disable communication.
 - Ordinary Workflow-backed work starts the worker session at the consuming project's canonical
   project root and asks that runtime to invoke workflow-next in-session; the worker's Workflow

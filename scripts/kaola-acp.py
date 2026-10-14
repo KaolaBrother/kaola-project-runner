@@ -3070,7 +3070,7 @@ def parse_acp_model_map(raw: str) -> dict[str, str]:
 
     Maps resolved runtime model IDs (PTY picker IDs) onto the ACP option
     values the agent actually advertises for the same model — e.g. Cursor's
-    ``grok-4.7-xhigh`` onto ``grok-4.7[effort=high,fast=true]``.
+    ``grok-4.7-high`` onto ``grok-4.7[effort=high,fast=true]``.
     """
     return quota_module().parse_acp_model_map(raw)
 
@@ -3129,7 +3129,7 @@ def resolve_config_id(candidates: list[str], state: Any) -> tuple[str, bool]:
 def picker_effort_suffix(model_id: str) -> str:
     """Extract an effort encoded in a picker-style model ID.
 
-    Picker IDs like ``grok-4.7-xhigh`` or ``...-xhigh-fast`` encode
+    Picker IDs like ``grok-4.7-high`` or ``...-high-fast`` encode
     effort in the trailing token; parameterized ACP transports carry that
     effort through their own effort config option instead.
     """
