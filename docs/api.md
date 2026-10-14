@@ -685,6 +685,24 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   when its batch carried it, never through `--events`, and keeps an uncarried input's
   original facts. A Host recovery request's batch also carries Host changes still pending
   past `handled_host_revision`, including a failed batch's range.
+- An obsolete pre-v0.9.12 `maintenance-returned` input can leave without a node checkpoint
+  (Issue #327). The same `update` removes one input when `--evidence` is an original reference
+  the tool checks, and the input is one of three shapes: `batch:<rev>` (the unsent range through
+  that host revision), `host:tasks/<id>@<rev>`, or a task id whose `why` is `not-in-batch`.
+  `retired:tasks/<id>` proves that task row is gone, and for a `batch:<rev>` input that no current
+  task, hold, alert, decision, or retirement stone still carries a host revision at or below the
+  range. `closed:issue/N` with `--index` proves this project's `kaola-dispatch-index/1` has an item
+  for issue N whose status is `returned`, `failed`, or `not-run` (no GitHub call); a task the input
+  names must be that item's task and must not still be the current row at the input's revision.
+  `stopped:holder/HOLDER` with `--live` proves that holder is `stopped` in this repo's
+  `kaola-acp-list/1` rows and is not the bound node, and that the input is not still the current
+  change. `superseded:REV` proves REV is a later current host revision that replaced the input:
+  for one task, that task's current `host_revision`; for a batch range, the file's current host
+  revision or a current record's, with no ready-queue row left at or below the range. A stop duty,
+  a `recovery#` input, a `batch:<id>` that is not a revision, and any other shape still need the
+  checkpoint proof. Evidence that does not check out refuses `input-unproven` and writes nothing.
+  This removal does not raise `host_revision`, so it adds no queue input, no wake, and no node
+  traffic. The alert leaves the file only when no input remains.
 - A verified checkpoint also drops a returned input whose `host_revision_through` is at or
   below that checkpoint's `host_revision.through` (coverage, Issue #310). A `batch:` input
   stays while another returned `host:` change at or below that revision is still open.

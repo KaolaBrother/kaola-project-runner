@@ -5448,23 +5448,411 @@ def record_recovery(args: argparse.Namespace, doc: dict[str, Any], current: dict
 
 STOP_DUTIES = RECORD.MAINTENANCE_STOP_DUTIES
 RETURNED_SUMMARY = re.compile(r"\d+ maintenance input\(s\) not applied by a node")
+# Pre-v0.9.12 maintenance failures named the unsent range `batch:<rev>` when
+# no batch id existed (through 1261, 1444, 1669 on the KPM Host). A later
+# named batch id is `batch:b-…` and stays on the checkpoint path.
+_OBSOLETE_BATCH = re.compile(r"batch:([1-9][0-9]*)$")
+_OBSOLETE_HOST_TASK = re.compile(r"host:tasks/([A-Za-z0-9#][A-Za-z0-9_.:#/-]{0,79})@([1-9][0-9]*)$")
+_TASK_IDENT = re.compile(r"[A-Za-z0-9#][A-Za-z0-9_.:#/-]{0,79}$")
+_RETIRED_TASK_EVIDENCE = re.compile(r"retired:tasks/([A-Za-z0-9#][A-Za-z0-9_.:#/-]{0,79})$")
+_CLOSED_ISSUE_EVIDENCE = re.compile(r"closed:issue/([1-9][0-9]*)$")
+_STOPPED_HOLDER_EVIDENCE = re.compile(r"stopped:holder/([A-Za-z0-9][A-Za-z0-9_.:-]{0,127})$")
+_SUPERSEDED_EVIDENCE = re.compile(r"superseded:([1-9][0-9]*)$")
+_OBSOLETE_RETIRE_ROUTE = (
+    " This input is an obsolete pre-v0.9.12 maintenance-returned input. The Host removes only "
+    "this input with the same update and one original-evidence reference that checks out: "
+    "retired:tasks/ID when that task row is gone, closed:issue/N with --index of this project's "
+    "kaola-dispatch-index/1 when that issue's item is closed (returned, failed, or not-run), "
+    "stopped:holder/HOLDER with --live kaola-acp-list/1 rows when that holder is stopped, or "
+    "superseded:REV when a later revision replaced it. The alert leaves the file when no input "
+    "remains. This writes no wake, no re-queue, and no node traffic."
+)
 
 
-def input_settlement_problem(state: dict[str, Any], inputs: dict[str, Any], ident: str,
-                             evidence: Any) -> str | None:
+def revision_number(value: Any) -> int | None:
+    """A positive host revision. Booleans are not revisions."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        return None
+    return value
+
+
+def obsolete_evidence_kind(evidence: Any) -> str | None:
+    """Which original-evidence reference this string is, if it is one."""
+    if not isinstance(evidence, str):
+        return None
+    if _RETIRED_TASK_EVIDENCE.fullmatch(evidence):
+        return "retired-task"
+    if _CLOSED_ISSUE_EVIDENCE.fullmatch(evidence):
+        return "closed-issue"
+    if _STOPPED_HOLDER_EVIDENCE.fullmatch(evidence):
+        return "stopped-holder"
+    if _SUPERSEDED_EVIDENCE.fullmatch(evidence):
+        return "superseded"
+    return None
+
+
+def obsolete_input_class(ident: str, row: Any) -> str | None:
+    """The pre-v0.9.12 shape a Host may retire, or None when the checkpoint
+    path is still the only one.
+
+    A stop duty is never this shape. `batch:<rev>` is the unbound failure id.
+    `host:tasks/<id>@<rev>` is one returned business change. A not-in-batch
+    task id is the bare task id the node named, with `why` `not-in-batch`.
+    """
+    if isinstance(row, dict) and row.get("why") in STOP_DUTIES:
+        return None
+    if not isinstance(ident, str):
+        return None
+    batch = _OBSOLETE_BATCH.fullmatch(ident)
+    if batch:
+        stored = row.get("host_revision_through") if isinstance(row, dict) else None
+        if stored is not None and stored != int(batch.group(1)):
+            return None
+        return "batch-range"
+    if _OBSOLETE_HOST_TASK.fullmatch(ident):
+        return "host-task"
+    if (isinstance(row, dict) and row.get("why") == "not-in-batch" and _TASK_IDENT.fullmatch(ident)
+            and not ident.startswith(("host:", "batch:", "recovery#"))):
+        return "not-in-batch"
+    return None
+
+
+def host_task_input(ident: str) -> tuple[str, int]:
+    match = _OBSOLETE_HOST_TASK.fullmatch(ident)
+    if match is None:
+        raise ValueError(ident)
+    return match.group(1), int(match.group(2))
+
+
+def input_revision(ident: str, row: Any, cls: str) -> int | None:
+    """The revision this input still claims, when it has one."""
+    if cls == "batch-range":
+        match = _OBSOLETE_BATCH.fullmatch(ident)
+        return int(match.group(1)) if match else None
+    if cls == "host-task":
+        return host_task_input(ident)[1]
+    if isinstance(row, dict):
+        return revision_number(row.get("host_revision_through"))
+    return None
+
+
+def observed_host_revision(doc: dict[str, Any], args: argparse.Namespace) -> int:
+    """The file's host revision as the Host read it.
+
+    A Host write has already counted one business revision for this command.
+    That count is not a rewrite of the queue."""
+    current = revision_number(doc.get("host_revision")) or 0
+    if getattr(args, "writer", None) == "host" and current:
+        return current - 1
+    return current
+
+
+def release_host_business_bump(doc: dict[str, Any], args: argparse.Namespace) -> None:
+    """Put back the business revision this command counted.
+
+    Retiring an obsolete returned input is bookkeeping. It must not become a
+    new queue input, so the file host revision stays where the Host read it
+    and the alert is not stamped with a new one."""
+    current = doc.get("host_revision")
+    if isinstance(current, int) and not isinstance(current, bool) and current > 0:
+        doc["host_revision"] = current - 1
+    args._host_revision = None
+
+
+def rows_at_or_below(state: dict[str, Any], through: int) -> list[str]:
+    """Current records and retirement stones whose host revision is still
+    inside a batch range. The returned alert itself is the thing being
+    retired, so its own stamp is not a blocker. Section sources from init
+    are not the ready queue."""
+    found: list[str] = []
+    for kind in RECORD_KINDS:
+        records = state.get(kind)
+        if not isinstance(records, dict):
+            continue
+        for record_id, record in records.items():
+            if kind == "alerts" and record_id == "maintenance-returned":
+                continue
+            if not isinstance(record, dict):
+                continue
+            rev = revision_number(record.get("host_revision"))
+            if rev is not None and rev <= through:
+                found.append(f"{kind}/{record_id}@{rev}")
+    for stone in state.get("retired") or []:
+        if not isinstance(stone, dict):
+            continue
+        rev = revision_number(stone.get("host_revision"))
+        if rev is not None and rev <= through:
+            found.append(f"retired/{stone.get('kind')}/{stone.get('id')}@{rev}")
+    return sorted(found)
+
+
+def task_change_is_current(state: dict[str, Any], task_id: str, revision: int | None) -> bool:
+    """Whether this task row is still the change the input names.
+
+    No stored revision means any current row is still that change. A later
+    host revision on the row is a rewrite, not this input."""
+    task = (state.get("tasks") or {}).get(task_id)
+    if not isinstance(task, dict):
+        return False
+    if revision is None:
+        return True
+    return revision_number(task.get("host_revision")) == revision
+
+
+def record_at_revision(state: dict[str, Any], rev: int) -> bool:
+    for kind in RECORD_KINDS:
+        records = state.get(kind)
+        if not isinstance(records, dict):
+            continue
+        for record in records.values():
+            if isinstance(record, dict) and revision_number(record.get("host_revision")) == rev:
+                return True
+    sources = state.get("section_sources")
+    if isinstance(sources, dict):
+        for source in sources.values():
+            if isinstance(source, dict) and revision_number(source.get("host_revision")) == rev:
+                return True
+    return False
+
+
+def range_block(ident: str, through: int, blockers: list[str]) -> str | None:
+    if not blockers:
+        return None
+    return (f"{ident} still has current rows at or below revision {through}: " + ", ".join(blockers))
+
+
+def prove_retired_task(state: dict[str, Any], ident: str, cls: str, named: str) -> str | None:
+    """A retired task row is a task that is not current. Clean retirement
+    stores no stone, so absence is the proof. A row that is still current
+    is not retired."""
+    tasks = state.get("tasks") if isinstance(state.get("tasks"), dict) else {}
+    if cls == "host-task":
+        task_id, _old = host_task_input(ident)
+        if named != task_id:
+            return f"retired:tasks/{named} is not the task in {ident}"
+    elif cls == "not-in-batch":
+        if named != ident:
+            return f"retired:tasks/{named} is not the task id {ident}"
+        task_id = ident
+    elif cls == "batch-range":
+        task_id = named
+        through = int(_OBSOLETE_BATCH.fullmatch(ident).group(1))
+        if tasks.get(task_id) is not None:
+            rev = revision_number(tasks[task_id].get("host_revision"))
+            return f"tasks/{task_id} is still a current row at revision {rev}"
+        return range_block(ident, through, rows_at_or_below(state, through))
+    else:
+        return f"{ident} is not an obsolete pre-v0.9.12 maintenance-returned input"
+    if tasks.get(task_id) is not None:
+        rev = revision_number(tasks[task_id].get("host_revision"))
+        return (f"tasks/{task_id} is still a current row at revision {rev}; "
+                f"name superseded:{rev} when that revision replaced this input")
+    return None
+
+
+def closed_issue_items(args: argparse.Namespace, number: int) -> tuple[list[dict[str, Any]], str | None]:
+    """Closed dispatch items for issue N in this project's index.
+
+    Closure is the index status retire already trusts (`returned`, `failed`,
+    `not-run`). This does not call GitHub. A foreign index is
+    `index-unidentified` and proves nothing."""
+    paths = supplied_index_paths(args)
+    if len(paths) != 1:
+        return [], (f"closed:issue/{number} needs one --index of this project's kaola-dispatch-index/1")
+    index_path = paths[0]
+    try:
+        index = load_object(Path(index_path))
+    except (OSError, ValueError) as exc:
+        return [], f"closed:issue/{number} index is unreadable: {exc}"
+    mismatch = index_identity_problem(index, str(repo_of_state_file(Path(args.file))))
+    if mismatch:
+        raise StateRefusal(
+            "index-unidentified",
+            f"the index at {index_path} {mismatch}; a closed issue is proven only from this "
+            "project's dispatch index",
+            recovery="pass --index pointing at this project's kaola-dispatch-index/1")
+    found = []
+    for item in index.get("items") or []:
+        if not isinstance(item, dict):
+            continue
+        if normalize_issue(item.get("issue")) != number or item.get("status") not in CLOSED_COVERAGE:
+            continue
+        found.append(item)
+    return found, None
+
+
+def prove_closed_issue(args: argparse.Namespace, state: dict[str, Any], ident: str, row: Any,
+                       cls: str, number: int) -> str | None:
+    matched, problem = closed_issue_items(args, number)
+    if problem:
+        return problem
+    if not matched:
+        return f"closed:issue/{number} is not a closed item in the index"
+    if cls == "host-task":
+        task_id, old = host_task_input(ident)
+        if not any(item.get("task_id") == task_id for item in matched):
+            return f"closed:issue/{number} is not a closed item of tasks/{task_id}"
+        if task_change_is_current(state, task_id, old):
+            return f"tasks/{task_id} is still the current change at revision {old}"
+        return None
+    if cls == "not-in-batch":
+        if not any(item.get("task_id") == ident for item in matched):
+            return f"closed:issue/{number} is not a closed item of tasks/{ident}"
+        if task_change_is_current(state, ident, input_revision(ident, row, cls)):
+            return f"tasks/{ident} is still current"
+        return None
+    if cls == "batch-range":
+        through = int(_OBSOLETE_BATCH.fullmatch(ident).group(1))
+        for item in matched:
+            task_id = item.get("task_id")
+            task = (state.get("tasks") or {}).get(task_id) if isinstance(task_id, str) else None
+            if not isinstance(task, dict):
+                continue
+            rev = revision_number(task.get("host_revision"))
+            if rev is not None and rev <= through:
+                return f"tasks/{task_id} is still current at revision {rev}, within {ident}"
+        return range_block(ident, through, rows_at_or_below(state, through))
+    return f"{ident} is not an obsolete pre-v0.9.12 maintenance-returned input"
+
+
+def prove_stopped_holder(args: argparse.Namespace, state: dict[str, Any], ident: str, row: Any,
+                         cls: str, holder_id: str) -> str | None:
+    """A stopped node holder is a same-repo live row at `stopped`, and not
+    the bound node. A holder that is still current business does not retire
+    the input."""
+    live_path = getattr(args, "live", None)
+    if not isinstance(live_path, str) or not live_path:
+        return "stopped:holder/ID needs --live kaola-acp-list/1 rows (list --repo --include-dead)"
+    rows = live_rows_of(live_path) or []
+    repo = str(repo_of_state_file(Path(args.file)))
+    own = [item for item in rows if item.get("holder_instance_id") == holder_id
+           and isinstance(item.get("repo"), str) and same_repo(item.get("repo"), repo)]
+    if not own:
+        return f"holder {holder_id} is not in the live rows for this repo; its stop is not shown"
+    if any(item.get("state") != "stopped" for item in own):
+        return f"holder {holder_id} is still live"
+    binding = state.get("sideagent") if isinstance(state.get("sideagent"), dict) else {}
+    if (binding.get("mode") == "node" and binding.get("state") == "active"
+            and binding.get("holder_instance_id") == holder_id):
+        return f"holder {holder_id} is the bound node"
+    if cls == "host-task":
+        task_id, old = host_task_input(ident)
+        if task_change_is_current(state, task_id, old):
+            return f"tasks/{task_id} is still the current change at revision {old}"
+        return None
+    if cls == "not-in-batch":
+        if task_change_is_current(state, ident, input_revision(ident, row, cls)):
+            return f"tasks/{ident} is still current"
+        return None
+    if cls == "batch-range":
+        through = int(_OBSOLETE_BATCH.fullmatch(ident).group(1))
+        return range_block(ident, through, rows_at_or_below(state, through))
+    return f"{ident} is not an obsolete pre-v0.9.12 maintenance-returned input"
+
+
+def prove_superseded(doc: dict[str, Any], args: argparse.Namespace, state: dict[str, Any],
+                     ident: str, row: Any, cls: str, rev: int) -> str | None:
+    """`superseded:REV` is a later revision that replaced this input.
+
+    For one task, REV is that task's current host revision. For a batch
+    range, REV is the file's current host revision or some current record's,
+    and no ready-queue row remains at or below the range."""
+    observed = observed_host_revision(doc, args)
+    if rev > observed:
+        return f"superseded:{rev} is past the current host revision {observed}"
+    if cls == "host-task":
+        task_id, old = host_task_input(ident)
+        if rev <= old:
+            return f"superseded:{rev} does not replace revision {old}"
+        task = (state.get("tasks") or {}).get(task_id)
+        if not isinstance(task, dict):
+            return f"tasks/{task_id} is not a current row; name retired:tasks/{task_id}"
+        current = revision_number(task.get("host_revision"))
+        if current != rev:
+            return f"tasks/{task_id} is at revision {current}, not superseded:{rev}"
+        return None
+    if cls == "not-in-batch":
+        through = input_revision(ident, row, cls)
+        if through is None:
+            return f"{ident} has no host_revision_through to supersede"
+        if rev <= through:
+            return f"superseded:{rev} does not replace revision {through}"
+        task = (state.get("tasks") or {}).get(ident)
+        if not isinstance(task, dict):
+            return f"tasks/{ident} is not a current row; name retired:tasks/{ident}"
+        current = revision_number(task.get("host_revision"))
+        if current != rev:
+            return f"tasks/{ident} is at revision {current}, not superseded:{rev}"
+        return None
+    if cls == "batch-range":
+        through = int(_OBSOLETE_BATCH.fullmatch(ident).group(1))
+        if rev <= through:
+            return f"superseded:{rev} does not replace {ident}"
+        blocked = range_block(ident, through, rows_at_or_below(state, through))
+        if blocked:
+            return blocked
+        if rev != observed and not record_at_revision(state, rev):
+            return f"superseded:{rev} is not a current record revision"
+        return None
+    return f"{ident} is not an obsolete pre-v0.9.12 maintenance-returned input"
+
+
+def obsolete_input_problem(doc: dict[str, Any], inputs: dict[str, Any], ident: str,
+                           args: argparse.Namespace, kind: str) -> str | None:
+    """None when the original-evidence reference proves this obsolete input."""
+    if getattr(args, "id", None) != "maintenance-returned":
+        return f"{ident} is not a maintenance-returned input"
+    row = inputs.get(ident)
+    cls = obsolete_input_class(ident, row)
+    if cls is None:
+        return (f"{ident} is not an obsolete pre-v0.9.12 maintenance-returned input "
+                "(batch:<rev>, host:tasks/<id>@<rev>, or a not-in-batch task id)")
+    state = doc["state"]
+    evidence = args.evidence
+    if kind == "retired-task":
+        named = _RETIRED_TASK_EVIDENCE.fullmatch(evidence).group(1)
+        return prove_retired_task(state, ident, cls, named)
+    if kind == "closed-issue":
+        number = int(_CLOSED_ISSUE_EVIDENCE.fullmatch(evidence).group(1))
+        return prove_closed_issue(args, state, ident, row, cls, number)
+    if kind == "stopped-holder":
+        holder_id = _STOPPED_HOLDER_EVIDENCE.fullmatch(evidence).group(1)
+        return prove_stopped_holder(args, state, ident, row, cls, holder_id)
+    rev = int(_SUPERSEDED_EVIDENCE.fullmatch(evidence).group(1))
+    return prove_superseded(doc, args, state, ident, row, cls, rev)
+
+
+def input_settlement_problem(doc: dict[str, Any], inputs: dict[str, Any], ident: str,
+                             args: argparse.Namespace) -> str | None:
     """Why the named evidence does not prove one returned input handled.
 
-    The proof is the recorded node checkpoint: it settled this exact input,
-    or it is verified and its range covers the input's `host_revision_through`.
-    A `batch:` input still needs no returned Host change at or below that
-    revision to be open. A `recovery#` input clears on that coverage, or when
-    this checkpoint settled that exact sequence. A recovery-only checkpoint
-    selects no new business range, so it cannot reach an unsent one. A stop
-    duty is proven by the exact stop, never here."""
+    The checkpoint proof is unchanged: the recorded node checkpoint settled
+    this exact input, or it is verified and its range covers the input's
+    `host_revision_through`. A `batch:` input still needs no returned Host
+    change at or below that revision to be open. A `recovery#` input clears
+    on that coverage, or when this checkpoint settled that exact sequence.
+    A recovery-only checkpoint selects no new business range, so it cannot
+    reach an unsent one. A stop duty is proven by the exact stop, never here.
+
+    Issue #327: an obsolete pre-v0.9.12 input may instead name an original
+    record (retired task, closed issue, stopped holder, superseded revision).
+    That reference has to check out. It does not raise a business revision.
+    """
+    state = doc["state"]
+    evidence = getattr(args, "evidence", None)
     item = inputs.get(ident)
     if isinstance(item, dict) and item.get("why") in STOP_DUTIES:
         return (f"{ident} is a stop duty ({item['why']}); only the exact stop of the original node "
                 "holder ends it, not a checkpoint")
+    kind = obsolete_evidence_kind(evidence)
+    if kind:
+        if args.writer != "host":
+            raise StateRefusal(
+                "host-only",
+                "an obsolete maintenance-returned input is retired by the Host",
+                path=f"alerts.{args.id}.inputs.{ident}",
+                recovery=settle_recovery(args, doc, (state.get("alerts") or {}).get(args.id) or {}, ident))
+        return obsolete_input_problem(doc, inputs, ident, args, kind)
     batch = evidence[len("checkpoint:"):] if isinstance(evidence, str) and evidence.startswith("checkpoint:") else ""
     maintenance = state.get("maintenance") if isinstance(state.get("maintenance"), dict) else {}
     last = maintenance.get("last_checkpoint") if isinstance(maintenance.get("last_checkpoint"), dict) else {}
@@ -5507,6 +5895,8 @@ def settle_recovery(args: argparse.Namespace, doc: dict[str, Any], current: dict
                           "--evidence", f"checkpoint:{last.get('batch') or 'BATCH'}",
                           "--set", json.dumps({"inputs": {ident: None}})])
     others = len((current.get("inputs") or {})) - 1
+    inputs = current.get("inputs") if isinstance(current.get("inputs"), dict) else {}
+    hint = _OBSOLETE_RETIRE_ROUTE if obsolete_input_class(ident, inputs.get(ident)) is not None else ""
     return (f"alerts/{args.id} is at record revision {current.get('rev')}. Recorded node checkpoint: "
             f"{last.get('batch') or 'none'} (verified {last.get('verified')}, Host revisions "
             f"{span.get('from')}..{span.get('through')}). "
@@ -5514,7 +5904,8 @@ def settle_recovery(args: argparse.Namespace, doc: dict[str, Any], current: dict
             f"{command}. Otherwise keep it: reconcile the original node and stop receipts, then request a "
             "bounded check with `state recovery-input --kind request`; that batch also carries pending Host "
             "business changes. A stop duty stays until the exact stop is confirmed. Do not retire the whole "
-            f"alert while {others} other input(s) remain, rewrite a failed range, or write a fake business change.")
+            f"alert while {others} other input(s) remain, rewrite a failed range, or write a fake business change."
+            f"{hint}")
 
 
 def settle_inputs(args: argparse.Namespace, doc: dict[str, Any], current: dict[str, Any] | None,
@@ -5543,10 +5934,15 @@ def settle_inputs(args: argparse.Namespace, doc: dict[str, Any], current: dict[s
                           f"{', '.join(sorted(inputs)) or 'none'}. Remove only a current input id, verbatim. "
                           "Do not create a handled row or move its text to another field."),
                 unapplied=patch)
-        problem = input_settlement_problem(doc["state"], inputs, ident, getattr(args, "evidence", None))
+        problem = input_settlement_problem(doc, inputs, ident, args)
         if problem:
             raise StateRefusal("input-unproven", problem, path=f"alerts.{args.id}.inputs.{ident}",
                                recovery=settle_recovery(args, doc, current, ident), unapplied=patch)
+    # An obsolete-input retirement is not a Host business write. The revision
+    # counted above would otherwise stamp the alert and queue it to a node.
+    obsolete = obsolete_evidence_kind(getattr(args, "evidence", None)) is not None
+    if obsolete:
+        release_host_business_bump(doc, args)
     remaining = {ident: row for ident, row in inputs.items() if ident not in removals}
     records = doc["state"]["alerts"]
     if args.id == "maintenance-returned" and not remaining:
@@ -5570,7 +5966,15 @@ def settle_inputs(args: argparse.Namespace, doc: dict[str, Any], current: dict[s
     merged["updated_at"] = observed_at()
     merged["source"] = args.source
     merged["writer"] = writer_trace(args, caller)
-    stamp_writer(doc, merged, args, caller)
+    if obsolete:
+        # Keep the alert's existing host revision. A new stamp would be a
+        # queue input for the maintenance node.
+        if caller and caller.get("holder_instance_id"):
+            merged["writer_holder"] = caller["holder_instance_id"]
+        else:
+            merged.pop("writer_holder", None)
+    else:
+        stamp_writer(doc, merged, args, caller)
     records[args.id] = merged
     return {**merged, "settled_inputs": removals}
 
@@ -7422,7 +7826,12 @@ def build_parser() -> argparse.ArgumentParser:
     update.add_argument("--set", required=True, help="JSON merge patch, or @path")
     update.add_argument("--host-turn", help="the Host turn a Sideagent transcribes a decision from")
     update.add_argument("--coalesce", action="store_true", help="repeat of an existing alert")
-    update.add_argument("--evidence", help="checkpoint:BATCH that proves a removed alert input handled")
+    update.add_argument("--evidence",
+                        help="checkpoint:BATCH that proves a removed alert input handled, or, for an "
+                             "obsolete pre-v0.9.12 maintenance-returned input, retired:tasks/ID, "
+                             "closed:issue/N, stopped:holder/HOLDER, or superseded:REV")
+    update.add_argument("--live", help="JSON file path: kaola-acp.py list --repo --include-dead rows "
+                        "(kaola-acp-list/1) showing the holder named by stopped:holder/HOLDER is stopped")
     update.set_defaults(func=command_state_update)
 
     retire = actions.add_parser("retire")
@@ -7444,7 +7853,9 @@ def build_parser() -> argparse.ArgumentParser:
     retire.add_argument("--handoff", help="current task that takes over its seats and dispatch")
     retire.set_defaults(func=command_state_retire)
 
-    update.add_argument("--index", help="JSON file path: dispatch index: mirror dispositions, and the only handoff locator this update reads")
+    update.add_argument("--index", help="JSON file path: dispatch index: mirror dispositions, and the only "
+                        "handoff locator this update reads; also this project's kaola-dispatch-index/1 "
+                        "when --evidence is closed:issue/N")
 
     recovery = actions.add_parser("recovery-input", help="register a bounded Host recovery duty without a business write")
     recovery.add_argument("--file", required=True)

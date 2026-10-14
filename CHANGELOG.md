@@ -8,6 +8,25 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 Seats: restart required
 
+- **Retire obsolete pre-v0.9.12 `maintenance-returned` inputs (Issue #327).**
+  `state update --kind alerts --id maintenance-returned` accepts one original-evidence
+  reference for an input the checkpoint path cannot settle: a `batch:<rev>` range,
+  a `host:tasks/<id>@<rev>` change, or a not-in-batch task id. `retired:tasks/<id>`
+  proves that task row is gone. `closed:issue/N` with `--index` proves this project's
+  dispatch index has a closed item for that issue (`returned`, `failed`, or `not-run`).
+  `stopped:holder/HOLDER` with `--live` proves that holder is stopped in this repo and
+  is not the bound node. `superseded:REV` proves a later current host revision replaced
+  the input. A batch range also stays while a current task, hold, alert, decision, or
+  retirement stone still sits at or below that revision. The alert is removed only when
+  no input remains. A stop duty, a `recovery#` input, a named `batch:<id>` that is not
+  a revision, and any reference that does not check out still refuse `input-unproven`
+  and write nothing. The removal does not raise `host_revision` and does not stage a
+  node or a wake. `delegator_turn_wake_reason` and normal queue handling are unchanged.
+  Seats: restart not required. `scripts/kaola-dispatch.py` is a per-call CLI outside
+  the operator restart set (`docs/conventions.md`). The holder script is unchanged.
+  The Unreleased section line stays `Seats: restart required` because Issue #326
+  changed the holder.
+
 - **Settle-window `steer` queues for the next turn instead of dead-ending against `send` (Issue #326).**
   While a turn is settling — the native CLI already emitted its result, so native
   steer answers `promptRequired`, while the holder's turn is still active
