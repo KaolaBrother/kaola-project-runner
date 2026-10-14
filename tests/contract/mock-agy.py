@@ -15,6 +15,7 @@ import os
 import signal
 import sys
 import threading
+import time
 import uuid
 
 SCENARIO = os.environ.get("MOCK_AGY_SCENARIO", "ok")
@@ -86,6 +87,8 @@ def normal_turn(content: str) -> None:
     step(0, "DONE", step_type="user_input")
     step(1, "ACTIVE", step_type="tool", tool_name="run_command",
          tool_info={"name": "run_command", "parameters": {"command": "ls"}})
+    if "slow" in content:
+        time.sleep(0.45)
     if "toolfail" in content:
         step(1, "DONE", step_type="tool", tool_name="run_command",
              tool_info={"name": "run_command", "error": {"type": "denied", "message": "soft-denied"}})
@@ -104,12 +107,24 @@ def normal_turn(content: str) -> None:
 
 def on_sigint(signum, frame) -> None:
     log({"event": "sigint"})
+    if SCENARIO == "legacy-interrupted":
+        emit({"event": "result", "result": {
+            "conversation_id": CONVERSATION, "status": "INTERRUPTED", "response": "",
+            "error": "", "duration_seconds": 0, "num_turns": TURNS, "usage": {}}})
+        return
+    # Real agy 1.3.5 (Issue #328): SIGINT cancels the root NotifyContext,
+    # emits an ERROR result with `error: "interrupted"` carrying the persisted
+    # conversation_id, writes `error: interrupted` to stderr, and exits 1.
     emit({"event": "result", "result": {
-        "conversation_id": CONVERSATION, "status": "INTERRUPTED", "response": "",
-        "error": "", "duration_seconds": 0, "num_turns": TURNS, "usage": {}}})
+        "conversation_id": CONVERSATION, "status": "ERROR", "response": "",
+        "error": "interrupted", "duration_seconds": 0, "num_turns": TURNS, "usage": {}}})
+    sys.stderr.write("error: interrupted\n")
+    sys.stderr.flush()
+    sys.exit(1)
 
 
 def main() -> int:
+    global TURNS
     log({"event": "spawn", "argv": ARGV, "scenario": SCENARIO})
     signal.signal(signal.SIGINT, on_sigint)
     if SCENARIO == "unsigned":
@@ -147,8 +162,9 @@ def main() -> int:
                 "duration_seconds": 0, "num_turns": TURNS, "usage": {}}})
             continue
         if content == "hang":
+            TURNS += 1
             step(1, "ACTIVE", step_type="agent_response", text_delta="working")
-            signal.pause()      # the SIGINT handler emits INTERRUPTED and the loop goes on
+            signal.pause()
             continue
         normal_turn(content)
     log({"event": "stdin-closed"})

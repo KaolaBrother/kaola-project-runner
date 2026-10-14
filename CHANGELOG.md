@@ -21,6 +21,37 @@ Seats: restart required
   script is unchanged. The section line stays `Seats: restart required` because Issue #326 changed
   the holder.
 
+- **Antigravity (`agy`) mid-turn `steer` and `cancel`/`--steer-mode interrupt` end to end (Issue #328).**
+  Live probes on `agy 1.3.5` established that `--input-format stream-json` is the
+  only multi-turn headless input mode (`handleStreamMessage` rejects
+  `control_request` and leading-slash commands with exit 2), that a mid-turn
+  `{"event":"user","message":{"content":"..."}}` written to `agy`'s stdin is
+  buffered on `agy`'s stream channel and runs on the same `agy` process
+  immediately after the in-flight turn completes, and that `SIGINT` mid-turn
+  causes `agy 1.3.5` to emit `status: "ERROR"` with `error: "interrupted"` and
+  exit 1 while persisting the conversation on disk (including on Turn 1) so it
+  resumes cleanly via `agy --conversation <conversation_id>`.
+  `scripts/kaola-antigravity-acp.py` now advertises `_meta.steering.supported=true`
+  and serves `_session/steering`: while a turn is active, it writes the `user`
+  event to the running child's stdin, coalesces the resulting `agy` turn under
+  the active ACP `session/prompt` request id (`turn_request_id` preserved), and
+  reports `written` (`steer_confirmation: write-only`); leading-slash text is
+  refused (`-32602`) before writing; when no native turn is running (including
+  during the holder's post-result settle window), `_session/steering` writes
+  nothing and returns `promptRequired`, composing with `#326`'s after-turn queue.
+  On `session/cancel` (`SIGINT`), `finish_turn` maps `status: "ERROR", error:
+  "interrupted"` (and `INTERRUPTED`/`CANCELED`) to `stopReason: "cancelled"`,
+  records `conversation_id` as persisted, and retires the interrupted child so
+  the next prompt (including `--steer-mode interrupt`) respawns with
+  `--conversation`. `platforms/antigravity.yaml` switches `acp_steer_method` to
+  `"_session/steering"` (removing `steering_delivery: "after-turn"`) and updates
+  `acp_verified_versions` to
+  `cli=1.3.5;protocol=1;condition=live-one-turn-two-turn-resume-steer-cancel`.
+  `delegator_turn_wake_reason` ordering and normal queue handling are unchanged.
+  Seats: restart required. `platforms/antigravity.yaml` and
+  `scripts/kaola-antigravity-acp.py` changed; a running Antigravity seat keeps
+  the old adapter process until it restarts. Nothing is installed by this change.
+
 - **Retire obsolete pre-v0.9.12 `maintenance-returned` inputs (Issue #327).**
   `state update --kind alerts --id maintenance-returned` accepts one original-evidence
   reference for an input the checkpoint path cannot settle: a `batch:<rev>` range,

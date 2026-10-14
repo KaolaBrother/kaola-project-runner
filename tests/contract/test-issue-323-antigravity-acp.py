@@ -166,7 +166,7 @@ class Wrapper:
 
 
 class WrapperProtocol(unittest.TestCase):
-    def test_initialize_advertises_resume_and_close_only(self) -> None:
+    def test_initialize_advertises_resume_close_and_steering(self) -> None:
         w = Wrapper(self)
         result = w.call("initialize", {"protocolVersion": 1})["result"]
         caps = result["agentCapabilities"]
@@ -176,6 +176,7 @@ class WrapperProtocol(unittest.TestCase):
         self.assertIs(caps["sessionCapabilities"]["close"], True)
         self.assertNotIn("list", caps["sessionCapabilities"])
         self.assertIs(caps["loadSession"], False)
+        self.assertEqual(result.get("_meta", {}).get("steering"), {"supported": True})
 
     def test_session_new_spawns_the_documented_argv_without_effort(self) -> None:
         w = Wrapper(self)
@@ -323,21 +324,109 @@ class WrapperProtocol(unittest.TestCase):
             self.assertEqual(reply["error"]["code"], -32602)
         self.assertEqual(w.spawns(), [])
 
-    def test_cancel_sends_sigint_and_ends_the_turn_cancelled(self) -> None:
+    def test_cancel_sends_sigint_and_resumes_next_turn_with_conversation(self) -> None:
+        """Real agy 1.3.5 emits status ERROR with error: interrupted and exits 1 on
+        SIGINT, persisting the conversation; the next prompt respawns with --conversation."""
         w = Wrapper(self)
+        sid = w.new_session()
+        conv = w.updates("native_session_identity")[-1]["nativeSessionId"]
+        pending = w.send("session/prompt", {"sessionId": sid, "prompt": "hang"})
+        deadline = time.monotonic() + 10
+        while not w.events("user") and time.monotonic() < deadline:
+            time.sleep(0.05)
+        time.sleep(0.2)
+        w.call("session/cancel", {"sessionId": sid})
+        reply = w.wait(pending)
+        self.assertEqual(reply["result"]["stopReason"], "cancelled")
+        meta = reply["result"]["_meta"]["antigravity"]
+        self.assertEqual(meta["agy_status"], "ERROR")
+        self.assertEqual(meta["agy_error"], "interrupted")
+        self.assertEqual(meta["conversation_id"], conv)
+        self.assertEqual(len(w.events("sigint")), 1)
+        again = w.call("session/prompt", {"sessionId": sid, "prompt": "after cancel"})
+        self.assertEqual(again["result"]["stopReason"], "end_turn")
+        respawn_argv = w.spawns()[-1]
+        self.assertIn("--conversation", respawn_argv)
+        self.assertEqual(respawn_argv[respawn_argv.index("--conversation") + 1], conv)
+
+    def test_cancel_also_handles_documented_interrupted_status(self) -> None:
+        w = Wrapper(self, scenario="legacy-interrupted")
         sid = w.new_session()
         pending = w.send("session/prompt", {"sessionId": sid, "prompt": "hang"})
         deadline = time.monotonic() + 10
         while not w.events("user") and time.monotonic() < deadline:
             time.sleep(0.05)
-        time.sleep(0.3)
+        time.sleep(0.2)
         w.call("session/cancel", {"sessionId": sid})
         reply = w.wait(pending)
         self.assertEqual(reply["result"]["stopReason"], "cancelled")
         self.assertEqual(reply["result"]["_meta"]["antigravity"]["agy_status"], "INTERRUPTED")
-        self.assertEqual(len(w.events("sigint")), 1)
-        again = w.call("session/prompt", {"sessionId": sid, "prompt": "after cancel"})
-        self.assertEqual(again["result"]["stopReason"], "end_turn")
+
+    def test_mid_turn_steering_writes_user_event_and_coalesces_turn_on_same_process(self) -> None:
+        w = Wrapper(self)
+        sid = w.new_session()
+        pending = w.send("session/prompt", {"sessionId": sid, "prompt": [{"type": "text", "text": "slow turn 1"}]})
+        deadline = time.monotonic() + 10
+        while not w.events("user") and time.monotonic() < deadline:
+            time.sleep(0.02)
+        steer = w.call("_session/steering", {
+            "sessionId": sid,
+            "prompt": [{"type": "text", "text": "steered follow-up"}],
+            "_meta": {"steering": {"idleBehavior": "promptRequired", "expectedTurnId": pending}},
+        })
+        self.assertEqual(steer["result"], {"outcome": "written", "confirmation": "write-only"})
+        reply = w.wait(pending)
+        self.assertEqual(reply["result"]["stopReason"], "end_turn")
+        self.assertEqual(reply["result"]["_meta"]["antigravity"]["num_turns"], 2)
+        self.assertEqual(len(w.spawns()), 1, "mid-turn steer must not restart agy")
+        self.assertEqual([e["content"] for e in w.events("user")], ["slow turn 1", "steered follow-up"])
+        text = "".join(u["content"]["text"] for u in w.updates("agent_message_chunk"))
+        self.assertEqual(text, "echo: slow turn 1echo: steered follow-up")
+        tool_ids = [u["toolCallId"] for u in w.updates("tool_call")]
+        self.assertEqual(len(tool_ids), 2)
+        self.assertNotEqual(tool_ids[0], tool_ids[1], "coalesced segments must have distinct toolCallIds")
+
+    def test_steering_idle_or_mismatched_turn_returns_prompt_required_without_writing(self) -> None:
+        w = Wrapper(self)
+        sid = w.new_session()
+        idle = w.call("_session/steering", {
+            "sessionId": sid,
+            "prompt": [{"type": "text", "text": "idle steer"}],
+            "_meta": {"steering": {"idleBehavior": "promptRequired"}},
+        })
+        self.assertEqual(idle["result"]["outcome"], "promptRequired")
+        self.assertEqual(idle["result"]["confirmation"], "none")
+        self.assertEqual(w.events("user"), [])
+        pending = w.send("session/prompt", {"sessionId": sid, "prompt": "hang"})
+        deadline = time.monotonic() + 10
+        while not w.events("user") and time.monotonic() < deadline:
+            time.sleep(0.02)
+        wrong = w.call("_session/steering", {
+            "sessionId": sid,
+            "prompt": [{"type": "text", "text": "wrong turn"}],
+            "_meta": {"steering": {"expectedTurnId": pending + 99}},
+        })
+        self.assertEqual(wrong["result"]["outcome"], "promptRequired")
+        self.assertEqual([e["content"] for e in w.events("user")], ["hang"])
+        w.call("session/cancel", {"sessionId": sid})
+        self.assertEqual(w.wait(pending)["result"]["stopReason"], "cancelled")
+
+    def test_steering_refuses_leading_slash_without_interrupting_running_turn(self) -> None:
+        w = Wrapper(self)
+        sid = w.new_session()
+        pending = w.send("session/prompt", {"sessionId": sid, "prompt": "slow keep going"})
+        deadline = time.monotonic() + 10
+        while not w.events("user") and time.monotonic() < deadline:
+            time.sleep(0.02)
+        bad = w.call("_session/steering", {
+            "sessionId": sid,
+            "prompt": [{"type": "text", "text": "/model"}],
+        })
+        self.assertEqual(bad["error"]["code"], -32602)
+        self.assertIn("slash command", bad["error"]["message"])
+        reply = w.wait(pending)
+        self.assertEqual(reply["result"]["stopReason"], "end_turn")
+        self.assertEqual([e["content"] for e in w.events("user")], ["slow keep going"])
 
     def test_a_second_prompt_while_running_is_refused_not_overwritten(self) -> None:
         w = Wrapper(self)
@@ -369,10 +458,10 @@ class WrapperProtocol(unittest.TestCase):
             time.sleep(0.05)
         self.assertEqual(len(w.events("stdin-closed")), 1)
 
-    def test_no_native_steer_and_unadvertised_methods_are_refused(self) -> None:
+    def test_unadvertised_methods_are_refused(self) -> None:
         w = Wrapper(self)
         sid = w.new_session()
-        for method in ("_session/steering", "session/list", "session/load", "session/set_mode"):
+        for method in ("session/list", "session/load", "session/set_mode"):
             self.assertEqual(w.call(method, {"sessionId": sid})["error"]["code"], -32601, method)
 
     def test_turn_error_statuses_are_not_success(self) -> None:
@@ -623,13 +712,15 @@ class ManifestAndRegistrations(unittest.TestCase):
             self.assertEqual(quota.resolve_model(catalog, model),
                              {"packageId": "antigravity:account", "status": "mapped"}, model)
 
-    def test_not_a_host_and_after_turn_steering(self) -> None:
+    def test_not_a_host_and_stream_json_steering(self) -> None:
         self.assertEqual(self.values["host_skill_entry"], "")
         self.assertEqual(self.acp.HOST_SKILL_ENTRIES["antigravity"], "")
         self.assertFalse(self.acp.host_capable("antigravity"))
-        self.assertEqual((self.values["native_steering"], self.values["acp_steer_method"],
-                          self.values["steering_delivery"]), ("supported", "session/prompt", "after-turn"))
-        self.assertIn("no native mid-turn steer", self.values["steering_summary"])
+        self.assertEqual((self.values["native_steering"], self.values["acp_steer_method"]),
+                         ("supported", "_session/steering"))
+        self.assertNotIn("steering_delivery", self.values)
+        for token in ("_session/steering", "user", "write-only", "promptRequired", "--steer-mode interrupt"):
+            self.assertIn(token, self.values["steering_summary"], token)
 
     def test_permission_default_is_the_one_skip_flag(self) -> None:
         self.assertEqual(self.acp.ACP_SKIP_MODE["antigravity"], "bypassPermissions")
@@ -641,8 +732,8 @@ class ManifestAndRegistrations(unittest.TestCase):
         self.assertEqual(self.acp.SURVEY_RUNTIMES["antigravity"], ("Antigravity", "agy", "AGY_BIN"))
 
     def test_verified_versions_claim_only_the_measured_live_scope(self) -> None:
-        self.assertIn("live-one-turn-two-turn-resume", self.values["acp_verified_versions"])
-        self.assertIn("steer-and-cancel-unverified", self.values["acp_verified_versions"])
+        self.assertIn("live-one-turn-two-turn-resume-steer-cancel", self.values["acp_verified_versions"])
+        self.assertNotIn("steer-and-cancel-unverified", self.values["acp_verified_versions"])
         self.assertIn("provisional", self.values["acp_quirks"])
 
     def test_the_wrapper_ships_inside_the_worker_skill_only(self) -> None:
@@ -765,11 +856,49 @@ class RealRunnerIntegration(unittest.TestCase):
         self.assertEqual(child[child.index("--model") + 1], "gemini-4-argon-high")
         self.assertNotIn("--effort", child)
 
-    def test_steer_is_the_after_turn_queue_not_a_native_write(self) -> None:
+    def test_mid_turn_steer_and_interrupt_steer_end_to_end(self) -> None:
         self.assertEqual(self.acp("start")["state"], "ready")
         idle = self.acp("steer", "--text", "later")
         self.assertEqual(idle.get("steer_outcome"), "not_consumed", idle)       # idle steer is never written
         self.assertEqual(idle.get("steer_reason"), "no-active-turn")
+
+        sent = self.acp("send", "--no-wait", "--text", "slow first")
+        self.assertEqual(sent.get("outcome"), "in_progress", sent)
+        steered = self.acp("steer", "--text", "steered second")
+        self.assertEqual(steered.get("steer_method"), "_session/steering", steered)
+        self.assertEqual(steered.get("steer_outcome"), "written", steered)
+        self.assertEqual(steered.get("steer_confirmation"), "write-only", steered)
+        self.assertIs(steered.get("turn_request_id_preserved"), True, steered)
+        self.assertEqual(steered.get("turn_request_id_after"), sent["turn_request_id"])
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            obs = self.acp("observe")
+            if not obs.get("turn_active"):
+                break
+            time.sleep(0.05)
+        self.assertEqual(obs["last_prompt"]["stop_reason"], "end_turn", obs)
+        captured = self.acp("capture")
+        self.assertEqual(captured.get("final_text"), "echo: slow firstecho: steered second", captured)
+
+        hung = self.acp("send", "--no-wait", "--text", "hang")
+        self.assertEqual(hung.get("outcome"), "in_progress", hung)
+        time.sleep(0.15)
+        interrupted = self.acp("steer", "--steer-mode", "interrupt", "--text", "after interrupt")
+        self.assertEqual(interrupted.get("steer_mode"), "interrupt", interrupted)
+        self.assertEqual(interrupted.get("steer_outcome"), "interrupted_and_resent", interrupted)
+        self.assertIs(interrupted.get("steer_consumed"), True, interrupted)
+        self.assertEqual(interrupted.get("steer_confirmation"), "cancel-confirmed", interrupted)
+        self.assertEqual(interrupted.get("cancelled_turn_request_id"), hung["turn_request_id"])
+        self.assertEqual(interrupted.get("cancelled_turn_stop_reason"), "cancelled")
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            obs = self.acp("observe")
+            if not obs.get("turn_active"):
+                break
+            time.sleep(0.05)
+        self.assertEqual(self.acp("capture").get("final_text"), "echo: after interrupt")
+        resume_child = [argv for argv in self.spawns() if "--conversation" in argv]
+        self.assertTrue(resume_child, "interrupt+resend must respawn agy with --conversation")
 
 
 if __name__ == "__main__":

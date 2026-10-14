@@ -14,11 +14,17 @@ headless documentation and agy 1.3.5 itself:
 
 * stdin: one ``{"event":"user","message":{"content":"..."}}`` line per turn;
   closing stdin ends the session cleanly; a ``control_request``, a slash command
-  or a non-text block ends it with an ERROR result (there is no native steer);
+  or a non-text block ends it with an ERROR result (exit 2), while a mid-turn
+  ``user`` event written to stdin is buffered by agy's stream reader and runs on
+  the same process immediately after the in-flight turn finishes (coalesced by
+  this adapter behind ``_session/steering``);
 * stdout: one ``init`` (carries the conversation id), ``step_update`` events
   (``ACTIVE``/``DONE``, ``text_delta``, ``tool_info``) and one ``result`` per
   turn with ``status`` SUCCESS, ERROR, CANCELED, INTERRUPTED, INVALID, WAITING
-  or RUNNING;
+  or RUNNING (on ``SIGINT``, agy 1.3.5 emits ``status: ERROR`` with
+  ``error: "interrupted"`` and exits 1 with the conversation persisted on disk,
+  which this adapter maps to ``stopReason: "cancelled"`` and resumes on the next
+  prompt with ``--conversation``);
 * an unsigned account makes agy print a single ERROR ``result`` and exit 1
   within about a second, before ``init`` and before any user event; a signed-in
   but ineligible account fails the same way with an ``Eligibility check
@@ -305,6 +311,8 @@ class Session:
         self.turn_rid: Any = None
         self.cancelled = False
         self.streamed = False
+        self.queued_steers = 0
+        self.step_epoch = 0
         self.tools: dict[str, str] = {}
 
 
@@ -468,7 +476,9 @@ class AntigravityAcpAgent:
     def translate_tool(self, session: Session, step: dict[str, Any], state: Any) -> None:
         info = step.get("tool_info") if isinstance(step.get("tool_info"), dict) else {}
         name = str(step.get("tool_name") or info.get("name") or "tool")
-        call_id = f"{step.get('conversation_id') or session.conversation_id or session.acp_id}:{step.get('step_index')}"
+        base_id = str(step.get("conversation_id") or session.conversation_id or session.acp_id)
+        epoch = f":{session.step_epoch}" if session.step_epoch else ""
+        call_id = f"{base_id}{epoch}:{step.get('step_index')}"
         if call_id not in session.tools:
             session.tools[call_id] = name
             call: dict[str, Any] = {"sessionUpdate": "tool_call", "toolCallId": call_id, "title": name,
@@ -490,30 +500,66 @@ class AntigravityAcpAgent:
 
     def finish_turn(self, session: Session, payload: dict[str, Any]) -> None:
         status = str(payload.get("status") or "")
+        error_text = str(payload.get("error") or "").strip()
         conversation = payload.get("conversation_id")
         with self.lock:
             rid = session.turn_rid
-            session.turn_rid = None
-            cancelled = session.cancelled
-            session.cancelled = False
-            streamed = session.streamed
-            session.tools = {}
+            if rid is None:
+                return
             if isinstance(conversation, str) and conversation:
                 session.conversation_id = conversation
                 session.persisted = True
-        if rid is None:
-            return
-        meta = {"antigravity": {"agy_status": status, "conversation_id": session.conversation_id,
-                                "num_turns": payload.get("num_turns"),
-                                "duration_seconds": payload.get("duration_seconds"),
-                                "usage": payload.get("usage")}}
+            interrupted = (
+                status in ("CANCELED", "INTERRUPTED")
+                or (status == "ERROR" and (
+                    session.cancelled
+                    or error_text == "interrupted"
+                    or error_text.startswith("stream input cancelled")
+                ))
+            )
+            if status == "SUCCESS" and not session.cancelled and session.queued_steers > 0:
+                session.queued_steers -= 1
+                session.step_epoch += 1
+                streamed = session.streamed
+                session.streamed = False
+                session.tools = {}
+                coalesced = True
+                child_to_stop = None
+            else:
+                coalesced = False
+                session.turn_rid = None
+                session.cancelled = False
+                session.queued_steers = 0
+                session.step_epoch = 0
+                streamed = session.streamed
+                session.tools = {}
+                # Real agy 1.3.5 cancels its root signal.NotifyContext on SIGINT
+                # and exits 1 right after emitting the interrupted result, so the
+                # next prompt must spawn a fresh `--conversation` child rather
+                # than racing a dying process.
+                child_to_stop = session.child if interrupted else None
+                if interrupted:
+                    session.child = None
         response = payload.get("response")
-        if status == "SUCCESS":
+        if coalesced:
+            if not streamed and isinstance(response, str) and response:
+                self.update(session, {"sessionUpdate": "agent_message_chunk",
+                                      "content": {"type": "text", "text": response}})
+            return
+        if child_to_stop is not None:
+            threading.Thread(target=child_to_stop.stop, daemon=True).start()
+        meta: dict[str, Any] = {"antigravity": {"agy_status": status, "conversation_id": session.conversation_id,
+                                                "num_turns": payload.get("num_turns"),
+                                                "duration_seconds": payload.get("duration_seconds"),
+                                                "usage": payload.get("usage")}}
+        if error_text and interrupted:
+            meta["antigravity"]["agy_error"] = error_text
+        if status == "SUCCESS" and not interrupted:
             if not streamed and isinstance(response, str) and response:
                 self.update(session, {"sessionUpdate": "agent_message_chunk",
                                       "content": {"type": "text", "text": response}})
             self.respond(rid, {"stopReason": "end_turn", "_meta": meta})
-        elif status in ("CANCELED", "INTERRUPTED"):
+        elif interrupted:
             self.respond(rid, {"stopReason": "cancelled", "_meta": meta})
         elif status == "ERROR":
             threading.Thread(target=self.respond_error, args=(session, rid, payload, status),
@@ -550,9 +596,14 @@ class AntigravityAcpAgent:
             session.turn_rid = None
             cancelled = session.cancelled
             session.cancelled = False
+            session.queued_steers = 0
+            session.step_epoch = 0
+            if cancelled and session.conversation_id:
+                session.persisted = True
         if cancelled:
             self.respond(rid, {"stopReason": "cancelled",
-                               "_meta": {"antigravity": {"agy_exit": child.proc.returncode}}})
+                               "_meta": {"antigravity": {"agy_exit": child.proc.returncode,
+                                                         "conversation_id": session.conversation_id}}})
             return
         self.respond(rid, error=agy_failure(
             "", child.stderr_text(), child.proc.returncode, None,
@@ -570,6 +621,7 @@ class AntigravityAcpAgent:
             },
             "authMethods": [],
             "agentInfo": {"name": ADAPTER_NAME, "version": ADAPTER_VERSION},
+            "_meta": {"steering": {"supported": True}},
         })
 
     def new_session(self, cwd: str, conversation: str | None = None) -> Session:
@@ -657,6 +709,8 @@ class AntigravityAcpAgent:
             session.turn_rid = rid
             session.cancelled = False
             session.streamed = False
+            session.queued_steers = 0
+            session.step_epoch = 0
             session.tools = {}
         try:
             child = self.ensure_child(session)
@@ -670,6 +724,54 @@ class AntigravityAcpAgent:
             self.respond(rid, error={"code": -32603,
                                      "message": f"agy stdin was not writable: {exc}"})
 
+    def on_session_steering(self, rid: Any, params: dict[str, Any]) -> None:
+        """Issue #328: mid-turn steering over agy's stream-json stdin.
+
+        agy's stream-json reader (`DecodeStreamInput` / `runStreamInput`) accepts
+        only `{"event":"user","message":{"content":"..."}}` lines; a
+        `control_request` or leading-slash command ends the session with exit 2.
+        While a turn is active, writing a `user` event to the running child's
+        stdin buffers it on agy's input channel and runs it on the same process
+        immediately after the in-flight turn completes, coalesced under the
+        active ACP `session/prompt` request id. When no turn is active (including
+        during the holder's post-result settle window, Issue #326), this handler
+        writes nothing and returns `promptRequired`, which the holder queues for
+        the next turn if the holder turn is still settling.
+        """
+        acp_id = params.get("sessionId") or ""
+        with self.lock:
+            session = self.sessions.get(acp_id)
+        if session is None:
+            self.respond(rid, error={"code": -32602, "message": f"unknown session {acp_id}"})
+            return
+        text = self.prompt_text(params.get("prompt"))
+        if not text.strip():
+            self.respond(rid, error={"code": -32602, "message": "empty steering text"})
+            return
+        if text.lstrip().startswith("/"):
+            self.respond(rid, error={"code": -32602, "message":
+                "agy treats a leading '/' in stream input as a slash command and ends the session; "
+                "nothing was sent. Resend the text without a leading slash."})
+            return
+        steering_meta = (params.get("_meta") or {}).get("steering") or {}
+        expected = steering_meta.get("expectedTurnId")
+        with self.lock:
+            child = session.child
+            if (session.turn_rid is None or session.cancelled
+                    or (expected is not None and str(session.turn_rid) != str(expected))
+                    or child is None or not child.alive()):
+                self.respond(rid, {"outcome": "promptRequired", "confirmation": "none",
+                                   "reason": "noRunningTurn"})
+                return
+            try:
+                child.write({"event": "user", "message": {"content": text}})
+            except (OSError, ValueError) as exc:
+                self.respond(rid, {"outcome": "unknown", "confirmation": "none",
+                                   "reason": f"stdinWriteError:{exc}"})
+                return
+            session.queued_steers += 1
+        self.respond(rid, {"outcome": "written", "confirmation": "write-only"})
+
     def on_session_cancel(self, rid: Any, params: dict[str, Any]) -> None:
         with self.lock:
             session = self.sessions.get(params.get("sessionId") or "")
@@ -679,7 +781,7 @@ class AntigravityAcpAgent:
             else:
                 child = None
         if child is not None:
-            child.interrupt()      # agy answers SIGINT with an INTERRUPTED result
+            child.interrupt()      # agy answers SIGINT with status ERROR (error: interrupted) and exits 1
         if rid is not None:
             self.respond(rid, {})
 
@@ -731,6 +833,7 @@ class AntigravityAcpAgent:
             "session/new": self.on_session_new,
             "session/resume": self.on_session_resume,
             "session/prompt": self.on_session_prompt,
+            "_session/steering": self.on_session_steering,
             "session/cancel": self.on_session_cancel,
             "session/close": self.on_session_close,
             "session/set_config_option": self.on_set_config_option,

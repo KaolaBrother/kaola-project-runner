@@ -1,7 +1,7 @@
 # Antigravity steering (`steer`)
 
 Scope: the ACP channel only. Noninterrupting input on this platform's ACP route:
-**supported** (entry `session/prompt`). agy has no native mid-turn steer: a control_request or slash command in the stream ends the session. KPR holds steer input until the current prompt ends, then sends one ordinary session/prompt on the same session without cancel, stop or restart. This supports next-turn processing, not immediate injection. holder-queued is process-local admission only; read steer_followup and later session output. A stopped holder loses pending input.
+**supported** (entry `_session/steering`). Mid-turn steering over `_session/steering` in `kaola-antigravity-acp.py` (live on agy 1.3.5, Issue #328): stream-json `control_request` and `/` commands end the session (exit 2), while a mid-turn `user` event on stdin is buffered by agy and runs on the same process right after the active turn. The adapter writes the `user` event to stdin, coalesces the queued agy turn under the active ACP `session/prompt` id, and reports `written` (`write-only`). Leading `/` text is refused (`-32602`). Once the native turn settles, `_session/steering` returns `promptRequired`, composing with the holder's settle-window queue (#326). `--steer-mode interrupt` sends `SIGINT` (`status: ERROR, error: interrupted`, exit 1) and resumes via `--conversation`.
 
 `steer` has two modes and the Agent picks one. `--steer-mode native` uses the
 native entry and exists only where the entry does. `--steer-mode interrupt` is
