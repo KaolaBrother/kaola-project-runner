@@ -213,3 +213,10 @@ Files this branch changed outside the kaola-workflow/ run-state band:
 
 Ready: candidate reviewed, affected scope green, validation recorded,
 live acceptance passed. Proceed to sink (merge), KT answers, and close.
+
+## Sink Findings
+
+post_rebase_tests: skipped
+
+archived_paths:
+- kaola-workflow/archive/issue-323/finalization-summary.md
