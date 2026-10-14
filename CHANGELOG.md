@@ -6,7 +6,7 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
-Seats: restart required (Issue #324 changes the holder; #322 and #323 do not)
+Seats: restart required
 
 - **No endless `binding-or-recipe-unavailable` failures, and no nothing-to-do `needs_decision` wake (Issue #324).**
   (1) Root cause of the repeated `sideagent maintenance failure:
