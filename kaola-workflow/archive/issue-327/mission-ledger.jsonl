@@ -1,0 +1,3 @@
+{"n": 1, "name": "Implement #327: state-tool retire path for obsolete maintenance-returned inputs with original-evidence references", "details": "dispatched: grok/default worker grok-KPR-i327-retire-path (fp 387e3461, cursor 36, holder 417c3b86) — output lands on branch workflow/issue-327 in .kw/worktrees/issue-327", "status": "in-flight"}
+{"n": 2, "name": "Host review of candidate diff + affected suites + render --check", "details": "todo", "status": "todo"}
+{"n": 3, "name": "Finalize #327: sink-merge, close with comment, archive", "details": "todo", "status": "todo"}
