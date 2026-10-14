@@ -65,11 +65,11 @@ delays an urgent stop, never stops in-flight work and never blocks an
 unrelated user task.
 
 If `status.last_receipt` is `failed` and `final`, treat it as a missed wake and run the whole inquiry; never conclude 'nothing new' from an empty webhook run.
+When the routine webhook answers HTTP 400 for more than one event, tell the user once, with the window and the count.
 
 ## Fixed report
 
-Pass valid evidence forward; recheck only changed facts or gaps. Every inquiry
-report has these five parts, in order. An empty part says
+Recheck only changed facts or gaps. Five parts, in order. Empty says
 “none”; a missing source is named.
 
 1. User special requirements: list **Project special requirements** and
@@ -84,7 +84,7 @@ report has these five parts, in order. An empty part says
    Roles can read AGENTS normally. Copy neither scope into JSON or timer text;
    typed language, cadence and grants keep their sources. A received message
    is not proof it was adopted. Include one
-   concise `seats` summary for the user: Elite/Expert exact preset ids, counts,
+   `seats` summary for the user: Elite/Expert exact preset ids, counts,
    Expert task/standing lifetime, occupied linked tasks and idle available
    capacity. Count each shared tier group once (Claude one; Droid count two
    when granted). Working, idle-but-unreclaimed, reserved, held/faulted and

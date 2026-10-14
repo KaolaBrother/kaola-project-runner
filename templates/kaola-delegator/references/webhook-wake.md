@@ -45,13 +45,11 @@ $HOOK remove --project "$PROJECT" --owner-agent "$LABEL"
    existing heartbeat the low-frequency cron fallback, or keep it if it is
    already low. No third routine. Both bodies are the canonical timer body.
 3. **Get the URL and the sender key without seeing them.** Ask the owner once
-   to paste the routine's webhook URL and sender key into the masked secret
-   input. Never ask in chat. They arrive as environment variables; use them
-   only by name. Ask how the panel attaches the key (header plus prefix, or
-   a key already in the URL). Do not guess. Grok Bot, verified 2026-10-10:
-   `--key-header Authorization --key-prefix 'Bearer '`. A bare key is HTTP 401.
+   to paste both into the masked secret input. Never ask in chat. Use the
+   variables by name. Ask how the panel attaches the key. Do not guess.
+   Grok Bot: `--key-header Authorization --key-prefix 'Bearer '`. A bare key is HTTP 401.
 4. **Configure.** Pass values by variable name, stdin, or a mode `0600` file
-   you own. Never put a value on a command line and never echo it.
+   you own. Never put a value on a command line or echo it.
    `--url-env URL_VAR [--key-env KEY_VAR]`, or `--stdin` / `--input-file PATH`
    with `{"url","sender_key"}`. Delete the file after `configure`.
    Attachment: `--key-header NAME [--key-prefix TEXT]`, or `--key-in-url`.
@@ -116,24 +114,18 @@ working. A Sideagent is not a seat. A confirmed node stop or the last worker
 
 A dead holder with no signal gets one `error`/`holder_lost` wake for that
 `holder_instance_id` and a new `event_seq`. `start` or a dead-holder `stop`
-sends it. The cron fallback sends it with no new Host start: each inquiry
-runs `$HOOK status --project "$PROJECT"`. `test` does not scan. `status`
-wakes a Host record of this project when the holder pid is dead and
-`state` is not `stopped`, even if the agent lives, via the same sender
-and `delegator_death_wake` dedupe. A live holder pid, reused or not, waits for
-`start` or `stop`. Nothing else polls. The wait is one `cadence.interval_minutes` (example
-120 minutes). `status` does not read that interval and does not schedule itself.
+sends it. Each inquiry runs `$HOOK status --project "$PROJECT"` with no new
+Host start. `test` does not scan. `status` wakes a Host of this project when
+the holder pid is dead and `state` is not `stopped`, even if the agent lives,
+via the same sender and `delegator_death_wake` dedupe. A live holder pid waits
+for `start` or `stop`. Nothing else polls. One `cadence.interval_minutes`
+(example 120). `status` does not read it or schedule itself.
 
 On each wake, re-read the Accepted line, locate, attest the session, and
 read `status`, `observe`, and `capture`. Then run the standard inquiry. If
 `project` or `session` is not your recorded `host`, report it and do not act.
 
-Dedupe is `holder_instance_id` + `event_seq`. The sender drops a second POST.
-A handled wake causes no action. Duplicate and out-of-order wakes are
-harmless; `watch` prevents a second relay. `blocked` is one owned
-permission. One attempt waits 12 s. A timeout is not retried. Connection
-errors and HTTP 400, 408, 429, and 5xx are retried. 401, 403, 404, and any
-other 4xx are final. An HTTP error stores a truncated `response_body` and
-headers `content-type`, `retry-after`, `www-authenticate`, `x-request-id`,
-`x-correlation-id`. The URL and the sender key never appear in a receipt.
-Receipts: `<repo>/.kaola/delegator-webhook-receipts.json` (last 32).
+Dedupe is `holder_instance_id` + `event_seq` (one POST). Handled, duplicate, and out-of-order wakes need nothing; `watch` blocks a second relay. `blocked` is one permission. One attempt waits 12 s. No timeout retry. Connection errors and HTTP 400, 408, 429, and 5xx are retried; other 4xx are final. An HTTP error stores a truncated body and the allowlisted headers. No URL or sender key is stored.
+Attempts keep the last 32. Final failures stay apart (`failed_receipts`, last 256).
+`status.repeated_failure` is the run (`window_start`, `window_end`, `count`). One Host alert (`host_notice.once`). No new wake. After 900 s, `heartbeat.applies` is true and `heartbeat.bound_seconds` is 7200. Do not schedule it.
+When the routine webhook answers HTTP 400 for more than one event, tell the user once, with the window and the count. Same `window_start`: do not repeat. Heartbeat carries that one tell.

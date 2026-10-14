@@ -1247,9 +1247,47 @@ inquiry, and never conclude that nothing is new from an empty webhook run.
 `missed_event_seq` is not a payload field. The three accepted shapes above
 are unchanged.
 
+A run of final failed deliveries is one fact (#325). Per-event retry and the
+per-receipt route stay as they are. Final rows whose `error` is
+`http-status`, `connection`, or `timeout` join one run. A `delivered` row
+ends that run. A skip, and a config or payload failure, neither joins it nor
+ends it. `count` is distinct events: one HTTP 400 retried four times is one
+event. The run is `repeated_failure` on the receipts file and on `status`
+(`schema` `kaola-delegator-webhook-repeated-failure/1`):
+
+| field | meaning |
+| --- | --- |
+| `window_start`, `window_end` | UTC stamps of the first and latest final failure in the open run |
+| `count`, `min_count` | events so far, and 2 (more than one event) |
+| `window_seconds` | 900. The window has passed when the span reaches this |
+| `window_passed` | true once that span has been reached |
+| `active` | true while `count` is at least 2 and the run has not ended |
+| `host_notice` | one alert (`kind` `alert`, `once` true) for that `window_start`. Later events update `count` and `window_end` and do not emit again |
+| `user_notice` | `once` while the run has opened the alert |
+| `heartbeat` | `path` `heartbeat`, `bound_seconds` 7200, `applies` true only while the run is still failing and the window has passed |
+| `fallbacks` | `retry`, `receipt-route`, `host-notice`, `heartbeat`, in that order |
+| `ended_at` | set when a later delivery ends the run; null while it is open |
+
+The sender writes one stderr line when the alert first opens. The holder
+already copies that line into the event log. The sender does not add a wake
+reason, does not start a timer, and does not send node traffic. When the
+window passes, `heartbeat.applies` becomes true. 7200 seconds is the
+heartbeat's own bound (the cadence example). The next heartbeat inquiry is
+the remaining path.
+
+When the routine webhook answers HTTP 400 for more than one event, tell the user once, with the window and the count.
+The same `window_start` is not said again. The user is told at the end of
+`fallbacks`, after the retry, the per-receipt route, and the one Host alert.
+
+Final failed rows of that class are also stored in `failed_receipts`, apart
+from the 32-attempt ring, last 256 (`failed_limit`). The next 32 delivered
+attempts do not drop them. `status.failed_receipts_kept` is how many are
+stored. `last_receipt` stays the newest attempt-ring row. A noticed run that
+a new run replaces is `previous_repeated_failure`.
+
 Receipts land in
 `<repo>/.kaola/delegator-webhook-receipts.json`
-(`{"schema": "kaola-delegator-webhook-receipts/1", "limit": 32, "receipts": [...]}`,
+(`{"schema": "kaola-delegator-webhook-receipts/1", "limit": 32, "failed_limit": 256, "receipts": [...], "failed_receipts": [...]}`,
 last 32 attempts oldest-first, mode 0600, atomic replace under a sidecar flock).
 A receipt-write failure prints one line on the deliver child's stderr and
 does not crash the child. The line is the self-route: the POST may have
@@ -1315,8 +1353,10 @@ exit 0 on success):
 - `status --project ROOT` prints `kaola-delegator-webhook-status/1`: project,
   config_path, config_mode, configured, enabled, owner_agent,
   sender_key_attachment (style/name/prefix), sender_key_present, a 12-hex
-  `fingerprint` of url+key, last_receipt, last_test, receipts_path, and
-  `holder_lost`. Never the URL or key. `holder_lost` is `{scan, leg, wakes}`
+  `fingerprint` of url+key, last_receipt, last_test, receipts_path,
+  `repeated_failure`, `previous_repeated_failure`, `failed_receipts_kept`, and
+  `holder_lost`. Never the URL or key. `repeated_failure` is the run above,
+  or null when none is stored. `holder_lost` is `{scan, leg, wakes}`
   and, when `scan` is `skipped` or `incomplete`, `reason`. `leg` is
   `delegator-webhook status`. `scan` is `complete`, `incomplete`, or
   `skipped`. An incomplete record-root scan has `reason`

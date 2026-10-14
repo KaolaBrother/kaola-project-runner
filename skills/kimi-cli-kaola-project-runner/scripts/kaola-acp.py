@@ -10,6 +10,7 @@ receipt as ``error: {code, message}``; usage errors also return JSON and exit no
 from __future__ import annotations
 
 import argparse
+import calendar
 import contextlib
 import ctypes
 import getpass
@@ -6640,21 +6641,40 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
 
 
 # ---------------------------------------------------------------------------
-# Issue #299 / #302 / #304 / #311: Delegator webhook wake. A Host holder spawns
-# the ``deliver`` subcommand detached only when the Delegator must act; this CLI
-# owns the config, validation, POST, retries, dedupe and receipts. No receipt
-# ever carries the URL, the sender key, or an exception message (urllib errors
-# can embed the URL); only the classified error code travels. An HTTP error
-# stores a truncated redacted body and an allowlisted header set (#311).
+# Issue #299 / #302 / #304 / #311 / #325: Delegator webhook wake. A Host holder
+# spawns the ``deliver`` subcommand detached only when the Delegator must act;
+# this CLI owns the config, validation, POST, retries, dedupe and receipts. No
+# receipt ever carries the URL, the sender key, or an exception message (urllib
+# errors can embed the URL); only the classified error code travels. An HTTP
+# error stores a truncated redacted body and an allowlisted header set (#311).
 # ``deliver`` is a new process per wake, so it accepts a payload from a holder
 # that is still running the previous shape (#304). ``status`` is the holder-lost
-# detector the cron inquiry runs; it does not schedule itself.
+# detector the cron inquiry runs; it does not schedule itself. A run of final
+# failed deliveries is one fact (#325): one Host alert, then the heartbeat path
+# once that run's window passes. This does not add a wake reason.
 # ---------------------------------------------------------------------------
 
 DELEGATOR_WEBHOOK_CONFIG_ENV = "KAOLA_DELEGATOR_WEBHOOK_CONFIG"
 DELEGATOR_WEBHOOK_SCHEMA = "kaola-delegator-webhook/1"
 DELEGATOR_WEBHOOK_RECEIPTS_SCHEMA = "kaola-delegator-webhook-receipts/1"
 DELEGATOR_WEBHOOK_RECEIPTS_LIMIT = 32
+# Issue #325. Final failed rows are kept apart from the 32-attempt ring, so the
+# next 32 deliveries cannot erase a 101-minute outage. 256 is the cap.
+DELEGATOR_WEBHOOK_FAILED_RECEIPTS_LIMIT = 256
+DELEGATOR_WEBHOOK_REPEATED_FAILURE_SCHEMA = "kaola-delegator-webhook-repeated-failure/1"
+# More than one final failed event. One event's retries are not a run.
+DELEGATOR_WEBHOOK_REPEATED_FAILURE_MIN = 2
+# Shorter than the 101-minute outage. When the span from the first final
+# failure reaches this, the heartbeat path applies. The sender does not sleep
+# for it and does not start a timer.
+DELEGATOR_WEBHOOK_FAILURE_WINDOW_S = 15 * 60
+# The cadence example in webhook-wake.md (120 minutes). The heartbeat's own
+# bound. Not a second wake channel and not a tighter poll.
+DELEGATOR_WEBHOOK_HEARTBEAT_BOUND_S = 120 * 60
+# Network failures only. Config, payload, and spawn failures are not this run,
+# and a skip neither joins it nor ends it.
+DELEGATOR_WEBHOOK_RUN_ERRORS = frozenset({"http-status", "connection", "timeout"})
+DELEGATOR_WEBHOOK_FALLBACKS = ("retry", "receipt-route", "host-notice", "heartbeat")
 DELEGATOR_WEBHOOK_CLAIMS_SCHEMA = "kaola-delegator-webhook-claims/1"
 # Bound of remembered (holder_instance_id, event_seq) pairs. A pair is claimed
 # before the first network attempt and kept after success or final failure, so
@@ -7138,22 +7158,261 @@ def _webhook_atomic_json(path: Path, doc: dict[str, Any]) -> None:
         raise
 
 
-def _webhook_append_receipts_unlocked(project_root: str, receipts: list[dict[str, Any]]) -> None:
+def _webhook_load_receipt_doc(project_root: str) -> dict[str, Any]:
+    """The receipts document, or ``{}`` when it is missing or not this schema.
+
+    A read does not rewrite the file. Callers that append hold the flock.
+    """
     path = delegator_webhook_receipts_path(project_root)
-    old: list[dict[str, Any]] = []
-    if path.is_file():
-        try:
-            existing = json.loads(path.read_text(encoding="utf-8"))
-            if (isinstance(existing, dict)
-                    and existing.get("schema") == DELEGATOR_WEBHOOK_RECEIPTS_SCHEMA
-                    and isinstance(existing.get("receipts"), list)):
-                old = [item for item in existing["receipts"] if isinstance(item, dict)]
-        except (OSError, ValueError):
-            old = []
+    try:
+        existing = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if (not isinstance(existing, dict)
+            or existing.get("schema") != DELEGATOR_WEBHOOK_RECEIPTS_SCHEMA):
+        return {}
+    return existing
+
+
+def _webhook_dict_list(doc: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    raw = doc.get(key)
+    if not isinstance(raw, list):
+        return []
+    return [item for item in raw if isinstance(item, dict)]
+
+
+def _webhook_parse_ts(ts: Any) -> int | None:
+    if not isinstance(ts, str) or not ts:
+        return None
+    try:
+        return calendar.timegm(time.strptime(ts, "%Y-%m-%dT%H:%M:%SZ"))
+    except (ValueError, OverflowError):
+        return None
+
+
+def _webhook_keeps_failed(receipt: dict[str, Any]) -> bool:
+    """A final network failure. One row per event, not each retry."""
+    return (receipt.get("result") == "failed"
+            and receipt.get("final") is True
+            and receipt.get("error") in DELEGATOR_WEBHOOK_RUN_ERRORS)
+
+
+def _webhook_event_key(receipt: dict[str, Any]) -> tuple[Any, Any]:
+    return (receipt.get("holder_instance_id"), receipt.get("event_seq"))
+
+
+def _webhook_heartbeat(applies: bool) -> dict[str, Any]:
+    return {
+        "path": "heartbeat",
+        "bound_seconds": DELEGATOR_WEBHOOK_HEARTBEAT_BOUND_S,
+        "applies": applies,
+    }
+
+
+def _webhook_run_open(current: Any) -> bool:
+    if not isinstance(current, dict):
+        return False
+    count = current.get("count")
+    return (current.get("schema") == DELEGATOR_WEBHOOK_REPEATED_FAILURE_SCHEMA
+            and not current.get("ended_at")
+            and isinstance(count, int)
+            and not isinstance(count, bool)
+            and count >= 1)
+
+
+def _webhook_copy_run(current: dict[str, Any]) -> dict[str, Any]:
+    copied = dict(current)
+    for key in ("heartbeat", "host_notice", "last_event"):
+        nested = copied.get(key)
+        if isinstance(nested, dict):
+            copied[key] = dict(nested)
+    return copied
+
+
+def _webhook_open_run(receipt: dict[str, Any]) -> dict[str, Any]:
+    ts = receipt.get("ts") if isinstance(receipt.get("ts"), str) else _utc_stamp()
+    return {
+        "schema": DELEGATOR_WEBHOOK_REPEATED_FAILURE_SCHEMA,
+        "active": False,
+        "window_start": ts,
+        "window_end": ts,
+        "count": 1,
+        "min_count": DELEGATOR_WEBHOOK_REPEATED_FAILURE_MIN,
+        "window_seconds": DELEGATOR_WEBHOOK_FAILURE_WINDOW_S,
+        "window_passed": False,
+        "last_http_status": receipt.get("http_status"),
+        "last_error": receipt.get("error"),
+        "last_event": {
+            "holder_instance_id": receipt.get("holder_instance_id"),
+            "event_seq": receipt.get("event_seq"),
+        },
+        "host_notice": None,
+        "user_notice": None,
+        "heartbeat": _webhook_heartbeat(False),
+        "fallbacks": list(DELEGATOR_WEBHOOK_FALLBACKS),
+        "ended_at": None,
+    }
+
+
+def _webhook_mark_window(cond: dict[str, Any]) -> None:
+    """The window has passed when the span reaches the failure bound.
+
+    A shorter span leaves ``heartbeat.applies`` false. The sender does not
+    wait out the window in this process.
+    """
+    start = _webhook_parse_ts(cond.get("window_start"))
+    end = _webhook_parse_ts(cond.get("window_end"))
+    if start is None or end is None or (end - start) < DELEGATOR_WEBHOOK_FAILURE_WINDOW_S:
+        return
+    cond["window_passed"] = True
+    heartbeat = cond.get("heartbeat")
+    if not isinstance(heartbeat, dict):
+        cond["heartbeat"] = _webhook_heartbeat(True)
+        return
+    heartbeat["path"] = "heartbeat"
+    heartbeat["bound_seconds"] = DELEGATOR_WEBHOOK_HEARTBEAT_BOUND_S
+    heartbeat["applies"] = True
+
+
+def _webhook_repeated_failure_line(cond: dict[str, Any]) -> str:
+    """One stderr line. No URL, key, body, or exception text."""
+    heartbeat = cond.get("heartbeat") if isinstance(cond.get("heartbeat"), dict) else {}
+    applies = "true" if heartbeat.get("applies") is True else "false"
+    return (
+        "delegator-webhook: repeated-failure "
+        f"window={cond.get('window_start')}..{cond.get('window_end')} "
+        f"count={cond.get('count')} host-notice=once "
+        f"heartbeat-bound={DELEGATOR_WEBHOOK_HEARTBEAT_BOUND_S}s "
+        f"heartbeat-applies={applies}"
+    )
+
+
+def _webhook_arm_host_notice(cond: dict[str, Any]) -> str | None:
+    """One Host alert per open run. Later events update the count only.
+
+    The line is the alert the holder already copies from child stderr. The
+    stored object is what ``status`` shows the heartbeat. Empty means this
+    event is not the first notice.
+    """
+    count = cond.get("count")
+    if (not isinstance(count, int) or isinstance(count, bool)
+            or count < DELEGATOR_WEBHOOK_REPEATED_FAILURE_MIN):
+        return None
+    cond["active"] = True
+    cond["user_notice"] = "once"
+    notice = cond.get("host_notice")
+    if isinstance(notice, dict):
+        notice["window_end"] = cond.get("window_end")
+        notice["count"] = count
+        return None
+    cond["host_notice"] = {
+        "kind": "alert",
+        "once": True,
+        "level": "warn",
+        "summary": "delegator webhook repeated failure",
+        "window_start": cond.get("window_start"),
+        "window_end": cond.get("window_end"),
+        "count": count,
+        "emitted_at": cond.get("window_end"),
+    }
+    return _webhook_repeated_failure_line(cond)
+
+
+def _webhook_advance_repeated_failure(
+    current: Any, previous: Any, receipt: dict[str, Any],
+) -> tuple[Any, Any, str | None]:
+    """Fold one attempt row into the run. Returns ``(run, previous, notice)``.
+
+    A non-final row changes nothing. A delivered row ends the open run and
+    does not emit a notice. A final network failure extends the open run, or
+    starts one. The notice line is returned only on the event that first
+    reaches ``min_count``.
+    """
+    if receipt.get("final") is not True:
+        return current, previous, None
+    if receipt.get("result") == "delivered":
+        if _webhook_run_open(current):
+            current = _webhook_copy_run(current)
+            current["active"] = False
+            ts = receipt.get("ts")
+            current["ended_at"] = ts if isinstance(ts, str) else _utc_stamp()
+            heartbeat = current.get("heartbeat")
+            if isinstance(heartbeat, dict):
+                heartbeat["applies"] = False
+        return current, previous, None
+    if not _webhook_keeps_failed(receipt):
+        return current, previous, None
+    key = _webhook_event_key(receipt)
+    if _webhook_run_open(current):
+        last = current.get("last_event")
+        if (isinstance(last, dict)
+                and (last.get("holder_instance_id"), last.get("event_seq")) == key):
+            return current, previous, None
+        current = _webhook_copy_run(current)
+        ts = receipt.get("ts") if isinstance(receipt.get("ts"), str) else _utc_stamp()
+        count = current.get("count")
+        current["count"] = (count if isinstance(count, int) and not isinstance(count, bool) else 0) + 1
+        current["window_end"] = ts
+        current["last_http_status"] = receipt.get("http_status")
+        current["last_error"] = receipt.get("error")
+        current["last_event"] = {
+            "holder_instance_id": receipt.get("holder_instance_id"),
+            "event_seq": receipt.get("event_seq"),
+        }
+        _webhook_mark_window(current)
+        return current, previous, _webhook_arm_host_notice(current)
+    if isinstance(current, dict) and isinstance(current.get("host_notice"), dict):
+        previous = current
+    return _webhook_open_run(receipt), previous, None
+
+
+def _webhook_remember_failed(failed: list[dict[str, Any]],
+                             receipts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep each event's final failure apart from the attempt ring."""
+    kept = list(failed)
+    for item in receipts:
+        if not _webhook_keeps_failed(item):
+            continue
+        key = _webhook_event_key(item)
+        kept = [old for old in kept if _webhook_event_key(old) != key]
+        kept.append(item)
+    return kept[-DELEGATOR_WEBHOOK_FAILED_RECEIPTS_LIMIT:]
+
+
+def _webhook_append_receipts_unlocked(project_root: str,
+                                     receipts: list[dict[str, Any]]) -> str | None:
+    """Write the attempt ring, the failed archive, and the run. Return the notice.
+
+    The notice is empty when this batch did not open the Host alert. The
+    caller prints it after the flock drops, and only when the write landed.
+    """
+    path = delegator_webhook_receipts_path(project_root)
+    doc = _webhook_load_receipt_doc(project_root)
+    old = _webhook_dict_list(doc, "receipts")
+    failed = _webhook_remember_failed(_webhook_dict_list(doc, "failed_receipts"), receipts)
+    run = doc.get("repeated_failure")
+    previous = doc.get("previous_repeated_failure")
+    if not isinstance(previous, dict):
+        previous = None
+    notice: str | None = None
+    for item in receipts:
+        run, previous, line = _webhook_advance_repeated_failure(run, previous, item)
+        if line:
+            notice = line
     merged = (old + receipts)[-DELEGATOR_WEBHOOK_RECEIPTS_LIMIT:]
-    doc = {"schema": DELEGATOR_WEBHOOK_RECEIPTS_SCHEMA,
-           "limit": DELEGATOR_WEBHOOK_RECEIPTS_LIMIT, "receipts": merged}
-    _webhook_atomic_json(path, doc)
+    out: dict[str, Any] = {
+        "schema": DELEGATOR_WEBHOOK_RECEIPTS_SCHEMA,
+        "limit": DELEGATOR_WEBHOOK_RECEIPTS_LIMIT,
+        "failed_limit": DELEGATOR_WEBHOOK_FAILED_RECEIPTS_LIMIT,
+        "receipts": merged,
+        "failed_receipts": failed,
+    }
+    if isinstance(run, dict):
+        out["repeated_failure"] = run
+    if isinstance(previous, dict):
+        out["previous_repeated_failure"] = previous
+    _webhook_atomic_json(path, out)
+    return notice
 
 
 def _webhook_diag(line: str) -> None:
@@ -7202,14 +7461,23 @@ def _webhook_append_receipts(project_root: str, receipts: list[dict[str, Any]],
     failure: the POST never started, so the receipt-write sentence would be
     the wrong instruction. That caller puts the spawn sentence on its event.
     """
+    notice: str | None = None
+
+    def write() -> None:
+        nonlocal notice
+        notice = _webhook_append_receipts_unlocked(project_root, receipts)
+
     try:
-        _webhook_under_lock(
-            project_root,
-            lambda: _webhook_append_receipts_unlocked(project_root, receipts))
+        _webhook_under_lock(project_root, write)
     except Exception:
         if announce:
             _webhook_diag(RECEIPT_WRITE_FAILED_LINE)
         return False
+    # The row is stored. The Host alert is one line, once per run (#325).
+    # A write failure took the receipt-write path above and does not also
+    # claim the alert.
+    if announce and notice:
+        _webhook_diag(notice)
     return True
 
 
@@ -7247,14 +7515,14 @@ def _webhook_claim_event(project_root: str, holder_instance_id: str, event_seq: 
 
 
 def _webhook_read_receipts(project_root: str) -> list[dict[str, Any]]:
-    path = delegator_webhook_receipts_path(project_root)
-    try:
-        doc = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return []
-    if not isinstance(doc, dict) or not isinstance(doc.get("receipts"), list):
-        return []
-    return [item for item in doc["receipts"] if isinstance(item, dict)]
+    return _webhook_dict_list(_webhook_load_receipt_doc(project_root), "receipts")
+
+
+def _webhook_repeated_view(value: Any) -> dict[str, Any] | None:
+    if (isinstance(value, dict)
+            and value.get("schema") == DELEGATOR_WEBHOOK_REPEATED_FAILURE_SCHEMA):
+        return value
+    return None
 
 
 def _webhook_state_detail_ok(detail: Any) -> bool:
@@ -7472,7 +7740,8 @@ def _webhook_status_receipt(project_root: str) -> dict[str, Any]:
             attachment_view["name"] = attachment.get("name")
             attachment_view["prefix"] = attachment.get("prefix", "")
             attachment_view["prefix_set"] = bool(attachment.get("prefix"))
-    receipts = _webhook_read_receipts(project_root)
+    store = _webhook_load_receipt_doc(project_root)
+    receipts = _webhook_dict_list(store, "receipts")
     last_test = next((item for item in reversed(receipts) if item.get("state") == "test"), None)
     valid = isinstance(entry, dict) and _webhook_entry_error(entry) is None
     sender_key = entry.get("sender_key") if isinstance(entry, dict) else None
@@ -7492,6 +7761,10 @@ def _webhook_status_receipt(project_root: str) -> dict[str, Any]:
         "last_receipt": receipts[-1] if receipts else None,
         "last_test": last_test,
         "receipts_path": str(delegator_webhook_receipts_path(project_root)),
+        "repeated_failure": _webhook_repeated_view(store.get("repeated_failure")),
+        "previous_repeated_failure": _webhook_repeated_view(
+            store.get("previous_repeated_failure")),
+        "failed_receipts_kept": len(_webhook_dict_list(store, "failed_receipts")),
     }
     if config_error is not None:
         receipt["error"] = config_error

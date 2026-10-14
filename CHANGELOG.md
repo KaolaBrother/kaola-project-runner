@@ -32,6 +32,25 @@ Seats: restart required
   operator restart set (`docs/conventions.md`); a running holder keeps the old
   behavior until it restarts. Nothing is installed by this change.
 
+- **Report a run of failed Delegator webhook deliveries and keep the outage receipts (Issue #325).**
+  Final rows whose `error` is `http-status`, `connection`, or `timeout` form
+  one run on the receipts file and on `delegator-webhook status`
+  (`repeated_failure`: `window_start`, `window_end`, `count`). One HTTP 400
+  retried four times is one event. At the second event the sender writes one
+  Host alert (`host_notice.once`) and one stderr line the holder already
+  copies. It does not add a wake reason and it does not send node traffic.
+  When the span reaches 900 seconds, `heartbeat.applies` is true and
+  `heartbeat.bound_seconds` is 7200, the existing cadence bound. The sender
+  does not start that timer. Final failed rows are kept in `failed_receipts`
+  (last 256), apart from the 32-attempt ring, so a 101-minute outage is still
+  in the file after the next 32 deliveries. When the routine answers HTTP 400
+  for more than one event, the Delegator tells the user once, with that
+  window and count. `delegator_turn_wake_reason` is unchanged.
+  Seats: restart not required. `scripts/kaola-acp.py` is a per-call CLI outside
+  the operator restart set (`docs/conventions.md`). The holder script is
+  unchanged. The Unreleased section line stays `Seats: restart required`
+  because Issue #326 changed the holder.
+
 ## 0.9.12 — 2026-10-14 (Antigravity runtime, Grok 4.7 tiers, maintenance fallback)
 
 New worker runtime Antigravity (`agy`, Gemini 4 Argon: `antigravity/default` = `gemini-4-argon-medium`, `antigravity/xhigh` = `gemini-4-argon-high`) (#323); Grok 4.7 seat tiers for Grok Build and Cursor (#322); Sideagent maintenance falls back through the Worker chain and fails once, and `needs_decision` wakes only for a decision cause (#324).
