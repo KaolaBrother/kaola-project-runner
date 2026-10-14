@@ -11,11 +11,13 @@ Seats: restart not required
 - **New worker platform: Antigravity (`agy`, Gemini 4 Argon) (Issue #323).**
   Runtime id `antigravity`, display `Antigravity`, Skill
   `antigravity-kaola-project-runner`, binary `agy` (`AGY_BIN`). It is the
-  eleventh worker. `antigravity/default` is `gemini-4-argon-high` (class Elite,
-  provisional; profile "Gemini 4 Argon through the Antigravity CLI."). Effort
-  is part of the model slug (`gemini-4-argon-{low,medium,high}`), so the
-  manifest declares no effort option and `--effort` is never passed; a future
-  tier is a new preset word for a model family, not a per-effort preset.
+  eleventh worker. Two tiers, both class Elite: `antigravity/default` is
+  `gemini-4-argon-medium` (owner-final profile: high-throughput multimodal
+  agentic implementer) and `antigravity/xhigh` is `gemini-4-argon-high` (the
+  escalation level for when Argon medium cannot solve the task). Effort is part
+  of the model slug (`gemini-4-argon-{low,medium,high}`), so the manifest
+  declares no effort option and `--effort` is never passed. The README Elite
+  count is 16 and the catalog has 25 preset IDs.
   agy ships no ACP server, so the in-repo `scripts/kaola-antigravity-acp.py`
   bridges ACP to agy's headless stream-json protocol (one child per session,
   `--conversation` for resume, SIGINT for cancel, leading-`/` prompts refused,
@@ -24,11 +26,20 @@ Seats: restart not required
   browser verify URL in the receipt; a generic start failure is never
   labeled that way. One `account` quota package, windows unknown (usage is not
   readable). Not a Host (`host_skill_entry` is empty). The Runner never reads
-  or writes `~/.gemini`. Unverified: a live model turn and resume (the account
-  was not yet verified for model runs, so the protocol is covered offline by
-  `tests/contract/mock-agy.py` and `test-issue-323-antigravity-acp.py`), the
-  `--effort` plus suffixed-slug interaction, and agy's SIGINT behavior.
-  Seats: restart not required. The operator test lists `scripts/adapters` and
+  or writes `~/.gemini`.
+  Verified live on agy 1.3.5 (2026-10-14, signed-in account): `start` on the
+  default tier applies `gemini-4-argon-medium` and bypassPermissions; a
+  one-turn reply and a second turn on the same session (it remembered the first
+  answer); `stop`, then `start --resume <native id>` and a third turn that
+  still remembered the conversation. Found live: agy prints its first `init`
+  at start, but the child is replaced before the first prompt when mode or
+  model is applied, so the conversation id announced at start is provisional
+  (resuming it opens an empty conversation) and the last
+  `native_session_identity` is the resumable one. Not measured live: steer,
+  cancel (SIGINT), the `--effort` plus suffixed-slug interaction and the
+  `xhigh` tier turn; those stay covered offline by
+  `tests/contract/mock-agy.py` and `test-issue-323-antigravity-acp.py`.
+  Seats: restart not required. The operator test lists `scripts/adapters`,
   `platforms` and `scripts/kaola-quota.py`, but the change only adds a new
   platform file and adapter, plus one platform name in the quota catalog's
   display order; no existing platform row, `scripts/kaola-acp-holder.py` logic

@@ -55,7 +55,7 @@ from typing import Any
 ADAPTER_NAME = "kaola-antigravity-acp"
 ADAPTER_VERSION = "0.1.0"
 
-DEFAULT_MODEL = "gemini-4-argon-high"
+DEFAULT_MODEL = "gemini-4-argon-medium"
 # The catalog `agy models` printed on agy 1.3.5 (2026-10-14). A slug outside it
 # is still accepted: agy answers an unknown model with `invalid model selection`,
 # and a stale catalog must never block a working model.

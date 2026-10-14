@@ -7,8 +7,8 @@ so a declaration change regenerates the rows instead of leaving a handwritten
 mapping behind. This suite pins four things:
 
 * the exact catalog: the README's generated region and the installed
-  ``profile-catalog.md`` table carry the same 24 Preset ID cells in class
-  grouping (Elite 15 / Worker 6 / Expert 3), each ID resolving to its
+  ``profile-catalog.md`` table carry the same 25 Preset ID cells in class
+  grouping (Elite 16 / Worker 6 / Expert 3), each ID resolving to its
   manifest model name on the same row;
 * the similar-name pairs the IDs exist to keep apart — ``cursor-cli/default``
   vs ``grok/default``, ``claude-code/default`` vs ``claude-code/sonnet`` — plus
@@ -47,7 +47,7 @@ README = PROJECT / "README.md"
 # regenerates these rows; this pin fails loudly instead of letting the catalog
 # and the issue's grants drift apart.
 ELITE = [
-    "antigravity/default", "claude-code/default", "claude-code/opus-xhigh", "claude-code/sonnet", "codex/default", "cursor-cli/default",
+    "antigravity/default", "antigravity/xhigh", "claude-code/default", "claude-code/opus-xhigh", "claude-code/sonnet", "codex/default", "cursor-cli/default",
     "cursor-cli/opus", "devin/opus-fusion", "droid/default", "droid/opus", "droid/core",
     "grok/default", "grok/xhigh", "kimi-cli/default", "kimi-cli/kimi-k2-8",
 ]
@@ -128,7 +128,7 @@ class PresetCatalogTest(unittest.TestCase):
         for label, rows in (("profile-catalog", self.orchestrator_rows),
                             ("README region", self.readme_rows)):
             self.assertEqual(catalog_ids(rows), EXPECTED_ORDER, label)
-            self.assertEqual(len(set(catalog_ids(rows))), 24, label)
+            self.assertEqual(len(set(catalog_ids(rows))), 25, label)
 
     def test_class_grouping_matches_issue(self) -> None:
         for rows in (self.orchestrator_rows, self.readme_rows):
@@ -379,7 +379,7 @@ class AuthorizationNotationTest(unittest.TestCase):
     def test_sonnet_is_elite_without_a_preset_cap_or_pool_seat(self) -> None:
         """Issue #228: Sonnet is Elite at high. Issue #301: six Workers stay exempt."""
         readme = README.read_text(encoding="utf-8")
-        self.assertIn("| **Elite** | 14 |", readme)
+        self.assertIn("| **Elite** | 16 |", readme)
         self.assertIn("| **Worker** | 6 |", readme)
         self.assertIn("| **Expert** | 3 |", readme)
         self.assertIn("no default seat and no preset-specific", readme)

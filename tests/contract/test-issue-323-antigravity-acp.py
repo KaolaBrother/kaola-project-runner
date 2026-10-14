@@ -2,10 +2,11 @@
 """Issue #323: Antigravity (`agy`) as the eleventh worker, through an in-repo ACP adapter.
 
 agy ships no ACP server, so ``scripts/kaola-antigravity-acp.py`` bridges ACP to
-agy's headless stream-json protocol. The account is not yet verified for model
-runs, so every protocol fact is exercised against ``mock-agy.py`` (built from
-agy's headless documentation and the one real unsigned-account sample), never
-against a live turn. The suite pins:
+agy's headless stream-json protocol. Every protocol fact is exercised offline
+against ``mock-agy.py`` (built from agy's headless documentation, the real
+unsigned-account sample and the live one-turn/two-turn/resume run recorded on
+the issue); the live run itself is acceptance evidence, not part of this suite.
+The suite pins:
 
 * the wrapper protocol: initialize, session/new, a streamed turn with tool
   events, two turns on one process, model and mode changes replacing the child,
@@ -183,7 +184,7 @@ class WrapperProtocol(unittest.TestCase):
         argv = w.spawns()[0]
         self.assertEqual(argv[:4], ["--input-format", "stream-json", "--output-format", "stream-json"])
         self.assertEqual(argv[argv.index("--print-timeout") + 1], "0s")
-        self.assertEqual(argv[argv.index("--model") + 1], "gemini-4-argon-high")
+        self.assertEqual(argv[argv.index("--model") + 1], "gemini-4-argon-medium")
         self.assertNotIn("--effort", argv)
         self.assertNotIn("--dangerously-skip-permissions", argv)
         self.assertNotIn("--conversation", argv)
@@ -195,7 +196,7 @@ class WrapperProtocol(unittest.TestCase):
         result = w.call("session/new", {"cwd": str(w.cwd)})["result"]
         options = {o["id"]: o for o in result["configOptions"]}
         self.assertEqual(sorted(options), ["mode", "model"])
-        self.assertEqual(options["model"]["currentValue"], "gemini-4-argon-high")
+        self.assertEqual(options["model"]["currentValue"], "gemini-4-argon-medium")
         self.assertEqual(options["mode"]["currentValue"], "default")
         self.assertEqual([o["value"] for o in options["mode"]["options"]], ["default", "bypassPermissions"])
         self.assertIn("gemini-4-argon-low", [o["value"] for o in options["model"]["options"]])
@@ -270,6 +271,20 @@ class WrapperProtocol(unittest.TestCase):
         self.assertEqual(argv[argv.index("--model") + 1], "gemini-4-argon-medium")
         self.assertEqual(argv[argv.index("--conversation") + 1],
                          w.updates("native_session_identity")[-1]["nativeSessionId"])
+
+    def test_the_identity_announced_at_start_is_replaced_after_a_respawn(self) -> None:
+        """Live agy: the start child is replaced before the first prompt (mode is
+        applied after session/new), so its conversation id is provisional and the
+        LAST native_session_identity is the resumable one."""
+        w = Wrapper(self)
+        sid = w.new_session()
+        first = w.updates("native_session_identity")[-1]["nativeSessionId"]
+        w.call("session/set_config_option", {"sessionId": sid, "configId": "mode", "value": "bypassPermissions"})
+        w.call("session/prompt", {"sessionId": sid, "prompt": "hi"})
+        ids = [u["nativeSessionId"] for u in w.updates("native_session_identity")]
+        self.assertEqual(len(ids), 2)
+        self.assertNotEqual(ids[0], ids[-1])
+        self.assertEqual(ids[0], first)
 
     def test_every_spawn_across_a_session_omits_effort(self) -> None:
         w = Wrapper(self)
@@ -388,7 +403,7 @@ class WrapperProtocol(unittest.TestCase):
         sid = w.new_session()
         for i in range(3):
             w.call("session/set_config_option", {"sessionId": sid, "configId": "model",
-                                                 "value": ("gemini-4-argon-low", "gemini-4-argon-medium", "gemini-4-argon-high")[i]})
+                                                 "value": ("gemini-4-argon-low", "gemini-4-argon-high", "gemini-4-argon-medium")[i]})
             reply = w.call("session/prompt", {"sessionId": sid, "prompt": f"turn {i}"})
             self.assertEqual(reply["result"]["stopReason"], "end_turn", reply)
 
@@ -548,19 +563,36 @@ class ManifestAndRegistrations(unittest.TestCase):
         self.assertIn("antigravity", self.acp.PLATFORMS)
         self.assertEqual(self.acp.PLATFORMS, tuple(sorted(self.acp.PLATFORMS)))
 
-    def test_kt_item_2_default_preset_and_effort_rule(self) -> None:
-        self.assertEqual(self.values["default_model_id"], "gemini-4-argon-high")
+    def test_kt_item_2_two_tiers_and_effort_rule(self) -> None:
+        self.assertEqual(self.values["default_model_id"], "gemini-4-argon-medium")
         self.assertEqual(self.values["default_model_name"], "Gemini 4 Argon")
-        self.assertEqual(self.values["default_model_effort"], "high")
-        self.assertEqual(self.values["default_model_profile"], "Gemini 4 Argon through the Antigravity CLI.")
-        self.assertEqual(self.values["named_tiers"], "")
+        self.assertEqual(self.values["default_model_effort"], "medium")
+        self.assertEqual(self.values["default_model_profile"],
+                         "High-throughput, multimodal agentic implementer. Think senior generalist engineer, "
+                         "strong on coding, long context, and parallel agent work, with a real creative streak "
+                         "in interactive front-end and 3D. Best with a clear brief and a defined done.")
+        self.assertEqual(self.values["named_tiers"], "xhigh")
+        self.assertEqual(self.values["xhigh_model_id"], "gemini-4-argon-high")
+        self.assertEqual(self.values["xhigh_model_name"], "Gemini 4 Argon")
+        self.assertEqual(self.values["xhigh_model_effort"], "high")
+        self.assertEqual(self.values["xhigh_model_class"], "Elite")
+        self.assertEqual(self.values["xhigh_model_profile"],
+                         "Escalation level: use it when Argon medium cannot solve the task, especially hard "
+                         "debugging that needs a root-cause fix or long multi-step work. Slower and uses more quota.")
         # Effort rides the slug: the manifest declares no effort option, so the
         # Runner cannot apply the preset effort a second time.
         self.assertEqual(self.values["acp_effort_config_id"], "")
         self.assertEqual(self.values["acp_model_map"], "")
         self.assertEqual(self.values["fast_support"], "none")
         render = load("render-skills")
-        self.assertEqual(render.preset_id(render.parse_manifest(MANIFEST), "default"), "antigravity/default")
+        parsed = render.parse_manifest(MANIFEST)
+        self.assertEqual(render.preset_id(parsed, "default"), "antigravity/default")
+        self.assertEqual(render.preset_id(parsed, "xhigh"), "antigravity/xhigh")
+        adapter = (SCRIPTS / "adapters" / "antigravity.sh").read_text(encoding="utf-8")
+        for line in ('ADAPTER_DEFAULT_MODEL_ID="gemini-4-argon-medium"', 'ADAPTER_NAMED_TIERS="xhigh"',
+                     'ADAPTER_XHIGH_MODEL_ID="gemini-4-argon-high"'):
+            self.assertIn(line, adapter)
+        self.assertEqual(load("kaola-antigravity-acp").DEFAULT_MODEL, "gemini-4-argon-medium")
 
     def test_kt_item_3_survey_presence_for_installed_but_unsigned_in(self) -> None:
         """Survey runs no binary, so an installed CLI is `present` whether or not
@@ -608,9 +640,10 @@ class ManifestAndRegistrations(unittest.TestCase):
     def test_survey_table_mirrors_the_manifest(self) -> None:
         self.assertEqual(self.acp.SURVEY_RUNTIMES["antigravity"], ("Antigravity", "agy", "AGY_BIN"))
 
-    def test_verified_versions_do_not_claim_a_live_turn(self) -> None:
-        self.assertIn("live-turn-unverified", self.values["acp_verified_versions"])
-        self.assertIn("unverified", self.values["acp_quirks"])
+    def test_verified_versions_claim_only_the_measured_live_scope(self) -> None:
+        self.assertIn("live-one-turn-two-turn-resume", self.values["acp_verified_versions"])
+        self.assertIn("steer-and-cancel-unverified", self.values["acp_verified_versions"])
+        self.assertIn("provisional", self.values["acp_quirks"])
 
     def test_the_wrapper_ships_inside_the_worker_skill_only(self) -> None:
         skill = PROJECT / "skills" / "antigravity-kaola-project-runner" / "scripts"
@@ -636,6 +669,14 @@ class RealRunnerIntegration(unittest.TestCase):
         self.log = root / "agy.jsonl"
         self.session = f"i323-{self._testMethodName.lower()}-{os.getpid()}"[:79]
         self.scenario = "ok"
+        # A refused start still leaves an error-state holder; stop every session.
+        self.addCleanup(self.force_stop)
+
+    def force_stop(self) -> None:
+        try:
+            self.acp("stop", "--force", timeout=30)
+        except Exception:      # noqa: BLE001 - cleanup must never mask the test result
+            pass
 
     def acp(self, command: str, *args: str, scenario: str | None = None, timeout: float = 90) -> dict[str, Any]:
         # A clean environment: the ambient dispatcher and Host identity of whoever
@@ -681,11 +722,10 @@ class RealRunnerIntegration(unittest.TestCase):
         self.assertNotIn("self_route", receipt)
 
     def test_one_turn_two_turn_stop_and_resume(self) -> None:
-        self.addCleanup(lambda: self.acp("stop", "--force", timeout=30))
         started = self.acp("start")
         self.assertEqual(started["state"], "ready", started)
         applied = started["config_application"]
-        self.assertEqual(applied["model"], {"applied": True, "config_id": "model", "value": "gemini-4-argon-high"})
+        self.assertEqual(applied["model"], {"applied": True, "config_id": "model", "value": "gemini-4-argon-medium"})
         self.assertEqual(applied["mode"]["value"], "bypassPermissions")
         # The preset effort is baked into the slug; no effort option exists to apply it twice.
         self.assertIs(applied["effort"]["applied"], False)
@@ -714,8 +754,17 @@ class RealRunnerIntegration(unittest.TestCase):
         self.assertEqual(resume_child[resume_child.index("--conversation") + 1], native[-1])
         self.assertNotIn("--effort", resume_child)
 
+    def test_xhigh_tier_selects_the_high_slug_without_effort(self) -> None:
+        started = self.acp("start", "--tier", "xhigh")
+        self.assertEqual(started["state"], "ready", started)
+        self.assertEqual(started["config_application"]["model"]["value"], "gemini-4-argon-high")
+        self.assertIs(started["config_application"]["effort"]["applied"], False)
+        self.acp("send", "--text", "hi", "--timeout", "30")
+        child = [argv for argv in self.spawns() if "--input-format" in argv][-1]
+        self.assertEqual(child[child.index("--model") + 1], "gemini-4-argon-high")
+        self.assertNotIn("--effort", child)
+
     def test_steer_is_the_after_turn_queue_not_a_native_write(self) -> None:
-        self.addCleanup(lambda: self.acp("stop", "--force", timeout=30))
         self.assertEqual(self.acp("start")["state"], "ready")
         idle = self.acp("steer", "--text", "later")
         self.assertEqual(idle.get("steer_outcome"), "not_consumed", idle)       # idle steer is never written

@@ -96,7 +96,7 @@ measured evidence, and fill a gap only when verified.
 | DSH 0.2.0-rc.2 | measured | **VERIFIED** scoped checkpoint (explicit positive) | busy: plugin inbox admission — #263 verified the request preserved its tool and processed ADOPTED (admission alone proves less) | background forwarding / installed-adapter efficacy unverified |
 | Grok 1.0.46 | measured | **VERIFIED** scoped checkpoint (candidate `9f778981`) | busy: `_x.ai/interject` queued ack — #263 verified the request ended ADOPTED (queued ack alone is admission; adoption from outcome) | turn-end race can start a detached fallback turn |
 | Kimi CLI 2.1.1 | measured | **POSITIVE** on fixed `24a2355a`: full automatic chain, **VERIFIED** scoped checkpoint `b-e93d1a2aaa85` (explicit `/compact`) | after-turn: ACP rejects concurrent prompt (`agent_busy`) → holder queue + ordinary prompt — #263 verified the owned prompt processed ADOPTED; admission-guard proof ran on a different holder/CLI hash (not a full-byte final-holder proof) | single-run positive; background route unmeasured; earlier r1/r2 partials retained |
-| Antigravity agy 1.3.5 (adapter 0.1.0) | **none** — no measured entry, not a Host | not applicable (not a Host) | after-turn: holder queue + ordinary prompt by manifest design; agy has no native steer (`control_request` ends the session); not measured live | live turn, resume and steer unverified until the account passes browser verification; worker only |
+| Antigravity agy 1.3.5 (adapter 0.1.0) | **none** — no measured entry, not a Host | not applicable (not a Host) | after-turn: holder queue + ordinary prompt by manifest design; agy has no native steer (`control_request` ends the session); not measured live | live one-turn, two-turn and resume verified on agy 1.3.5 (2026-10-14); steer and cancel unverified live; worker only |
 | OpenCode 2.0.23 (bridge 47a3b97d) | measured | **VERIFIED** scoped checkpoint (candidate `24a2355a`, recovery-only) | busy: V2 local adapter inbox admission (2.0.22) — #263 verified the request ended ADOPTED (admitted ≠ adopted) | numbered wrapper omits final-newline byte exposure; home propagation qualified |
 
 Every runtime also has the composite `--steer-mode interrupt` path, and
@@ -336,7 +336,7 @@ roles, not benchmark claims, and they do not change which model a Host itself ru
 |---|---|---|---|
 | **Expert** | 3 | Complex thinking only: difficult analysis, design, objective decomposition, and review judgments. No concrete implementation or execution; not an ordinary worker seat. | Your explicit grant. A task grant (the default) ends with its task. A standing grant, only when you say so, lets the Host use that preset within its stated scope, count and limits until you revoke it or it expires. The Host judges completion and exact-stops the seat; that stop revokes no standing grant, and the same approved task continues across turns and recovery without asking again. |
 | **Worker** | 6 | Cheaper and generally weaker; simpler, bounded work that adds parallel throughput. | Default-authorized: no approval is required for each seat, count, or priority. Actual account, token and service limits and your explicit restrictions still apply. |
-| **Elite** | 14 | The main execution workforce: primary implementation and demanding execution. | Your explicit runtime/preset/count grant, within its caps and seat-switch rules. A valid grant stays valid for its scope; no per-task permission. |
+| **Elite** | 16 | The main execution workforce: primary implementation and demanding execution. | Your explicit runtime/preset/count grant, within its caps and seat-switch rules. A valid grant stays valid for its scope; no per-task permission. |
 
 An Expert review informs the Host; it never replaces the Host's acceptance or its
 ownership of the seat lifecycle.
@@ -362,7 +362,8 @@ explicit `--model` choices, not a separate Fast toggle.
 <!-- KW-README-PRESETS-START -->
 | Class | Runtime | `--tier` | Preset ID | Model | Effort / parameters | Profile |
 |---|---|---|---|---|---|---|
-| Elite | Antigravity | `default` | `antigravity/default` | Gemini 4 Argon | effort=high (encoded in model ID) | Gemini 4 Argon through the Antigravity CLI. |
+| Elite | Antigravity | `default` | `antigravity/default` | Gemini 4 Argon | effort=medium (encoded in model ID) | High-throughput, multimodal agentic implementer. Think senior generalist engineer, strong on coding, long context, and parallel agent work, with a real creative streak in interactive front-end and 3D. Best with a clear brief and a defined done. |
+| Elite | Antigravity | `xhigh` | `antigravity/xhigh` | Gemini 4 Argon | effort=high (encoded in model ID) | Escalation level: use it when Argon medium cannot solve the task, especially hard debugging that needs a root-cause fix or long multi-step work. Slower and uses more quota. |
 | Elite | Claude Code | `default` | `claude-code/default` | Opus 5.5 | effort=high | All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation. |
 | Elite | Claude Code | `opus-xhigh` | `claude-code/opus-xhigh` | Opus 5.5 | effort=xhigh | Plans, designs, and reviews difficult, complex work and handles deep reasoning tasks, with particular strength in UI and 3D visual design and review; does not perform implementation. |
 | Elite | Claude Code | `sonnet` | `claude-code/sonnet` | Sonnet | effort=high | All-round execution worker, especially UI and 3D visual implementation. |
@@ -418,8 +419,10 @@ and `references/acp.md`; transport and bridge internals are in the
   `login-required` start refusal (it carries the browser verify URL when agy prints
   one), never a crash; `kaola-acp survey` still reports the installed CLI as
   `present`, because survey runs no binary. Steering is an after-turn queue (agy has
-  no native steer), and it is not a Host (no measured Host entry). A live turn and
-  resume are unverified until the account passes agy's browser verification.
+  no native steer), and it is not a Host (no measured Host entry). A live one-turn,
+  two-turn and resume run is verified on agy 1.3.5 (2026-10-14); steer and cancel are
+  not measured live, and the conversation id announced at start is provisional until the
+  first turn (the last `native_session_identity` is the resumable one).
 - **dsh** runs its shipped automation-only ACP profile (`dsh --profile acp`); it
   needs no login and has no terminal UI, and the profile must already exist under
   `$DSH_HOME`. It starts with **full access by default** (`danger-full-access`, no

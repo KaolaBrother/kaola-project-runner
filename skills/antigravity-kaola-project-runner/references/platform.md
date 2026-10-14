@@ -5,7 +5,8 @@
 - Binary override: `AGY_BIN`
 - Standalone session prefix: `antigravity-kaola-<purpose>` (under Project Runner the name is issue-scoped; see SKILL.md)
 - Resume: `session/resume`/`session/load` per advertised capability; Continue: `unsupported`
-- Runner default preset `antigravity/default` (`--tier default`): **Gemini 4 Argon** — `gemini-4-argon-high` with `effort=high (encoded in model ID)`
+- Runner default preset `antigravity/default` (`--tier default`): **Gemini 4 Argon** — `gemini-4-argon-medium` with `effort=medium (encoded in model ID)`
+- Runner xhigh preset `antigravity/xhigh` (`--tier xhigh`): **Gemini 4 Argon** — `gemini-4-argon-high` with `effort=high (encoded in model ID)`
 - Fast support: no native Fast toggle; the catalog's low, medium and high slugs are explicit model choices, not a Fast switch
 
 ## Preflight
