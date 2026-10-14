@@ -1,0 +1,1 @@
+{"n":1,"name":"Fix issue #326 turn-settle steer/send refusal, fallback to holder after-turn queue, and add regression tests","details":"dispatched: self — committed 1164ff38bf58410c54e74e775aa5481c129366c1 on branch workflow/issue-326 in /Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-326; focused and full validate.sh inventories passed","status":"done"}
