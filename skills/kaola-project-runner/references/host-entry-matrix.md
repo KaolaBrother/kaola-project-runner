@@ -71,6 +71,7 @@ as unsupported or fully supported.
 | opencode | `/kaola-project-runner` | `~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills` |
 | kimi-cli | `/skill:kaola-project-runner ` | `~/.agents/skills`, `${KIMI_CODE_HOME:-~/.kimi-code}/skills` |
 | codex | `$kaola-project-runner` | `~/.codex/skills`, `~/.agents/skills` |
+| antigravity | none (not a Host) | workspace `.agents/skills` only; the user root lives under `~/.gemini`, which the Runner never reads |
 
 Notes:
 

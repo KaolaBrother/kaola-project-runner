@@ -11,9 +11,9 @@ and authorization are not pooled across projects.
 
 This repository provides:
 
-- ten self-contained **worker** Agent Skills — Claude Code, Codex CLI, Cursor CLI,
-  Devin CLI, Grok CLI, Kimi CLI, OpenCode, ZCode, Droid CLI, and dsh (DeepSeek
-  Harness). A controlling agent starts a session in a Git repository, sends
+- eleven self-contained **worker** Agent Skills — Claude Code, Codex CLI, Cursor CLI,
+  Devin CLI, Grok CLI, Kimi CLI, OpenCode, ZCode, Droid CLI, dsh (DeepSeek
+  Harness), and Antigravity. A controlling agent starts a session in a Git repository, sends
   instructions, reads replies and runtime evidence, and stops that exact owned
   session. Communication uses structured ACP (Agent Client Protocol) only.
 - the main control-plane Skill **Project Runner** (`kaola-project-runner`): recover
@@ -30,7 +30,7 @@ a recoverable path from issue to verified delivery.
 1. [Choose an entry](#choose-an-entry) — Delegator / Project Runner / Platform Runner / Workflow Next
 2. [Kaola Workflow integration](#kaola-workflow-integration) — normal path, orchestrator binding, evidence-backed exception
 3. [Install and begin](#install-and-begin)
-4. [Select workers](#select-workers) — [runtimes](#runtimes), [model selection](#model-selection), [worker classes](#worker-classes) (Expert / Worker / Elite), [preset catalog](#preset-catalog) (all 10 runtimes, 22 presets), [platform notes](#platform-notes)
+4. [Select workers](#select-workers) — [runtimes](#runtimes), [model selection](#model-selection), [worker classes](#worker-classes) (Expert / Worker / Elite), [preset catalog](#preset-catalog) (all 11 runtimes, 24 presets), [platform notes](#platform-notes)
 5. [Authorization](#authorization) — [authorization by class](#authorization-by-class), [choosing a worker](#choosing-a-worker), [seat binding and switching](#seat-binding-and-switching), [authorization before a new Host](#authorization-before-a-new-host)
 6. [What you specify and what agents own](#what-you-specify-and-what-agents-own)
 7. [Daily use](#daily-use) — session commands, steering, watching ACP sessions
@@ -62,8 +62,8 @@ second scheduler.
 
 **Status.** Kaola-Delegator is included in this repository and the v0.4.0 release;
 installation on a consuming machine and Grok Bot account-side live UAT still require
-separate verification. The delegated Host can be any of the ten CLI platforms, chosen
-apart from the authorized worker platforms. Grok Bot is a bridge host for
+separate verification. The delegated Host can be any CLI platform with a measured Host entry
+(Antigravity has none yet), chosen apart from the authorized worker platforms. Grok Bot is a bridge host for
 Kaola-Delegator only — not a worker platform and not a Project Runner host; see
 [Grok Bot host](docs/grok-bot-host.md).
 
@@ -96,6 +96,7 @@ measured evidence, and fill a gap only when verified.
 | DSH 0.2.0-rc.2 | measured | **VERIFIED** scoped checkpoint (explicit positive) | busy: plugin inbox admission — #263 verified the request preserved its tool and processed ADOPTED (admission alone proves less) | background forwarding / installed-adapter efficacy unverified |
 | Grok 1.0.46 | measured | **VERIFIED** scoped checkpoint (candidate `9f778981`) | busy: `_x.ai/interject` queued ack — #263 verified the request ended ADOPTED (queued ack alone is admission; adoption from outcome) | turn-end race can start a detached fallback turn |
 | Kimi CLI 2.1.1 | measured | **POSITIVE** on fixed `24a2355a`: full automatic chain, **VERIFIED** scoped checkpoint `b-e93d1a2aaa85` (explicit `/compact`) | after-turn: ACP rejects concurrent prompt (`agent_busy`) → holder queue + ordinary prompt — #263 verified the owned prompt processed ADOPTED; admission-guard proof ran on a different holder/CLI hash (not a full-byte final-holder proof) | single-run positive; background route unmeasured; earlier r1/r2 partials retained |
+| Antigravity agy 1.3.5 (adapter 0.1.0) | **none** — no measured entry, not a Host | not applicable (not a Host) | after-turn: holder queue + ordinary prompt by manifest design; agy has no native steer (`control_request` ends the session); not measured live | live turn, resume and steer unverified until the account passes browser verification; worker only |
 | OpenCode 2.0.23 (bridge 47a3b97d) | measured | **VERIFIED** scoped checkpoint (candidate `24a2355a`, recovery-only) | busy: V2 local adapter inbox admission (2.0.22) — #263 verified the request ended ADOPTED (admitted ≠ adopted) | numbered wrapper omits final-newline byte exposure; home propagation qualified |
 
 Every runtime also has the composite `--steer-mode interrupt` path, and
@@ -203,7 +204,7 @@ survey each detected in-scope runtime once, then resolve, prepare, and verify th
 components, and report one compact row per runtime in that same result. `--runtime` is the
 Skill destination, not the only CLI to inspect. A locator attestation is not this step.
 
-The default installs all ten worker Skills plus the main orchestrator Skill into
+The default installs all eleven worker Skills plus the main orchestrator Skill into
 `${CODEX_HOME:-$HOME/.codex}/skills` as standalone copies. `--runtime` selects the
 host's skill directory, `--platform` selects worker CLI Skills only, and
 `--no-orchestrator` skips `kaola-project-runner` (that name is not a `--platform`
@@ -288,7 +289,7 @@ Codex CLI.
 ### Runtimes
 
 Each target has its own generated **worker** Skill, platform manifest, and launch
-adapter. The main orchestrator Skill is generated separately and is not an eleventh
+adapter. The main orchestrator Skill is generated separately and is not a twelfth
 platform.
 
 | Target runtime | Skill | CLI executable |
@@ -303,6 +304,7 @@ platform.
 | ZCode | `zcode-kaola-project-runner` | explicit `KAOLA_ZCODE_ENTRY` + `KAOLA_ZCODE_NODE` |
 | Droid CLI | `droid-kaola-project-runner` | `droid` |
 | dsh (DeepSeek Harness) | `dsh-kaola-project-runner` | `dsh` |
+| Antigravity | `antigravity-kaola-project-runner` | `agy` |
 
 Every platform communicates over ACP only, with structured replies and events;
 capabilities vary by platform. Login is a human act in a native terminal, outside the
@@ -360,6 +362,7 @@ explicit `--model` choices, not a separate Fast toggle.
 <!-- KW-README-PRESETS-START -->
 | Class | Runtime | `--tier` | Preset ID | Model | Effort / parameters | Profile |
 |---|---|---|---|---|---|---|
+| Elite | Antigravity | `default` | `antigravity/default` | Gemini 4 Argon | effort=high (encoded in model ID) | Gemini 4 Argon through the Antigravity CLI. |
 | Elite | Claude Code | `default` | `claude-code/default` | Opus 5.5 | effort=high | All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation. |
 | Elite | Claude Code | `opus-xhigh` | `claude-code/opus-xhigh` | Opus 5.5 | effort=xhigh | Plans, designs, and reviews difficult, complex work and handles deep reasoning tasks, with particular strength in UI and 3D visual design and review; does not perform implementation. |
 | Elite | Claude Code | `sonnet` | `claude-code/sonnet` | Sonnet | effort=high | All-round execution worker, especially UI and 3D visual implementation. |
@@ -403,6 +406,20 @@ environment, quirks, and verification status are in each
 and `references/acp.md`; transport and bridge internals are in the
 [architecture notes](docs/architecture.md).
 
+- **Antigravity** (`agy`) has no ACP server, so the in-repo adapter
+  `scripts/kaola-antigravity-acp.py` bridges ACP to agy's headless stream-json
+  protocol, one long-lived `agy` child per session; the Runner never uses the
+  third-party `agy-acp` package and never reads or writes `~/.gemini`. Effort is part
+  of the model id (`gemini-4-argon-{low,medium,high}`); the adapter never passes
+  `--effort`, so effort cannot be applied twice. `start` sets mode
+  `bypassPermissions` (`--dangerously-skip-permissions`) because headless agy has no
+  approval prompt and soft-denies shell commands; `--permission-mode default` keeps
+  agy's review mode. An unsigned or ineligible account is a recoverable
+  `login-required` start refusal (it carries the browser verify URL when agy prints
+  one), never a crash; `kaola-acp survey` still reports the installed CLI as
+  `present`, because survey runs no binary. Steering is an after-turn queue (agy has
+  no native steer), and it is not a Host (no measured Host entry). A live turn and
+  resume are unverified until the account passes agy's browser verification.
 - **dsh** runs its shipped automation-only ACP profile (`dsh --profile acp`); it
   needs no login and has no terminal UI, and the profile must already exist under
   `$DSH_HOME`. It starts with **full access by default** (`danger-full-access`, no
@@ -677,7 +694,7 @@ the task, interprets the output, and decides what to do next.
   platform Runners. An on-demand Sideagent may
   prepare that plan, synthesize evidence, or do explicitly scoped light work.
   The Host still adopts the plan, accepts the result, and exact-stops seats.
-- **Skill names**: `<platform>-kaola-project-runner` for each of the ten runtimes,
+- **Skill names**: `<platform>-kaola-project-runner` for each of the eleven runtimes,
   `kaola-project-runner` (display name Project Runner) as the control plane, and
   `kaola-delegator` (display name Kaola-Delegator) for external delegation.
 - **Read the installed or [generated](skills/) `SKILL.md`** for each Skill's exact
@@ -691,7 +708,7 @@ the task, interprets the output, and decides what to do next.
 - **Host coverage**: not every host/target combination has end-to-end coverage
   (recorded: Codex and Devin); treat others as unverified until run there — see
   [development](#development).
-- The ten worker Skills include optional Workflow guidance.
+- The eleven worker Skills include optional Workflow guidance.
 
 ## Further documentation
 

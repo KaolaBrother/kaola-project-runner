@@ -517,13 +517,13 @@ def orchestrator_values(manifests: list[dict[str, str]]) -> dict[str, str]:
         # description is otherwise a ScannerError under yaml.safe_load.
         "DESCRIPTION": json.dumps(
             "Use when the controlling Agent should supervise explicitly authorized "
-            "CLI workers through the ten platform Runner Skills: recover live "
+            "CLI workers through the eleven platform Runner Skills: recover live "
             "authorization, dispatch and review work, accept deliveries before "
             "finalize, cap live workers at the authorized count, and stop each "
             "accepted seat without dropping close-out duties."
         ),
         "SHORT_DESCRIPTION": (
-            "Supervise authorized CLI workers through the ten platform Runner Skills"
+            "Supervise authorized CLI workers through the eleven platform Runner Skills"
         ),
         "DEFAULT_PROMPT": (
             f"Use ${ORCHESTRATOR_NAME} to recover authorization, supervise named "
@@ -621,9 +621,11 @@ def host_platform_rows(manifests: list[dict[str, str]]) -> str:
     for manifest in manifests:
         entry = manifest["host_skill_entry"]
         entry_cell = f"`{entry}`" if entry else "none (not a Host)"
+        # An entry-less platform is no Host, so it has no Host session name.
+        host_name = f"`{manifest['id']}-<PROJECT_CODE>-orchestrator-<purpose>`" if entry else "n/a"
         rows.append(
             f"| {manifest['id']} (`{manifest['runtime_name']}`) | `{manifest['skill_name']}` | {entry_cell} | "
-            f"`{manifest['id']}-<PROJECT_CODE>-orchestrator-<purpose>` |"
+            f"{host_name} |"
         )
     return "\n".join(rows)
 
@@ -775,6 +777,8 @@ def expected_files(manifest: dict[str, str], main_build: bytes) -> dict[str, byt
     if manifest["id"] == "dsh":
         for name in ("kaola-dsh-acp.py", "kaola-dsh-steer.mjs", "kaola-opencode-acp.py"):
             result[f"scripts/{name}"] = (shared_root / name).read_bytes()
+    if manifest["id"] == "antigravity":
+        result["scripts/kaola-antigravity-acp.py"] = (shared_root / "kaola-antigravity-acp.py").read_bytes()
     return result
 
 
@@ -1500,13 +1504,13 @@ def main() -> int:
 
     manifests = [parse_manifest(path) for path in sorted(PLATFORMS.glob("*.yaml"))]
     expected_ids = [
-        "claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok", "kimi-cli",
-        "opencode", "zcode",
+        "antigravity", "claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok",
+        "kimi-cli", "opencode", "zcode",
     ]
     if [m["id"] for m in manifests] != expected_ids:
         raise ValueError(
             "platform inventory must be exactly "
-            "claude-code,codex,cursor-cli,devin,droid,dsh,grok,kimi-cli,opencode,zcode"
+            "antigravity,claude-code,codex,cursor-cli,devin,droid,dsh,grok,kimi-cli,opencode,zcode"
         )
 
     findings: list[str] = []

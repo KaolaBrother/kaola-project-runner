@@ -153,7 +153,10 @@ FAST_VARIANT_SUFFIXES = ("-fast", "-priority")
 SESSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
 # Session identity: sidekick is the legacy Sideagent value; never rewrite live records.
 SESSION_ROLES = frozenset({"host", "sideagent", "sidekick", "expert", "elite", "worker"})
-PLATFORMS = ("claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok", "kimi-cli", "opencode", "zcode")
+PLATFORMS = (
+    "antigravity", "claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok", "kimi-cli",
+    "opencode", "zcode",
+)
 START_WAIT = 20.0
 # Issue #146: the holder's shared session/new wait. A manifest
 # `acp_session_new_timeout` raises it per platform, and the start window and
@@ -173,6 +176,9 @@ SESSION_PREFIX = "kaola"
 # (Grok: agent always-approve; Cursor/OpenCode: no skip-shaped mode value).
 # Devin ACP `bypass` is not the PTY argv `dangerous`.
 ACP_SKIP_MODE = {
+    # Headless agy has no approval prompt and soft-denies shell commands, so the
+    # skip-all default is the one --dangerously-skip-permissions flag (#323).
+    "antigravity": "bypassPermissions",
     "claude-code": "bypassPermissions",
     "codex": "agent-full-access",
     "devin": "bypass",
@@ -225,6 +231,7 @@ SKILL_SCRIPTS_TOKEN = "$SKILL_DIR/scripts/"
 # binary: the Runner-resolved path of ``binary_env``/``binary_name`` travels to
 # the bridge in this variable, so the bridge never looks the binary up itself.
 BRIDGE_BINARY_ENV = {
+    "antigravity": "AGY_BIN",
     "claude-code": "CLAUDE_ACP_CLAUDE_BIN",
     "opencode": "OPENCODE_BIN",
     "dsh": "DSH_BIN",
@@ -285,6 +292,8 @@ DISPATCHER_ENV = "KAOLA_ACP_DISPATCHER"
 # refuse `host-entry-unsupported`; filling the manifest entry with measured
 # evidence is the only admission.
 HOST_SKILL_ENTRIES = {
+    # Issue #323: no measured Host entry yet (empty fails closed, Issue #122).
+    "antigravity": "",
     "claude-code": "/kaola-project-runner",
     "codex": "$kaola-project-runner",
     "cursor-cli": "/kaola-project-runner",
@@ -1160,6 +1169,7 @@ def command_list(args: argparse.Namespace) -> dict[str, Any]:
 # explicit ZCode paths are set, never by PATH or an application bundle.
 SURVEY_SCHEMA = "kaola-acp-survey/1"
 SURVEY_RUNTIMES = {
+    "antigravity": ("Antigravity", "agy", "AGY_BIN"),
     "claude-code": ("Claude Code", "claude", "CLAUDE_BIN"),
     "codex": ("Codex CLI", "codex", "CODEX_BIN"),
     "cursor-cli": ("Cursor CLI", "cursor-agent", "CURSOR_AGENT_BIN"),

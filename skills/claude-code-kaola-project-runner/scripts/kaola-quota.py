@@ -54,7 +54,7 @@ from typing import Any
 
 RULE_KINDS = ("single", "provider_prefix", "native_field", "explicit")
 PLATFORM_ORDER = (
-    "claude-code", "codex", "cursor-cli", "devin", "droid",
+    "antigravity", "claude-code", "codex", "cursor-cli", "devin", "droid",
     "dsh", "grok", "kimi-cli", "opencode", "zcode",
 )
 PACKAGE_KEYS = {"id", "name", "binds_models", "windows"}

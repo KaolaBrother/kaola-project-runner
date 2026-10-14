@@ -1,7 +1,7 @@
 # Grok Bot host
 
 Grok Bot is a **bridge host** for Kaola-Delegator. It is not a Project Runner
-host, not a tenth CLI worker, and not an installer destination. Project Runner
+host, not a CLI worker, and not an installer destination. Project Runner
 consuming entries are Codex, generic `--skills-dir`, and ZCode. Kaola-Delegator
 consuming entries are Grok Bot, generic `--skills-dir`, and Codex.
 

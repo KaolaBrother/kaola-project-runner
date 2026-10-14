@@ -1,10 +1,10 @@
 # Host platforms
 
-All platforms have Host entry (#119, #122, #126); availability needs proof.
-A new Host needs the bound target's surveyed runtime and installed Runner with a
-valid entry. Unknown stays unknown; never substitute the outer PATH. A live Host
-keeps its platform; Host choice and worker grants are separate.
-Rows: platforms/<id>.yaml; empty entry means host-entry-unsupported.
+A platform is a Host only with an entry (#119, #122, #126; rows:
+platforms/<id>.yaml, empty means host-entry-unsupported); availability needs
+proof. A new Host needs the bound target's surveyed runtime and installed Runner
+with a valid entry. Unknown stays unknown; never substitute the outer PATH. A
+live Host keeps its platform; Host choice and worker grants are separate.
 
 Before Host choice/change, read its version-matched checkout row:
 `docs/host-compact-capabilities.md`; disclose material limits, unknowns, impact
@@ -49,7 +49,7 @@ Relay these facts. The Host selects seats; do not load its selection policy.
 
 Name current grants/pauses by exact catalog preset id; remove settled revocations. Name each seat (`<platform>/<tier>`; absent `special_requirements` means none). A switch grant is per seat and stays inside that runtime. Visibility is not authorization.
 
-For a choice on the bound target, require both a present survey runtime and that target's installed Runner declaring the tier. Never use the outer computer's PATH. Omit missing rows; keep unknown discovery unknown. Read only the exact catalog rows for runtimes present on that target. Do not load the full catalog, install a runtime, authenticate, or substitute. Refresh after an install or explicit-path change; do not rescan each beat or interrupt a verified session.
+For a choice on the bound target, require both a present survey runtime and that target's installed Runner declaring the tier. Omit missing rows; keep unknown discovery unknown. Read only the exact catalog rows for runtimes present on that target. Do not load the full catalog, install a runtime, authenticate, or substitute. Refresh after an install or explicit-path change; do not rescan each beat or interrupt a verified session.
 
 ## KPR updates
 
@@ -68,9 +68,9 @@ Skill alone does not prove worker runtime installation.
 Use the existing idle send / busy steer route in
 [handoff.md](handoff.md#handoff-and-updates) to update the same Host's
 heartbeat snapshot. Do not repeat intake, claims, or dispatch; discard
-in-flight work; start a duplicate Host; or restart automatically. Use existing safe lifecycle guidance when applicable.
+in-flight work; start a duplicate Host; or restart automatically.
 Create no ledger, change no cadence, alter no conversation or
-archive, and do not affect another project. Reconcile once, not per poll.
+archive, and do not affect another project.
 
 ## Native resume id
 

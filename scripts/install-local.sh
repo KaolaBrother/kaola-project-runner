@@ -93,7 +93,7 @@ usage() {
     'receipt. --method link is an explicit development choice that symlinks each' \
     'Skill to this checkout. An owned source link migrates to a copy on a default' \
     'or --method copy reinstall.' \
-    'Platforms: grok, claude-code, opencode, kimi-cli, cursor-cli, devin, codex, zcode, droid, dsh' \
+    'Platforms: grok, claude-code, opencode, kimi-cli, cursor-cli, devin, codex, zcode, droid, dsh, antigravity' \
     '--platform filters worker Skills only. The main Skill kaola-project-runner' \
     '(display name Project Runner) is installed for every destination unless' \
     '--no-orchestrator is passed. Codex and generic destinations also plan' \
@@ -109,7 +109,7 @@ usage() {
     'creates it. A foreign or broken symlink under a Host root is refused like' \
     'any other foreign Skill path; --no-orchestrator skips this planning.' \
     'Neither control-plane Skill is a platform ID.' \
-    'With no --platform, installs all ten worker Skills plus the control-plane' \
+    'With no --platform, installs all eleven worker Skills plus the control-plane' \
     'Skills for that destination (unless skipped). With no destination flags the' \
     'legacy Codex destination is used. Existing foreign paths are never replaced.' \
     'Installed Skills are shared blocks counted by reference: each receipt lists' \
@@ -154,6 +154,7 @@ skill_name_for() {
     claude-code) printf '%s\n' 'claude-code-kaola-project-runner' ;;
     opencode) printf '%s\n' 'opencode-kaola-project-runner' ;;
     dsh) printf '%s\n' 'dsh-kaola-project-runner' ;;
+    antigravity) printf '%s\n' 'antigravity-kaola-project-runner' ;;
     kimi-cli) printf '%s\n' 'kimi-cli-kaola-project-runner' ;;
     cursor-cli) printf '%s\n' 'cursor-cli-kaola-project-runner' ;;
     devin) printf '%s\n' 'devin-kaola-project-runner' ;;
@@ -310,12 +311,12 @@ else
 fi
 
 if [[ ${#selection[@]} -eq 0 ]]; then
-  selection=(grok claude-code opencode kimi-cli cursor-cli devin codex zcode droid dsh)
+  selection=(grok claude-code opencode kimi-cli cursor-cli devin codex zcode droid dsh antigravity)
 fi
-# Issue #215: the full generated catalog (all ten workers plus the
+# Issue #215: the full generated catalog (all eleven workers plus the
 # control-plane Skills) for expected-set and obsolete-copy logic; the selected
 # payload is $selection, and the catalog never shrinks with --platform.
-all_platforms=(grok claude-code opencode kimi-cli cursor-cli devin codex zcode droid dsh)
+all_platforms=(grok claude-code opencode kimi-cli cursor-cli devin codex zcode droid dsh antigravity)
 catalog_names="$orchestrator_skill_name $external_skill_name"
 for known_platform in "${all_platforms[@]}"; do
   catalog_names="$catalog_names $(skill_name_for "$known_platform")"

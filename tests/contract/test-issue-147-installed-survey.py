@@ -32,7 +32,7 @@ ACP_REF = PROJECT / "skills" / "codex-kaola-project-runner" / "references" / "ac
 README = PROJECT / "README.md"
 
 PLATFORM_ORDER = [
-    "claude-code", "codex", "cursor-cli", "devin", "droid",
+    "antigravity", "claude-code", "codex", "cursor-cli", "devin", "droid",
     "dsh", "grok", "kimi-cli", "opencode", "zcode",
 ]
 TOP_KEYS = {"schema", "login_env", "platforms"}
@@ -152,7 +152,7 @@ class InstalledSurveyTest(unittest.TestCase):
 
     def test_uninstalled_cli_is_absent(self) -> None:
         rows = self.rows(self.survey())
-        for platform in ("claude-code", "cursor-cli", "devin", "droid", "dsh", "grok",
+        for platform in ("antigravity", "claude-code", "cursor-cli", "devin", "droid", "dsh", "grok",
                          "kimi-cli", "zcode"):
             row = rows[platform]
             self.assertEqual(row["status"], "absent", row)

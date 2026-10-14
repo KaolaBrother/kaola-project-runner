@@ -461,12 +461,12 @@ class SteeringContract(unittest.TestCase):
                 self.assertIn("steer-mode-required", reference)
 
     def test_every_platform_has_a_documented_usable_path(self) -> None:
-        """The deliverable: ten platforms, ten usable steering paths."""
+        """The deliverable: eleven platforms, eleven usable steering paths."""
         native, composite = [], []
         for path in sorted(PLATFORMS.glob("*.yaml")):
             values = manifest(path.stem)
             (native if values["native_steering"] == "supported" else composite).append(path.stem)
-        self.assertEqual(len(native) + len(composite), 10)
+        self.assertEqual(len(native) + len(composite), 11)
         self.assertTrue(native, "at least one platform steers natively")
         for platform in composite:
             values = manifest(platform)

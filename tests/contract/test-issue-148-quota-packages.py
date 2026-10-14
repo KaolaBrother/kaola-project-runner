@@ -25,7 +25,7 @@ QUOTA_PATH = PROJECT / "scripts" / "kaola-quota.py"
 RENDER_PATH = PROJECT / "scripts" / "render-skills.py"
 PLATFORMS = PROJECT / "platforms"
 PLATFORM_ORDER = [
-    "claude-code", "codex", "cursor-cli", "devin", "droid",
+    "antigravity", "claude-code", "codex", "cursor-cli", "devin", "droid",
     "dsh", "grok", "kimi-cli", "opencode", "zcode",
 ]
 
@@ -68,6 +68,7 @@ class QuotaSchemaTest(unittest.TestCase):
 
     def test_seeded_package_tokens(self) -> None:
         expected = {
+            "antigravity": ["account"],
             "claude-code": ["subscription", "scoped-weekly", "extra_usage"],
             "codex": ["primary", "base_model_inference"],
             "cursor-cli": ["cursor-models", "other-models"],
@@ -109,6 +110,7 @@ class QuotaSchemaTest(unittest.TestCase):
                 "cursor-models": ["monthly"],
                 "other-models": ["monthly"],
             },
+            "antigravity": {"account": None},
             "devin": {"max": ["weekly"], "overage": None},
             "droid": {
                 "standard": ["5h", "weekly", "monthly"],

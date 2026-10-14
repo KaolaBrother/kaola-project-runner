@@ -8,6 +8,32 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 Seats: restart not required
 
+- **New worker platform: Antigravity (`agy`, Gemini 4 Argon) (Issue #323).**
+  Runtime id `antigravity`, display `Antigravity`, Skill
+  `antigravity-kaola-project-runner`, binary `agy` (`AGY_BIN`). It is the
+  eleventh worker. `antigravity/default` is `gemini-4-argon-high` (class Elite,
+  provisional; profile "Gemini 4 Argon through the Antigravity CLI."). Effort
+  is part of the model slug (`gemini-4-argon-{low,medium,high}`), so the
+  manifest declares no effort option and `--effort` is never passed; a future
+  tier is a new preset word for a model family, not a per-effort preset.
+  agy ships no ACP server, so the in-repo `scripts/kaola-antigravity-acp.py`
+  bridges ACP to agy's headless stream-json protocol (one child per session,
+  `--conversation` for resume, SIGINT for cancel, leading-`/` prompts refused,
+  no native mid-turn steer: `steering_delivery: after-turn`). An unsigned or
+  ineligible account is the recoverable `login-required` refusal with agy's
+  browser verify URL in the receipt; a generic start failure is never
+  labeled that way. One `account` quota package, windows unknown (usage is not
+  readable). Not a Host (`host_skill_entry` is empty). The Runner never reads
+  or writes `~/.gemini`. Unverified: a live model turn and resume (the account
+  was not yet verified for model runs, so the protocol is covered offline by
+  `tests/contract/mock-agy.py` and `test-issue-323-antigravity-acp.py`), the
+  `--effort` plus suffixed-slug interaction, and agy's SIGINT behavior.
+  Seats: restart not required. The operator test lists `scripts/adapters` and
+  `platforms` and `scripts/kaola-quota.py`, but the change only adds a new
+  platform file and adapter, plus one platform name in the quota catalog's
+  display order; no existing platform row, `scripts/kaola-acp-holder.py` logic
+  or protocol changes. Nothing is installed by this change.
+
 - **Grok 4.7 seat tiers change for Grok Build and Cursor (Issue #322).**
   Owner decision, 2026-10-14. `grok/default` is now Grok 4.7 at
   `reasoning_effort=high` (it was xhigh). New named tier `grok/xhigh` is

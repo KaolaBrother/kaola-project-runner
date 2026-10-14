@@ -74,7 +74,7 @@ print(json.dumps(d,ensure_ascii=False,sort_keys=True))' "$@"
 unset KPR_CANONICAL_REPO
 platform="${1:-}"; [[ -n "$platform" ]] || die "missing platform"; shift
 [[ "$platform" != -h && "$platform" != --help ]] || { usage; exit 0; }
-case "$platform" in grok|claude-code|opencode|kimi-cli|cursor-cli|devin|codex|zcode|droid|dsh) ;; *) die "unknown platform: $platform" ;; esac
+case "$platform" in grok|claude-code|opencode|kimi-cli|cursor-cli|devin|codex|zcode|droid|dsh|antigravity) ;; *) die "unknown platform: $platform" ;; esac
 adapter_file="$script_dir/adapters/$platform.sh"; [[ -f "$adapter_file" ]] || die "adapter not installed"
 [[ -f "$MODEL_POLICY_HELPER" && -f "$ACP_CLI" ]] || die "ACP transport is not installed"
 # shellcheck source=/dev/null

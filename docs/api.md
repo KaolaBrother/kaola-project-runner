@@ -7,10 +7,10 @@ scripts/render-skills.py --write
 scripts/render-skills.py --check
 ```
 
-`--write` deterministically rebuilds ten managed worker Skill directories plus
-`skills/kaola-project-runner/` from `templates/orchestrator/` (control plane; not an eleventh
+`--write` deterministically rebuilds eleven managed worker Skill directories plus
+`skills/kaola-project-runner/` from `templates/orchestrator/` (control plane; not a twelfth
 platform), `skills/kaola-delegator/` from `templates/kaola-delegator/` (external
-delegation Skill; not an eleventh platform), and the Grok Bot host bundle `hosts/grok-bot/`: `kaola-delegator.md` (the one
+delegation Skill; not a twelfth platform), and the Grok Bot host bundle `hosts/grok-bot/`: `kaola-delegator.md` (the one
 thin bridge Skill, from `templates/grok-bot/bridge.md.tmpl` and `accepted-revision.json`; at
 the pinned stage it carries the accepted 40-hex commit and its label or release, the locator
 command, and the one canonical entry path `ROOT/skills/kaola-delegator`, and no canonical content), `bridge.json`
@@ -133,8 +133,8 @@ scripts/install-local.sh [--runtime NAME | --skills-dir ABS_PATH]
                          [--bin-links | --no-bin-links] [--uninstall]
 ```
 
-Platform IDs are `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, `devin`, `codex`, `zcode`, `droid`, and `dsh`.
-Omit `--platform` for all ten workers. `--platform` never selects the main Skill;
+Platform IDs are `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, `devin`, `codex`, `zcode`, `droid`, `dsh`, and `antigravity`.
+Omit `--platform` for all eleven workers. `--platform` never selects the main Skill;
 `kaola-project-runner` is not a platform ID. The orchestrator is installed for every `--runtime`
 and `--skills-dir` destination unless `--no-orchestrator` is passed. Every selected destination is
 preflighted before mutation; foreign paths are never replaced. Before any write an install also
@@ -174,8 +174,8 @@ into more than one root does not repeat it.
    preparation covers installed runtimes: an absent CLI the selection did not explicitly
    request is outside that scope — report it skipped, not as an obligation to install
    everything. A runtime explicitly requested but missing is a distinct recovery item. An
-   unresolved `unknown` is a missing fact to resolve, not guessed absence. Installing ten
-   Skill folders does not prove ten CLIs are present. Do not install an absent CLI
+   unresolved `unknown` is a missing fact to resolve, not guessed absence. Installing eleven
+   Skill folders does not prove eleven CLIs are present. Do not install an absent CLI
    automatically.
 2. Install or update the selected Skill payloads with `install-local.sh` and accept only its
    existing payload verification. A nonzero exit stops this procedure.

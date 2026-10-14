@@ -206,7 +206,7 @@ def test_manifest_and_generated_skill() -> None:
           "Claude SKILL.md states the ACP command and that ACP is the only transport")
     check(ACP_COMMAND in (SKILL / "references" / "acp.md").read_text(), "Claude acp.md states the ACP command")
     others = [p for p in (ROOT / "skills").iterdir() if p.is_dir() and p != SKILL]
-    check(len(others) == 11, "eleven other generated packages (nine other workers + orchestrator + kaola-delegator)")
+    check(len(others) == 12, "twelve other generated packages (ten other workers + orchestrator + kaola-delegator)")
     for package in others:
         check(not (package / "scripts" / "vendor").exists(), f"{package.name} ships no vendored bridge")
         check("claude-code-acp" not in (package / "SKILL.md").read_text(), f"{package.name} SKILL.md does not mention the bridge")

@@ -28,7 +28,7 @@ MOCK = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
 PYTHON = sys.executable
 REPO_ID = "https://github.com/example/consumer.git"
 EXPECTED_IDS = (
-    "claude-code", "codex", "cursor-cli", "devin", "droid", "dsh",
+    "antigravity", "claude-code", "codex", "cursor-cli", "devin", "droid", "dsh",
     "grok", "kimi-cli", "opencode", "zcode",
 )
 

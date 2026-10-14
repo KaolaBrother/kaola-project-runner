@@ -26,6 +26,7 @@ RENDERER = PROJECT / "scripts" / "render-skills.py"
 INSTALLER = PROJECT / "scripts" / "install-local.sh"
 ORCHESTRATOR_ID = "kaola-project-runner"
 WORKER_IDS = (
+    "antigravity",
     "claude-code",
     "codex",
     "cursor-cli",
@@ -223,7 +224,7 @@ def authorizes_wrong_move(text: str, patterns: tuple[str, ...]) -> str | None:
 
 
 class Issue41RendererContract(unittest.TestCase):
-    def test_orchestrator_is_not_an_eleventh_platform(self) -> None:
+    def test_orchestrator_is_not_a_twelfth_platform(self) -> None:
         platforms = sorted(path.stem for path in (PROJECT / "platforms").glob("*.yaml"))
         self.assertEqual(platforms, list(WORKER_IDS))
         self.assertFalse((PROJECT / "platforms" / f"{ORCHESTRATOR_ID}.yaml").exists())

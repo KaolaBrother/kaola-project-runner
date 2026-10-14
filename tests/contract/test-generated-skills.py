@@ -3,7 +3,7 @@
 
 Ten platform worker packages remain transport-only. Issue #41 adds one
 control-plane package, ``kaola-project-runner``, which is generated through
-the same byte inventory/write/check path and is not an eleventh platform.
+the same byte inventory/write/check path and is not a twelfth platform.
 """
 
 from __future__ import annotations
@@ -85,6 +85,12 @@ PLATFORMS = {
         "short": "Communicate with dsh through exact ACP",
         "prompt": "Use $dsh-kaola-project-runner to start an exact dsh ACP session, read its output, and send only the input I choose.",
         "tokens": ("dsh", "dsh-kaola-project-runner"),
+    },
+    "antigravity-kaola-project-runner": {
+        "display": "Antigravity Kaola Project Runner",
+        "short": "Communicate with Antigravity through exact ACP",
+        "prompt": "Use $antigravity-kaola-project-runner to start an exact Antigravity ACP session, read its output, and send only the input I choose.",
+        "tokens": ("antigravity", "antigravity-kaola-project-runner"),
     },
 }
 
@@ -646,7 +652,7 @@ def check_generated_tree(assertions: Assertions, root: Path, require_check: bool
     } if generated.is_dir() else set()
     expected_ids = set(PLATFORMS) | {ORCHESTRATOR_ID, EXTERNAL_ID}
     assertions.check(
-        "test_generated_skill_inventory_is_ten_workers_orchestrator_and_external",
+        "test_generated_skill_inventory_is_eleven_workers_orchestrator_and_external",
         actual_ids == expected_ids,
         f"generated Skill directories are {sorted(actual_ids)!r}, expected {sorted(expected_ids)!r}",
     )

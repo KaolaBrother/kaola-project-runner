@@ -61,10 +61,15 @@ class GeneratedDelegator(unittest.TestCase):
         cls.skill = (DELEG / "SKILL.md").read_text(encoding="utf-8")
         cls.handoff = (DELEG / "references" / "handoff.md").read_text(encoding="utf-8")
         cls.platforms = (DELEG / "references" / "host-platforms.md").read_text(encoding="utf-8")
-        cls.ids = sorted(p.stem for p in PLATFORMS.glob("*.yaml"))
+        cls.all_ids = sorted(p.stem for p in PLATFORMS.glob("*.yaml"))
+        # Issue #323: a platform with an empty host_skill_entry is a worker only.
+        cls.ids = [p for p in cls.all_ids if manifest_value(p, "host_skill_entry")]
 
     def test_every_manifest_is_a_selectable_host_row(self) -> None:
         self.assertEqual(len(self.ids), 10)
+        self.assertEqual(sorted(set(self.all_ids) - set(self.ids)), ["antigravity"])
+        self.assertIn("| antigravity (`Antigravity`) | `antigravity-kaola-project-runner` | "
+                      "none (not a Host) | n/a |", self.platforms)
         for platform in self.ids:
             with self.subTest(platform=platform):
                 entry = manifest_value(platform, "host_skill_entry")

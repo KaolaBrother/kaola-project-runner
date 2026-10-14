@@ -46,8 +46,13 @@ TMUX = ROOT / "scripts" / "kaola-tmux.sh"
 PYTHON = sys.executable
 DISPATCHER_ENV = "KAOLA_ACP_DISPATCHER"
 HEARTBEAT_HOST_ENV = "KAOLA_ACP_HEARTBEAT_HOST"
-PLATFORMS = ("claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok",
+PLATFORMS = ("antigravity", "claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok",
              "kimi-cli", "opencode", "zcode")
+# Issue #323: antigravity is a worker with no measured Host entry (empty
+# host_skill_entry), so it is not a Host and has no discovery roots; the ten
+# others are Host-capable.
+ENTRYLESS = ("antigravity",)
+HOST_PLATFORMS = tuple(p for p in PLATFORMS if p not in ENTRYLESS)
 # sha256 of the ZCode carrier the main 5122468 holder builds for
 # ZCODE_SNAPSHOT_EVENTS at repo /nonexistent-119 with no heartbeat prompt file.
 ZCODE_CARRIER_SHA256 = "8e8294760493aa6e8f62505792d553e5e5d086c73e64133816fe8bdd3f5ebd98"
@@ -238,10 +243,15 @@ def test_manifest_entries_are_the_code_table() -> None:
         declared = manifest(platform)["host_skill_entry"]
         check(acp.HOST_SKILL_ENTRIES[platform] == declared,
               f"{platform}: HOST_SKILL_ENTRIES equals the manifest host_skill_entry")
+        if platform in ENTRYLESS:
+            check(declared == "" and not acp.host_capable(platform)
+                  and platform not in acp.HOST_SKILL_DISCOVERY_DIRS,
+                  f"{platform}: entry-less, not Host-capable, no Host discovery roots")
+            continue
         check(platform in acp.HOST_SKILL_DISCOVERY_DIRS,
               f"{platform}: measured Skill discovery roots are declared")
     check(set(acp.HOST_SKILL_ENTRIES) == set(PLATFORMS) == set(acp.PLATFORMS),
-          "the entry table covers exactly the ten platforms")
+          "the entry table covers exactly the eleven platforms")
     check(acp.HOST_SKILL_ENTRIES["zcode"] == "/kaola-project-runner",
           "ZCode keeps /kaola-project-runner")
     check(acp.HOST_SKILL_ENTRIES["kimi-cli"] == "/skill:kaola-project-runner ",
@@ -516,7 +526,7 @@ def test_host_resolves_like_worker_h1() -> None:
     try:
         keys = ("model_selection", "resolved_runtime_model_id", "resolved_parameters",
                 "config_application", "requested_tier")
-        for platform in PLATFORMS:
+        for platform in HOST_PLATFORMS:
             if platform == "zcode":
                 continue  # its Host pin equals the default preset (test-issue-111-model-tiers)
             receipts = []
@@ -632,10 +642,16 @@ def test_issue_122_entryless_host_fails_closed() -> None:
               "T1: a worker-named entry-less start is not a Host and still starts")
         sandbox.invoke("codex", "stop", "--force", session=plain, cli=codex_cli)
 
-        # T2: all ten shipped platforms have a measured entry, pass the gate,
-        # and meet the unchanged #104 liveness check instead.
+        # T2: the ten Host-capable shipped platforms have a measured entry, pass
+        # the gate, and meet the unchanged #104 liveness check instead.
         capable = [p for p in PLATFORMS if manifest(p)["host_skill_entry"]]
-        check(capable == list(PLATFORMS), f"Issue #126: ten entry platforms ({capable})")
+        check(capable == list(HOST_PLATFORMS), f"Issue #126: ten entry platforms ({capable})")
+        # Issue #323: the entry-less eleventh platform is refused as a Host.
+        for platform in ENTRYLESS:
+            entryless_host = f"{platform}-KPR-orchestrator-t122"
+            result, receipt = sandbox.invoke(platform, "start", session=entryless_host)
+            refused_unsupported(result, receipt, entryless_host, f"T2b {platform} Host start",
+                                platform=platform)
         for platform in capable:
             worker = f"claude-code-KPR-i122-t2-{platform}"
             result, receipt = sandbox.invoke(

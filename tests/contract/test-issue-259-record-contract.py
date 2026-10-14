@@ -192,7 +192,7 @@ class RecordContract(unittest.TestCase):
         module = load_module(DISPATCH, "installed_layout_projection")
         with unittest.mock.patch.object(module, "__file__", str(entry)):
             paths = module.platform_paths(entry, None)
-            self.assertEqual(len(paths), 10)
+            self.assertEqual(len(paths), 11)
             projected = module.host_view(self.doc(), self.file)["capability"]
         self.assertEqual(projected["catalog_source"], str(installed.resolve()))
         self.assertEqual(projected["catalog_sha256"], hashlib.sha256(b"".join(p.read_bytes() for p in paths)).hexdigest())

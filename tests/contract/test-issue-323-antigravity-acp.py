@@ -1,0 +1,726 @@
+#!/usr/bin/env python3
+"""Issue #323: Antigravity (`agy`) as the eleventh worker, through an in-repo ACP adapter.
+
+agy ships no ACP server, so ``scripts/kaola-antigravity-acp.py`` bridges ACP to
+agy's headless stream-json protocol. The account is not yet verified for model
+runs, so every protocol fact is exercised against ``mock-agy.py`` (built from
+agy's headless documentation and the one real unsigned-account sample), never
+against a live turn. The suite pins:
+
+* the wrapper protocol: initialize, session/new, a streamed turn with tool
+  events, two turns on one process, model and mode changes replacing the child,
+  resume with ``--conversation``, cancel through SIGINT, exact close;
+* the effort rule: ``--effort`` is never passed, so a model slug that already
+  carries its effort cannot be double-applied;
+* login states: an unsigned or ineligible account is the recoverable
+  ``login-required`` refusal through the real holder, with the verify URL in
+  the receipt, and a generic start failure is never mislabeled as one;
+* the manifest, registrations and the five KT answers that are facts of code
+  (survey presence, quota package, preset id, runtime id).
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+import unittest
+from pathlib import Path
+from typing import Any
+
+PROJECT = Path(__file__).resolve().parents[2]
+SCRIPTS = PROJECT / "scripts"
+WRAPPER = SCRIPTS / "kaola-antigravity-acp.py"
+MOCK = PROJECT / "tests" / "contract" / "mock-agy.py"
+MANIFEST = PROJECT / "platforms" / "antigravity.yaml"
+CLI = SCRIPTS / "kaola-acp.py"
+UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+
+def load(name: str) -> Any:
+    spec = importlib.util.spec_from_file_location(name.replace("-", "_"), SCRIPTS / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def manifest_values() -> dict[str, str]:
+    values: dict[str, str] = {}
+    for line in MANIFEST.read_text(encoding="utf-8").splitlines():
+        match = re.match(r'^([a-z_]+):\s*"(.*)"\s*$', line)
+        if match:
+            values[match.group(1)] = json.loads(f'"{match.group(2)}"')
+    return values
+
+
+def hermetic_env(**extra: str) -> dict[str, str]:
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith(("KAOLA_", "MOCK_AGY", "AGY_")) or (k == "KAOLA_LAUNCH_BACKEND" and v == "direct")}
+    env.update(extra)
+    return env
+
+
+class Wrapper:
+    """An ACP client over the wrapper's stdio, with the mock agy behind it."""
+
+    def __init__(self, test: unittest.TestCase, scenario: str = "ok", window: str = "3",
+                 binary: str | None = None, extra_env: dict[str, str] | None = None) -> None:
+        self.tmp = tempfile.TemporaryDirectory(prefix="kaola-i323-")
+        test.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        self.cwd = root / "work"
+        self.cwd.mkdir()
+        self.log = root / "agy.jsonl"
+        env = hermetic_env(AGY_BIN=binary or str(MOCK), MOCK_AGY_SCENARIO=scenario,
+                           MOCK_AGY_LOG=str(self.log), KAOLA_ANTIGRAVITY_START_WINDOW=window,
+                           HOME=str(root))
+        env.update(extra_env or {})
+        self.proc = subprocess.Popen([sys.executable, str(WRAPPER), "--cwd", str(self.cwd)],
+                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE, text=True, env=env)
+        self.responses: dict[int, dict] = {}
+        self.notifications: list[dict] = []
+        self.cond = threading.Condition()
+        self._next = 0
+        threading.Thread(target=self._read, daemon=True).start()
+        test.addCleanup(self.close)
+
+    def _read(self) -> None:
+        for line in self.proc.stdout:
+            try:
+                msg = json.loads(line)
+            except ValueError:
+                continue
+            with self.cond:
+                if "id" in msg and "method" not in msg:
+                    self.responses[msg["id"]] = msg
+                else:
+                    self.notifications.append(msg)
+                self.cond.notify_all()
+
+    def send(self, method: str, params: dict | None = None) -> int:
+        self._next += 1
+        self.proc.stdin.write(json.dumps({"jsonrpc": "2.0", "id": self._next, "method": method,
+                                          "params": params or {}}) + "\n")
+        self.proc.stdin.flush()
+        return self._next
+
+    def wait(self, rid: int, timeout: float = 20.0) -> dict:
+        deadline = time.monotonic() + timeout
+        with self.cond:
+            while rid not in self.responses:
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    raise AssertionError(f"no response to request {rid}; stderr={self.stderr_tail()}")
+                self.cond.wait(left)
+            return self.responses[rid]
+
+    def call(self, method: str, params: dict | None = None, timeout: float = 20.0) -> dict:
+        return self.wait(self.send(method, params), timeout)
+
+    def updates(self, kind: str) -> list[dict]:
+        with self.cond:
+            return [n["params"]["update"] for n in self.notifications
+                    if n.get("method") == "session/update"
+                    and n["params"]["update"].get("sessionUpdate") == kind]
+
+    def spawns(self) -> list[list[str]]:
+        if not self.log.exists():
+            return []
+        return [e["argv"] for e in map(json.loads, self.log.read_text().splitlines()) if e["event"] == "spawn"]
+
+    def events(self, name: str) -> list[dict]:
+        if not self.log.exists():
+            return []
+        return [e for e in map(json.loads, self.log.read_text().splitlines()) if e["event"] == name]
+
+    def stderr_tail(self) -> str:
+        return ""
+
+    def new_session(self) -> str:
+        self.call("initialize", {"protocolVersion": 1})
+        reply = self.call("session/new", {"cwd": str(self.cwd), "mcpServers": []})
+        assert "result" in reply, reply
+        return reply["result"]["sessionId"]
+
+    def close(self) -> None:
+        try:
+            self.proc.stdin.close()
+        except OSError:
+            pass
+        try:
+            self.proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+            self.proc.wait()
+        for stream in (self.proc.stdout, self.proc.stderr):
+            if stream is not None:
+                stream.close()
+
+
+class WrapperProtocol(unittest.TestCase):
+    def test_initialize_advertises_resume_and_close_only(self) -> None:
+        w = Wrapper(self)
+        result = w.call("initialize", {"protocolVersion": 1})["result"]
+        caps = result["agentCapabilities"]
+        self.assertEqual(result["protocolVersion"], 1)
+        self.assertEqual(result["authMethods"], [])
+        self.assertIs(caps["sessionCapabilities"]["resume"], True)
+        self.assertIs(caps["sessionCapabilities"]["close"], True)
+        self.assertNotIn("list", caps["sessionCapabilities"])
+        self.assertIs(caps["loadSession"], False)
+
+    def test_session_new_spawns_the_documented_argv_without_effort(self) -> None:
+        w = Wrapper(self)
+        sid = w.new_session()
+        self.assertTrue(sid.startswith("antigravity-"))
+        argv = w.spawns()[0]
+        self.assertEqual(argv[:4], ["--input-format", "stream-json", "--output-format", "stream-json"])
+        self.assertEqual(argv[argv.index("--print-timeout") + 1], "0s")
+        self.assertEqual(argv[argv.index("--model") + 1], "gemini-4-argon-high")
+        self.assertNotIn("--effort", argv)
+        self.assertNotIn("--dangerously-skip-permissions", argv)
+        self.assertNotIn("--conversation", argv)
+        self.assertNotIn("-p", argv)
+
+    def test_session_new_reports_options_and_announces_the_native_conversation(self) -> None:
+        w = Wrapper(self)
+        w.call("initialize", {"protocolVersion": 1})
+        result = w.call("session/new", {"cwd": str(w.cwd)})["result"]
+        options = {o["id"]: o for o in result["configOptions"]}
+        self.assertEqual(sorted(options), ["mode", "model"])
+        self.assertEqual(options["model"]["currentValue"], "gemini-4-argon-high")
+        self.assertEqual(options["mode"]["currentValue"], "default")
+        self.assertEqual([o["value"] for o in options["mode"]["options"]], ["default", "bypassPermissions"])
+        self.assertIn("gemini-4-argon-low", [o["value"] for o in options["model"]["options"]])
+        self.assertEqual(result["_meta"]["antigravity"]["start_probe"], "init")
+        identity = w.updates("native_session_identity")
+        self.assertEqual(len(identity), 1)
+        self.assertRegex(identity[0]["nativeSessionId"], UUID)
+        self.assertEqual(identity[0]["acpSessionId"], result["sessionId"])
+
+    def test_nested_init_payload_is_read_too(self) -> None:
+        w = Wrapper(self, scenario="nested-init")
+        w.new_session()
+        self.assertRegex(w.updates("native_session_identity")[0]["nativeSessionId"], UUID)
+
+    def test_a_turn_streams_text_and_tool_events_and_ends(self) -> None:
+        w = Wrapper(self)
+        sid = w.new_session()
+        reply = w.call("session/prompt", {"sessionId": sid, "prompt": [{"type": "text", "text": "hello"}]})
+        self.assertEqual(reply["result"]["stopReason"], "end_turn")
+        meta = reply["result"]["_meta"]["antigravity"]
+        self.assertEqual((meta["agy_status"], meta["num_turns"]), ("SUCCESS", 1))
+        text = "".join(u["content"]["text"] for u in w.updates("agent_message_chunk"))
+        self.assertEqual(text, "echo: hello")          # the user_input echo is not agent output
+        call = w.updates("tool_call")[0]
+        self.assertEqual((call["title"], call["kind"], call["status"]), ("run_command", "execute", "in_progress"))
+        self.assertEqual(call["rawInput"], {"command": "ls"})
+        done = w.updates("tool_call_update")[0]
+        self.assertEqual((done["toolCallId"], done["status"]), (call["toolCallId"], "completed"))
+        self.assertEqual(done["content"][0]["content"]["text"], "file.txt")
+        self.assertEqual(w.events("user")[0]["content"], "hello")
+
+    def test_a_failed_tool_is_reported_failed(self) -> None:
+        w = Wrapper(self)
+        sid = w.new_session()
+        w.call("session/prompt", {"sessionId": sid, "prompt": "toolfail"})
+        self.assertEqual(w.updates("tool_call_update")[0]["status"], "failed")
+
+    def test_unstreamed_response_is_not_lost(self) -> None:
+        w = Wrapper(self)
+        sid = w.new_session()
+        w.call("session/prompt", {"sessionId": sid, "prompt": "nostream please"})
+        text = "".join(u["content"]["text"] for u in w.updates("agent_message_chunk"))
+        self.assertEqual(text, "echo: nostream please")
+
+    def test_two_turns_share_one_process_and_one_conversation(self) -> None:
+        w = Wrapper(self)
+        sid = w.new_session()
+        first = w.call("session/prompt", {"sessionId": sid, "prompt": "one"})["result"]
+        second = w.call("session/prompt", {"sessionId": sid, "prompt": "two"})["result"]
+        self.assertEqual(len(w.spawns()), 1)
+        self.assertEqual([e["content"] for e in w.events("user")], ["one", "two"])
+        self.assertEqual(second["_meta"]["antigravity"]["num_turns"], 2)
+        self.assertEqual(first["_meta"]["antigravity"]["conversation_id"],
+                         second["_meta"]["antigravity"]["conversation_id"])
+
+    def test_model_and_mode_changes_replace_the_child_before_the_next_prompt(self) -> None:
+        w = Wrapper(self)
+        sid = w.new_session()
+        for config, value in (("mode", "bypassPermissions"), ("model", "gemini-4-argon-low")):
+            reply = w.call("session/set_config_option", {"sessionId": sid, "configId": config, "value": value})
+            self.assertIn("result", reply, reply)
+        self.assertEqual(len(w.spawns()), 1, "a change alone must not spawn")
+        w.call("session/prompt", {"sessionId": sid, "prompt": "first"})
+        argv = w.spawns()[1]
+        self.assertEqual(argv[argv.index("--model") + 1], "gemini-4-argon-low")
+        self.assertIn("--dangerously-skip-permissions", argv)
+        self.assertNotIn("--effort", argv)
+        self.assertNotIn("--conversation", argv, "no conversation exists before the first result")
+        w.call("session/set_config_option", {"sessionId": sid, "configId": "model", "value": "gemini-4-argon-medium"})
+        w.call("session/prompt", {"sessionId": sid, "prompt": "second"})
+        argv = w.spawns()[2]
+        self.assertEqual(argv[argv.index("--model") + 1], "gemini-4-argon-medium")
+        self.assertEqual(argv[argv.index("--conversation") + 1],
+                         w.updates("native_session_identity")[-1]["nativeSessionId"])
+
+    def test_every_spawn_across_a_session_omits_effort(self) -> None:
+        w = Wrapper(self)
+        sid = w.new_session()
+        for value in ("gemini-4-argon-low", "claude-opus-5-5-high", "gpt-oss-120b-medium"):
+            w.call("session/set_config_option", {"sessionId": sid, "configId": "model", "value": value})
+            w.call("session/prompt", {"sessionId": sid, "prompt": value})
+        self.assertGreaterEqual(len(w.spawns()), 4)
+        self.assertFalse([a for a in w.spawns() if "--effort" in a])
+
+    def test_option_validation(self) -> None:
+        w = Wrapper(self)
+        sid = w.new_session()
+        for params in ({"configId": "mode", "value": "plan"}, {"configId": "model", "value": "bad model!"},
+                       {"configId": "effort", "value": "high"}, {"configId": "model", "value": ""}):
+            reply = w.call("session/set_config_option", {"sessionId": sid, **params})
+            self.assertEqual(reply["error"]["code"], -32602, params)
+
+    def test_resume_uses_conversation_and_adopts_the_native_id(self) -> None:
+        w = Wrapper(self)
+        w.call("initialize", {"protocolVersion": 1})
+        conversation = "3f2a9c1e-0b7d-4e55-9a41-1c2d3e4f5a6b"
+        reply = w.call("session/resume", {"sessionId": conversation, "cwd": str(w.cwd)})["result"]
+        self.assertEqual(reply["sessionId"], conversation)
+        argv = w.spawns()[0]
+        self.assertEqual(argv[argv.index("--conversation") + 1], conversation)
+        turn = w.call("session/prompt", {"sessionId": conversation, "prompt": "again"})["result"]
+        self.assertEqual(turn["_meta"]["antigravity"]["conversation_id"], conversation)
+        self.assertRegex(json.dumps(w.updates("native_session_identity")), conversation)
+
+    def test_resume_refuses_a_malformed_id_before_spawning(self) -> None:
+        w = Wrapper(self)
+        w.call("initialize", {"protocolVersion": 1})
+        for bad in ("", "../x", "a b"):
+            reply = w.call("session/resume", {"sessionId": bad})
+            self.assertEqual(reply["error"]["code"], -32602)
+        self.assertEqual(w.spawns(), [])
+
+    def test_cancel_sends_sigint_and_ends_the_turn_cancelled(self) -> None:
+        w = Wrapper(self)
+        sid = w.new_session()
+        pending = w.send("session/prompt", {"sessionId": sid, "prompt": "hang"})
+        deadline = time.monotonic() + 10
+        while not w.events("user") and time.monotonic() < deadline:
+            time.sleep(0.05)
+        time.sleep(0.3)
+        w.call("session/cancel", {"sessionId": sid})
+        reply = w.wait(pending)
+        self.assertEqual(reply["result"]["stopReason"], "cancelled")
+        self.assertEqual(reply["result"]["_meta"]["antigravity"]["agy_status"], "INTERRUPTED")
+        self.assertEqual(len(w.events("sigint")), 1)
+        again = w.call("session/prompt", {"sessionId": sid, "prompt": "after cancel"})
+        self.assertEqual(again["result"]["stopReason"], "end_turn")
+
+    def test_a_second_prompt_while_running_is_refused_not_overwritten(self) -> None:
+        w = Wrapper(self)
+        sid = w.new_session()
+        pending = w.send("session/prompt", {"sessionId": sid, "prompt": "hang"})
+        time.sleep(0.5)
+        busy = w.call("session/prompt", {"sessionId": sid, "prompt": "second"})
+        self.assertEqual(busy["error"]["code"], -32010)
+        w.call("session/cancel", {"sessionId": sid})
+        self.assertEqual(w.wait(pending)["result"]["stopReason"], "cancelled")
+
+    def test_a_leading_slash_is_refused_before_anything_is_written(self) -> None:
+        w = Wrapper(self)
+        sid = w.new_session()
+        for text in ("/model", "  /compact", "/kaola-project-runner"):
+            reply = w.call("session/prompt", {"sessionId": sid, "prompt": text})
+            self.assertEqual(reply["error"]["code"], -32602, text)
+            self.assertIn("slash command", reply["error"]["message"])
+        self.assertEqual(w.events("user"), [])
+        ok = w.call("session/prompt", {"sessionId": sid, "prompt": "plain /not/leading"})
+        self.assertEqual(ok["result"]["stopReason"], "end_turn")
+
+    def test_close_ends_the_child_by_closing_stdin(self) -> None:
+        w = Wrapper(self)
+        sid = w.new_session()
+        self.assertEqual(w.call("session/close", {"sessionId": sid})["result"], {})
+        deadline = time.monotonic() + 10
+        while not w.events("stdin-closed") and time.monotonic() < deadline:
+            time.sleep(0.05)
+        self.assertEqual(len(w.events("stdin-closed")), 1)
+
+    def test_no_native_steer_and_unadvertised_methods_are_refused(self) -> None:
+        w = Wrapper(self)
+        sid = w.new_session()
+        for method in ("_session/steering", "session/list", "session/load", "session/set_mode"):
+            self.assertEqual(w.call(method, {"sessionId": sid})["error"]["code"], -32601, method)
+
+    def test_turn_error_statuses_are_not_success(self) -> None:
+        for scenario, code in (("error-turn", -32603), ("waiting", -32603)):
+            with self.subTest(scenario=scenario):
+                w = Wrapper(self, scenario=scenario)
+                sid = w.new_session()
+                reply = w.call("session/prompt", {"sessionId": sid, "prompt": "x"})
+                self.assertEqual(reply["error"]["code"], code, reply)
+        w = Wrapper(self, scenario="error-turn")
+        sid = w.new_session()
+        message = w.call("session/prompt", {"sessionId": sid, "prompt": "x"})["error"]["message"]
+        self.assertIn("invalid model selection", message)
+        self.assertNotIn("login required", message)
+
+    def test_child_death_mid_turn_is_an_error_naming_unknown_effects(self) -> None:
+        w = Wrapper(self, scenario="die-mid")
+        sid = w.new_session()
+        reply = w.call("session/prompt", {"sessionId": sid, "prompt": "x"})
+        self.assertEqual(reply["error"]["code"], -32603)
+        self.assertIn("effects are unknown", reply["error"]["message"])
+        self.assertIn("exit 1", reply["error"]["message"])
+        self.assertEqual(reply["error"]["data"]["antigravity"]["agy_exit"], 1)
+
+    def test_replacing_a_child_never_fails_the_new_prompt(self) -> None:
+        """The replaced child's exit must not be read as the new turn dying."""
+        w = Wrapper(self)
+        sid = w.new_session()
+        for i in range(3):
+            w.call("session/set_config_option", {"sessionId": sid, "configId": "model",
+                                                 "value": ("gemini-4-argon-low", "gemini-4-argon-medium", "gemini-4-argon-high")[i]})
+            reply = w.call("session/prompt", {"sessionId": sid, "prompt": f"turn {i}"})
+            self.assertEqual(reply["result"]["stopReason"], "end_turn", reply)
+
+
+class LoginStates(unittest.TestCase):
+    def test_unsigned_account_is_the_recoverable_login_required_error(self) -> None:
+        w = Wrapper(self, scenario="unsigned")
+        w.call("initialize", {"protocolVersion": 1})
+        error = w.call("session/new", {"cwd": str(w.cwd)})["error"]
+        # The holder maps -32000 and any message containing "auth" to login-required.
+        self.assertEqual(error["code"], -32000)
+        self.assertIn("auth", error["message"].lower())
+        login = error["data"]["login"]
+        self.assertEqual(login["kind"], "not-signed-in")
+        self.assertIn("`agy`", login["recovery"])
+        self.assertIsNone(login["verify_url"])
+        self.assertEqual(error["data"]["antigravity"]["agy_status"], "ERROR")
+        self.assertEqual(error["data"]["antigravity"]["agy_exit"], 1)
+
+    def test_ineligible_account_carries_the_browser_verify_url(self) -> None:
+        w = Wrapper(self, scenario="ineligible")
+        w.call("initialize", {"protocolVersion": 1})
+        error = w.call("session/new", {"cwd": str(w.cwd)})["error"]
+        self.assertEqual(error["code"], -32000)
+        login = error["data"]["login"]
+        self.assertEqual(login["kind"], "account-not-eligible")
+        self.assertEqual(login["verify_url"], "https://accounts.example.test/verify?session=abc123")
+        self.assertIn("Verify URL: https://accounts.example.test/verify?session=abc123", error["message"])
+        self.assertNotIn("..", error["message"])
+
+    def test_a_generic_start_failure_is_not_mislabeled_as_login(self) -> None:
+        w = Wrapper(self, scenario="crash")
+        w.call("initialize", {"protocolVersion": 1})
+        error = w.call("session/new", {"cwd": str(w.cwd)})["error"]
+        self.assertEqual(error["code"], -32603)
+        self.assertNotIn("auth", error["message"].lower())
+        self.assertIn("boom", error["message"])
+        self.assertNotIn("login", error["data"])
+
+    def test_refusal_discards_the_session_and_the_child(self) -> None:
+        w = Wrapper(self, scenario="unsigned")
+        w.call("initialize", {"protocolVersion": 1})
+        w.call("session/new", {"cwd": str(w.cwd)})
+        reply = w.call("session/prompt", {"sessionId": "antigravity-1", "prompt": "x"})
+        self.assertEqual(reply["error"]["code"], -32602)       # unknown session
+        self.assertEqual(w.events("user"), [])
+
+    def test_a_quiet_child_is_kept_and_its_late_refusal_surfaces_on_the_turn(self) -> None:
+        """If agy emits nothing at start (init may arrive only with the first
+        turn), session/new still succeeds after the window and the refusal is
+        reported as the turn's login-required error."""
+        w = Wrapper(self, scenario="lazy-unsigned", window="0.4")
+        w.call("initialize", {"protocolVersion": 1})
+        result = w.call("session/new", {"cwd": str(w.cwd)})["result"]
+        self.assertEqual(result["_meta"]["antigravity"]["start_probe"], "quiet")
+        error = w.call("session/prompt", {"sessionId": result["sessionId"], "prompt": "x"})["error"]
+        self.assertEqual(error["code"], -32000)
+        self.assertEqual(error["data"]["login"]["kind"], "not-signed-in")
+
+    def test_lazy_init_still_works_when_signed_in(self) -> None:
+        w = Wrapper(self, scenario="lazy", window="0.4")
+        sid = w.new_session()
+        reply = w.call("session/prompt", {"sessionId": sid, "prompt": "hi"})
+        self.assertEqual(reply["result"]["stopReason"], "end_turn")
+        self.assertRegex(w.updates("native_session_identity")[0]["nativeSessionId"], UUID)
+
+    def test_classification_table(self) -> None:
+        module = load("kaola-antigravity-acp")
+        cases = (
+            ("Eligibility check failed: Your current account is not eligible", "", "account-not-eligible"),
+            ("authentication failed or timed out", "Error: authentication required. Run 'agy' to log in", "not-signed-in"),
+            ("authentication failed or timed out", "", "auth-failed-or-timed-out"),
+            ("invalid model selection (--model x)", "", None),
+            ("", "panic: nil pointer", None),
+        )
+        for error, stderr, kind in cases:
+            with self.subTest(error=error, stderr=stderr):
+                result = module.classify_login(error, stderr)
+                self.assertEqual(result["kind"] if result else None, kind)
+
+    def test_redaction_never_breaks_json_framing(self) -> None:
+        module = load("kaola-antigravity-acp")
+        for text in ('token=abc123def"', "Bearer abcdefghijklmnop", "ya29.a0AfH6SMBxyz", "api_key=sk-12345\\"):
+            cleaned = module.redact(text)
+            self.assertNotIn("abc123def", cleaned)
+            json.dumps(cleaned)
+
+
+class FailClosed(unittest.TestCase):
+    def run_wrapper(self, **env: str) -> subprocess.CompletedProcess:
+        return subprocess.run([sys.executable, str(WRAPPER)], input="", capture_output=True, text=True,
+                              timeout=30, env=hermetic_env(HOME=tempfile.gettempdir(), **env))
+
+    def test_missing_absolute_binary_fails_closed(self) -> None:
+        result = self.run_wrapper(AGY_BIN="/nonexistent/agy-323")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("fail-closed", result.stderr)
+
+    def test_unfindable_bare_name_fails_closed(self) -> None:
+        result = self.run_wrapper(AGY_BIN="agy-not-on-any-path-323", PATH="/usr/bin:/bin")
+        self.assertEqual(result.returncode, 2)
+
+    def test_invalid_print_timeout_falls_back_to_the_unit_form(self) -> None:
+        w = Wrapper(self, extra_env={"KAOLA_ANTIGRAVITY_PRINT_TIMEOUT": "120"})   # a bare number is rejected by agy
+        w.new_session()
+        argv = w.spawns()[0]
+        self.assertEqual(argv[argv.index("--print-timeout") + 1], "0s")
+
+    def test_valid_print_timeout_override_is_passed_with_its_unit(self) -> None:
+        w = Wrapper(self, extra_env={"KAOLA_ANTIGRAVITY_PRINT_TIMEOUT": "15m"})
+        w.new_session()
+        argv = w.spawns()[0]
+        self.assertEqual(argv[argv.index("--print-timeout") + 1], "15m")
+
+
+class SourceBoundaries(unittest.TestCase):
+    """The deliberate non-capabilities, asserted on the code rather than described."""
+
+    def setUp(self) -> None:
+        self.source = WRAPPER.read_text(encoding="utf-8")
+        self.code = re.sub(r'""".*?"""', "", self.source, flags=re.S)
+        self.code = "\n".join(line.split("#", 1)[0] for line in self.code.splitlines())
+
+    def test_never_touches_the_gemini_home(self) -> None:
+        self.assertNotIn(".gemini", self.code)
+        self.assertNotIn("expanduser", self.code)
+        self.assertNotIn("Path.home", self.code)
+
+    def test_no_network_login_or_catalog_client(self) -> None:
+        for forbidden in ("import socket", "import urllib", "import http", "requests", "agy-acp",
+                          '"models"', "'models'"):
+            self.assertNotIn(forbidden, self.code, forbidden)
+        # The one child ever spawned is the streaming agy; no login or model-list run.
+        self.assertEqual(self.code.count("subprocess.Popen"), 1)
+        self.assertNotIn("subprocess.run", self.code)
+
+    def test_effort_flag_is_never_built(self) -> None:
+        self.assertNotIn('"--effort"', self.code)
+        self.assertNotIn("'--effort'", self.code)
+
+    def test_the_only_binary_is_the_runner_resolved_agy_bin(self) -> None:
+        self.assertIn('os.environ.get("AGY_BIN")', self.code)
+        self.assertNotIn("shell=True", self.code)
+        self.assertNotIn("os.system", self.code)
+
+
+class ManifestAndRegistrations(unittest.TestCase):
+    def setUp(self) -> None:
+        self.values = manifest_values()
+        self.acp = load("kaola-acp")
+
+    def test_kt_item_1_runtime_id_and_display_name(self) -> None:
+        self.assertEqual(self.values["id"], "antigravity")
+        self.assertEqual(self.values["runtime_name"], "Antigravity")
+        self.assertEqual(self.values["skill_name"], "antigravity-kaola-project-runner")
+        self.assertEqual((self.values["binary_name"], self.values["binary_env"]), ("agy", "AGY_BIN"))
+        self.assertIn("antigravity", self.acp.PLATFORMS)
+        self.assertEqual(self.acp.PLATFORMS, tuple(sorted(self.acp.PLATFORMS)))
+
+    def test_kt_item_2_default_preset_and_effort_rule(self) -> None:
+        self.assertEqual(self.values["default_model_id"], "gemini-4-argon-high")
+        self.assertEqual(self.values["default_model_name"], "Gemini 4 Argon")
+        self.assertEqual(self.values["default_model_effort"], "high")
+        self.assertEqual(self.values["default_model_profile"], "Gemini 4 Argon through the Antigravity CLI.")
+        self.assertEqual(self.values["named_tiers"], "")
+        # Effort rides the slug: the manifest declares no effort option, so the
+        # Runner cannot apply the preset effort a second time.
+        self.assertEqual(self.values["acp_effort_config_id"], "")
+        self.assertEqual(self.values["acp_model_map"], "")
+        self.assertEqual(self.values["fast_support"], "none")
+        render = load("render-skills")
+        self.assertEqual(render.preset_id(render.parse_manifest(MANIFEST), "default"), "antigravity/default")
+
+    def test_kt_item_3_survey_presence_for_installed_but_unsigned_in(self) -> None:
+        """Survey runs no binary, so an installed CLI is `present` whether or not
+        the account is signed in; sign-in is the ACP probe's `login_required`."""
+        with tempfile.TemporaryDirectory(prefix="kaola-i323-survey-") as tmp:
+            marker = Path(tmp) / "agy-was-executed"
+            fake = Path(tmp) / "bin" / "agy"
+            fake.parent.mkdir()
+            fake.write_text(f"#!/bin/sh\ntouch {marker}\nexit 0\n", encoding="utf-8")
+            fake.chmod(0o755)
+            env = hermetic_env(PATH=f"{fake.parent}:/usr/bin:/bin", HOME=tmp, SHELL="/bin/sh")
+            env.pop("AGY_BIN", None)
+            out = subprocess.run([sys.executable, str(CLI), "survey", "--platform", "antigravity"],
+                                 capture_output=True, text=True, timeout=60, env=env)
+            row = json.loads(out.stdout)["platforms"][0]
+            self.assertEqual(row["platform"], "antigravity")
+            self.assertEqual((row["status"], row["installed"]), ("present", True))
+            self.assertEqual(Path(row["path"]).name, "agy")
+            self.assertFalse(marker.exists(), "survey must not run the platform binary")
+
+    def test_kt_item_4_quota_package(self) -> None:
+        quota = load("kaola-quota")
+        catalog = quota.load_catalog("antigravity", SCRIPTS)
+        self.assertEqual(catalog.public_packages(),
+                         [{"id": "antigravity:account", "name": "Account", "windows": None, "binds_models": True}])
+        self.assertEqual(catalog.rule["kind"], "single")
+        for model in ("gemini-4-argon-high", "gemini-4-argon-low", "claude-opus-5-5-high", "gpt-oss-120b-medium"):
+            self.assertEqual(quota.resolve_model(catalog, model),
+                             {"packageId": "antigravity:account", "status": "mapped"}, model)
+
+    def test_not_a_host_and_after_turn_steering(self) -> None:
+        self.assertEqual(self.values["host_skill_entry"], "")
+        self.assertEqual(self.acp.HOST_SKILL_ENTRIES["antigravity"], "")
+        self.assertFalse(self.acp.host_capable("antigravity"))
+        self.assertEqual((self.values["native_steering"], self.values["acp_steer_method"],
+                          self.values["steering_delivery"]), ("supported", "session/prompt", "after-turn"))
+        self.assertIn("no native mid-turn steer", self.values["steering_summary"])
+
+    def test_permission_default_is_the_one_skip_flag(self) -> None:
+        self.assertEqual(self.acp.ACP_SKIP_MODE["antigravity"], "bypassPermissions")
+        self.assertEqual(self.values["acp_mode_config_id"], "mode")
+        self.assertEqual(self.acp.BRIDGE_BINARY_ENV["antigravity"], "AGY_BIN")
+        self.assertIn("--dangerously-skip-permissions", self.values["permission_summary"])
+
+    def test_survey_table_mirrors_the_manifest(self) -> None:
+        self.assertEqual(self.acp.SURVEY_RUNTIMES["antigravity"], ("Antigravity", "agy", "AGY_BIN"))
+
+    def test_verified_versions_do_not_claim_a_live_turn(self) -> None:
+        self.assertIn("live-turn-unverified", self.values["acp_verified_versions"])
+        self.assertIn("unverified", self.values["acp_quirks"])
+
+    def test_the_wrapper_ships_inside_the_worker_skill_only(self) -> None:
+        skill = PROJECT / "skills" / "antigravity-kaola-project-runner" / "scripts"
+        self.assertEqual((skill / "kaola-antigravity-acp.py").read_bytes(), WRAPPER.read_bytes())
+        for other in (PROJECT / "skills").iterdir():
+            if other.name != "antigravity-kaola-project-runner" and other.is_dir():
+                self.assertFalse((other / "scripts" / "kaola-antigravity-acp.py").exists(), other.name)
+
+
+class RealRunnerIntegration(unittest.TestCase):
+    """The whole path through kaola-acp.py and the real holder, over the mock agy."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory(prefix="kaola-i323-run-")
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name).resolve()
+        self.repo = root / "repo"
+        self.repo.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
+        self.home = root / "home"
+        self.home.mkdir()
+        self.records = root / "records"
+        self.log = root / "agy.jsonl"
+        self.session = f"i323-{self._testMethodName.lower()}-{os.getpid()}"[:79]
+        self.scenario = "ok"
+
+    def acp(self, command: str, *args: str, scenario: str | None = None, timeout: float = 90) -> dict[str, Any]:
+        # A clean environment: the ambient dispatcher and Host identity of whoever
+        # runs the suite must not reach this Runner.
+        env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(self.home),
+               "KAOLA_ACP_RECORD_ROOT": str(self.records), "KAOLA_LAUNCH_BACKEND": "direct",
+               "AGY_BIN": str(MOCK), "MOCK_AGY_SCENARIO": scenario or self.scenario,
+               "MOCK_AGY_LOG": str(self.log), "KAOLA_ANTIGRAVITY_START_WINDOW": "3"}
+        result = subprocess.run(
+            [sys.executable, str(CLI), "antigravity", command, "--repo", str(self.repo),
+             "--session", self.session, "--command", f"{sys.executable} {WRAPPER}", *args],
+            capture_output=True, text=True, timeout=timeout, env=env)
+        try:
+            return json.loads(result.stdout)
+        except ValueError:
+            self.fail(f"{command}: rc={result.returncode}\nstdout={result.stdout!r}\nstderr={result.stderr!r}")
+
+    def spawns(self) -> list[list[str]]:
+        return [e["argv"] for e in map(json.loads, self.log.read_text().splitlines()) if e["event"] == "spawn"]
+
+    def test_unsigned_start_is_login_required_with_a_self_route(self) -> None:
+        receipt = self.acp("start", scenario="unsigned")
+        self.assertEqual(receipt["error"]["code"], "login-required", receipt)
+        self.assertEqual(receipt["state"], "error")
+        self.assertIn("agy", receipt["error"]["message"])
+        self.assertIn("sign in", receipt["self_route"])
+        self.assertIn("Do not retry credentials", receipt["self_route"])
+
+    def test_ineligible_start_names_the_browser_verify_url_in_the_receipt(self) -> None:
+        receipt = self.acp("start", scenario="ineligible")
+        self.assertEqual(receipt["error"]["code"], "login-required", receipt)
+        self.assertIn("https://accounts.example.test/verify?session=abc123", receipt["error"]["message"])
+        self.assertIn("self_route", receipt)
+
+    def test_preflight_reports_login_required_without_failing(self) -> None:
+        receipt = self.acp("preflight", scenario="unsigned")
+        self.assertIs(receipt.get("login_required"), True, receipt)
+        self.assertNotIn("error", receipt)
+
+    def test_generic_failure_is_not_login_required(self) -> None:
+        receipt = self.acp("start", scenario="crash")
+        self.assertEqual(receipt["error"]["code"], "acp-session-failed", receipt)
+        self.assertNotIn("self_route", receipt)
+
+    def test_one_turn_two_turn_stop_and_resume(self) -> None:
+        self.addCleanup(lambda: self.acp("stop", "--force", timeout=30))
+        started = self.acp("start")
+        self.assertEqual(started["state"], "ready", started)
+        applied = started["config_application"]
+        self.assertEqual(applied["model"], {"applied": True, "config_id": "model", "value": "gemini-4-argon-high"})
+        self.assertEqual(applied["mode"]["value"], "bypassPermissions")
+        # The preset effort is baked into the slug; no effort option exists to apply it twice.
+        self.assertIs(applied["effort"]["applied"], False)
+        self.assertEqual(applied["effort"]["reason"], "no-advertised-config-option")
+        first = self.acp("send", "--text", "hello agy", "--timeout", "30")
+        self.assertEqual((first["outcome"], first["stop_reason"], first["final_text"]),
+                         ("turn_completed", "end_turn", "echo: hello agy"))
+        second = self.acp("send", "--text", "second turn", "--timeout", "30")
+        self.assertEqual(second["final_text"], "echo: second turn")
+        spawns = [argv for argv in self.spawns() if "--input-format" in argv]
+        self.assertTrue(all("--effort" not in argv for argv in spawns))
+        turn_child = spawns[-1]
+        self.assertIn("--dangerously-skip-permissions", turn_child)
+        stopped = self.acp("stop")
+        self.assertIs(stopped.get("stopped"), True, stopped)
+        native = [json.loads(line)["update"]["nativeSessionId"]
+                  for path in self.records.rglob("events.jsonl") for line in path.read_text().splitlines()
+                  if "nativeSessionId" in line]
+        self.assertTrue(native and all(re.match(UUID, n) for n in native))
+        resumed = self.acp("start", "--resume", native[-1])
+        self.assertEqual(resumed["state"], "ready", resumed)
+        self.assertEqual(resumed["acp_session_id"], native[-1])
+        third = self.acp("send", "--text", "after resume", "--timeout", "30")
+        self.assertEqual(third["final_text"], "echo: after resume")
+        resume_child = [argv for argv in self.spawns() if "--conversation" in argv][-1]
+        self.assertEqual(resume_child[resume_child.index("--conversation") + 1], native[-1])
+        self.assertNotIn("--effort", resume_child)
+
+    def test_steer_is_the_after_turn_queue_not_a_native_write(self) -> None:
+        self.addCleanup(lambda: self.acp("stop", "--force", timeout=30))
+        self.assertEqual(self.acp("start")["state"], "ready")
+        idle = self.acp("steer", "--text", "later")
+        self.assertEqual(idle.get("steer_outcome"), "not_consumed", idle)       # idle steer is never written
+        self.assertEqual(idle.get("steer_reason"), "no-active-turn")
+
+
+if __name__ == "__main__":
+    unittest.main()

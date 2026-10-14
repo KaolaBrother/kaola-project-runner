@@ -58,7 +58,7 @@ INSTALL_GUIDE = HOST_BUNDLE / "INSTALL.md"
 GROK_BOT_TEMPLATES = PROJECT / "templates" / HOST_ID
 ACCEPTED_REVISION = GROK_BOT_TEMPLATES / "accepted-revision.json"
 BUDGETS = json.loads((PROJECT / "templates" / "budgets.json").read_text(encoding="utf-8"))
-WORKER_IDS = ("claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok",
+WORKER_IDS = ("antigravity", "claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok",
                "kimi-cli", "opencode", "zcode")
 WORKER_SKILL_IDS = tuple(f"{wid}-kaola-project-runner" for wid in WORKER_IDS)
 LOCATOR_COMMAND = "kaola-project-runner-locate"

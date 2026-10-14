@@ -1,12 +1,12 @@
 ---
 name: kaola-project-runner
-description: "Use when the controlling Agent should supervise explicitly authorized CLI workers through the ten platform Runner Skills: recover live authorization, dispatch and review work, accept deliveries before finalize, cap live workers at the authorized count, and stop each accepted seat without dropping close-out duties."
+description: "Use when the controlling Agent should supervise explicitly authorized CLI workers through the eleven platform Runner Skills: recover live authorization, dispatch and review work, accept deliveries before finalize, cap live workers at the authorized count, and stop each accepted seat without dropping close-out duties."
 ---
 
 # Project Runner
 
 This Skill is the main control-plane Skill. It is not a platform Runner and has
-no transport adapter. The ten platform Runner Skills are workers: they only
+no transport adapter. The platform Runner Skills are workers: they only
 identify, start, send, wait, permit, observe, capture, and stop an exact owned
 session. Kaola-Workflow, when used, owns worker-side claim, mission ledger,
 child worktree, finalize, archive, and sink.
