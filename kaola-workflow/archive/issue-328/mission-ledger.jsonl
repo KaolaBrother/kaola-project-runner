@@ -1,0 +1,3 @@
+{"n": 1, "name": "Implement #328: agy mid-turn steer end to end (live experiments + chosen delivery mode + tests + live evidence)", "details": "dispatched: antigravity/default worker antigravity-KPR-i328-midturn-steer (brief fp 71ee51ed, cursor 8, holder 0e076cad) — output lands on branch workflow/issue-328 in .kw/worktrees/issue-328", "status": "in-flight"}
+{"n": 2, "name": "Host review of candidate diff + affected suites + render --check + live evidence check", "details": "todo", "status": "todo"}
+{"n": 3, "name": "Finalize #328: sink-merge, close with comment naming delivery mode, archive", "details": "todo", "status": "todo"}
