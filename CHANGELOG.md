@@ -4,7 +4,11 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.9.12 — 2026-10-14 (Antigravity runtime, Grok 4.7 tiers, maintenance fallback)
+
+New worker runtime Antigravity (`agy`, Gemini 4 Argon: `antigravity/default` = `gemini-4-argon-medium`, `antigravity/xhigh` = `gemini-4-argon-high`) (#323); Grok 4.7 seat tiers for Grok Build and Cursor (#322); Sideagent maintenance falls back through the Worker chain and fails once, and `needs_decision` wakes only for a decision cause (#324).
+
+Known issues (next version): [#325](https://github.com/KaolaBrother/kaola-project-runner/issues/325) Delegator webhook 400 runs are not reported and receipts are not retained long enough; [#326](https://github.com/KaolaBrother/kaola-project-runner/issues/326) `steer` and `send` both refuse while a turn is settling.
 
 Seats: restart required
 
