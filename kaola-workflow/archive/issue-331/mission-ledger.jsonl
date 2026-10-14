@@ -1,0 +1,3 @@
+{"n": 1, "name": "Implement #331: effort evidence via applied_via model-id for antigravity dispatch", "details": "dispatched: claude-code/haiku worker claude-code-KPR-i331-effort-evidence (probe OK after 22:50 reset; brief fp 49b3a353, cursor 19, holder 70346e3b) — output lands on branch workflow/issue-331 in .kw/worktrees/issue-331", "status": "in-flight"}
+{"n": 2, "name": "Host review of candidate diff + affected suites + render --check", "details": "todo", "status": "todo"}
+{"n": 3, "name": "Finalize #331: sink-merge, close with comment, archive", "details": "todo", "status": "todo"}
