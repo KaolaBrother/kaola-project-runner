@@ -10,7 +10,7 @@ owner's final two-tier spec.
     profile: "High-throughput, multimodal agentic implementer. Think
     senior generalist engineer, strong on coding, long context, and
     parallel agent work, with a real creative streak in interactive
-    front-end and 3D. Best with a clear brief and a defined done."
+    front-end and 3D. Best with a clear brief and a defined 'done'."
   - `antigravity/xhigh` → `gemini-4-argon-high`, class Elite, profile:
     "Escalation level: use it when Argon medium cannot solve the task,
     especially hard debugging that needs a root-cause fix or long

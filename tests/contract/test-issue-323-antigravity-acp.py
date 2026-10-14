@@ -570,7 +570,7 @@ class ManifestAndRegistrations(unittest.TestCase):
         self.assertEqual(self.values["default_model_profile"],
                          "High-throughput, multimodal agentic implementer. Think senior generalist engineer, "
                          "strong on coding, long context, and parallel agent work, with a real creative streak "
-                         "in interactive front-end and 3D. Best with a clear brief and a defined done.")
+                         "in interactive front-end and 3D. Best with a clear brief and a defined 'done'.")
         self.assertEqual(self.values["named_tiers"], "xhigh")
         self.assertEqual(self.values["xhigh_model_id"], "gemini-4-argon-high")
         self.assertEqual(self.values["xhigh_model_name"], "Gemini 4 Argon")

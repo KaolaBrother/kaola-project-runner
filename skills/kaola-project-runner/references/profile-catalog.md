@@ -26,7 +26,7 @@ absent means none.
 
 | Class | Runtime | `--tier` | Preset ID | Model | Effort / parameters | Profile |
 |---|---|---|---|---|---|---|
-| Elite | Antigravity | `default` | `antigravity/default` | Gemini 4 Argon | effort=medium (encoded in model ID) | High-throughput, multimodal agentic implementer. Think senior generalist engineer, strong on coding, long context, and parallel agent work, with a real creative streak in interactive front-end and 3D. Best with a clear brief and a defined done. |
+| Elite | Antigravity | `default` | `antigravity/default` | Gemini 4 Argon | effort=medium (encoded in model ID) | High-throughput, multimodal agentic implementer. Think senior generalist engineer, strong on coding, long context, and parallel agent work, with a real creative streak in interactive front-end and 3D. Best with a clear brief and a defined 'done'. |
 | Elite | Antigravity | `xhigh` | `antigravity/xhigh` | Gemini 4 Argon | effort=high (encoded in model ID) | Escalation level: use it when Argon medium cannot solve the task, especially hard debugging that needs a root-cause fix or long multi-step work. Slower and uses more quota. |
 | Elite | Claude Code | `default` | `claude-code/default` | Opus 5.5 | effort=high | All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation. |
 | Elite | Claude Code | `opus-xhigh` | `claude-code/opus-xhigh` | Opus 5.5 | effort=xhigh | Plans, designs, and reviews difficult, complex work and handles deep reasoning tasks, with particular strength in UI and 3D visual design and review; does not perform implementation. |
