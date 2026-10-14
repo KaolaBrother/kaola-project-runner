@@ -2127,6 +2127,10 @@ the agent never adopted verifies `false` instead of comparing the argv value to 
 agent's own current `session_meta.configOptions[].currentValue`. ACP `start` receipts additionally carry
 `model_selection` and per-option `config_application` receipts; a rejected or unadvertised
 `set_config_option` is reported as a limitation and leaves the session usable.
+When a platform advertises no effort option (`acp_effort_config_id` empty) and the accepted model
+id carries the requested effort as its suffix (antigravity `gemini-4-argon-{low,medium,high}`),
+`config_application.effort` is `{"applied": true, "applied_via": "model-id", "value": ...}` (Issue
+#331); otherwise it stays `{"applied": false, "reason": "no-advertised-config-option", ...}`.
 
 ### Session model evidence
 

@@ -727,9 +727,9 @@ class RealRunnerIntegration(unittest.TestCase):
         applied = started["config_application"]
         self.assertEqual(applied["model"], {"applied": True, "config_id": "model", "value": "gemini-4-argon-medium"})
         self.assertEqual(applied["mode"]["value"], "bypassPermissions")
-        # The preset effort is baked into the slug; no effort option exists to apply it twice.
-        self.assertIs(applied["effort"]["applied"], False)
-        self.assertEqual(applied["effort"]["reason"], "no-advertised-config-option")
+        # The preset effort is baked into the slug; no effort option exists to apply it twice,
+        # and the accepted slug carries it, so it is applied through the model ID (Issue #331).
+        self.assertEqual(applied["effort"], {"applied": True, "applied_via": "model-id", "value": "medium"})
         first = self.acp("send", "--text", "hello agy", "--timeout", "30")
         self.assertEqual((first["outcome"], first["stop_reason"], first["final_text"]),
                          ("turn_completed", "end_turn", "echo: hello agy"))
@@ -758,7 +758,8 @@ class RealRunnerIntegration(unittest.TestCase):
         started = self.acp("start", "--tier", "xhigh")
         self.assertEqual(started["state"], "ready", started)
         self.assertEqual(started["config_application"]["model"]["value"], "gemini-4-argon-high")
-        self.assertIs(started["config_application"]["effort"]["applied"], False)
+        self.assertEqual(started["config_application"]["effort"],
+                         {"applied": True, "applied_via": "model-id", "value": "high"})
         self.acp("send", "--text", "hi", "--timeout", "30")
         child = [argv for argv in self.spawns() if "--input-format" in argv][-1]
         self.assertEqual(child[child.index("--model") + 1], "gemini-4-argon-high")

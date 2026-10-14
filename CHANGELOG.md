@@ -8,6 +8,19 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 Seats: restart required
 
+- **Antigravity effort applied through its model id, not a false selection mismatch (Issue #331).**
+  An antigravity seat advertises no effort option: its effort is part of the accepted
+  `gemini-4-argon-{low,medium,high}` slug. `kaola-acp.py start` used to record that effort as
+  `applied: false` while the model matched, so `kaola-dispatch.py execute` failed a correctly
+  started seat with `selection-mismatch` before sending. Now the effort is recorded as
+  `{"applied": true, "applied_via": "model-id", "value": ...}` when the accepted model id carries
+  the same effort suffix. A model the agent did not accept, or a suffix that disagrees, still fails
+  `selection-mismatch`. Resume continuity judges such an effort by the model axis. cursor-cli, which
+  advertises its own effort option, is unchanged. Seats: restart not required for this item.
+  `scripts/kaola-acp.py` is outside the operator restart set (`docs/conventions.md`); the holder
+  script is unchanged. The section line stays `Seats: restart required` because Issue #326 changed
+  the holder.
+
 - **Retire obsolete pre-v0.9.12 `maintenance-returned` inputs (Issue #327).**
   `state update --kind alerts --id maintenance-returned` accepts one original-evidence
   reference for an input the checkpoint path cannot settle: a `batch:<rev>` range,

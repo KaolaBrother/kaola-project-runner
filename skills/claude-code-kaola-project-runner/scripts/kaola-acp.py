@@ -3153,6 +3153,24 @@ def picker_effort_suffix(model_id: str) -> str:
     return match.group(1) if match else ""
 
 
+def effort_applied_by_model_id(model_record: Any, applied_model: str, effort: str) -> bool:
+    """Issue #331: an effort the accepted model ID already carries is applied.
+
+    A platform with no effort config option (antigravity bakes effort into
+    ``gemini-4-argon-{low,medium,high}``) applies the requested effort exactly
+    when the model the agent accepted encodes that same effort as its suffix.
+    An unapplied model, or a suffix that disagrees, proves nothing.
+    """
+    if not isinstance(model_record, dict) or model_record.get("applied") is not True:
+        return False
+    return bool(effort) and picker_effort_suffix(applied_model) == effort
+
+
+def _effort_carried_by_model(application: Any) -> bool:
+    entry = application.get("effort") if isinstance(application, dict) else None
+    return isinstance(entry, dict) and entry.get("applied_via") == "model-id"
+
+
 def acp_value_params(value: str) -> dict[str, str]:
     """Parse a trailing ``[k=v,...]`` descriptor from an ACP option value.
 
@@ -4481,6 +4499,10 @@ def reconcile_selection_continuity(
             prior_live=prior_live, prior_live_readable=prior_live_readable,
             fresh=fresh_value, fresh_readable=fresh_readable,
         )
+        if label == "effort" and _effort_carried_by_model(prior_application):
+            # Issue #331: an effort the model ID carries has no readback of its
+            # own (no effort option), so it stands or falls with the model axis.
+            status = statuses[0]
         statuses.append(status)
         axis = {
             "label": label,
@@ -6111,6 +6133,13 @@ def command_start(args: argparse.Namespace, repo: str,
                 candidates = parse_config_id_candidates(config_id)
                 config_id, advertised = resolve_config_id(
                     candidates, socket_request(sock, "state", {}, 10.0))
+            if not config_id and label == "effort" and effort_applied_by_model_id(
+                    application.get("model"), acp_model_value, value):
+                # Issue #331: no effort option is advertised, and the accepted
+                # model ID already carries this effort — it is applied.
+                application[label] = {"applied": True, "applied_via": "model-id",
+                                      "value": value}
+                continue
             if not config_id:
                 application[label] = {
                     "applied": False,
