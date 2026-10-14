@@ -251,8 +251,72 @@ class Mapping(unittest.TestCase):
                      if json.loads(line)['kind'] == 'steer_followup'][-1]
             self.assertFalse(event['receipt']['mutation_performed'])
             self.assertEqual(event['receipt']['outcome'], 'prior_turn_not_completed')
+            self.assertEqual(event['receipt']['error']['code'], 'prior-turn-not-completed')
+            self.assertIn('send a normal prompt', event['receipt']['error']['message'])
             self.assertEqual(event['original_turn']['outcome'], original['outcome'])
             self.assertFalse(self.agent.cancels_sent())
+
+    def test_prompt_required_while_turn_active_falls_back_to_after_turn_queue(self):
+        # Issue #326: native CLI already emitted its result and answers
+        # promptRequired while the holder turn is still active (settling).
+        self.holder.args.platform = 'claude-code'
+        first, original = self.start_turn('settling')
+        logged = threading.Event()
+        append = self.holder.events.append
+        def record(event, **kwargs):
+            cursor = append(event, **kwargs)
+            if event['kind'] == 'steer_followup':
+                logged.set()
+            return cursor
+        self.holder.events.append = record
+        self.agent.wait_response = lambda request, timeout: {
+            'result': {'outcome': 'promptRequired', 'reason': 'noRunningTurn'}}
+        busy = self.holder.op_prompt({'text': 'concurrent send', 'wait': False})
+        self.assertEqual(busy['error']['code'], 'prompt-in-progress')
+        self.assertIn('steer --delivery after-turn', busy['error']['message'])
+        self.assertIn('turn_ended', busy['error']['message'])
+        result = self.holder.op_steer({'method': '_session/steering', 'text': 'DECISION-326'})
+        self.assertEqual(result['steer_outcome'], 'queued')
+        self.assertIsNone(result['steer_consumed'])
+        self.assertEqual(result['steer_confirmation'], 'holder-queued')
+        self.assertEqual(result['steer_native_outcome'], 'promptRequired')
+        self.assertFalse(result['steer_native_written'])
+        self.assertTrue(result['turn_active'])
+        self.assertTrue(result['turn_request_id_preserved'])
+        self.assertTrue(result['mutation_performed'])
+        self.assertNotIn('error', result)
+        self.assertIn('still active', result['steer_reason'])
+        self.assertIn('past its native result', result['steer_reason'])
+        self.assertIn('settling soon', result['steer_reason'])
+        self.assertNotIn('already settled', result['steer_reason'])
+        self.assertEqual(self.holder._delegator_followups, 1)
+        # Once the active turn settles, the queued follow-up is sent as the next prompt.
+        self.settle(first['turn_request_id'])
+        self.assertTrue(logged.wait(3))
+        self.assertEqual(original['outcome'], 'turn_completed')
+        self.assertEqual(self.holder._delegator_followups, 0)
+        event = [json.loads(line) for line in self.holder.events.path.read_text().splitlines()
+                 if json.loads(line)['kind'] == 'steer_followup'][-1]
+        self.assertEqual(event['original_turn']['request_id'], first['turn_request_id'])
+        self.assertEqual(self.agent.prompts_sent()[-1]['params'],
+                         {'sessionId': 'ses-race', 'prompt': [{'type': 'text', 'text': 'DECISION-326'}]})
+
+    def test_prompt_required_after_turn_ended_during_wait_stays_not_consumed(self):
+        # When the turn genuinely ends while waiting for the native steer reply,
+        # the turn is no longer active and steer returns steer-prompt-required.
+        self.holder.args.platform = 'claude-code'
+        first, _ = self.start_turn('ending')
+        def settle_then_reply(request, timeout):
+            self.settle(first['turn_request_id'])
+            return {'result': {'outcome': 'promptRequired', 'reason': 'noRunningTurn'}}
+        self.agent.wait_response = settle_then_reply
+        result = self.holder.op_steer({'method': '_session/steering', 'text': 'LATE-326'})
+        self.assertEqual(result['steer_outcome'], 'not_consumed')
+        self.assertFalse(result['steer_consumed'])
+        self.assertFalse(result['turn_active'])
+        self.assertFalse(result['mutation_performed'])
+        self.assertEqual(result['error']['code'], 'steer-prompt-required')
+        self.assertEqual(self.holder._delegator_followups, 0)
 
     def test_after_turn_stop_does_not_send_or_restart(self):
         first, _, result, logged = self.queued()

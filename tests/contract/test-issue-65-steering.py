@@ -239,12 +239,30 @@ class SteeringContract(unittest.TestCase):
 
     def test_prompt_required_is_not_consumed(self) -> None:
         self.start_running_turn(SUPPORTED_PLATFORM, "promptRequired")
+        # Issue #326: while the holder turn is still active (settling), send
+        # refuses with prompt-in-progress naming the working route, and a
+        # native promptRequired steer falls back to the holder after-turn queue
+        # so the text is sent as the next prompt once the turn ends.
+        busy_send = self.cli(SUPPORTED_PLATFORM, "send", "--no-wait", "--text", "busy",
+                             steering="promptRequired", turn_ms=9000, check=False)
+        self.assertEqual(busy_send["error"]["code"], "prompt-in-progress")
+        self.assertIn("steer --delivery after-turn", busy_send["error"]["message"])
+        self.assertIn("turn_ended", busy_send["error"]["message"])
+        self.assertIn("steer --delivery after-turn", busy_send.get("self_route", ""))
         receipt = self.cli(SUPPORTED_PLATFORM, "steer", "--text", STEER_TEXT,
                            steering="promptRequired", turn_ms=9000, check=False)
-        self.assertEqual(receipt["steer_outcome"], "not_consumed")
-        self.assertIs(receipt["steer_consumed"], False)
-        self.assertEqual(receipt["error"]["code"], "steer-prompt-required")
-        self.assertIs(receipt["mutation_performed"], False)
+        self.assertEqual(receipt["steer_outcome"], "queued")
+        self.assertIsNone(receipt["steer_consumed"])
+        self.assertEqual(receipt["steer_confirmation"], "holder-queued")
+        self.assertEqual(receipt["steer_native_outcome"], "promptRequired")
+        self.assertIs(receipt["steer_native_written"], False)
+        self.assertIs(receipt["turn_active"], True)
+        self.assertIs(receipt["mutation_performed"], True)
+        self.assertNotIn("error", receipt)
+        self.assertIn("still active", receipt["steer_reason"])
+        self.assertIn("past its native result", receipt["steer_reason"])
+        self.assertIn("settling soon", receipt["steer_reason"])
+        self.assertNotIn("already settled", receipt["steer_reason"])
 
     def test_started_new_turn_confirms_later_delivery_only(self) -> None:
         self.start_running_turn(SUPPORTED_PLATFORM, "startedNewTurn")

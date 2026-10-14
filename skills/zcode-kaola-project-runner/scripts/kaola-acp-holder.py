@@ -3203,7 +3203,9 @@ class Holder:
                                   "message": "the targeted turn did not end successfully"}}
             if self.turn["active"]:
                 return {"error": {"code": "prompt-in-progress",
-                                  "message": "a prompt turn is already active"},
+                                  "message": "a prompt turn is already active; steer this turn "
+                                             "(steer --delivery after-turn queues for the next "
+                                             "turn) or retry send after turn_ended"},
                         "outcome": "in_progress", "mutation_performed": False,
                         "active_turn_request_id": self.turn.get("request_id"),
                         "mutation_status": self.turn["mutation_status"]}
@@ -5954,6 +5956,67 @@ class Holder:
             return {**base, **refusal, "steer_outcome": "not_consumed",
                     "steer_consumed": False, "steer_confirmation": "none"}
 
+        def _queue_after_turn(original: dict[str, Any], session_id: str | None,
+                              turn_req_id: Any, turn_fp: Any,
+                              steer_reason: str,
+                              extra: dict[str, Any] | None = None) -> dict[str, Any]:
+            queue_cursor = self.events.append({"kind": "steer_queued",
+                "confirmation": "holder-queued", "turn_request_id": turn_req_id,
+                "fingerprint": base["steer_fingerprint"]})
+            def after_turn() -> None:
+                try:
+                    with self.turn_cond:
+                        while original["active"] and not self.agent.exited.is_set():
+                            self.turn_cond.wait()
+                    original_result = {"request_id": original.get("request_id"),
+                        "fingerprint": original.get("fingerprint"),
+                        "outcome": original.get("outcome"),
+                        "stop_reason": original.get("stop_reason"),
+                        "final_text": original.get("final_text")}
+                    if original.get("outcome") != "turn_completed":
+                        sent = {"outcome": "prior_turn_not_completed",
+                                "mutation_status": "not_started", "mutation_performed": False,
+                                "error": {"code": "prior-turn-not-completed",
+                                          "message": "the targeted prior turn ended without "
+                                                     "turn_completed; nothing was written - read "
+                                                     "original_turn and send a normal prompt once "
+                                                     "the session is idle"}}
+                    else:
+                        # op_prompt refuses before writing if another prompt
+                        # owns the slot or the holder is stopping. Preserve that
+                        # receipt; never cancel that prompt or retry the write.
+                        # No _prompt_source: this follow-up is the Delegator's.
+                        sent = self.op_prompt({"text": text, "wait": False,
+                            "expected_holder_instance_id": self.holder_instance_id,
+                            "expected_prior_turn_request_id": turn_req_id,
+                            "expected_acp_session_id": session_id})
+                    self.events.append({"kind": "steer_followup", "queue_cursor": queue_cursor,
+                        "turn_request_id": turn_req_id,
+                        "original_turn": original_result,
+                        "fingerprint": base["steer_fingerprint"], "receipt": sent})
+                finally:
+                    # Decrement only after op_prompt returns or is skipped,
+                    # so the ended turn still sees the queued follow-up.
+                    with self.lock:
+                        self._delegator_followups = max(0, self._delegator_followups - 1)
+            self._delegator_followups += 1
+            try:
+                threading.Thread(target=after_turn, daemon=True).start()
+            except Exception:
+                self._delegator_followups = max(0, self._delegator_followups - 1)
+                raise
+            queued_receipt: dict[str, Any] = {
+                **base, "steer_outcome": "queued", "steer_consumed": None,
+                "steer_confirmation": "holder-queued", "steer_queue_cursor": queue_cursor,
+                "steer_native_written": False, "turn_request_id": turn_req_id,
+                "turn_prompt_fingerprint": turn_fp, "outcome": "steer_queued",
+                "mutation_status": original.get("mutation_status"), "mutation_performed": True,
+                "steer_reason": steer_reason,
+            }
+            if extra:
+                queued_receipt.update(extra)
+            return queued_receipt
+
         with self.lock:
             if not self.turn["active"]:
                 # An idle steer is never written. Some agents answer an idle
@@ -5965,6 +6028,8 @@ class Holder:
                         "steer_confirmation": "none",
                         "mutation_status": self.turn.get("mutation_status"),
                         "mutation_performed": False}
+            original_turn_ref = self.turn
+            session_id_before = self.acp_session_id
             turn_request_id_before = self.turn["request_id"]
             turn_fingerprint = self.turn["fingerprint"]
             if params.get("delivery") == "after-turn":
@@ -5972,56 +6037,13 @@ class Holder:
                 # Wait on the existing completion condition, then use ordinary
                 # prompt admission once. This is process-local pending input,
                 # not native admission, a timer, or a restart/replay mechanism.
-                original = self.turn
-                session_id = self.acp_session_id
-                queue_cursor = self.events.append({"kind": "steer_queued",
-                    "confirmation": "holder-queued", "turn_request_id": turn_request_id_before,
-                    "fingerprint": base["steer_fingerprint"]})
-                def after_turn() -> None:
-                    try:
-                        with self.turn_cond:
-                            while original["active"] and not self.agent.exited.is_set():
-                                self.turn_cond.wait()
-                        original_result = {"request_id": original.get("request_id"),
-                            "fingerprint": original.get("fingerprint"),
-                            "outcome": original.get("outcome"),
-                            "stop_reason": original.get("stop_reason"),
-                            "final_text": original.get("final_text")}
-                        if original.get("outcome") != "turn_completed":
-                            sent = {"outcome": "prior_turn_not_completed",
-                                    "mutation_status": "not_started", "mutation_performed": False}
-                        else:
-                            # op_prompt refuses before writing if another prompt
-                            # owns the slot or the holder is stopping. Preserve that
-                            # receipt; never cancel that prompt or retry the write.
-                            # No _prompt_source: this follow-up is the Delegator's.
-                            sent = self.op_prompt({"text": text, "wait": False,
-                                "expected_holder_instance_id": self.holder_instance_id,
-                                "expected_prior_turn_request_id": turn_request_id_before,
-                                "expected_acp_session_id": session_id})
-                        self.events.append({"kind": "steer_followup", "queue_cursor": queue_cursor,
-                            "turn_request_id": turn_request_id_before,
-                            "original_turn": original_result,
-                            "fingerprint": base["steer_fingerprint"], "receipt": sent})
-                    finally:
-                        # Decrement only after op_prompt returns or is skipped,
-                        # so the ended turn still sees the queued follow-up.
-                        with self.lock:
-                            self._delegator_followups = max(0, self._delegator_followups - 1)
-                self._delegator_followups += 1
-                try:
-                    threading.Thread(target=after_turn, daemon=True).start()
-                except Exception:
-                    self._delegator_followups = max(0, self._delegator_followups - 1)
-                    raise
-                return {**base, "steer_outcome": "queued", "steer_consumed": None,
-                    "steer_confirmation": "holder-queued", "steer_queue_cursor": queue_cursor,
-                    "steer_native_written": False, "turn_request_id": turn_request_id_before,
-                    "turn_prompt_fingerprint": turn_fingerprint, "outcome": "steer_queued",
-                    "mutation_status": original.get("mutation_status"), "mutation_performed": True,
-                    "steer_reason": "pending input waits for prompt completion; read steer_followup "
-                                    "for native write and session output for processing. A stopped "
-                                    "holder loses pending input. No cancel or replay is sent"}
+                return _queue_after_turn(
+                    original_turn_ref, session_id_before,
+                    turn_request_id_before, turn_fingerprint,
+                    "pending input waits for prompt completion; read steer_followup "
+                    "for native write and session output for processing. A stopped "
+                    "holder loses pending input. No cancel or replay is sent",
+                )
             request_params = {
                 "sessionId": self.acp_session_id,
                 "prompt": [{"type": "text", "text": text}],
@@ -6180,6 +6202,37 @@ class Holder:
 
         with self.lock:
             turn_request_id_after = self.turn["request_id"]
+            turn_preserved = turn_request_id_after in (turn_request_id_before, None)
+            if (base.get("steer_native_outcome") == "promptRequired"
+                    and original_turn_ref["active"]
+                    and self.turn is original_turn_ref):
+                # Issue #326: the native CLI already emitted its result, so it
+                # answered promptRequired, but the holder turn is still active
+                # (settling / post-result work / compact reload) and send
+                # would refuse with prompt-in-progress. Fall back to the
+                # holder after-turn queue so the text is sent once as the next
+                # prompt when this turn ends, and report that honestly.
+                queued_receipt = _queue_after_turn(
+                    original_turn_ref, session_id_before,
+                    turn_request_id_before, turn_fingerprint,
+                    "the turn is still active in this holder but past its native result "
+                    "(settling soon); native steer answered promptRequired and wrote nothing, "
+                    "so this holder queued the input for the next prompt once the turn ends. "
+                    "Read steer_followup for native write and session output for processing. "
+                    "A stopped holder loses pending input. No cancel or replay is sent",
+                    extra={
+                        "steer_response": response,
+                        "turn_request_id_after": turn_request_id_after,
+                        "turn_request_id_preserved": turn_preserved,
+                        "turn_active": self.turn["active"],
+                    },
+                )
+                self.events.append({"kind": "steer_result", "method": method,
+                                    "request_id": steer_request_id,
+                                    "steer_outcome": "queued",
+                                    "steer_consumed": None,
+                                    "turn_request_id_preserved": turn_preserved})
+                return queued_receipt
             receipt = {
                 **base,
                 "steer_outcome": outcome,
@@ -6187,9 +6240,7 @@ class Holder:
                 "steer_confirmation": confirmation,
                 "steer_response": response,
                 "turn_request_id_after": turn_request_id_after,
-                "turn_request_id_preserved": (
-                    turn_request_id_after in (turn_request_id_before, None)
-                ),
+                "turn_request_id_preserved": turn_preserved,
                 "turn_prompt_fingerprint": turn_fingerprint,
                 "turn_active": self.turn["active"],
                 "outcome": f"steer_{outcome}",

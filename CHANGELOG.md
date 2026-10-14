@@ -4,6 +4,34 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+Seats: restart required
+
+- **Settle-window `steer` queues for the next turn instead of dead-ending against `send` (Issue #326).**
+  While a turn is settling — the native CLI already emitted its result, so native
+  steer answers `promptRequired`, while the holder's turn is still active
+  (`turn_active: true`, e.g. post-result work or a compact reload) and `send`
+  refuses with `prompt-in-progress` — `op_steer` now falls back in order to the
+  existing holder after-turn queue (`steer_outcome: queued`,
+  `steer_confirmation: holder-queued`) so the text is sent once as the next
+  prompt when the active turn ends, and reports in `steer_reason` that the turn
+  is still active in the holder, past its native result, and settling soon. When
+  the targeted turn has already ended by the time the native `promptRequired`
+  reply is inspected, `steer` still returns `not_consumed` /
+  `steer-prompt-required`. `steer` also accepts explicit `--delivery
+  native|after-turn` on `kaola-tmux.sh` and `kaola-acp.py`, the `send`
+  `prompt-in-progress` refusal message and the `scripts/kaola-recovery-routes.py`
+  entries for `prompt-in-progress`, `steer-prompt-required`, and
+  `prior-turn-not-completed` name the working routes (`steer --delivery
+  after-turn` or retry `send` after `turn_ended`), and `steer_followup` records
+  an explicit `prior-turn-not-completed` error receipt when the prior turn ends
+  without `turn_completed`. `delegator_turn_wake_reason` and
+  `_delegator_followups` accounting are unchanged.
+  Seats: restart required. `scripts/kaola-acp-holder.py` changed and is in the
+  operator restart set (`docs/conventions.md`); a running holder keeps the old
+  behavior until it restarts. Nothing is installed by this change.
+
 ## 0.9.12 — 2026-10-14 (Antigravity runtime, Grok 4.7 tiers, maintenance fallback)
 
 New worker runtime Antigravity (`agy`, Gemini 4 Argon: `antigravity/default` = `gemini-4-argon-medium`, `antigravity/xhigh` = `gemini-4-argon-high`) (#323); Grok 4.7 seat tiers for Grok Build and Cursor (#322); Sideagent maintenance falls back through the Worker chain and fails once, and `needs_decision` wakes only for a decision cause (#324).

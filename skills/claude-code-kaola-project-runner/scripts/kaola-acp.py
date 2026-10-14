@@ -3273,7 +3273,8 @@ def steer_after_turn_refusal(args: argparse.Namespace, directory: Path) -> dict[
     Apply only to this new delivery route, never to accepted native entries.
     This is a missing operation, not a version or ordinary drift restriction.
     """
-    if args.manifest.get("steering_delivery") != "after-turn":
+    delivery = getattr(args, "delivery", None) or args.manifest.get("steering_delivery")
+    if delivery != "after-turn":
         return None
     record = read_record(directory) or {}
     if not pid_alive(record.get("holder_pid")):
@@ -7798,6 +7799,7 @@ def main() -> int:
     parser.add_argument("--fast", choices=("on", "off"))
     parser.add_argument("--mode")
     parser.add_argument("--steer-mode", choices=("native", "interrupt"))
+    parser.add_argument("--delivery", choices=("native", "after-turn"))
     parser.add_argument("--cancel-timeout", type=float)
     args = parser.parse_args()
     # Issue #181: ``--command`` is resolved below, so its raw presence must be
@@ -7976,11 +7978,12 @@ def main() -> int:
                 },
             })
         else:
+            delivery = args.delivery or args.manifest.get("steering_delivery", "native")
             refusal = steer_after_turn_refusal(args, directory)
             receipt = refusal if refusal is not None else op_or_holder_lost(
                 args, repo, directory, "steer",
                 {"text": text, "method": method, "timeout": timeout,
-                 "delivery": args.manifest.get("steering_delivery", "native")},
+                 "delivery": delivery},
                 sock_timeout,
             )
             receipt.setdefault("native_steering", native_steering)

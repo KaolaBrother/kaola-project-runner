@@ -28,7 +28,7 @@ original `turn_request_id`; its later `steer_followup` records `original_turn` a
 | `interrupted_and_resent` | `true` | composite: the running turn was cancelled and confirmed stopped, then this text ran as the next turn |
 | `resent_without_interrupt` | `true` | composite: the turn had already ended, so nothing was interrupted and this text ran as the next turn |
 | `started_new_turn` | `null` | the agent opened a separate turn on the same session; this holder does not track that turn |
-| `not_consumed` | `false` | nothing was written (no active turn, or the turn had already settled); `send` a normal prompt if you still want it |
+| `not_consumed` | `false` | nothing was written (no active turn, or the turn already ended); `send` a normal prompt if you still want it |
 | `unsupported` | `false` | no native entry on this platform; nothing was written |
 | `rejected` | `false` | the agent refused the request; `error.detail` carries its reason |
 | `unknown` | `null` | no reply or an unrecognized outcome — consumption is undecided; do not resend blindly |
@@ -54,9 +54,7 @@ this change does not restart a consumer.
 
 An idle session is never natively steered: the Runner refuses before writing, since some agents
 answer an idle steering call by starting a detached turn. A turn that ends in the same instant is
-decided by what the agent actually answers, not by a blanket rule: `not_consumed` when the holder
-still held the turn and refused before writing, `started_new_turn` when the agent says it opened a
-separate turn instead, and `unknown` when its effect is not known. A turn-end race with later processing is
+decided by what the agent answers: `queued` (`holder-queued`) when `promptRequired` arrives while the holder turn is still active, `not_consumed` (`steer-prompt-required`) when the turn ended, `started_new_turn` when a separate turn opened, and `unknown` when undecided. A turn-end race with later processing is
 valid when the session and ongoing work are preserved and no cancel, stop, or restart occurs.
 Read subsequent session output for processing evidence. Nothing is ever silently resent.
 

@@ -27,7 +27,7 @@ usage() {
   kaola-tmux.sh PLATFORM status    --repo ABS_PATH --session NAME
   kaola-tmux.sh PLATFORM capture   --repo ABS_PATH --session NAME [--lines N] [--full]
   kaola-tmux.sh PLATFORM send      --repo ABS_PATH --session NAME [--if-snapshot ID] [--text TEXT]
-  kaola-tmux.sh PLATFORM steer     --repo ABS_PATH --session NAME --text TEXT [--steer-mode native|interrupt] [--cancel-timeout SECONDS]
+  kaola-tmux.sh PLATFORM steer     --repo ABS_PATH --session NAME --text TEXT [--steer-mode native|interrupt] [--delivery native|after-turn] [--cancel-timeout SECONDS]
   kaola-tmux.sh PLATFORM key       --repo ABS_PATH --session NAME [--if-snapshot ID] --key NAME
   kaola-tmux.sh PLATFORM answer    --repo ABS_PATH --session NAME [--decision-id ID] [--if-snapshot ID] --replace-editor [--text TEXT]
   kaola-tmux.sh PLATFORM stop      --repo ABS_PATH --session NAME [--if-snapshot ID] [--force] [--preserve-dispatched-workers]
@@ -99,11 +99,11 @@ model_given=false effort_given=false permission_mode_given=false key_name="" tra
 launch_backend="" launch_backend_given=false
 tier="" tier_given=false fast="off" fast_given=false role="" role_given=false
 acp_wait="" timeout="" request_id="" option="" capture_tools=false capture_since="" capture_full=false capture_inline=false
-expected_holder_instance_id="" expected_holder_instance_id_given=false steer_mode="" cancel_timeout=""
+expected_holder_instance_id="" expected_holder_instance_id_given=false steer_mode="" steer_delivery="" cancel_timeout=""
 preserve_dispatched=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --repo|--session|--resume|--lines|--text|--if-snapshot|--decision-id|--model|--effort|--tier|--role|--fast|--permission-mode|--transport|--key|--steer-mode|--cancel-timeout|--timeout|--request-id|--option|--expected-holder-instance-id|--since|--launch-backend)
+    --repo|--session|--resume|--lines|--text|--if-snapshot|--decision-id|--model|--effort|--tier|--role|--fast|--permission-mode|--transport|--key|--steer-mode|--delivery|--cancel-timeout|--timeout|--request-id|--option|--expected-holder-instance-id|--since|--launch-backend)
       [[ $# -ge 2 ]] || die "missing value for $1" ;;
   esac
   case "$1" in
@@ -117,7 +117,7 @@ while [[ $# -gt 0 ]]; do
     --role) role="$2"; role_given=true; shift 2 ;;
     --fast) fast="$2"; fast_given=true; shift 2 ;; --permission-mode) permission_mode="$2"; permission_mode_given=true; shift 2 ;;
     --transport) transport="$2"; transport_given=true; shift 2 ;; --key) key_name="$2"; shift 2 ;;
-    --steer-mode) steer_mode="$2"; shift 2 ;; --cancel-timeout) cancel_timeout="$2"; shift 2 ;;
+    --steer-mode) steer_mode="$2"; shift 2 ;; --delivery) steer_delivery="$2"; shift 2 ;; --cancel-timeout) cancel_timeout="$2"; shift 2 ;;
     --wait) acp_wait=true; shift ;; --no-wait) acp_wait=false; shift ;; --timeout) timeout="$2"; shift 2 ;;
     --request-id) request_id="$2"; shift 2 ;; --option) option="$2"; shift 2 ;; --tools) capture_tools=true; shift ;;
     --expected-holder-instance-id) expected_holder_instance_id="$2"; expected_holder_instance_id_given=true; shift 2 ;;
@@ -127,15 +127,15 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ ( -n "$steer_mode" || -n "$cancel_timeout" ) && "$command_name" != steer ]]; then
-  die "--steer-mode and --cancel-timeout are steer-only"
+if [[ ( -n "$steer_mode" || -n "$steer_delivery" || -n "$cancel_timeout" ) && "$command_name" != steer ]]; then
+  die "--steer-mode, --delivery, and --cancel-timeout are steer-only"
 fi
 PYTHON_BIN="$(resolve_tool "${PYTHON_BIN:-python3}")" || die "python3 executable not found"
 
 # Issue #130 (owner ruling 2026-09-22): PTY is retired and the Runner is ACP-only.
 # A request for the pty transport on any command is refused here, from the arguments
 # alone, before a manifest, Git, the canonical-root binding (#73), or the
-# dispatcher (#104) is consulted, and before any process, session, or record
+# dispatcher (#104) is consulted, and before any process, holder, or record
 # exists. --transport acp stays accepted as a no-op.
 if [[ "$transport_given" == true && "$transport" == pty ]]; then
   emit_json "n:schema_version:3" "s:result:refused" "s:reason:transport-pty-retired" \
@@ -213,6 +213,7 @@ acp_args=("$PYTHON_BIN" "$ACP_CLI" "$platform" "$command_name" --repo "$repo")
 [[ "$acp_wait" == false ]] && acp_args+=(--no-wait)
 [[ -n "$timeout" ]] && acp_args+=(--timeout "$timeout")
 [[ -n "$steer_mode" ]] && acp_args+=(--steer-mode "$steer_mode")
+[[ -n "$steer_delivery" ]] && acp_args+=(--delivery "$steer_delivery")
 [[ -n "$cancel_timeout" ]] && acp_args+=(--cancel-timeout "$cancel_timeout")
 [[ -n "$request_id" ]] && acp_args+=(--request-id "$request_id")
 [[ -n "$option" ]] && acp_args+=(--option "$option")
