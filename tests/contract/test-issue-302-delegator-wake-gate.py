@@ -62,7 +62,11 @@ class Predicate(unittest.TestCase):
     def test_mapping(self) -> None:
         question = [{"kind": "decisions", "why": "host-decision"}]
         delivery = [{"kind": "tasks", "why": "awaiting-verdict"}]
-        other = [{"kind": "holds", "why": "host-owned"}]
+        # Issue #324: a standing Host-owned row is not a Delegator decision.
+        # A severe alert and a registered decision are.
+        other = [{"kind": "alerts", "why": "severe"}]
+        standing = [{"kind": "holds", "why": "host-owned"},
+                    {"kind": "alerts", "why": "warn"}]
         cases = [
             ({}, None),
             ({"prompt_source": "delegator"}, None),
@@ -80,6 +84,9 @@ class Predicate(unittest.TestCase):
             ({"attention_rows": [{"kind": "tasks", "why": "verdict-missing"}]},
              "delivery_review"),
             ({"attention_rows": other}, "needs_decision"),
+            ({"attention_rows": standing}, None),
+            ({"attention_rows": standing, "stop_reason": "max_tokens"},
+             "host_stopped_pending"),
             ({"stop_reason": "refusal"}, "needs_decision"),
             ({"outcome": "turn_canceled", "stop_reason": None}, "needs_decision"),
             ({"outcome": "turn_canceled", "stop_requested": True}, None),
@@ -113,6 +120,8 @@ class Predicate(unittest.TestCase):
              "question_waiting"),
             ({"live_seats": False, "attention_rows": other,
               "all_idle_due": False}, "needs_decision"),
+            ({"live_seats": False, "attention_rows": standing,
+              "all_idle_due": False}, "all-idle"),
             ({"live_seats": False, "attention_rows": delivery,
               "prompt_source": "delegator"}, "delivery_review"),
             ({"live_seats": False, "prompt_source": "self",
@@ -670,7 +679,7 @@ class WakeGate(issue299.WebhookCase):
         cycles = [
             ([{"kind": "decisions", "why": "host-decision"}], "question_waiting"),
             ([{"kind": "tasks", "why": "awaiting-verdict"}], "delivery_review"),
-            ([{"kind": "holds", "why": "host-owned"}], "needs_decision"),
+            ([{"kind": "alerts", "why": "severe"}], "needs_decision"),
         ]
         for rows, reason in cycles:
             before = self.delivered_count(host)

@@ -1,8 +1,7 @@
 # Webhook wake
 
 A webhook wakes you when the Host holder decides you must act. It does not
-wake on every turn end. A model or a prompt never sends it. The owner pastes
-the URL and the sender key into the masked secret input once.
+wake on every turn end. A model or a prompt never sends it.
 
 ## One Delegator timer
 
@@ -108,7 +107,9 @@ pending Delegator decision wakes `needs_decision` only from `state.decisions`
 (`owner` `delegator` or `user`). A `.kaola/run` file or turn text does not.
 The latch does not block it, including the turn after a compaction reload.
 A length stop or refusal while a seat works stays `host_stopped_pending` or
-`needs_decision`. No wake when the Host continues, or when your send ends
+`needs_decision`. A standing Host row (hold, non-severe alert, maintenance
+duty) wakes nothing.
+No wake when the Host continues, or when your send ends
 during a seat turn unless the Host called `wake`. Only an active turn is
 working. A Sideagent is not a seat. A confirmed node stop or the last worker
 `terminated` re-checks one `all-idle` when owed. No time throttle.

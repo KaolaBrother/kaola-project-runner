@@ -6,7 +6,43 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
-Seats: restart not required
+Seats: restart required (Issue #324 changes the holder; #322 and #323 do not)
+
+- **No endless `binding-or-recipe-unavailable` failures, and no nothing-to-do `needs_decision` wake (Issue #324).**
+  (1) Root cause of the repeated `sideagent maintenance failure:
+  binding-or-recipe-unavailable` (KPR Host, batches 83 to 156, e.g. batch 156 at
+  event 41566): the Host carrier ran its failure branch whenever
+  `_node_binding()` found no usable node binding, and that includes no binding at
+  all. The KPR Host's `state.sideagent` is null, so every Host business write
+  raised `host_revision`, the next turn end selected it as an owed batch, and
+  the carrier recorded a new `batch:<rev>` failure (a new `maintenance-returned`
+  input and evidence line each time, 75 in the two event logs) and staged a
+  `node` item that started the next Host turn, whose own write minted the next
+  one. The in-memory dedupe keyed on `batch:<rev>`, so it never matched. Not
+  version skew: the installed holder (#320, `4b00e6a8`) and `main` have the
+  same branch. Host business changes are now owed only under a node binding
+  (`mode` `node`, `state` `active`), as the state view already treated an
+  unbound Host. A node binding with a refused recipe fails once: while its
+  `binding-or-recipe-unavailable` input stays returned, later Host writes add
+  no failure and no wake; the Host's bounded request still selects every change
+  past the handled revision, and a repaired binding sends the later changes to
+  a fresh node. A typed recovery input keeps its one failure per sequence.
+  Rows the old loop already wrote stay until the Host retires them. The
+  failure's `evidence` pointer is now read after its own
+  `sideagent_node_returned` row; it used to name the stream event just before
+  it (batch 156: `#41565` for the row at `#41566`).
+  (2) `classify_delegator_attention` mapped any undelivered host-view attention
+  row to `needs_decision`. A standing Host-owned row (a `holds` row with `why`
+  `host-owned`, the Host's non-severe `maintenance-returned` alert) moves its
+  `content` digest whenever the Host or its Sideagent node edits it, so a
+  compaction-reload turn ending beside a node settle woke the Delegator with
+  `state.decisions` empty. `needs_decision` now needs a `registered-decision`
+  row (Issue #315) or a severe alert; other rows wake nothing by themselves.
+  `question_waiting`, `delivery_review`, `host_stopped_pending`, the refusal
+  and cancel rules, the all-idle rule and its ordering are unchanged.
+  Seats: restart required. `scripts/kaola-acp-holder.py` changed and is in the
+  operator restart set (`docs/conventions.md`); a running Host holder keeps the
+  old behavior until it restarts. Nothing is installed by this change.
 
 - **New worker platform: Antigravity (`agy`, Gemini 4 Argon) (Issue #323).**
   Runtime id `antigravity`, display `Antigravity`, Skill

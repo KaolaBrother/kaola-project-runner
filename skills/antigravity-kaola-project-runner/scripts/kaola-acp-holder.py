@@ -306,6 +306,18 @@ DELEGATOR_WAKE_REASONS = frozenset({
 DELEGATOR_LENGTH_STOPS = frozenset({"max_tokens", "max_turn_requests", "length"})
 # Host-view attention ``why`` values that mean a delivery needs review.
 DELEGATOR_DELIVERY_WHYS = frozenset({"awaiting-verdict", "delivery-open", "verdict-missing"})
+# Issue #324: the only host-view attention rows that are a Delegator decision
+# cause besides the two classified reasons above. A registered open
+# ``state.decisions`` row (Issue #315) and a severe alert. Every other row is
+# a standing Host-owned item or Host maintenance bookkeeping the Host already
+# holds (a ``holds`` row owned by the host, a non-severe Host alert such as
+# ``maintenance-returned``, a ``maintenance`` or ``sideagent`` duty, a
+# transcribed-check). A changed ``content`` digest on such a row makes it
+# "undelivered" but is not a question for the Delegator.
+DELEGATOR_DECISION_CAUSES = frozenset({
+    ("decisions", "registered-decision"),
+    ("alerts", "severe"),
+})
 # Issue #315: owners whose open ``state.decisions`` row is not already an
 # attention item. ``owner`` ``host`` is ``why`` ``host-decision`` in the view.
 DELEGATOR_DECISION_OWNERS = frozenset({"delegator", "user"})
@@ -404,7 +416,10 @@ def open_registered_decision_rows(doc: Any) -> list[dict[str, Any]]:
 def classify_delegator_attention(rows: list | None) -> str | None:
     """Map undelivered host-view attention to one wake reason.
 
-    Empty means nothing in this list. Callers decide what an empty list means.
+    ``None`` means nothing in this list needs the Delegator: the list is
+    empty, or every row is a Host-owned or Host-maintenance item. Callers
+    decide what ``None`` means. ``needs_decision`` needs a registered open
+    decision or a severe alert (Issue #324); an unrecognized row is not one.
     """
     found = rows or []
     if any(isinstance(row, dict) and row.get("kind") == "decisions"
@@ -413,7 +428,8 @@ def classify_delegator_attention(rows: list | None) -> str | None:
     if any(isinstance(row, dict) and row.get("kind") == "tasks"
            and row.get("why") in DELEGATOR_DELIVERY_WHYS for row in found):
         return "delivery_review"
-    if found:
+    if any(isinstance(row, dict) and (row.get("kind"), row.get("why")) in DELEGATOR_DECISION_CAUSES
+           for row in found):
         return "needs_decision"
     return None
 
@@ -473,9 +489,11 @@ def delegator_turn_wake_reason(
       ``state.decisions`` row the caller merged when no seat is in a turn.
       A ``decisions``/``host-decision`` row is ``question_waiting``; a
       ``tasks`` row whose ``why`` is awaiting-verdict, delivery-open or
-      verdict-missing is ``delivery_review``; any other row, including
-      ``why`` ``registered-decision``, is ``needs_decision``. With no seat
-      in a turn this classification runs before the ``all-idle`` fallback.
+      verdict-missing is ``delivery_review``; a ``registered-decision`` row
+      or a severe alert is ``needs_decision``. Any other row is a standing
+      Host-owned or Host-maintenance item and wakes nothing (Issue #324).
+      With no seat in a turn this classification runs before the
+      ``all-idle`` fallback.
       With a seat still in a turn it runs only after the Delegator-source
       check above.
     * staged worker events with no prompt fingerprint, or an unconfirmed
@@ -4234,6 +4252,8 @@ class Holder:
             doc = self._lifecycle_state()
             recovery = self._node_recovery_pending(doc)
             through = self._node_host_pending(doc)
+            if recovery is None and through is not None and not self._node_business_owed(doc):
+                through = None
             if recovery or through is not None:
                 self._maintenance_failure("binding-or-recipe-unavailable", through, recovery)
         if not self.pending_worker_events:
@@ -4368,6 +4388,28 @@ class Holder:
             return current
         return None
 
+    @staticmethod
+    def _node_business_owed(doc: dict[str, Any] | None) -> bool:
+        """Whether Host business changes are owed to a node that cannot start.
+
+        Issue #324: only a configured node binding (``mode`` ``node``,
+        ``state`` ``active``) makes a Host business change a node input. With
+        no binding, or one that is not node mode, nothing is owed and nothing
+        failed. A configured binding whose recipe is unusable fails once: an
+        unresolved ``binding-or-recipe-unavailable`` business row already
+        tells the Host to repair the binding, and its bounded request selects
+        every change past the handled revision. A later Host write is not a
+        new failure, so the Host's own turn never mints the next one.
+        """
+        state = (doc or {}).get("state") or {}
+        binding = state.get("sideagent")
+        if not isinstance(binding, dict) or binding.get("mode") != "node" or binding.get("state") != "active":
+            return False
+        returned = ((state.get("alerts") or {}).get("maintenance-returned") or {}).get("inputs") or {}
+        return not any(isinstance(ident, str) and ident.startswith("batch:") and isinstance(row, dict)
+                       and row.get("why") == "binding-or-recipe-unavailable"
+                       for ident, row in returned.items())
+
     def _node_recovery_pending(self, doc: dict[str, Any] | None) -> dict[str, Any] | None:
         if self.session_role != "host":
             return None
@@ -4450,11 +4492,14 @@ class Holder:
         if self.node.get("failure_reported") == key:
             return
         self.node["failure_reported"] = key
-        evidence = f"{self.events.path}#{self.events.cursor}"
         binding = (((doc or {}).get("state") or {}).get("sideagent") or self.dispatcher_identity())
         if wake:
             self._node_to_host(binding, f"maintenance {ident}: {why}; Host must reconcile original receipts, "
                                        "repair the binding and request a bounded check", record=False)
+        # Issue #324: read after the wake's own ``sideagent_node_returned`` row,
+        # so the pointer names this failure, not the stream event before it.
+        # Without a wake it names the caller's event (relay failure, node loss).
+        evidence = f"{self.events.path}#{self.events.cursor}"
         sources = missing_sources if isinstance(missing_sources, dict) and missing_sources else None
         encoded = json.dumps(sources, sort_keys=True) if sources else None
         def record_failure(encoded: str | None = encoded) -> None:

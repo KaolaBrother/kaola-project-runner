@@ -726,7 +726,14 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   once naming the unhandled range, and that range is not sent again. A batch the node does not
   admit, a failed start and a lost node are staged for the Host once as a `node` item naming
   the unhandled range; the first two start no further node until the binding changes. The
-  carrier then exact-stops the node. A stop is confirmed when the node's holder process is
+  carrier then exact-stops the node. Host business changes are node inputs only under a node
+  binding (`mode` `node`, `state` `active`); with no binding, or one in another mode or state,
+  a Host write owes no batch and records no failure (Issue #324). A node binding whose recipe
+  is refused records one `binding-or-recipe-unavailable` input and wakes the Host once; while
+  that input stays in `maintenance-returned`, later Host writes add no failure and no wake.
+  The Host's bounded request selects every change past the handled revision, and a repaired
+  binding sends the changes after the failed one to a fresh node. A typed recovery input
+  without a usable binding still records its one failure per sequence. A stop is confirmed when the node's holder process is
   gone, not by its `stopped` record; while it still runs (`sideagent_node_stop_unconfirmed`)
   no node starts, and once it is gone (`sideagent_node_stop_confirmed_late`) the next Host
   change starts a fresh node. A holder whose stop reply cannot be delivered still exits.
@@ -866,14 +873,20 @@ Delegator is not already there and the Host did not continue by itself:
 | prompt source `delegator` (this send or steer) and a seat still has an active turn | no wake |
 | undelivered host-view row `kind=decisions`, `why=host-decision` | `question_waiting` |
 | undelivered host-view row `kind=tasks` and `why` one of `awaiting-verdict`, `delivery-open`, `verdict-missing` | `delivery_review` |
-| any other undelivered attention row, including `why` `registered-decision` | `needs_decision` |
+| undelivered `why` `registered-decision` row, or an `alerts` row with `why` `severe` | `needs_decision` |
+| any other undelivered attention row (a `holds` row owned by the host, a non-severe Host alert such as `maintenance-returned`, a `maintenance` or `sideagent` duty, a `transcribed-check`) | no wake of its own (Issue #324) |
 | a seat still has an active turn, and a staged worker event has no prompt fingerprint, an overflow is unconfirmed, or the stop is `max_tokens` / `max_turn_requests` / `length` | `host_stopped_pending` |
 | a seat still has an active turn, and the stop is `refusal` or the cancel was not requested | `needs_decision` |
 | clean `end_turn` with nothing pending, while a seat still has an active turn | no wake |
 
 Undelivered attention means the heartbeat body is a host view (`view` `host`,
 `attention` a list) whose fingerprint is not the one last delivered on a
-worker-event prompt. Checked in that order. Self-continuation wins over
+worker-event prompt. A standing Host-owned row whose `content` digest moved
+(the Host or its Sideagent node edited a hold or the `maintenance-returned`
+alert) counts as undelivered, but it is Host bookkeeping, not a question for
+the Delegator: a compaction-reload turn that ends beside a Sideagent node
+settle, with `state.decisions` empty, sends nothing (Issue #324). Checked in
+that order. Self-continuation wins over
 everything below it (no wake): the Host has not gone idle. A working seat is
 a running holder whose record names this Host instance as `dispatcher`, whose
 `session_role` is not `sideagent` or legacy `sidekick`, whose `state` is
