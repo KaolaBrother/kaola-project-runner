@@ -1,0 +1,3 @@
+{"n": 1, "name": "Implement #329: verify and expose antigravity account usage (quota) data through kaola-quota.py contract", "details": "dispatched: antigravity/default worker antigravity-KPR-i329-quota-usage (brief fp 19fed626, cursor 8, holder 505f015b) — output lands on branch workflow/issue-329 in .kw/worktrees/issue-329; live verification required on agy 1.3.5 both tiers", "status": "in-flight"}
+{"n": 2, "name": "Host review of candidate diff + affected suites + render --check + live evidence check", "details": "todo", "status": "todo"}
+{"n": 3, "name": "Finalize #329: sink-merge, close with comment, archive", "details": "todo", "status": "todo"}
