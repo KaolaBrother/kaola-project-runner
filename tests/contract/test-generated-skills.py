@@ -284,6 +284,12 @@ def check_no_cross_platform_leakage(assertions: Assertions, package: Path, packa
         # Issue #227: the route's session header and key env are dsh route facts.
         text = text.replace("x-opencode-session", "dsh-route-session-header")
         text = text.replace("opencode_go_api_key", "dsh-route-key-env")
+    if package_id == "antigravity-kaola-project-runner":
+        # Issue #334: Antigravity's opus preset selects claude-opus-5-5-high
+        # ("Claude Opus 5.5"), a first-class agy catalog model, not Claude Code
+        # adapter leakage. Remove only those exact declared preset strings.
+        text = text.replace("claude-opus-5-5-high", "antigravity-opus-model-id")
+        text = text.replace("claude opus 5.5", "antigravity-opus-model")
     for other_id, tokens in forbidden.items():
         for token in tokens:
             # A common word such as "cursor" is intentionally not exempted: a

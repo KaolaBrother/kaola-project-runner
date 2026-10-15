@@ -660,7 +660,7 @@ class ManifestAndRegistrations(unittest.TestCase):
                          "High-throughput, multimodal agentic implementer. Think senior generalist engineer, "
                          "strong on coding, long context, and parallel agent work, with a real creative streak "
                          "in interactive front-end and 3D. Best with a clear brief and a defined 'done'.")
-        self.assertEqual(self.values["named_tiers"], "xhigh")
+        self.assertEqual(self.values["named_tiers"], "xhigh,opus")
         self.assertEqual(self.values["xhigh_model_id"], "gemini-4-argon-high")
         self.assertEqual(self.values["xhigh_model_name"], "Gemini 4 Argon")
         self.assertEqual(self.values["xhigh_model_effort"], "high")
@@ -668,6 +668,15 @@ class ManifestAndRegistrations(unittest.TestCase):
         self.assertEqual(self.values["xhigh_model_profile"],
                          "Escalation level: use it when Argon medium cannot solve the task, especially hard "
                          "debugging that needs a root-cause fix or long multi-step work. Slower and uses more quota.")
+        self.assertEqual(self.values["opus_model_id"], "claude-opus-5-5-high")
+        self.assertEqual(self.values["opus_model_name"], "Claude Opus 5.5")
+        self.assertEqual(self.values["opus_model_parameters"], "effort=high (encoded in model ID)")
+        self.assertEqual(self.values["opus_model_effort"], "high")
+        self.assertEqual(self.values["opus_model_class"], "Elite")
+        self.assertEqual(self.values["opus_model_profile"],
+                         "Deep-reasoning escalation seat for tasks beyond the Argon tiers: architecture and "
+                         "cross-cutting design review, hardest debugging, and final-quality passes. Not a default "
+                         "worker; select when depth outweighs latency.")
         # Effort rides the slug: the manifest declares no effort option, so the
         # Runner cannot apply the preset effort a second time.
         self.assertEqual(self.values["acp_effort_config_id"], "")
@@ -677,9 +686,13 @@ class ManifestAndRegistrations(unittest.TestCase):
         parsed = render.parse_manifest(MANIFEST)
         self.assertEqual(render.preset_id(parsed, "default"), "antigravity/default")
         self.assertEqual(render.preset_id(parsed, "xhigh"), "antigravity/xhigh")
+        self.assertEqual(render.preset_id(parsed, "opus"), "antigravity/opus")
         adapter = (SCRIPTS / "adapters" / "antigravity.sh").read_text(encoding="utf-8")
-        for line in ('ADAPTER_DEFAULT_MODEL_ID="gemini-4-argon-medium"', 'ADAPTER_NAMED_TIERS="xhigh"',
-                     'ADAPTER_XHIGH_MODEL_ID="gemini-4-argon-high"'):
+        for line in ('ADAPTER_DEFAULT_MODEL_ID="gemini-4-argon-medium"', 'ADAPTER_NAMED_TIERS="xhigh,opus"',
+                     'ADAPTER_XHIGH_MODEL_ID="gemini-4-argon-high"',
+                     'ADAPTER_OPUS_MODEL_NAME="Claude Opus 5.5"',
+                     'ADAPTER_OPUS_MODEL_ID="claude-opus-5-5-high"',
+                     'ADAPTER_OPUS_MODEL_EFFORT="high"'):
             self.assertIn(line, adapter)
         self.assertEqual(load("kaola-antigravity-acp").DEFAULT_MODEL, "gemini-4-argon-medium")
 
@@ -911,6 +924,18 @@ class RealRunnerIntegration(unittest.TestCase):
         self.acp("send", "--text", "hi", "--timeout", "30")
         child = [argv for argv in self.spawns() if "--input-format" in argv][-1]
         self.assertEqual(child[child.index("--model") + 1], "gemini-4-argon-high")
+        self.assertNotIn("--effort", child)
+
+    def test_opus_tier_selects_claude_opus_5_5_high_without_effort(self) -> None:
+        started = self.acp("start", "--tier", "opus")
+        self.assertEqual(started["state"], "ready", started)
+        self.assertEqual(started["config_application"]["model"],
+                         {"applied": True, "config_id": "model", "value": "claude-opus-5-5-high"})
+        self.assertEqual(started["config_application"]["effort"],
+                         {"applied": True, "applied_via": "model-id", "value": "high"})
+        self.acp("send", "--text", "hi opus", "--timeout", "30")
+        child = [argv for argv in self.spawns() if "--input-format" in argv][-1]
+        self.assertEqual(child[child.index("--model") + 1], "claude-opus-5-5-high")
         self.assertNotIn("--effort", child)
 
     def test_mid_turn_steer_and_interrupt_steer_end_to_end(self) -> None:

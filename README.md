@@ -30,7 +30,7 @@ a recoverable path from issue to verified delivery.
 1. [Choose an entry](#choose-an-entry) — Delegator / Project Runner / Platform Runner / Workflow Next
 2. [Kaola Workflow integration](#kaola-workflow-integration) — normal path, orchestrator binding, evidence-backed exception
 3. [Install and begin](#install-and-begin)
-4. [Select workers](#select-workers) — [runtimes](#runtimes), [model selection](#model-selection), [worker classes](#worker-classes) (Expert / Worker / Elite), [preset catalog](#preset-catalog) (all 11 runtimes, 24 presets), [platform notes](#platform-notes)
+4. [Select workers](#select-workers) — [runtimes](#runtimes), [model selection](#model-selection), [worker classes](#worker-classes) (Expert / Worker / Elite), [preset catalog](#preset-catalog) (all 11 runtimes, 26 presets), [platform notes](#platform-notes)
 5. [Authorization](#authorization) — [authorization by class](#authorization-by-class), [choosing a worker](#choosing-a-worker), [seat binding and switching](#seat-binding-and-switching), [authorization before a new Host](#authorization-before-a-new-host)
 6. [What you specify and what agents own](#what-you-specify-and-what-agents-own)
 7. [Daily use](#daily-use) — session commands, steering, watching ACP sessions
@@ -336,7 +336,7 @@ roles, not benchmark claims, and they do not change which model a Host itself ru
 |---|---|---|---|
 | **Expert** | 3 | Complex thinking only: difficult analysis, design, objective decomposition, and review judgments. No concrete implementation or execution; not an ordinary worker seat. | Your explicit grant. A task grant (the default) ends with its task. A standing grant, only when you say so, lets the Host use that preset within its stated scope, count and limits until you revoke it or it expires. The Host judges completion and exact-stops the seat; that stop revokes no standing grant, and the same approved task continues across turns and recovery without asking again. |
 | **Worker** | 6 | Cheaper and generally weaker; simpler, bounded work that adds parallel throughput. | Default-authorized: no approval is required for each seat, count, or priority. Actual account, token and service limits and your explicit restrictions still apply. |
-| **Elite** | 16 | The main execution workforce: primary implementation and demanding execution. | Your explicit runtime/preset/count grant, within its caps and seat-switch rules. A valid grant stays valid for its scope; no per-task permission. |
+| **Elite** | 17 | The main execution workforce: primary implementation and demanding execution. | Your explicit runtime/preset/count grant, within its caps and seat-switch rules. A valid grant stays valid for its scope; no per-task permission. |
 
 An Expert review informs the Host; it never replaces the Host's acceptance or its
 ownership of the seat lifecycle.
@@ -364,6 +364,7 @@ explicit `--model` choices, not a separate Fast toggle.
 |---|---|---|---|---|---|---|
 | Elite | Antigravity | `default` | `antigravity/default` | Gemini 4 Argon | effort=medium (encoded in model ID) | High-throughput, multimodal agentic implementer. Think senior generalist engineer, strong on coding, long context, and parallel agent work, with a real creative streak in interactive front-end and 3D. Best with a clear brief and a defined 'done'. |
 | Elite | Antigravity | `xhigh` | `antigravity/xhigh` | Gemini 4 Argon | effort=high (encoded in model ID) | Escalation level: use it when Argon medium cannot solve the task, especially hard debugging that needs a root-cause fix or long multi-step work. Slower and uses more quota. |
+| Elite | Antigravity | `opus` | `antigravity/opus` | Claude Opus 5.5 | effort=high (encoded in model ID) | Deep-reasoning escalation seat for tasks beyond the Argon tiers: architecture and cross-cutting design review, hardest debugging, and final-quality passes. Not a default worker; select when depth outweighs latency. |
 | Elite | Claude Code | `default` | `claude-code/default` | Opus 5.5 | effort=high | All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation. |
 | Elite | Claude Code | `opus-xhigh` | `claude-code/opus-xhigh` | Opus 5.5 | effort=xhigh | Plans, designs, and reviews difficult, complex work and handles deep reasoning tasks, with particular strength in UI and 3D visual design and review; does not perform implementation. |
 | Elite | Claude Code | `sonnet` | `claude-code/sonnet` | Sonnet | effort=high | All-round execution worker, especially UI and 3D visual implementation. |

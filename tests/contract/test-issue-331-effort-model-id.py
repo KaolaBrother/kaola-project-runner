@@ -60,6 +60,9 @@ class EffortAppliedByModelId(unittest.TestCase):
         self.assertTrue(ACP.effort_applied_by_model_id(model, "gemini-4-argon-medium", "medium"))
         self.assertTrue(ACP.effort_applied_by_model_id(
             {"applied": True, "applied_via": "argv"}, "gemini-4-argon-high", "high"))
+        self.assertTrue(ACP.effort_applied_by_model_id(
+            {"applied": True, "config_id": "model", "value": "claude-opus-5-5-high"},
+            "claude-opus-5-5-high", "high"))
 
     def test_an_unapplied_model_or_a_disagreeing_suffix_proves_nothing(self) -> None:
         self.assertFalse(ACP.effort_applied_by_model_id(
@@ -67,6 +70,8 @@ class EffortAppliedByModelId(unittest.TestCase):
         self.assertFalse(ACP.effort_applied_by_model_id(None, "gemini-4-argon-medium", "medium"))
         self.assertFalse(ACP.effort_applied_by_model_id(
             {"applied": True}, "gemini-4-argon-high", "medium"))
+        self.assertFalse(ACP.effort_applied_by_model_id(
+            {"applied": True}, "claude-opus-5-5-high", "medium"))
         self.assertFalse(ACP.effort_applied_by_model_id({"applied": True}, "auto", "medium"))
         self.assertFalse(ACP.effort_applied_by_model_id({"applied": True}, "gemini-4-argon-medium", ""))
 
@@ -128,6 +133,17 @@ class AntigravityEffortThroughRealHolder(unittest.TestCase):
         self.assertEqual(receipt["config_application"]["model"]["value"], "gemini-4-argon-high")
         verdict = self.dispatch_verdict(
             {"model_id": "gemini-4-argon-high", "effort": "high"}, receipt)
+        self.assertFalse(verdict["mismatch"], verdict)
+        self.assertEqual(verdict["comparison"], "match", verdict)
+
+    def test_b2_opus_tier_dispatches_without_a_selection_mismatch(self) -> None:
+        receipt = self.acp("start", "--tier", "opus")
+        self.assertEqual(receipt["state"], "ready", receipt)
+        self.assertEqual(receipt["config_application"]["model"]["value"], "claude-opus-5-5-high")
+        self.assertEqual(receipt["config_application"]["effort"],
+                         {"applied": True, "applied_via": "model-id", "value": "high"})
+        verdict = self.dispatch_verdict(
+            {"model_id": "claude-opus-5-5-high", "effort": "high"}, receipt)
         self.assertFalse(verdict["mismatch"], verdict)
         self.assertEqual(verdict["comparison"], "match", verdict)
 

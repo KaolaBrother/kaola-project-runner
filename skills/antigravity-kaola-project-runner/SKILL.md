@@ -45,7 +45,7 @@ SESSION="<exact-name>"   # under Project Runner: <platform>-<CODE>-i<ISSUE>-<pur
 ```
 
 The controlling Agent owns model selection for each `start`. This Skill declares its per-run
-presets — `--tier default` (**Gemini 4 Argon**: `gemini-4-argon-medium`, effort=medium (encoded in model ID)) and `--tier xhigh` (**Gemini 4 Argon**: `gemini-4-argon-high`, effort=high (encoded in model ID)) — and `default` applies whenever nothing more specific was chosen. Pass
+presets — `--tier default` (**Gemini 4 Argon**: `gemini-4-argon-medium`, effort=medium (encoded in model ID)), `--tier xhigh` (**Gemini 4 Argon**: `gemini-4-argon-high`, effort=high (encoded in model ID)), and `--tier opus` (**Claude Opus 5.5**: `claude-opus-5-5-high`, effort=high (encoded in model ID)) — and `default` applies whenever nothing more specific was chosen. Pass
 another `--tier` when the human or an existing authorization — the default-authorized Worker pool included —
 names that preset; never infer one from code size, failures, elapsed time, or your own assessment.
 An undeclared name is refused (`tier-not-declared`), never resolved to `default`.
