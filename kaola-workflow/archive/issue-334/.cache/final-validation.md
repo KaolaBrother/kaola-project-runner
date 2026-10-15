@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy -u KAOLA_ACP_DISPATCHER ./scripts/validate.sh (full inventory rc=0, 1457s, on candidate a039b04d); render-skills.py --check PASS; suites 323/331/218/generated-skills green standalone; live acceptance: i334-opus-live one-turn OK on agy 1.3.5 via --tier opus with effort applied_via model-id; profile text is the Host DRAFT pending Yanlei confirmation — candidate intentionally NOT finalized or merged until confirmed
+validated_candidate_hash: fb9a4da7f52ed4448e818a1fe9d9f24f7e235b0764df113855c85811dc5f1f1a

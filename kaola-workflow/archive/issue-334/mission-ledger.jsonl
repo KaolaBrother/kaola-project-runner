@@ -1,0 +1,3 @@
+{"n": 1, "name": "Implement #334: antigravity/opus named tier (claude-opus-5-5-high, Elite, effort in model id); implement against draft profile, merge GATED on owner confirmation", "details": "dispatched: antigravity/default worker antigravity-KPR-i334-opus-tier (fp 1bb9bc79, cursor 8, holder b0531975) — output lands on branch workflow/issue-334; live tier acceptance required; DO NOT MERGE until Yanlei confirms profile text", "status": "in-flight"}
+{"n": 2, "name": "Host review of candidate diff + affected suites + render --check + live tier acceptance evidence", "details": "todo", "status": "todo"}
+{"n": 3, "name": "Finalize #334 (ONLY after Yanlei confirms profile text): sink-merge, close with comment, archive", "details": "todo", "status": "todo"}
