@@ -4,7 +4,7 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.9.14 — 2026-10-15 (Antigravity Opus tier; Elite-classed expert rows; dead-holder task retire)
 
 Fixes #332 (an expert_task_grants row admits its preset even when the manifest classes it Elite; refusals with no ceiling defect name the grant rows they read), #333 (an accepted task retires an unknown dispatch row when the worker holder is dead) and #334 (Antigravity `antigravity/opus` tier for `claude-opus-5-5-high`, class Elite, with model-carried effort).
 
