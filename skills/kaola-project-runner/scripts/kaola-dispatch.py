@@ -646,6 +646,7 @@ def current_candidates(catalog: dict[str, Any], auth: dict[str, Any], grants: li
     ceiling, error = delegator_ceiling(repo) if repo else (None, None)
     if ceiling:
         ceiling = admission_ceiling(ceiling)
+        catalog = admission_catalog(catalog, ceiling)
     effective = apply_ceiling_to_grants(grants, ceiling, catalog) if ceiling else grants
     candidates, withheld = eligibility(catalog, auth, effective, available)
     holds = preset_holds(document)
@@ -911,6 +912,7 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
     ceiling, ceiling_error = delegator_ceiling(projection["repo"])
     if ceiling:
         ceiling = admission_ceiling(ceiling)
+        catalog = admission_catalog(catalog, ceiling)
     effective = apply_ceiling_to_grants(grants, ceiling, catalog) if ceiling else grants
     availability = availability_map(load_object(Path(args.availability))) if getattr(args, "availability", None) else {}
     candidates, withheld = eligibility(catalog, auth, effective, availability)
@@ -1725,6 +1727,18 @@ def admission_ceiling(ceiling: dict[str, Any]) -> dict[str, Any]:
     return merged
 
 
+def admission_catalog(catalog: dict[str, dict[str, Any]], ceiling: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    """An expert_task_grants row is its preset's Expert permission, whatever the manifest class (#332).
+
+    A manifest Elite preset that has an Expert row admits, counts and occupies as
+    that Expert task choice, never as an Elite seat. Manifest classes stay as written.
+    """
+    experts = (ceiling or {}).get("expert_ids") or {}
+    promoted = {ident: {**row, "class": "Expert"} for ident, row in catalog.items()
+                if row.get("class") == "Elite" and ident in experts}
+    return {**catalog, **promoted} if promoted else catalog
+
+
 def delegator_ceiling(repo: str, observations: list[dict[str, Any]] | None = None) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """Read current grants with the writer's shape check. Scope bad grants by id.
 
@@ -2355,6 +2369,7 @@ def command_execute(args: argparse.Namespace) -> int:
     ceiling, ceiling_error = delegator_ceiling(repo, observations)
     if ceiling is not None:
         ceiling = admission_ceiling(ceiling)
+        catalog = admission_catalog(catalog, ceiling)
         grants = apply_ceiling_to_grants(grants, ceiling, catalog)
         shared_capacities = shared_seat_capacities(grants)
         candidates, withheld = eligibility(catalog, auth, grants, available)
@@ -2430,7 +2445,14 @@ def command_execute(args: argparse.Namespace) -> int:
             detail = ((ceiling or {}).get("problem_evidence", {}).get(preset)
                       or (ceiling or {}).get("expert_problem_evidence", {}).get(preset)
                       or (ceiling or {}).get("worker_problem" if row["class"] == "Worker" else "elite_problem"))
-            extra = {"evidence": detail} if isinstance(detail, dict) else None
+            if not isinstance(detail, dict):
+                # No ceiling defect to quote: name the grant rows that were read, so the refusal is never empty (#332).
+                detail = {
+                    "class": row["class"],
+                    "elite_row": preset in ((ceiling or {}).get("elite_ids") or {}),
+                    "expert_row": preset in ((ceiling or {}).get("expert_ids") or {}),
+                }
+            extra = {"evidence": detail}
             blocked.append(blank_item(item["item_id"], preset, session, "not-run", reason, extra))
             continue
         if item.get("requires") is not None:

@@ -4,6 +4,11 @@
 A shared seat group has one count. An Expert choice in that group still needs
 its own task or standing grant. Elite grants are a time window ending at
 expires. These cases use the dispatch CLI and do not write a seat view.
+
+Issue #332: an expert_task_grants row admits its preset even when the manifest
+classes that preset Elite (claude-code/opus-xhigh). The manifest class stays
+Elite; the row is a task choice, never an Elite seat. A refusal with no ceiling
+defect names the grant rows it read instead of an empty evidence object.
 """
 
 from __future__ import annotations
@@ -310,6 +315,77 @@ class ExpertCeiling(unittest.TestCase):
         self.assertNotEqual(grouped["claude-seat"]["reason"], "ceiling-incomplete")
         self.assertEqual(grouped["fable-seat"]["reason"], "dry-run")
         self.assertEqual(grouped["fable-seat"]["evidence"]["lifetime"], "task")
+
+    def admit_expert_row(self, preset: str) -> dict:
+        host = [{"id": preset, "state": "granted", "count": 1, "lifetime": "standing"}]
+        rows, _ = self.execute(host, {
+            "elite_grants": [{"count": 1, "preset_ids": ["claude-code/sonnet", "claude-code/fable"],
+                              "state": "granted"}],
+            "expert_task_grants": [{
+                "count": 1, "lifetime": "standing", "preset_ids": [preset],
+                "special_requirements": {preset: {"task_scope": "planning-design-review-only"}},
+                "state": "granted",
+            }],
+        }, [self.item("expert", preset)])
+        return rows["expert"]
+
+    def test_expert_row_admits_elite_classed_preset(self) -> None:
+        # Issue #332 reproduction: opus-xhigh is manifest class Elite, fable and astra are Expert.
+        opus = self.admit_expert_row("claude-code/opus-xhigh")
+        self.assertEqual(opus["reason"], "dry-run")
+        self.assertEqual(opus["evidence"]["lifetime"], "standing")
+        for control in ("claude-code/fable", "codex/astra"):
+            with self.subTest(control=control):
+                row = self.admit_expert_row(control)
+                self.assertEqual(row["reason"], "dry-run")
+                self.assertEqual(row["evidence"]["lifetime"], "standing")
+
+    def test_expert_row_keeps_manifest_class_and_task_seat(self) -> None:
+        self.write_delegator({
+            "elite_grants": [{"count": 1, "preset_ids": ["claude-code/sonnet"], "state": "granted"}],
+            "expert_task_grants": [{
+                "count": 1, "lifetime": "standing", "preset_ids": ["claude-code/opus-xhigh"],
+                "state": "granted",
+            }],
+        })
+        ceiling = self.ceiling()
+        catalog = self.dispatch.catalog_from_files(self.dispatch.platform_paths(DISPATCH, str(PLATFORMS)))
+        promoted = self.dispatch.admission_catalog(catalog, ceiling)
+        self.assertEqual(catalog["claude-code/opus-xhigh"]["class"], "Elite")
+        self.assertEqual(promoted["claude-code/opus-xhigh"]["class"], "Expert")
+        self.assertEqual(self.dispatch.ceiling_count(ceiling, "claude-code/opus-xhigh", "Expert"), 1)
+        self.assertIsNone(self.dispatch.ceiling_block(ceiling, "claude-code/opus-xhigh", "Expert", expert_grants=True))
+        # Not an Elite window: the Elite path still refuses a preset no Elite grant names.
+        self.assertEqual(self.dispatch.ceiling_block(ceiling, "claude-code/opus-xhigh", "Elite"), "above-ceiling")
+        # Non-Expert presets are never promoted, and an Elite-only preset stays Elite.
+        self.assertIs(promoted["claude-code/sonnet"], catalog["claude-code/sonnet"])
+        self.assertEqual(promoted["claude-code/sonnet"]["class"], "Elite")
+
+    def test_elite_only_grant_for_elite_preset_still_admits(self) -> None:
+        rows, _ = self.execute(
+            [{"id": "claude-code/opus-xhigh", "state": "granted", "count": 1}],
+            {"elite_grants": [{"count": 1, "preset_ids": ["claude-code/opus-xhigh"], "state": "granted"}]},
+            [self.item("elite-opus", "claude-code/opus-xhigh")],
+        )
+        self.assertEqual(rows["elite-opus"]["reason"], "dry-run")
+        self.assertNotIn("lifetime", rows["elite-opus"]["evidence"])
+
+    def test_refusal_without_ceiling_defect_names_grant_rows(self) -> None:
+        delegator = {"elite_grants": [{"count": 1, "preset_ids": ["claude-code/sonnet"], "state": "granted"}]}
+        no_grant, _ = self.execute([], delegator, [self.item("no-grant", "claude-code/opus-xhigh")])
+        self.assertEqual(no_grant["no-grant"]["reason"], "not-authorized")
+        self.assertEqual(no_grant["no-grant"]["evidence"], {
+            "class": "Elite", "elite_row": False, "expert_row": False,
+        })
+        above, _ = self.execute(
+            [{"id": "claude-code/opus-xhigh", "state": "granted", "count": 1, "lifetime": "standing"}],
+            delegator,
+            [self.item("above", "claude-code/opus-xhigh")],
+        )
+        self.assertEqual(above["above"]["reason"], "above-ceiling")
+        self.assertEqual(above["above"]["evidence"], {
+            "class": "Elite", "elite_row": False, "expert_row": False,
+        })
 
 
 if __name__ == "__main__":

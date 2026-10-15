@@ -97,7 +97,11 @@ or `standing`). That Expert lifetime and `expires` govern only the Expert
 choice. They do not limit the group's Elite choices. Expert-only presets,
 such as `codex/astra`, are granted only in `expert_task_grants` and are not
 Elite seats. A shared-group Expert choice with no current `expert_task_grants`
-row is `above-ceiling`.
+row is `above-ceiling`. An `expert_task_grants` row admits its preset as an Expert
+choice even when the manifest classes that preset Elite (`claude-code/opus-xhigh`);
+the manifest class and the Elite seat count do not change, and the row is never an
+Elite seat (#332). A refusal with no ceiling defect carries `class`, `elite_row` and
+`expert_row` as evidence.
 
 `count` on that grouped grant stays the shared pool: `count` 2 means any mix
 of two seats from the group, including two of one tier. A tier-specific seat

@@ -4,6 +4,16 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+Fixes #332 (an expert_task_grants row admits its preset even when the manifest classes it Elite; refusals with no ceiling defect name the grant rows they read).
+
+- **Expert task rows admit Elite-classed presets (#332).** `claude-code/opus-xhigh` is manifest class Elite, so its `expert_task_grants` row was refused `above-ceiling` with empty evidence. An Expert row for a preset admits it as that Expert task choice, whatever the manifest class; the manifest class, Elite grants and the Elite seat count are unchanged, and the row is never an Elite seat. An Elite-classed preset with an Expert row is then governed by that row's lifetime and `expires`, as `codex/astra` and `claude-code/fable` already are.
+- **Refusals name their evidence (#332).** A dispatch refusal with no ceiling defect to quote now carries `class`, `elite_row` and `expert_row` instead of an empty `evidence` object.
+
+Seats: restart not required
+
+## 0.9.13 — 2026-10-15 (Antigravity steer, usage and effort; webhook outage reporting; maintenance retire path)
 ## 0.9.13 — 2026-10-15 (Antigravity steer, usage and effort; webhook outage reporting; maintenance retire path)
 
 Fixes #325 (webhook failure runs reported, outage receipts kept), #326 (settle-window steer queues for the next turn), #327 (retire obsolete pre-v0.9.12 maintenance-returned inputs), #328 (Antigravity mid-turn steer and cancel end to end), #329 (Antigravity account usage verified and exposed) and #331 (Antigravity effort applied through its model id; no false selection-mismatch). #330 was closed as not planned: no compatibility for legacy list-format `state.decisions`; owners migrate old files to the current dict format.
