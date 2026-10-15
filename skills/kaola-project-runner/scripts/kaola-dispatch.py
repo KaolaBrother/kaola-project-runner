@@ -6360,6 +6360,68 @@ def index_identity_problem(index: dict[str, Any], repo: str) -> str | None:
     return None
 
 
+# Issue #333: a holder that died before collect captured last_prompt leaves the
+# index row unknown. These reasons are that close. A fingerprint-differs row
+# that already carries collected continuation evidence stays on the older route.
+_DEAD_HOLDER_UNKNOWN_REASONS = ("event-range-unavailable", "no-last-prompt", "fingerprint-differs")
+_DEAD_HOLDER_RETIRE_ROUTE = (
+    "dead-holder unknown route: an accepted task retires this unknown row when --live "
+    "shows that session stopped or absent (the session is gone) and --evidence carries "
+    "the original close (closed issue, archive, receipt) with --cite. A missing session "
+    "link, a foreign holder, or a live session still refuses. This writes no index bytes, "
+    "no wake, and no re-queue"
+)
+
+
+def dead_holder_unknown_settlement(ref: str, row: dict[str, Any], task: dict[str, Any],
+                                   live: list[dict[str, Any]], evidence: Any) -> dict[str, Any] | str | None:
+    """Reconcile one unknown row whose holder died, or say why not.
+
+    None means this row is not that route. A string is a refusal and names
+    the route. A dict is the reconciliation the retire result reports. The
+    index row is not rewritten here.
+    """
+    if row.get("status") != "unknown":
+        return None
+    reason = row.get("reason")
+    if reason not in _DEAD_HOLDER_UNKNOWN_REASONS:
+        return None
+    evidence_rows = row.get("evidence") if isinstance(row.get("evidence"), dict) else {}
+    collected = evidence_rows.get("collect_status") if isinstance(evidence_rows, dict) else None
+    if reason == "fingerprint-differs" and isinstance(collected, dict) and collected:
+        # The continuation route still owns a row that has collected proof.
+        return None
+    verdict = task.get("verdict") if isinstance(task.get("verdict"), dict) else {}
+    if task.get("stage") != "done" or verdict.get("value") != "accepted":
+        return f"{ref} is unknown"
+    dispositions = task.get("dispositions") if isinstance(task.get("dispositions"), dict) else None
+    if dispositions is not None and dispositions.get(ref) != "accepted":
+        return (f"{ref} is unknown; its per-item disposition is not accepted. "
+                + _DEAD_HOLDER_RETIRE_ROUTE)
+    session = session_name(row.get("session"))
+    if session is None:
+        return f"{ref} is unknown; missing session link. " + _DEAD_HOLDER_RETIRE_ROUTE
+    holder = row.get("holder_instance_id")
+    holder = holder if isinstance(holder, str) and holder else None
+    matches = [item for item in live if item.get("session") == session]
+    live_proof = "absent"
+    if matches:
+        if any(item.get("state") != "stopped" for item in matches):
+            return f"{ref} is unknown; {session} is a live session. " + _DEAD_HOLDER_RETIRE_ROUTE
+        if holder and not any(item.get("holder_instance_id") == holder for item in matches):
+            other = matches[0].get("holder_instance_id")
+            return (f"{ref} is unknown; {session} is stopped under holder {other}, "
+                    f"not the recorded {holder}; foreign holder. " + _DEAD_HOLDER_RETIRE_ROUTE)
+        live_proof = "stopped"
+    entry: dict[str, Any] = {
+        "item_id": ref, "session": session, "collect_status": "unknown", "reason": reason,
+        "disposition": "accepted", "evidence": evidence, "live": live_proof,
+    }
+    if holder:
+        entry["holder_instance_id"] = holder
+    return entry
+
+
 def supplied_index_paths(args: argparse.Namespace) -> list[str]:
     """Every --index this command holds, in order (Issue #290).
 
@@ -6377,8 +6439,9 @@ def supplied_index_paths(args: argparse.Namespace) -> list[str]:
 def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
     """Why a task's dispatched items are not shown closed: each needs an index
     row that is no longer in flight and stopped seats. A Host can reconcile
-    an initial fingerprint against its accepted same-holder continuation;
-    this does not change the original unknown collect result.
+    an initial fingerprint against its accepted same-holder continuation.
+    An accepted task can also retire an unknown row whose holder is dead
+    (stopped or absent live row, session gone) without rewriting that row.
 
     Issue #290: the closure proof may span several of this project's index
     files. Every supplied file still identifies itself as this project's
@@ -6476,7 +6539,17 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
                      "collect_status": "unknown", "reason": "fingerprint-differs",
                      "disposition": "accepted"}]
             else:
-                problems.append(f"{ref} is {row.get('status')}")
+                # Issue #333: the continuation proof above does not cover a holder
+                # that died before last_prompt. The dead-holder route reports the
+                # reconciliation and leaves the unknown index bytes alone.
+                settlement = dead_holder_unknown_settlement(
+                    ref, row, task, live, getattr(args, "evidence", None))
+                if isinstance(settlement, dict):
+                    args._reconciled_dispatch = getattr(args, "_reconciled_dispatch", []) + [settlement]
+                elif isinstance(settlement, str):
+                    problems.append(settlement)
+                else:
+                    problems.append(f"{ref} is {row.get('status')}")
         sessions = {rows[ref].get("session") for ref in refs
                     if ref in rows and ref not in ambiguous} - set(seats)
         for row in live:

@@ -94,7 +94,12 @@ All citations are at `8b3779c9`. That commit changed only the design document re
   sessions must be shown stopped in `--live`, under the recorded holder. Otherwise the seats and
   dispatch must be handed to another current task (`D:4886-4952`, `D:4859-4883`,
   `D:5016-5028`). A single narrow exception exists: a fingerprint-differs item that the Host
-  accepted, with the exact stop recorded (`D:4918-4945`).
+  accepted, with the exact stop recorded (`D:4918-4945`). Issue #333 adds a second route
+  for an accepted task whose unknown row is `event-range-unavailable`, `no-last-prompt`,
+  or a bare `fingerprint-differs` with no collected continuation: `--live` shows that
+  session stopped or absent (the session is gone), and `--evidence` carries the original
+  close. A missing session link, a foreign holder, and a live session still refuse, and
+  the refusal names the dead-holder unknown route. The continuation exception is unchanged.
 - **I7 — An accepted outcome stays findable.** Boundary: task record → repository. An accepted
   task needs a `--cite` that can be retrieved (`D:5036-5065`).
 - **I8 — Owner questions stay with their owner.** Boundary: the decision record. A Sideagent

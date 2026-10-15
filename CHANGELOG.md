@@ -6,10 +6,12 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
-Fixes #332 (an expert_task_grants row admits its preset even when the manifest classes it Elite; refusals with no ceiling defect name the grant rows they read).
+Fixes #332 (an expert_task_grants row admits its preset even when the manifest classes it Elite; refusals with no ceiling defect name the grant rows they read) and #333 (an accepted task retires an unknown dispatch row when the worker holder is dead).
 
 - **Expert task rows admit Elite-classed presets (#332).** `claude-code/opus-xhigh` is manifest class Elite, so its `expert_task_grants` row was refused `above-ceiling` with empty evidence. An Expert row for a preset admits it as that Expert task choice, whatever the manifest class; the manifest class, Elite grants and the Elite seat count are unchanged, and the row is never an Elite seat. An Elite-classed preset with an Expert row is then governed by that row's lifetime and `expires`, as `codex/astra` and `claude-code/fable` already are.
 - **Refusals name their evidence (#332).** A dispatch refusal with no ceiling defect to quote now carries `class`, `elite_row` and `expert_row` instead of an empty `evidence` object.
+
+- **Dead-holder unknown rows can retire (#333).** An accepted task whose dispatch index row is `unknown` with reason `event-range-unavailable`, `no-last-prompt`, or a bare `fingerprint-differs` (no collected continuation) retires when `--live` shows that session stopped or absent, the session is gone, and `--evidence` carries the original close with `--cite`. The retire result reports `reconciled_dispatch` and does not rewrite the unknown index row. A missing session link, a foreign holder, and a live session still refuse, and that refusal names the dead-holder unknown route. The existing `fingerprint-differs` continuation route, wake ordering, and normal queue handling are unchanged. Seats: restart not required. `scripts/kaola-dispatch.py` is a per-call CLI outside the operator restart set (`docs/conventions.md`).
 
 Seats: restart not required
 

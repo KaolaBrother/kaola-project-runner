@@ -457,5 +457,190 @@ class MultiIndexRetire(unittest.TestCase):
         self.assertEqual(out["index_mirror"]["changed"], {"i1": "accepted"})
 
 
+class DeadHolderUnknownRetire(unittest.TestCase):
+    """Issue #333: an accepted task retires an unknown row when the holder is dead.
+
+    The reproduced rows are ``unknown`` with reason ``event-range-unavailable``,
+    ``fingerprint-differs``, or ``no-last-prompt``, plus a stopped live row for
+    that session and no collected continuation. ``returned`` still retires and
+    records no reconciliation. A missing session link, a foreign holder, and a
+    live session still refuse, and the refusal names the dead-holder unknown
+    route. The unknown index bytes stay. The Sideagent retire does not move
+    ``host_revision``, so it queues no maintenance wake.
+    """
+
+    ROUTE = "dead-holder unknown route"
+    EVIDENCE = "closed KGIT #193; archive; receipt"
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory(prefix="kpr-i333-")
+        self.repo = Path(self.tmp.name) / "consumer"
+        (self.repo / ".kaola").mkdir(parents=True)
+        (self.repo / "README.md").write_text("retire evidence\n", encoding="utf-8")
+        self.file = self.repo / ".kaola" / "heartbeat-prompt.json"
+        code, out = run(["state", "init", "--file", str(self.file), "--writer", "host",
+                         "--source", "turn-1", "--project", json.dumps({"code": "KT", "goal": "ship"}),
+                         "--authorization", json.dumps(AUTH)])
+        self.assertEqual(code, 0, out)
+        self.index = self.repo / "index.json"
+        self.live = self.repo / "live.json"
+        self._n = 0
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def doc(self) -> dict:
+        return json.loads(self.file.read_text(encoding="utf-8"))
+
+    def accept(self, item: str, **extra: object) -> str:
+        self._n += 1
+        ident = f"t{self._n}"
+        patch = {**ACCEPTED, "dispatch": [item]}
+        if extra:
+            patch.update(extra)
+        code, out = run(["state", "update", "--file", str(self.file), "--writer", "host",
+                         "--source", "evt", "--kind", "tasks", "--id", ident, "--set",
+                         json.dumps(patch)])
+        self.assertEqual(code, 0, out)
+        return ident
+
+    def write_index(self, item: str, **row: object) -> bytes:
+        body = {"schema": "kaola-dispatch-index/1", "repo": str(self.repo),
+                "items": [{"item_id": item, "session": "zcode-KGIT-i193", **row}]}
+        self.index.write_text(json.dumps(body), encoding="utf-8")
+        return self.index.read_bytes()
+
+    def write_live(self, rows: list[dict]) -> None:
+        self.live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": rows}),
+                             encoding="utf-8")
+
+    def retire(self, ident: str) -> tuple[int, dict]:
+        rev = str(self.doc()["state"]["tasks"][ident]["rev"])
+        return run(["state", "retire", "--file", str(self.file), "--writer", "sideagent",
+                    "--source", "s", "--kind", "tasks", "--id", ident, "--expect-rev", rev,
+                    "--evidence", self.EVIDENCE, "--cite", CITE,
+                    "--index", str(self.index), "--live", str(self.live)])
+
+    def test_returned_control_still_retires(self) -> None:
+        ident = self.accept("i193")
+        self.write_index("i193", status="returned")
+        self.write_live([{"session": "zcode-KGIT-i193", "state": "stopped"}])
+        before_rev = self.doc()["host_revision"]
+        code, out = self.retire(ident)
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("reconciled_dispatch", out["value"])
+        self.assertNotIn(ident, self.doc()["state"]["tasks"])
+        self.assertEqual(self.doc()["host_revision"], before_rev)
+
+    def test_dead_holder_unknown_reasons_retire_and_keep_the_index(self) -> None:
+        reasons = ("event-range-unavailable", "fingerprint-differs", "no-last-prompt")
+        for reason in reasons:
+            with self.subTest(reason=reason):
+                ident = self.accept("i193")
+                before_index = self.write_index("i193", status="unknown", reason=reason)
+                self.write_live([{"session": "zcode-KGIT-i193", "state": "stopped"}])
+                before_rev = self.doc()["host_revision"]
+                code, out = self.retire(ident)
+                self.assertEqual(code, 0, out)
+                entry = out["value"]["reconciled_dispatch"][0]
+                self.assertEqual(entry["item_id"], "i193")
+                self.assertEqual(entry["reason"], reason)
+                self.assertEqual(entry["disposition"], "accepted")
+                self.assertEqual(entry["evidence"], self.EVIDENCE)
+                self.assertEqual(entry["live"], "stopped")
+                self.assertEqual(entry["collect_status"], "unknown")
+                self.assertEqual(self.index.read_bytes(), before_index)
+                self.assertNotIn(ident, self.doc()["state"]["tasks"])
+                self.assertFalse(self.doc()["state"].get("retired"))
+                self.assertEqual(self.doc()["host_revision"], before_rev)
+                self.assertEqual(self.doc()["state"].get("maintenance"), {})
+
+    def test_an_absent_live_row_is_the_session_gone(self) -> None:
+        ident = self.accept("i193")
+        before_index = self.write_index("i193", status="unknown", reason="no-last-prompt")
+        self.write_live([])
+        code, out = self.retire(ident)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["value"]["reconciled_dispatch"][0]["live"], "absent")
+        self.assertEqual(self.index.read_bytes(), before_index)
+
+    def test_a_recorded_holder_that_stopped_retires(self) -> None:
+        ident = self.accept("i193")
+        self.write_index("i193", status="unknown", reason="event-range-unavailable",
+                         holder_instance_id="holder-dead")
+        self.write_live([{"session": "zcode-KGIT-i193", "state": "stopped",
+                          "holder_instance_id": "holder-dead"}])
+        code, out = self.retire(ident)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["value"]["reconciled_dispatch"][0]["holder_instance_id"], "holder-dead")
+
+    def test_an_accepted_per_item_disposition_retires(self) -> None:
+        ident = self.accept("i193", dispositions={"i193": "accepted"})
+        self.write_index("i193", status="unknown", reason="event-range-unavailable")
+        self.write_live([{"session": "zcode-KGIT-i193", "state": "stopped"}])
+        code, out = self.retire(ident)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["value"]["reconciled_dispatch"][0]["disposition"], "accepted")
+
+    def _refuse(self, ident: str, fragment: str) -> dict:
+        before_state = self.file.read_bytes()
+        before_index = self.index.read_bytes()
+        code, out = self.retire(ident)
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn(fragment, out["detail"], out)
+        self.assertIn(self.ROUTE, out["detail"], out)
+        self.assertEqual(self.file.read_bytes(), before_state)
+        self.assertEqual(self.index.read_bytes(), before_index)
+        return out
+
+    def test_a_missing_session_link_names_the_route(self) -> None:
+        ident = self.accept("i193")
+        self.index.write_text(json.dumps({
+            "schema": "kaola-dispatch-index/1", "repo": str(self.repo),
+            "items": [{"item_id": "i193", "status": "unknown", "reason": "no-last-prompt"}]}),
+            encoding="utf-8")
+        self.write_live([{"session": "zcode-KGIT-i193", "state": "stopped"}])
+        self._refuse(ident, "missing session link")
+
+    def test_a_foreign_holder_names_the_route(self) -> None:
+        ident = self.accept("i193")
+        self.write_index("i193", status="unknown", reason="event-range-unavailable",
+                         holder_instance_id="holder-dead")
+        self.write_live([{"session": "zcode-KGIT-i193", "state": "stopped",
+                          "holder_instance_id": "holder-other"}])
+        self._refuse(ident, "foreign holder")
+
+    def test_a_live_session_names_the_route(self) -> None:
+        ident = self.accept("i193")
+        self.write_index("i193", status="unknown", reason="fingerprint-differs")
+        self.write_live([{"session": "zcode-KGIT-i193", "state": "ready"}])
+        self._refuse(ident, "live session")
+
+    def test_a_repair_disposition_names_the_route(self) -> None:
+        ident = self.accept("i193", dispositions={"i193": "repair"})
+        self.write_index("i193", status="unknown", reason="no-last-prompt")
+        self.write_live([{"session": "zcode-KGIT-i193", "state": "stopped"}])
+        self._refuse(ident, "per-item disposition is not accepted")
+
+    def test_an_unrelated_unknown_and_in_flight_still_refuse(self) -> None:
+        ident = self.accept("i193")
+        self.write_index("i193", status="unknown", reason="holder-mismatch")
+        self.write_live([{"session": "zcode-KGIT-i193", "state": "stopped"}])
+        before = self.file.read_bytes()
+        code, out = self.retire(ident)
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("i193 is unknown", out["detail"], out)
+        self.assertNotIn(self.ROUTE, out["detail"], out)
+        self.assertEqual(self.file.read_bytes(), before)
+        ident = self.accept("i194")
+        self.write_index("i194", status="in-flight", reason="event-range-unavailable")
+        self.write_live([{"session": "zcode-KGIT-i193", "state": "stopped"}])
+        before = self.file.read_bytes()
+        code, out = self.retire(ident)
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("i194 is in-flight", out["detail"], out)
+        self.assertEqual(self.file.read_bytes(), before)
+
+
 if __name__ == "__main__":
     unittest.main()

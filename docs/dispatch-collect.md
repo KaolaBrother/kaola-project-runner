@@ -239,6 +239,19 @@ under the same holder and root; the live row must prove exact reclaim. The
 command reports the reconciliation but preserves the unknown index row.
 This route refuses missing links, foreign holders and unknown effects. It
 does not settle remaining integration or issue lifecycle duties.
+An accepted task may also retire an unknown index row when the worker holder
+died before collect captured `last_prompt` (Issue #333). The row reason is
+`event-range-unavailable`, `no-last-prompt`, or a bare `fingerprint-differs`
+that has no collected continuation. `--live` shows that session `stopped`, or
+the session is absent because it is gone. `--evidence` carries the original
+close (closed issue, archive, receipt) and `--cite` names a retrievable path.
+The task verdict is accepted. A per-item `dispositions` entry, when the task
+has one, is `accepted` for that item. The command reports `reconciled_dispatch`
+and does not rewrite the unknown index row. A missing session link, a foreign
+holder, and a live session still refuse, and that refusal names the
+dead-holder unknown route. A `fingerprint-differs` row that already carries
+collected continuation evidence stays on the continuation route above. This
+writes no index bytes, no wake, no re-queue, and no node traffic.
 A pending recovery input requires its exact scoped checkpoint. Retiring an old
 alert does not clear a newer recovery input. Plan `state migrate` before `--write`;
 repeat migration preserves pending adoption, grants, duties and current links.
