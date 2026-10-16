@@ -2125,8 +2125,16 @@ as `advertised_model`. On such a launch-argv start Droid's `model_verified` comp
 the agent never adopted verifies `false` instead of comparing the argv value to itself.
 `status`/`observe` report the
 agent's own current `session_meta.configOptions[].currentValue`. ACP `start` receipts additionally carry
-`model_selection` and per-option `config_application` receipts; a rejected or unadvertised
-`set_config_option` is reported as a limitation and leaves the session usable.
+`model_selection` and per-option `config_application` receipts. When the agent rejects the resolved
+model config option (`config_application.model.applied` is `false` with `error`), `start` stops the
+just-created session before returning and refuses at exit 1 (`result: "refused"`,
+`reason: "model-config-option-rejected"`, top-level `error` carrying the agent's `config-option-failed`
+rejection and `-32602` detail, `detail` naming the option id and value, `holder_reclaimed: true`,
+`mutation_status: "not_started"`), unless the caller passes `--allow-unapplied-model` to accept the
+agent's own selection (`state: "ready"`, with `applied: false` and `error` kept visible in the receipt
+and `status` `start_evidence`). An unadvertised option (`reason: "no-advertised-config-option"`), a
+rejected effort or Fast option, and an `effective_selection` readback mismatch remain reported
+limitations or evidence and leave the session usable.
 When a platform advertises no effort option (`acp_effort_config_id` empty) and the accepted model
 id carries the requested effort as its suffix (antigravity `gemini-4-argon-{low,medium,high}`),
 `config_application.effort` is `{"applied": true, "applied_via": "model-id", "value": ...}` (Issue

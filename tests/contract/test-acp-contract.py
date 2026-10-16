@@ -1787,11 +1787,18 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual((application.get("fast") or {}).get("reason"), "no-advertised-config-option")
 
     def test_codex_rejected_model_is_limitation_not_failure(self) -> None:
+        refused = self.start(
+            "codex", "--model", "unavailable/model", "--effort", "high",
+            caps="strict-config", check=False,
+        )
+        self.assertEqual(refused.get("result"), "refused", refused)
+        self.assertEqual(refused.get("reason"), "model-config-option-rejected", refused)
+        self.assertEqual((refused.get("error") or {}).get("code"), "config-option-failed")
         receipt = self.start(
             "codex", "--model", "unavailable/model", "--effort", "high",
-            caps="strict-config",
+            "--allow-unapplied-model", caps="strict-config", check=False,
         )
-        self.assertIsNone(receipt.get("error"), f"rejected option must not fail start: {receipt}")
+        self.assertIsNone(receipt.get("error"), f"rejected option with --allow-unapplied-model must not fail start: {receipt}")
         application = receipt.get("config_application") or {}
         model = application.get("model") or {}
         self.assertFalse(model.get("applied"))
@@ -1851,10 +1858,19 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         # A fast-suffix model ID that the agent rejects must not report
         # fast-on — the fast variant was never applied (model-id path on a
         # platform without a native fast config option).
-        receipt = self.start(
+        refused = self.start(
             "devin", "--model", "experimental-7-fast", "--fast", "on",
             "--mode", "agent",
-            caps="strict-config",
+            caps="strict-config", check=False,
+        )
+        self.assertEqual(refused.get("result"), "refused", refused)
+        self.assertEqual(refused.get("reason"), "model-config-option-rejected", refused)
+        self.assertFalse(((refused.get("config_application") or {}).get("model") or {}).get("applied"))
+        self.assertEqual((refused.get("fast") or {}).get("effective"), "unknown")
+        receipt = self.start(
+            "devin", "--model", "experimental-7-fast", "--fast", "on",
+            "--mode", "agent", "--allow-unapplied-model",
+            caps="strict-config", check=False,
         )
         application = receipt.get("config_application") or {}
         self.assertFalse((application.get("model") or {}).get("applied"))
@@ -1935,8 +1951,14 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
 
     def test_model_not_in_argv_still_goes_through_the_option(self) -> None:
         # Issue #140: without an argv --model the apply path is unchanged.
+        refused = self.start("devin", "--tier", "default", "--mode", "agent",
+                             caps="strict-config", check=False)
+        self.assertEqual(refused.get("result"), "refused", refused)
+        self.assertEqual(refused.get("reason"), "model-config-option-rejected", refused)
+        if self.mock_log.is_file():
+            self.mock_log.write_text("", encoding="utf-8")
         receipt = self.start("devin", "--tier", "default", "--mode", "agent",
-                             caps="strict-config")
+                             "--allow-unapplied-model", caps="strict-config", check=False)
         self.assertIn(("model", "swe-2-max"), self.config_events())
         self.assertNotIn("effort", [config_id for config_id, _ in self.config_events()])
         self.assertEqual((receipt.get("config_application") or {}).get("effort"),
@@ -2165,7 +2187,7 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
 
     def test_single_effort_id_resolves_to_itself(self) -> None:
         # Every other manifest names one id: it is sent unchanged.
-        receipt = self.start("grok", "--effort", "high", caps="strict-config")
+        receipt = self.start("grok", "--effort", "high")
         effort = (receipt.get("config_application") or {}).get("effort") or {}
         self.assertEqual(effort.get("config_id"), "reasoning_effort")
         self.assertEqual(effort.get("candidates"), ["reasoning_effort"])
@@ -2175,7 +2197,7 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
     def test_grok_default_and_xhigh_tiers_send_their_declared_effort(self) -> None:
         # Issue #322: Grok Build default is Grok 4.7 at high; the declared
         # ``xhigh`` named tier is the same native model at xhigh.
-        receipt = self.start("grok", caps="strict-config")
+        receipt = self.start("grok")
         self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
         self.assertEqual((receipt.get("model_selection") or {}).get("tier"), "default")
         self.assertIn(("model", "grok-4.7"), self.config_events())
@@ -2183,7 +2205,7 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertNotIn(("reasoning_effort", "xhigh"), self.config_events())
         self.tearDown()
         self.setUp()
-        receipt = self.start("grok", "--tier", "xhigh", caps="strict-config")
+        receipt = self.start("grok", "--tier", "xhigh")
         self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
         selection = receipt.get("model_selection") or {}
         self.assertEqual(selection.get("tier"), "xhigh")
@@ -2390,7 +2412,12 @@ class Issue203StartEvidenceTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual(evidence["inherited"]["model_selection"]["source"], "runner-astra")
 
     def test_rejected_option_and_old_record_stay_readable_not_refusals(self) -> None:
-        receipt = self.codex_start("--model", "unavailable/codex", caps="resume,strict-config")
+        refused = self.codex_start("--model", "unavailable/codex", caps="resume,strict-config", check=False)
+        self.assertEqual(refused.get("result"), "refused", refused)
+        self.assertEqual(refused.get("reason"), "model-config-option-rejected", refused)
+        self.assertEqual((refused.get("error") or {}).get("code"), "config-option-failed")
+        receipt = self.codex_start("--model", "unavailable/codex", "--allow-unapplied-model",
+                                   caps="resume,strict-config", check=False)
         self.assertIsNone(receipt.get("error"), receipt)
         evidence = self.cli("status", platform="codex")["start_evidence"]
         self.assertFalse(evidence["config_application"]["model"]["applied"])
