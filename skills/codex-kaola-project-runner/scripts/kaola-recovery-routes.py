@@ -229,6 +229,7 @@ ROUTES: dict[str, tuple[str, str]] = {
     "managed-build-default": ("self-route", "An existing config source is in effect. Do not pass a second one. Read the receipt and keep it or replace it explicitly."),
     "mode-required": ("route", "Fix the named argument in detail and rerun the same command. Do not start a second session or bootstrap a partial job."),
     "model-config-not-applied": ("self-route", "The Host model was not verified. Read status before trusting it. Do not assume the requested model is active."),
+    "model-config-option-rejected": ("route", "The agent rejected the resolved model option; the session was stopped and no other model was substituted. Pass a model the agent advertises (status or observe lists its model option values), or pass --allow-unapplied-model to accept the agent's own selection, then start again. Do not start a second session with the same name until the receipt shows holder_reclaimed."),
     "mutation-ambiguous": ("route", "The notice was not delivered. Read detail. Retry the notice only after the Host is idle, or leave it pending. Do not invent a delivery."),
     "mutation-unknown": ("route", "The notice was not delivered. Read detail. Retry the notice only after the Host is idle, or leave it pending. Do not invent a delivery."),
     "native-config-supplied": ("self-route", "An existing config source is in effect. Do not pass a second one. Read the receipt and keep it or replace it explicitly."),
