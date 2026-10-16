@@ -260,11 +260,11 @@ node -e 'const p=require("path"),f=require("fs");let d=p.dirname(process.argv[1]
 ```
 
 Under the route condition recorded in the DSH manifest, the verified package pair is
-`0.1.7-rc.2` (ACP protocol 1). Its launcher pins both harness packages to the same exact version,
+`0.2.0-rc.2` (ACP protocol 1; live `initialize` 2026-10-16 reports `deepseek-harness-acp 0.0.1`, as under `0.1.7-rc.2`). Its launcher pins both harness packages to the same exact version,
 so there is no standalone harness upgrade. Keep a matching installation. If the selected DSH
 install is elsewhere, set `DSH_BIN` to that binary. If either harness package is missing or too
 old, the recovery is to install/update the whole `@deepseek-ai/dsh` package, for example
-`npm install -g @deepseek-ai/dsh@0.1.7-rc.2` with the npm prefix that installed it; apply the
+`npm install -g @deepseek-ai/dsh@0.2.0-rc.2` with the npm prefix that installed it; apply the
 authorization rule above before that whole-CLI action. For changed or unverified DSH layers, the
 existing bounded check is `preflight`, `start` (the receipt's `transport.agent_info` confirms the
 ACP handshake, not the package version), `status`, and exact `stop`; it needs no model turn. Report
