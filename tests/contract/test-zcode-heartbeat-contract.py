@@ -2035,8 +2035,10 @@ def test_issue_108_host_requires_glm53_max() -> None:
     An explicit contradicting --model/--effort is a typed pre-mutation
     refusal that creates nothing; an absent one is pinned and then verified
     against the holder's own advertised config state; a session that cannot
-    prove the required selection is stopped and refused; and an ordinary
-    worker name is never pinned.
+    apply or prove the required selection is stopped and refused
+    (``model-config-option-rejected`` when the agent rejects the pin outright,
+    or ``host-model-unverified`` when the set succeeds but readback disagrees);
+    and an ordinary worker name is never pinned.
     """
     sandbox = Sandbox("i108-host-model")
     try:
@@ -2149,14 +2151,15 @@ def test_issue_108_host_requires_glm53_max() -> None:
             "start", "--mode", "yolo", session=host_plan, scenario="basic")
         check(result.returncode == 1, f"an unverifiable Host exits 1 ({result.returncode})")
         check(isinstance(receipt, dict) and receipt.get("result") == "refused"
-              and receipt.get("reason") == "host-model-unverified"
+              and receipt.get("reason") in ("host-model-unverified", "model-config-option-rejected")
               and receipt.get("host_session_stopped") is True
               and receipt.get("holder_alive") is False
               and receipt.get("residual_pids") == []
               and receipt.get("mutation_performed") is False,
               f"an unprovable pin refuses with the session stopped ({receipt})")
-        fact = receipt.get("host_selection") or {}
-        check(fact.get("verified") is False
+        fact = receipt.get("host_selection") or receipt.get("effective_selection") or {}
+        model_app = ((receipt.get("config_application") or {}).get("model") or {})
+        check((fact.get("verified") is False or model_app.get("applied") is False)
               and str(fact.get("effective_model") or "").endswith("\\GLM-5.3-Flash"),
               f"the refusal names the effective wrong selection ({fact})")
         stopped = json.loads(

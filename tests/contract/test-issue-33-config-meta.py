@@ -164,8 +164,8 @@ class Issue33ConfigMetaTests(unittest.TestCase):
         return receipt
 
     def start(self, *args: str, caps: str = "", config: dict | None = None,
-              pages: list[dict] | None = None) -> dict:
-        receipt = self.cli("start", *args, caps=caps, config=config, pages=pages)
+              pages: list[dict] | None = None, timeout: float = 60) -> dict:
+        receipt = self.cli("start", *args, caps=caps, config=config, pages=pages, timeout=timeout)
         self._started = True
         return receipt
 
@@ -307,7 +307,9 @@ class Issue33ConfigMetaTests(unittest.TestCase):
 
     def test_failed_set_keeps_prior_proven_state(self) -> None:
         baseline = options(model="init-a", mode="agent")
-        self.start(config={"new": baseline,
+        # Issue #339: allow the unapplied start model so the session stays alive for the explicit set_config test.
+        self.start("--allow-unapplied-model",
+                   config={"new": baseline,
                            "set_error": {"code": -32000, "message": "set refused"}})
         result = self.set_config("model", "wanted-b")
         self.assertEqual((result.get("error") or {}).get("code"), "config-option-failed")
@@ -331,7 +333,9 @@ class Issue33ConfigMetaTests(unittest.TestCase):
 
     def test_timeout_keeps_prior_proven_state(self) -> None:
         baseline = options(model="init-a", mode="agent")
-        self.start(config={"new": baseline, "set_drop": True})
+        # Issue #339: allow the unapplied start model so the session stays alive for the explicit set_config timeout test.
+        self.start("--allow-unapplied-model",
+                   config={"new": baseline, "set_drop": True})
         result = self.set_config("model", "wanted-b", timeout=30)
         self.assertEqual((result.get("error") or {}).get("code"), "config-option-timeout")
         obs = self.cli("observe")

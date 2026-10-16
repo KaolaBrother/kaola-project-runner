@@ -93,6 +93,7 @@ class DroidAcpSessionFixture(unittest.TestCase):
         if extra_env:
             env.update(extra_env)
         result = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=timeout)
+        self.last_returncode = result.returncode
         try:
             receipt = json.loads(result.stdout)
         except ValueError:
@@ -282,11 +283,23 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
         self.assertEqual(receipt.get("actual_runtime_model_id"), "gpt-5.6-sol")
         self.assertIs(receipt.get("model_verified"), True)
 
-    def test_a_model_the_agent_rejects_is_reported_false_not_a_gate(self) -> None:
-        """Issue #185: a selection the agent never adopted is a mismatch, not a
-        refusal. Droid's echoed model stays the session's real one; the start
-        remains usable."""
-        receipt = self.start("--model", "unavailable/droid")
+    def test_a_model_the_agent_rejects_is_refused_unless_allowed(self) -> None:
+        """Issue #185 / #339: a selection the agent rejects is refused and
+        stopped by default while still carrying the #185 echo verdict; with
+        --allow-unapplied-model, droid's echoed model stays the session's real
+        one and the start remains usable."""
+        refused = self.start("--model", "unavailable/droid", check=False)
+        self.assertEqual(self.last_returncode, 1)
+        self.assertEqual(refused.get("result"), "refused")
+        self.assertEqual(refused.get("reason"), "model-config-option-rejected")
+        self.assertIs(refused.get("holder_reclaimed"), True)
+        self.assertIs(refused.get("host_session_stopped"), True)
+        self.assertIs(refused.get("holder_alive"), False)
+        self.assertEqual(refused.get("actual_runtime_model_id"), "gpt-5.6-sol")
+        self.assertIs(refused.get("model_verified"), False)
+        self.assertEqual(refused.get("model_mismatch_reason"), "actual-model-mismatch:gpt-5.6-sol")
+
+        receipt = self.start("--model", "unavailable/droid", "--allow-unapplied-model")
         self.assertIsNone(receipt.get("error"), receipt)
         self.assertNotEqual(receipt.get("result"), "refused")
         model = (receipt.get("config_application") or {}).get("model") or {}
