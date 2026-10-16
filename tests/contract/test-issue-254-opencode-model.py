@@ -166,8 +166,22 @@ class OpenCodeModelAdvertisement(unittest.TestCase):
                 "ready": [model_option(INITIAL_CURRENT, [INITIAL_CURRENT, TARGET])],
             },
         }
+        refused = self.cli(
+            "start", check=False, timeout=30,
+            extra_env={"MOCK_ACP_CONFIG": json.dumps(fixture)},
+        )
+        self.assertEqual(refused.get("result"), "refused", refused)
+        self.assertEqual(refused.get("reason"), "model-config-option-rejected", refused)
+        self.assertEqual((refused.get("error") or {}).get("code"), "config-option-failed")
+        refused_detail = ((refused.get("error") or {}).get("detail") or {})
+        self.assertEqual(refused_detail.get("code"), -32602)
+        self.assertIn(TARGET, str(refused_detail.get("message")))
+        self.assertEqual(
+            (refused.get("effective_selection") or {}).get("effective_model"),
+            INITIAL_CURRENT,
+        )
         receipt = self.cli(
-            "start", timeout=30,
+            "start", "--allow-unapplied-model", check=False, timeout=30,
             extra_env={"MOCK_ACP_CONFIG": json.dumps(fixture)},
         )
         self._started = True

@@ -2119,14 +2119,31 @@ The agent's actual selection is `effective_selection` on `start`, beside
 (the resolved `acp_effort_config_id` candidate). When the spawn argv already carries the resolved
 model as `--model`, the model option is not re-sent: `config_application.model` is
 `{"applied": true, "applied_via": "argv", "value": ...}` and `effective_selection.effective_model`
-is that id with `effective_model_source: "launch-argv"`, the agent's own (possibly stale) value kept
-as `advertised_model`. On such a launch-argv start Droid's `model_verified` compares that echoed
+is that id with `effective_model_source: "launch-argv"` and `applied_via: "argv"`, the agent's own
+(possibly stale) value kept as `advertised_model`. Devin ACP cannot report the argv model: its
+model option ignores `--model` and need not list the preset (a `devin/default` seat advertises
+`swe-2-high` while running `swe-2-max`), so for an `acp_command_<tier>` launch the argv id is
+authoritative and the advertised `currentValue` is never the effective model (Issue #340).
+`status`/`observe` of such a session carry the same top-level `effective_selection` (argv id as
+`effective_model`, `applied_via: "argv"`, the live advertised `currentValue` — or the start's when
+the holder is gone — as `advertised_model`, named by `advertised_source`). This is not
+verification: `model_verified` stays as the start recorded it (`unknown` for Devin).
+On such a launch-argv start Droid's `model_verified` compares that echoed
 `advertised_model`, never the argv value the Runner itself supplied, so a session whose argv model
 the agent never adopted verifies `false` instead of comparing the argv value to itself.
 `status`/`observe` report the
-agent's own current `session_meta.configOptions[].currentValue`. ACP `start` receipts additionally carry
-`model_selection` and per-option `config_application` receipts; a rejected or unadvertised
-`set_config_option` is reported as a limitation and leaves the session usable.
+agent's own current `session_meta.configOptions[].currentValue` (raw advertised evidence; for an
+argv launch read the effective model from `effective_selection`). ACP `start` receipts additionally carry
+`model_selection` and per-option `config_application` receipts. When the agent rejects the resolved
+model config option (`config_application.model.applied` is `false` with `error`), `start` stops the
+just-created session before returning and refuses at exit 1 (`result: "refused"`,
+`reason: "model-config-option-rejected"`, top-level `error` carrying the agent's `config-option-failed`
+rejection and `-32602` detail, `detail` naming the option id and value, `holder_reclaimed: true`,
+`mutation_status: "not_started"`), unless the caller passes `--allow-unapplied-model` to accept the
+agent's own selection (`state: "ready"`, with `applied: false` and `error` kept visible in the receipt
+and `status` `start_evidence`). An unadvertised option (`reason: "no-advertised-config-option"`), a
+rejected effort or Fast option, and an `effective_selection` readback mismatch remain reported
+limitations or evidence and leave the session usable.
 When a platform advertises no effort option (`acp_effort_config_id` empty) and the accepted model
 id carries the requested effort as its suffix (antigravity `gemini-4-argon-{low,medium,high}`),
 `config_application.effort` is `{"applied": true, "applied_via": "model-id", "value": ...}` (Issue

@@ -411,7 +411,12 @@ class ModelPolicyOnAcp(_ACP.AcpSessionFixture, unittest.TestCase):
                          {"applied": True, "config_id": "model", "value": "unavailable/codex"})
 
     def test_b_an_unavailable_model_the_agent_rejects_is_reported_not_a_gate(self) -> None:
-        receipt = self.guarded_start("--model", "unavailable/codex", caps="strict-config")
+        refused = self.guarded_start("--model", "unavailable/codex", caps="strict-config", check=False)
+        self.assertEqual(refused.get("result"), "refused", refused)
+        self.assertEqual(refused.get("reason"), "model-config-option-rejected", refused)
+        self.assertEqual((refused.get("error") or {}).get("code"), "config-option-failed")
+        receipt = self.guarded_start("--model", "unavailable/codex", "--allow-unapplied-model",
+                                     caps="strict-config", check=False)
         self.assertIsNone(receipt.get("error"), receipt)
         self.assertEqual(receipt["requested_model_name"], "unavailable/codex")
         model = receipt["config_application"]["model"]

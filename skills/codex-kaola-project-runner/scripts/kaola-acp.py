@@ -3807,6 +3807,48 @@ def effective_selection(manifest: dict[str, str], state: Any) -> dict[str, Any]:
     return found
 
 
+def apply_argv_model(effective: dict[str, Any], application: Any) -> dict[str, Any]:
+    """An ``acp_command_<tier>`` argv model is the effective model (#140, #340).
+
+    Devin's advertised model option cannot report the argv id, so its
+    currentValue stays evidence as ``advertised_model``. Nothing is verified.
+    """
+    model = application.get("model") if isinstance(application, dict) else None
+    if not isinstance(model, dict) or model.get("applied_via") != "argv" \
+            or not model.get("value"):
+        return effective
+    effective["advertised_model"] = effective.get("effective_model")
+    effective["effective_model"] = model["value"]
+    effective["effective_model_source"] = "launch-argv"
+    effective["applied_via"] = "argv"
+    return effective
+
+
+def annotate_argv_effective_selection(receipt: dict[str, Any],
+                                      manifest: dict[str, str]) -> None:
+    """Issue #340: status/observe name an argv-launched model as effective.
+
+    Only a start whose ``config_application.model`` was applied via argv. The
+    live advertised currentValue, else the start's, stays ``advertised_model``.
+    """
+    evidence = receipt.get("start_evidence") if isinstance(receipt, dict) else None
+    if not isinstance(evidence, dict):
+        return
+    application = evidence.get("config_application")
+    model = application.get("model") if isinstance(application, dict) else None
+    if not isinstance(model, dict) or model.get("applied_via") != "argv":
+        return
+    if isinstance(receipt.get("session_meta"), dict):
+        current = effective_selection(manifest, receipt)
+        current["advertised_source"] = "live-config-option"
+    else:
+        started = evidence.get("effective_selection")
+        current = dict(started) if isinstance(started, dict) else {}
+        current["effective_model"] = current.get("advertised_model")
+        current["advertised_source"] = "start-evidence"
+    receipt["effective_selection"] = apply_argv_model(current, application)
+
+
 def explicit_selection_problem(requested_model: str, requested_effort: str,
                                effective: dict[str, Any]) -> str | None:
     problems = []
@@ -6295,12 +6337,9 @@ def command_start(args: argparse.Namespace, repo: str,
         # Issue #185: droid's verdict reads the agent's raw echo here, before
         # the Issue #140 block below replaces the display value with the argv.
         echo_verdict = echo_model_verification(args.platform, policy, effective)
-        if (application.get("model") or {}).get("applied_via") == "argv":
-            # Issue #140: devin's advertised currentValue stays the stale
-            # initial value when the argv set the model; keep it as evidence.
-            effective["advertised_model"] = effective.get("effective_model")
-            effective["effective_model"] = application["model"]["value"]
-            effective["effective_model_source"] = "launch-argv"
+        # Issue #140: devin's advertised currentValue stays the stale
+        # initial value when the argv set the model; keep it as evidence.
+        apply_argv_model(effective, application)
         receipt["effective_selection"] = effective
         if echo_verdict is not None:
             receipt.update(echo_verdict)
@@ -6331,6 +6370,36 @@ def command_start(args: argparse.Namespace, repo: str,
             selection["preserved"] = continuity.get("prior_settings_preserved") is True
         explicit_model = acp_model_value if args.model else ""
         explicit_effort = effort_value if args.effort else ""
+        rejected = application.get("model") or {}
+        if (rejected.get("applied") is False and isinstance(rejected.get("error"), dict)
+                and not getattr(args, "allow_unapplied_model", False)):
+            # Issue #339: the agent answered the resolved model option with an
+            # error, so this session would run the agent's own model, not the
+            # selected one (a dsh seat advertised as opencode-go/deepseek-v4.1-
+            # flash ran deepseek-official/deepseek-v4-flash behind a ``ready``
+            # receipt). An option the agent never advertises is still a
+            # limitation receipt (``no-advertised-config-option``): no set was
+            # attempted and nothing is refused.
+            stopped = stop_started_holder(sock, proc, holder_pid_hint,
+                                          receipt.get("holder_instance_id"))
+            reclaimed = stopped.get("holder_reclaimed") is True
+            failure = rejected["error"]
+            receipt.update({
+                "result": "refused",
+                "reason": "model-config-option-rejected",
+                "action": "start",
+                "error": failure,
+                "detail": (f"the {args.platform} agent rejected the resolved model option "
+                           f"{rejected.get('config_id')}={rejected.get('value')!r} "
+                           f"({(failure.get('detail') or {}).get('message') or failure.get('code')}); "
+                           "the session was stopped before this start returned, and no other model "
+                           "was substituted; pass --allow-unapplied-model to accept the agent's own "
+                           "selection instead."),
+                **stopped,
+                "mutation_performed": False if reclaimed else None,
+                "mutation_status": "not_started" if reclaimed else "unknown",
+            })
+            return receipt
         problem = (explicit_selection_problem(explicit_model, explicit_effort, effective)
                    if args.platform in EXPLICIT_SELECTION_VERIFIED else None)
         if problem is not None:
@@ -8099,6 +8168,11 @@ def main() -> int:
     # Issue #181: None means "not passed", so explicit detection is None-ness.
     # Every consumer that relied on the old "off" default treats None as off.
     parser.add_argument("--fast", choices=("on", "off"))
+    # Issue #339: a start whose resolved model option the agent rejects is
+    # refused; this flag is the caller's explicit acceptance of the agent's
+    # own model selection instead.
+    parser.add_argument("--allow-unapplied-model", action="store_true",
+                        help="accept a start whose model config option the agent rejected")
     parser.add_argument("--mode")
     parser.add_argument("--steer-mode", choices=("native", "interrupt"))
     parser.add_argument("--delivery", choices=("native", "after-turn"))
@@ -8333,6 +8407,7 @@ def main() -> int:
         if isinstance(record, dict) and isinstance(record.get("repo"), str) and record["repo"]:
             evidence_repo = record["repo"]
         annotate_session_model_evidence(receipt, args.platform, evidence_repo, directory)
+        annotate_argv_effective_selection(receipt, args.manifest)
         receipt = bound_state_receipt(receipt)
     elif args.command == "capture":
         receipt = op_or_holder_lost(

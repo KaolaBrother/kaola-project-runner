@@ -1,0 +1,1 @@
+{"n":1,"name":"Refuse start when resolved model config option is rejected unless --allow-unapplied-model is passed","details":"dispatched: self — landed on branch workflow/issue-339 in .kw/worktrees/issue-339 at commit fff146c1 and merged origin/main at 8692fd90; all suites + render --check PASS","status":"done"}
