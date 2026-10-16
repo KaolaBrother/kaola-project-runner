@@ -282,6 +282,9 @@ NODE_START_TIMEOUT = 180.0
 # the Worker fallback chain, never a pin.
 NODE_DEFAULT_PRESET = "zcode/default"
 NODE_STOP_CONFIRM_SECONDS = 30.0
+# Issue #336: how long a carrier waits for its own still-starting node holder
+# (the Runner gave up first) before it exact-stops it and moves on.
+NODE_ADOPT_READY_SECONDS = 60.0
 # A carrier's own stop waits this long for a node start in flight and for the
 # node stop, inside the Runner's 30 s stop request.
 NODE_RECLAIM_SECONDS = 8.0
@@ -4686,7 +4689,11 @@ class Holder:
         node = self.node
         if node.get("stop_unconfirmed"):
             old = node["stop_unconfirmed"]
-            if not self._node_holder_alive(binding, old.get("holder")):
+            # Issue #336: the unconfirmed stop belongs to the runtime that node
+            # ran on, which a move may since have replaced in ``binding``.
+            probe = {**binding, "platform": old.get("platform") or binding["platform"],
+                     "session": old.get("session") or session}
+            if not self._node_holder_alive(probe, old.get("holder")):
                 self.events.append({"kind": "sideagent_node_stop_confirmed_late", "holder": old.get("holder")})
                 node.pop("stop_unconfirmed", None)
         own = [item for item in self.pending_worker_events if item.get("session") == session]
@@ -4745,7 +4752,8 @@ class Holder:
             old = self._node_record(binding) or {}
             old_holder = old.get("holder_instance_id")
             if old_holder and self._node_holder_alive(binding, old_holder):
-                node["stop_unconfirmed"] = {"holder": old_holder}
+                node["stop_unconfirmed"] = {"holder": old_holder, "platform": binding["platform"],
+                                            "session": session}
                 self._maintenance_failure("old-node-live", through, recovery)
                 return result
             node.update(phase="starting", binding=fingerprint)
@@ -4889,7 +4897,10 @@ class Holder:
         turn the agent stopped with ``refusal`` - ZCode maps a backend
         ``turn.failed`` (its 5-hour limit, a provider rejection) to that stop
         reason. The stop reason is the turn end's own field, else the
-        ``stop_reason=`` of its reason text from an older node holder."""
+        ``stop_reason=`` of its reason text from an older node holder. A
+        deterministic prompt failure (#173 systemError on end_turn, any
+        JSON-RPC prompt error) therefore moves through the whole chain once,
+        one node start per runtime and no Host wake, before failing once."""
         outcome = end.get("turn_outcome")
         if outcome == "turn_failed":
             return "turn_failed"
@@ -4981,8 +4992,10 @@ class Holder:
                 elif ours:
                     detail = f"checkpoint partial: {named}" if named else "checkpoint partial"
                 elif refusal and binding is not None:
+                    tried = ", ".join((node.get("runtime") or {}).get("tried") or [])
                     detail = (f"checkpoint missing; node turn refused ({refusal}); no eligible fallback "
-                              "runtime; no node starts until the binding or recipe changes")
+                              f"runtime (tried {tried}); {self._unhandled(sent)}; "
+                              "no node starts until the binding or recipe changes")
                 else:
                     detail = "checkpoint missing"
                 end["reason"] = f"{end.get('reason')} maintenance batch {node['batch']} {detail}"
@@ -5008,7 +5021,8 @@ class Holder:
                                   "code": f"turn-refused:{refusal}"}
             holder = node["holder"]
             node.update(phase="stopping", batch=None, fingerprint=None)
-            threading.Thread(target=self._stop_node, args=(holder, None, binding), daemon=True).start()
+            threading.Thread(target=self._stop_node, args=(holder, None, binding, (sent, recovery)),
+                             daemon=True).start()
 
     @staticmethod
     def _node_wrote_attention(doc: dict[str, Any] | None, body: str | None, holder: str) -> bool:
@@ -5084,7 +5098,38 @@ class Holder:
         holder = receipt.get("holder_instance_id") if isinstance(receipt, dict) else None
         ok = (code == 0 and isinstance(holder, str) and holder
               and (receipt.get("result") not in ("refused", "failed")))
+        stopped_holder: str | None = None
+        stopped_alive, stop_receipt = False, {}
+        if not ok:
+            # Issue #336 (review): a holder of ours the Runner left behind is
+            # adopted only once its record is ready. A still-starting one is
+            # waited for, bounded and outside the lock; one that never gets
+            # there, or sits in an error state alive, is exact-stopped under
+            # its own runtime before the chain moves on, never twinned.
+            own = self._own_live_node(binding)
+            deadline = time.monotonic() + NODE_ADOPT_READY_SECONDS
+            while (own.get("state") == "starting" and time.monotonic() < deadline
+                   and not self.stop_requested):
+                time.sleep(0.5)
+                own = self._own_live_node(binding, own.get("holder_instance_id"))
+            if own and own.get("state") != "ready":
+                stopped_holder = own["holder_instance_id"]
+                stopped_alive, stop_receipt = self._exact_stop_holder(stopped_holder, binding,
+                                                                      NODE_STOP_CONFIRM_SECONDS)
         with self.worker_events_lock:
+            if stopped_holder and not ok:
+                if stopped_alive:
+                    self.node["stop_unconfirmed"] = {"holder": stopped_holder, "platform": binding["platform"],
+                                                     "session": binding["session"]}
+                    self.events.append({"kind": "sideagent_node_stop_unconfirmed", "holder": stopped_holder,
+                                        "receipt": stop_receipt})
+                    doc = self._lifecycle_state()
+                    self._maintenance_failure("stop-unconfirmed", self._node_host_pending(doc),
+                                              self._node_recovery_pending(doc))
+                else:
+                    self.events.append({"kind": "sideagent_node_stopped", "holder": stopped_holder,
+                                        "receipt": {key: stop_receipt.get(key) for key in ("stopped", "error")
+                                                    if key in stop_receipt}})
             if ok:
                 self.node.update(phase="running", holder=holder, batch=None, fingerprint=None)
                 self.node.setdefault("holders", []).append(holder)
@@ -5110,7 +5155,7 @@ class Holder:
                         and isinstance(record.get("holder_instance_id"), str)
                         and record.get("holder_instance_id")):
                     live_holder = record["holder_instance_id"]
-                if live_holder and ours:
+                if live_holder and ours and record.get("state") == "ready":
                     # The runner refused or failed a session this carrier
                     # dispatched: adopt the live holder instead of orphaning it.
                     self.node.update(phase="running", holder=live_holder,
@@ -5121,11 +5166,12 @@ class Holder:
                                         "session": binding["session"],
                                         **({"start_error": error.get("code")} if isinstance(error, dict)
                                            and error.get("code") != "session-exists" else {})})
-                elif live_holder:
+                elif live_holder and not ours:
                     # A live verified node another holder dispatched: stop is
                     # unconfirmed until that holder is gone, then a start can
                     # proceed (the late-confirm path clears stop_unconfirmed).
-                    self.node.update(phase="stopped", stop_unconfirmed={"holder": live_holder})
+                    self.node.update(phase="stopped", stop_unconfirmed={
+                        "holder": live_holder, "platform": binding["platform"], "session": binding["session"]})
                     doc = self._lifecycle_state()
                     self._maintenance_failure("old-node-live", self._node_host_pending(doc),
                                               self._node_recovery_pending(doc))
@@ -5149,12 +5195,24 @@ class Holder:
                                                     "no node starts until the binding or recipe changes")
         self._kick_worker_events()
 
-    def _stop_node(self, holder: str, wait: float | None = None,
-                   binding: dict[str, Any] | None = None) -> None:
-        wait = NODE_STOP_CONFIRM_SECONDS if wait is None else wait
-        # Issue #324: a caller that just moved to a fallback runtime names the
-        # runtime this holder runs on.
-        binding = binding or self._node_binding() or {}
+    def _own_live_node(self, binding: dict[str, Any], holder: str | None = None) -> dict[str, Any]:
+        """This carrier's own live node record for the binding's session (the
+        dispatcher is this holder, the process is alive, the repo and role
+        match; ``holder`` pins the instance), else an empty dict."""
+        record = self._node_record(binding) or {}
+        ident = record.get("holder_instance_id")
+        if ((record.get("dispatcher") or {}).get("holder_instance_id") == self.holder_instance_id
+                and isinstance(ident, str) and ident and (holder is None or ident == holder)
+                and record.get("repo") == self.args.repo
+                and record.get("session_role") in SIDEAGENT_ROLES
+                and process_alive(record.get("holder_pid"))):
+            return record
+        return {}
+
+    def _exact_stop_holder(self, holder: str, binding: dict[str, Any], wait: float) -> tuple[bool, dict[str, Any]]:
+        """Send the exact stop to this holder's socket under ``binding`` and
+        wait, bounded, for its process to go. Returns (still alive, receipt);
+        the caller owns the node phase and the events."""
         receipt: dict[str, Any] = {}
         target = None
         if binding:
@@ -5187,15 +5245,30 @@ class Holder:
         while alive and time.monotonic() < deadline:
             time.sleep(0.5)
             alive = self._node_holder_alive(binding, holder)
+        return alive, receipt
+
+    def _stop_node(self, holder: str, wait: float | None = None,
+                   binding: dict[str, Any] | None = None,
+                   failure: tuple[Any, Any] | None = None) -> None:
+        """``failure`` is the (host revision through, recovery input) the batch
+        this holder carried, for an unconfirmed stop's maintenance failure;
+        the caller may already have restored the node's own fields (#336)."""
+        wait = NODE_STOP_CONFIRM_SECONDS if wait is None else wait
+        # Issue #324: a caller that just moved to a fallback runtime names the
+        # runtime this holder runs on.
+        binding = binding or self._node_binding() or {}
+        alive, receipt = self._exact_stop_holder(holder, binding, wait)
         confirmed = False
         with self.worker_events_lock:
             if alive:
                 # The node is still alive. This is not the idle moment.
-                self.node.update(phase="stopped", stop_unconfirmed={"holder": holder})
+                self.node.update(phase="stopped", stop_unconfirmed={
+                    "holder": holder, "platform": binding.get("platform"), "session": binding.get("session")})
                 self.events.append({"kind": "sideagent_node_stop_unconfirmed", "holder": holder,
                                     "receipt": receipt})
-                self._maintenance_failure("stop-unconfirmed", self.node.get("sent_through"),
-                                          self.node.get("recovery_input"))
+                through, recovery = (failure if failure is not None
+                                     else (self.node.get("sent_through"), self.node.get("recovery_input")))
+                self._maintenance_failure("stop-unconfirmed", through, recovery)
             else:
                 confirmed = True
                 self.node.update(phase="stopped")

@@ -31,10 +31,12 @@ chain never advanced, and the next Host write started the same runtime again
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -73,9 +75,51 @@ LIVE_THEN_FAIL_RUNNER = issue255.FAKE_NODE_RUNNER.replace(
     'sys.exit(1)')
 assert LIVE_THEN_FAIL_RUNNER != issue255.FAKE_NODE_RUNNER
 
+# The same, but the holder is still starting when the Runner gives up (the
+# record says ``starting``); it writes where FAKE_NODE_RECORD_DSH points when set.
+STARTING_THEN_FAIL_RUNNER = LIVE_THEN_FAIL_RUNNER.replace(
+    '"state": "ready"', '"state": "starting"').replace(
+    'Path(os.environ["FAKE_NODE_RECORD"]).write_text(',
+    'Path(os.environ.get("FAKE_NODE_RECORD_DSH") or os.environ["FAKE_NODE_RECORD"]).write_text(')
+assert STARTING_THEN_FAIL_RUNNER.count('"starting"') == 1
+
 
 class NodeTurnRefusal(issue324.NodeRuntimeFallback):
     """The runtime refused the admitted node turn (Issue #336)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.saved_adopt = holder_module.NODE_ADOPT_READY_SECONDS
+        holder_module.NODE_ADOPT_READY_SECONDS = 6.0
+
+    def tearDown(self) -> None:
+        holder_module.NODE_ADOPT_READY_SECONDS = self.saved_adopt
+        os.environ.pop("FAKE_NODE_RECORD_DSH", None)
+        super().tearDown()
+
+    def node_dir(self, platform: str) -> Path:
+        digest = hashlib.sha256(str(self.repo).encode()).hexdigest()[:16]
+        return self.records / platform / self.SESSION / digest
+
+    def fake_at(self, platform: str) -> issue255.FakeNode:
+        """A second fake node holder for ``platform``, beside ``self.fake``."""
+        directory = self.node_dir(platform)
+        directory.mkdir(parents=True, exist_ok=True)
+        sock = Path("/tmp") / f"kaola-{os.getuid()}-acp" / (
+            hashlib.sha256(str(directory).encode()).hexdigest()[:24] + ".sock")
+        fake = issue255.FakeNode(sock, directory / "record.json")
+        self.addCleanup(fake.close)
+        return fake
+
+    def partial_checkpoint(self, through: int) -> None:
+        """The running node's own checkpoint for its batch, short of the range."""
+        path = self.repo / ".kaola" / "heartbeat-prompt.json"
+        doc = json.loads(path.read_text())
+        doc["state"]["maintenance"]["last_checkpoint"] = {
+            "batch": self.holder.node["batch"], "node": {"holder_instance_id": self.holder.node["holder"]},
+            "host_revision": {"from": 0, "through": through, "current": doc.get("host_revision")},
+            "verified": True}
+        path.write_text(json.dumps(doc))
 
     def end_node_turn(self, platform: str, outcome: str = "turn_completed", stop: str | None = None,
                       explicit: bool = True, reason: str | None = None, cursor: int = 90) -> dict:
@@ -220,6 +264,99 @@ class NodeTurnRefusal(issue324.NodeRuntimeFallback):
         given = Path(str(Path(self.tmp.name) / "argv") + ".root").read_text()
         self.assertEqual(given, str(Path(self.holder.args.record_dir).parent.parent.parent),
                          "the Runner start resolves the node under this carrier's own root")
+        self.holder._reclaim_node()
+
+    def test_a_failed_turn_with_a_partial_checkpoint_stays_with_the_host(self) -> None:
+        self.first_batch(WORKERS_OFF)
+        self.partial_checkpoint(2)
+        self.end_node_turn("zcode", outcome="turn_failed")
+        self.wait_for(lambda: len(self.agent.prompts()) == 1, "the Host is woken as before")
+        self.assertIn("checkpoint partial: host revision 3..4 not handled", self.agent.prompts()[0])
+        self.assertEqual(self.events_of("sideagent_node_fallback"), [], "a node that ran is not a runtime failure")
+        self.assertIsNone(self.holder.node.get("failed"))
+        self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "the node stopped")
+        self.holder._reclaim_node()
+
+    def test_an_unconfirmed_stop_after_a_move_is_checked_under_the_old_runtime(self) -> None:
+        self.first_batch(WORKERS_OFF)
+        zcode = self.fake
+        self.addCleanup(zcode.close)
+        zcode.ignore_stop = True  # a wedged node: the stop is answered but not applied
+        self.fake = None
+        self.serve("dsh")
+        self.end_node_turn("zcode", stop="refusal")
+        self.wait_for(lambda: "sideagent_node_stop_unconfirmed" in self.log_kinds(), "the stop stays unconfirmed")
+        self.assertEqual([(m["from"], m.get("to")) for m in self.events_of("sideagent_node_fallback")],
+                         [("zcode", "dsh/default")])
+        self.wait_for(lambda: ("batch:4", "stop-unconfirmed") in
+                      [(row["input"], row["reason"]) for row in self.events_of("sideagent_maintenance_failure_recorded")],
+                      "the unconfirmed stop names the batch's own range")
+        for _ in range(4):
+            self.holder.turn["active"] = False
+            self.boundary()
+            time.sleep(0.2)
+        self.assertEqual(self.node_count(), 1, "no next-runtime start while the refused node may still run")
+        self.assertEqual(self.events_of("sideagent_node_stop_confirmed_late"), [])
+        self.assertEqual(self.holder.node["stop_unconfirmed"]["platform"], "zcode")
+        # The unconfirmed stop woke the Host once (a wedged node is its to see);
+        # the recorded failure gates the range until the Host writes again.
+        self.wait_for(lambda: len(self.agent.prompts()) == 1, "the Host told once")
+        self.finish_host_turn()
+        # The wedged node finally dies: the late confirmation is read under its
+        # own runtime, and the next Host change resumes on the fallback runtime
+        # with the whole unhandled range.
+        record = json.loads(zcode.record.read_text())
+        record.update(state="stopped", holder_pid=zcode.dead_pid)
+        zcode.record.write_text(json.dumps(record))
+        self.holder.turn["active"] = False
+        self.boundary()
+        self.assertEqual(len(self.events_of("sideagent_node_stop_confirmed_late")), 1)
+        self.bind("zcode", WORKERS_OFF, 5)
+        self.drive(lambda: len(self.fake.prompts) == 1, "the next runtime takes the range on the next Host write")
+        self.assertIn("host revision 1..5", self.fake.prompts[0]["params"]["text"])
+        self.assertEqual(self.node_count(), 2)
+        self.holder._reclaim_node()
+
+    def test_a_starting_holder_is_adopted_once_ready(self) -> None:
+        self.prepare_recovery_host()
+        self.install("dsh", STARTING_THEN_FAIL_RUNNER)
+        self.install("zcode", issue255.FAKE_NODE_RUNNER)
+        self.serve("dsh")
+        record = self.node_dir("dsh") / "record.json"
+
+        def finish_starting() -> None:
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline and not record.exists():
+                time.sleep(0.05)
+            time.sleep(1.2)
+            doc = json.loads(record.read_text())
+            doc["state"] = "ready"
+            record.write_text(json.dumps(doc))
+        threading.Thread(target=finish_starting, daemon=True).start()
+        self.bind("dsh", WORKERS_OFF)
+        self.drive(lambda: len(self.fake.prompts) == 1, "the batch on the holder that finished starting")
+        self.assertEqual([row["session"] for row in self.events_of("sideagent_node_adopted")], [self.SESSION])
+        self.assertEqual(self.events_of("sideagent_node_fallback"), [])
+        self.assertEqual(self.node_count(), 1)
+        self.holder._reclaim_node()
+
+    def test_a_holder_that_never_becomes_ready_is_stopped_before_the_chain(self) -> None:
+        holder_module.NODE_ADOPT_READY_SECONDS = 1.0
+        self.prepare_recovery_host()
+        self.install("dsh", STARTING_THEN_FAIL_RUNNER)
+        self.install("zcode", issue255.FAKE_NODE_RUNNER)
+        dsh = self.fake_at("dsh")
+        os.environ["FAKE_NODE_RECORD_DSH"] = str(dsh.record)
+        self.serve("zcode")
+        self.bind("dsh", WORKERS_OFF)
+        self.drive(lambda: len(self.fake.prompts) == 1, "the batch on the next runtime")
+        self.assertEqual(len(dsh.stops), 1, "the never-ready holder was exact-stopped under its own runtime")
+        kinds = self.log_kinds()
+        self.assertLess(kinds.index("sideagent_node_stopped"), kinds.index("sideagent_node_fallback"))
+        self.assertEqual([(m["from"], m.get("to")) for m in self.events_of("sideagent_node_fallback")],
+                         [("dsh", "zcode/default")])
+        self.assertEqual(self.events_of("sideagent_node_adopted"), [])
+        self.assertEqual(self.node_count(), 2)
         self.holder._reclaim_node()
 
     def test_a_failed_start_whose_holder_is_live_is_adopted_not_twinned(self) -> None:

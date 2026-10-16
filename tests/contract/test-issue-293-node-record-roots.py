@@ -314,7 +314,11 @@ class NodeRecordRoots(unittest.TestCase):
         self.write_node_state(host_revision=4)
         self.drive_start_refused(record_path, os.getpid())
         node = self.holder.node
-        self.assertEqual(node.get("stop_unconfirmed"), {"holder": "node-foreign"})
+        # Issue #336: the row also names the runtime the holder runs on, so a
+        # later runtime move still confirms the stop under this one.
+        bound = json.loads((self.repo / ".kaola" / "heartbeat-prompt.json").read_text())["state"]["sideagent"]
+        self.assertEqual(node.get("stop_unconfirmed"),
+                         {"holder": "node-foreign", "platform": "zcode", "session": bound["session"]})
         self.assertNotEqual(node.get("phase"), "running")
         self.assertNotIn("failed", node)
         kinds = self.log_kinds()
