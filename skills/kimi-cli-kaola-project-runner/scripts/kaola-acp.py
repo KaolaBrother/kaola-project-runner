@@ -3807,6 +3807,48 @@ def effective_selection(manifest: dict[str, str], state: Any) -> dict[str, Any]:
     return found
 
 
+def apply_argv_model(effective: dict[str, Any], application: Any) -> dict[str, Any]:
+    """An ``acp_command_<tier>`` argv model is the effective model (#140, #340).
+
+    Devin's advertised model option cannot report the argv id, so its
+    currentValue stays evidence as ``advertised_model``. Nothing is verified.
+    """
+    model = application.get("model") if isinstance(application, dict) else None
+    if not isinstance(model, dict) or model.get("applied_via") != "argv" \
+            or not model.get("value"):
+        return effective
+    effective["advertised_model"] = effective.get("effective_model")
+    effective["effective_model"] = model["value"]
+    effective["effective_model_source"] = "launch-argv"
+    effective["applied_via"] = "argv"
+    return effective
+
+
+def annotate_argv_effective_selection(receipt: dict[str, Any],
+                                      manifest: dict[str, str]) -> None:
+    """Issue #340: status/observe name an argv-launched model as effective.
+
+    Only a start whose ``config_application.model`` was applied via argv. The
+    live advertised currentValue, else the start's, stays ``advertised_model``.
+    """
+    evidence = receipt.get("start_evidence") if isinstance(receipt, dict) else None
+    if not isinstance(evidence, dict):
+        return
+    application = evidence.get("config_application")
+    model = application.get("model") if isinstance(application, dict) else None
+    if not isinstance(model, dict) or model.get("applied_via") != "argv":
+        return
+    if isinstance(receipt.get("session_meta"), dict):
+        current = effective_selection(manifest, receipt)
+        current["advertised_source"] = "live-config-option"
+    else:
+        started = evidence.get("effective_selection")
+        current = dict(started) if isinstance(started, dict) else {}
+        current["effective_model"] = current.get("advertised_model")
+        current["advertised_source"] = "start-evidence"
+    receipt["effective_selection"] = apply_argv_model(current, application)
+
+
 def explicit_selection_problem(requested_model: str, requested_effort: str,
                                effective: dict[str, Any]) -> str | None:
     problems = []
@@ -6295,12 +6337,9 @@ def command_start(args: argparse.Namespace, repo: str,
         # Issue #185: droid's verdict reads the agent's raw echo here, before
         # the Issue #140 block below replaces the display value with the argv.
         echo_verdict = echo_model_verification(args.platform, policy, effective)
-        if (application.get("model") or {}).get("applied_via") == "argv":
-            # Issue #140: devin's advertised currentValue stays the stale
-            # initial value when the argv set the model; keep it as evidence.
-            effective["advertised_model"] = effective.get("effective_model")
-            effective["effective_model"] = application["model"]["value"]
-            effective["effective_model_source"] = "launch-argv"
+        # Issue #140: devin's advertised currentValue stays the stale
+        # initial value when the argv set the model; keep it as evidence.
+        apply_argv_model(effective, application)
         receipt["effective_selection"] = effective
         if echo_verdict is not None:
             receipt.update(echo_verdict)
@@ -8333,6 +8372,7 @@ def main() -> int:
         if isinstance(record, dict) and isinstance(record.get("repo"), str) and record["repo"]:
             evidence_repo = record["repo"]
         annotate_session_model_evidence(receipt, args.platform, evidence_repo, directory)
+        annotate_argv_effective_selection(receipt, args.manifest)
         receipt = bound_state_receipt(receipt)
     elif args.command == "capture":
         receipt = op_or_holder_lost(
