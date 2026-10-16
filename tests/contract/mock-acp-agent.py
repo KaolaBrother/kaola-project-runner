@@ -655,6 +655,10 @@ class MockAgent:
                 self.configured[str(config_id)] = params.get("value")
                 respond(request_id, {"configOptions": options})
                 return
+        # Every accepted set is remembered. The #254/#338 deferred-list
+        # reply above returns early; a set with no defer_model fixture,
+        # including a cursor model switch, still lands here.
+        if config_id is not None:
             if config_id == "model" and "cursor-params" in self.caps:
                 # A model switch replaces the model-scoped option set.
                 for scoped in {o["id"] for opts in self.CURSOR_MODEL_OPTIONS.values()
