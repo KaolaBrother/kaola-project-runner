@@ -547,9 +547,9 @@ def test_opencode_explicit_selection_h2() -> None:
         plain = sandbox.cli("opencode", "start", session="opencode-KPR-i119-plain")
         check(plain.get("state") == "ready"
               and plain.get("effective_selection") == {"effective_model": "opencode-go/deepseek-v4.1-flash",
-                                                       "effective_effort": "default",
+                                                       "effective_effort": "max",
                                                        "effort_config_id": "effort"},
-              f"no --model: the pinned default preset's selection is reported ({plain.get('effective_selection')})")
+              f"no --model: the pinned default preset applies effort max ({plain.get('effective_selection')})")
         sandbox.cli("opencode", "stop", "--force", session="opencode-KPR-i119-plain")
         wanted = ("--model", "opencode-go/deepseek-v4.1-flash", "--effort", "max")
         honored = sandbox.cli("opencode", "start", *wanted, session="opencode-KPR-i119-ok")

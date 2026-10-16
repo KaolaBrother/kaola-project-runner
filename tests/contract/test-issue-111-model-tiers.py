@@ -59,7 +59,9 @@ LIVE_PRESETS = {
                   ("core", "Kimi K3", "kimi-k3", "max")],
     },
     "dsh": {
-        "default": ("DeepSeek V4.1 Flash", "opencode-go/deepseek-v4.1-flash", ""),
+        # Issue #338: the opencode-go route accepts reasoning_effort max, and
+        # the default preset applies it on a plain start.
+        "default": ("DeepSeek V4.1 Flash", "opencode-go/deepseek-v4.1-flash", "max"),
         "named": [],
     },
     "zcode": {

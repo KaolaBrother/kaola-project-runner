@@ -637,12 +637,21 @@ class MockAgent:
                     message = f"Unknown model config option: {config_id}"  # live text
                 respond(request_id, error={"code": -32602, "message": message})
                 return
-        if config_id is not None:
-            if spec is not None and isinstance(self.deferred_ready_options, list):
-                options = json.loads(json.dumps(self.deferred_ready_options))
+        if config_id is not None and spec is not None:
+            # Issue #254 publishes the model list late. A later set (the
+            # default preset's effort, #338) must answer from that list, or
+            # from session/new before it is published, and must keep a model
+            # currentValue this same call already applied. The default grok
+            # option list would replace the model the test is measuring.
+            source = self.deferred_ready_options if isinstance(self.deferred_ready_options, list) \
+                else self.config_fixture.get("new")
+            if isinstance(source, list):
+                options = json.loads(json.dumps(source))
                 for option in options:
                     if isinstance(option, dict) and option.get("id") == config_id:
                         option["currentValue"] = params.get("value")
+                if isinstance(self.deferred_ready_options, list):
+                    self.deferred_ready_options = options
                 self.configured[str(config_id)] = params.get("value")
                 respond(request_id, {"configOptions": options})
                 return
