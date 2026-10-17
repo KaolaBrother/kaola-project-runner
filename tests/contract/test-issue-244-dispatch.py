@@ -223,7 +223,45 @@ class DispatchEntry(unittest.TestCase):
         self.assertEqual(code, 0, payload)
         return payload
 
+    def _ensure_worker_grants(self, plan: Path, auth: Path) -> None:
+        """A Worker preset in this fixture dispatches only with an explicit count.
+
+        Issue #346 removed the default pool. Tests that admit a Worker add a
+        numeric host grant when the authorization does not already name it.
+        """
+        workers = {
+            "claude-code/haiku", "codex/luna", "devin/default", "dsh/commandcode",
+            "dsh/default", "opencode/default", "zcode/default",
+        }
+        try:
+            body = json.loads(auth.read_text(encoding="utf-8"))
+            plan_body = json.loads(plan.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        auth_obj = body.get("authorization", body) if isinstance(body, dict) else None
+        if not isinstance(auth_obj, dict) or not isinstance(auth_obj.get("grants"), list):
+            return
+        have: set[str] = set()
+        for grant in auth_obj["grants"]:
+            if not isinstance(grant, dict):
+                continue
+            if isinstance(grant.get("id"), str):
+                have.add(grant["id"])
+            for ident in grant.get("preset_ids") or []:
+                if isinstance(ident, str):
+                    have.add(ident)
+        added = False
+        for item in plan_body.get("items") or []:
+            preset = item.get("preset") if isinstance(item, dict) else None
+            if preset in workers and preset not in have:
+                auth_obj["grants"].append({"id": preset, "state": "granted", "count": 8})
+                have.add(preset)
+                added = True
+        if added:
+            auth.write_text(json.dumps(body), encoding="utf-8")
+
     def execute(self, plan: Path, auth: Path, avail: Path | None = None, **flags) -> dict:
+        self._ensure_worker_grants(plan, auth)
         args = [
             "execute", "--plan", str(plan), "--authorization", str(auth),
             "--platforms", str(PLATFORMS), "--skills-root", str(self.skills),
@@ -243,6 +281,7 @@ class DispatchEntry(unittest.TestCase):
 
     def execute_dry_run(self, plan: Path, auth: Path, avail: Path | None = None,
                         live: Path | None = None) -> dict:
+        self._ensure_worker_grants(plan, auth)
         args = [
             "execute", "--plan", str(plan), "--authorization", str(auth),
             "--platforms", str(PLATFORMS), "--skills-root", str(self.skills), "--dry-run",
@@ -273,7 +312,7 @@ class DispatchEntry(unittest.TestCase):
         self.assertNotIn("classes", summary)
         self.assertNotIn("computer_interaction", summary)
         self.assertIn("codex/default", summary["presets"])
-        self.assertIn("zcode/default", summary["presets"])
+        self.assertNotIn("zcode/default", summary["presets"])
         self.assertNotIn("visual:", summary["text"])
         self.assertNotIn("computer-use:", summary["text"])
         self.assertNotIn("exploring directions", summary["text"])
@@ -281,7 +320,7 @@ class DispatchEntry(unittest.TestCase):
         self.assertNotIn("Expert not granted", summary["text"])
         ids = {item["id"] for item in payload["candidates"]}
         self.assertIn("codex/default", ids)
-        self.assertIn("zcode/default", ids)
+        self.assertNotIn("zcode/default", ids)
         self.assertNotIn("codex/astra", ids)
         self.assertNotIn("codex/luna", ids)
         luna = [row for row in payload["withheld"] if row["id"] == "codex/luna"]
@@ -292,12 +331,12 @@ class DispatchEntry(unittest.TestCase):
         self.assertTrue(codex["selection"]["effort"])
         self.assertIn("computer-use capability", codex["profile"])
         self.assertNotIn("computer-use", summary["text"])
-        zcode = next(item for item in payload["candidates"] if item["id"] == "zcode/default")
-        self.assertEqual(zcode["availability"], "present")
-        self.assertTrue(zcode["pool"])
+        self.assertTrue(all(item["id"] != "zcode/default" for item in payload["candidates"]))
 
     def test_unknown_availability_is_projected_and_not_advertised(self) -> None:
-        auth = self.authorization()
+        auth = self.authorization([
+            {"id": "zcode/default", "state": "granted", "count": 1},
+        ])
         payload = self.project(auth, self.availability([]))
         zcode = next(item for item in payload["candidates"] if item["id"] == "zcode/default")
         self.assertEqual(zcode["availability"], "unknown")
@@ -920,7 +959,9 @@ class DispatchEntry(unittest.TestCase):
         worker = self.root / "skills" / "zcode-kaola-project-runner" / "scripts"
         worker.mkdir(parents=True)
         (worker / "platform.yaml").write_bytes((PLATFORMS / "zcode.yaml").read_bytes())
-        auth = self.authorization()
+        auth = self.authorization([
+            {"id": "zcode/default", "state": "granted", "count": 1},
+        ])
         proc = subprocess.run(
             [sys.executable, str(skill_scripts / "kaola-dispatch.py"), "project",
              "--authorization", str(auth)],
@@ -1792,7 +1833,11 @@ class DispatchEntry(unittest.TestCase):
         self.assertNotIn('"elite_cap":', rendered)
         self.assertLessEqual(len(rendered.encode()), 8192)
         install_fake(self.skills, ["zcode"])
-        auth = write_json(self.root, "skeleton-auth.json", example["authorization"])
+        skeleton_auth = dict(example["authorization"])
+        skeleton_auth["grants"] = list(skeleton_auth.get("grants") or []) + [
+            {"id": "zcode/default", "state": "granted", "count": 1},
+        ]
+        auth = write_json(self.root, "skeleton-auth.json", skeleton_auth)
         plan = self.plan([{
             "item_id": "pool", "preset": "zcode/default",
             "session": "zcode-KPR-i244-skel", "prompt": "a",
@@ -3092,12 +3137,25 @@ class DispatchEntry(unittest.TestCase):
              "lifetime": "standing", "expires": "2000-01-01T00:00:00+00:00"},
             {"count": 1, "id": "zcode/default", "state": "granted",
              "lifetime": "bogus", "expires": "not a time"}]), avail)
-        self.assertEqual(plain["candidates"], keyed["candidates"])
-        self.assertEqual(plain["withheld"], keyed["withheld"])
-        for preset in ("codex/default", "zcode/default"):
-            row = self.candidate(keyed, preset)
-            self.assertNotIn("lifetime", row)
-            self.assertNotIn("expires", row)
+        # Elite still ignores Expert lifetime and expires. A Worker ignores
+        # lifetime. expires is a Worker grant field (#346): an unreadable
+        # value withholds that preset and does not become unlimited.
+        self.assertEqual(self.candidate(plain, "codex/default"), self.candidate(keyed, "codex/default"))
+        self.assertIsNone(self.withheld(keyed, "codex/default"))
+        elite = self.candidate(keyed, "codex/default")
+        self.assertNotIn("lifetime", elite)
+        self.assertNotIn("expires", elite)
+        worker = self.candidate(plain, "zcode/default")
+        self.assertIsNotNone(worker)
+        self.assertNotIn("lifetime", worker)
+        self.assertNotIn("expires", worker)
+        self.assertIsNone(self.candidate(keyed, "zcode/default"))
+        self.assertEqual(self.withheld(keyed, "zcode/default"), "expiry-unreadable")
+        lifetime_only = self.project(self.authorization([
+            {"id": "codex/default", "state": "granted", "count": 1},
+            {"count": 1, "id": "zcode/default", "state": "granted", "lifetime": "bogus"},
+        ]), avail)
+        self.assertEqual(worker, self.candidate(lifetime_only, "zcode/default"))
 
     def test_expert_expiry_is_withheld_and_execute_reports_the_reason(self) -> None:
         install_fake(self.skills, ["codex"])
@@ -3372,7 +3430,7 @@ class DispatchEntry(unittest.TestCase):
             {"item_id": "kept", "preset": "zcode/default", "session": kept_session, "prompt": kept_prompt},
             {"item_id": "retry", "preset": "zcode/default", "session": retry_session, "prompt": retry_prompt},
         ])
-        auth = self.authorization()
+        auth = self.authorization([{"id": "zcode/default", "state": "granted", "count": 8}])
         proc = subprocess.Popen(
             [
                 sys.executable, str(SCRIPT), "execute",

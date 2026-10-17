@@ -496,7 +496,7 @@ substantial, full-cycle tasks.
 
 The Host keeps exact grants and current duties; class meanings and the
 on-demand capability summary cover presets both local and currently
-authorized: discovered Worker pool members (minus your restrictions), granted
+authorized: Worker presets the owner explicitly granted (minus your restrictions), granted
 Elite presets with their limits, and an Expert preset only while its
 permitted task is active. A local preset requires a
 runtime discovered in the bound target's effective launch context and a

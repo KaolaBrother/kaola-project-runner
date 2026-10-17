@@ -18,7 +18,7 @@ project runs one Agent for it.
 From the user and Git/Workflow/Issue/Runner records collect:
 goal; progress; the Host platform; authorized worker platforms by class;
 Elite grants/counts; Expert grants/lifetime; bound-target local choices
-separate from authorization (host-platforms.md); Worker pool rules;
+separate from authorization (host-platforms.md); Worker grant rules;
 exclusions; the quota the user actually gave, each figure in its own unit;
 priority; delivery/stop boundary; project path; optional `project.user_language`; unset keeps the preference.
 On a live Host, apply only the user's latest change; batch nonurgent

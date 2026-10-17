@@ -754,10 +754,10 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   without a usable binding still records its one failure per sequence.
   The bound runtime is not a pin (Issue #324). When its Runner file is missing, its start
   fails, or its node does not admit a batch, the carrier moves the node to the next runtime
-  instead of failing: the Worker-class presets that `kaola-dispatch.py project` finds
-  eligible now (grants, exclusions, holds, Delegator ceiling, availability not `absent`),
-  `zcode/default` first and then by id, skipping every runtime already tried for this
-  binding. The fallback start is the same Runner start from the sibling installed Skill
+  instead of failing: only Worker presets that `kaola-dispatch.py project` finds
+  eligible now (an explicit Worker grant, exclusions, holds, Delegator ceiling, availability not `absent`),
+  sorted by preset id, skipping every runtime already tried for this
+  binding. No granted Worker preset means the chain fails once and returns; it does not try an ungranted preset. The fallback start is the same Runner start from the sibling installed Skill
   (`<root>/<platform>-kaola-project-runner/scripts/<runner>`, or the checkout entrypoint with
   that platform first), the bound `--session`, this `--repo`, `--role sideagent` and the
   preset's `--tier`; the bound `--model`/`--effort` are dropped. A preset whose Runner is not
@@ -782,7 +782,7 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   `pending_host_changes`; the Delegator view adds `maintenance`. The Delegator view lists the `AGENTS.md`
   user-requirements region, holds, alerts, pending decisions, `unverified`, then doing, todo,
   and outcomes. Unknown content is `unknown` locators. It is not view text.
-  Host view derives capability from current grants, default Worker pool, exclusions, holds
+  Host view derives capability from current grants, explicit Worker grants, exclusions, holds
   and actual availability. Class definitions/defaults come from matched catalog/templates.
   Grouped grants own one count, choice set and switch permission; compatibility rows are generated.
   `count` on a grouped grant is the shared pool. `extra_seats` maps a member preset id to a positive
@@ -817,7 +817,7 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   shape check serves writes, migration, and the dispatch ceiling. `delegator update` accepts one
   grouped `elite_grants` row with `extra_seats` plus that preset once in `expert_task_grants`. A malformed
   grant with known preset ids refuses those ids; malformed pool authorization
-  refuses that class. Legacy aggregate limits require original owner reconciliation. Owner conditions remain literal until mapped
+  refuses that class. A `worker_grants` row is exactly one of `preset_ids` or `scope` `all-worker-presets`, plus `count` (a nonnegative integer or the literal `unlimited`), optional `expires`, and `state` (`granted`, `paused`, or `revoked`; omitted means granted). A missing, null, or malformed `count` refuses that row and is not `unlimited`. A named row with a bad count refuses those ids; an unreadable all-worker row or an unreadable `worker_grants` value refuses the Worker class. Two all-worker rows, a named row mixed with an all-worker row, or the same preset twice refuses the list. A Worker preset also named on an Elite or Expert row refuses. `unlimited` does not authorize Elite or Expert and does not override an exclusion. The closed form sorts `preset_ids`. A well-formed legacy `worker_pool` is removed on migration and is not copied into `worker_grants`. The Delegator view lists `authorization.worker_grants` (coverage `named-presets` or `all-worker-presets`, count as the integer or the word `unlimited`, expiry) and `worker_grant_statement`. With no grants that statement is `No Worker grants. There are no Workers until the owner grants some.` Dispatch `worker_ids` come only from current `worker_grants`. An unauthorized Worker preset is `no-worker-grant`; an expired one is `worker-grant-expired`. A numeric count is enforced. Only an explicit `unlimited` grant that covers that preset skips the count check. Legacy aggregate limits require original owner reconciliation. Owner conditions remain literal until mapped
   from original authority. An untyped old file produces an actionable
   migration observation from `execute`; legacy Host authorization continues.
   `adopted` needs a string `evidence` or `locator` that names the Host record or path. `sent` does not.
@@ -2388,9 +2388,9 @@ implementation, and the Host fallback when no tier is chosen). `--tier opus-xhig
 is the same display name Opus 5.5, preset `claude-code/opus-xhigh`, native alias `opus` at
 `effort=xhigh` (Elite; planning, design, and review; it does not perform
 implementation). The preset ID is not the alias. `--tier sonnet` is Sonnet (`sonnet`)
-at `effort=high` (Elite; an explicit preset and count grant, not a Worker-pool member).
-`--tier haiku` is Claude Haiku (`haiku`) at `effort=high` (Worker; a default-authorized
-pool member). The Worker pool is exactly: `claude-code/haiku`, `codex/luna`, `devin/default`, `dsh/commandcode`, `dsh/default`, `opencode/default`, `zcode/default`. Each of those seven is default-authorized and needs no grant row. `dsh/commandcode` is the Command Code DeepSeek V4.1 Flash preset in that pool. Codex's `--tier luna` is GPT-6 Luna (`gpt-6-luna`) at `effort=max`
+at `effort=high` (Elite; an explicit preset and count grant, not a Worker-class preset).
+`--tier haiku` is Claude Haiku (`haiku`) at `effort=high` (Worker; usable only after an explicit Worker grant).
+Worker-class presets are exactly: `claude-code/haiku`, `codex/luna`, `devin/default`, `dsh/commandcode`, `dsh/default`, `opencode/default`, `zcode/default`. Each of those seven is usable only after an explicit Worker grant. `dsh/commandcode` is the Command Code DeepSeek V4.1 Flash preset in that class, and it needs a grant the same way. Codex's `--tier luna` is GPT-6 Luna (`gpt-6-luna`) at `effort=max`
 (Issue #188, profile narrowed in #301): a computer-use-only Worker, not an upgrade
 and not a general implementation preset. These are applied as ordinary ACP config
 options; a native rejection is a `config_application` limitation, never a substitute.

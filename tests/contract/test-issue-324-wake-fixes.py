@@ -9,9 +9,9 @@
    batch, so its business writes record no failure and stage no Host turn. A
    node binding whose recipe is unusable fails once; later Host writes do not
    mint a new failure each, and a repaired binding picks the later range up.
-3. A bound node whose runtime fails moves through the eligible Worker chain
-   (default ``zcode/default`` first), never retrying a runtime and never
-   using an excluded preset; an exhausted chain fails once, with no retry.
+3. A bound node whose runtime fails moves through granted Worker presets
+   sorted by id, never retrying a runtime and never using an excluded or
+   ungranted preset; an exhausted chain fails once, with no retry.
 """
 
 from __future__ import annotations
@@ -349,9 +349,16 @@ class NodeRuntimeFallback(issue255.HolderNodeMode):
 
     def bind(self, platform: str, exclusions: list[str], revision: int = 4) -> None:
         runner = Path(self.tmp.name) / "skills" / f"{platform}-kaola-project-runner" / "scripts" / "runtime-tmux.sh"
+        worker_grants = [
+            {"id": preset, "state": "granted", "count": 1}
+            for preset in (
+                "claude-code/haiku", "codex/luna", "devin/default", "dsh/commandcode",
+                "dsh/default", "opencode/default", "zcode/default",
+            )
+        ]
         doc = {"schema": "kaola-heartbeat-prompt/2", "host_revision": revision,
                "body": json.dumps({"view": "host", "attention": []}),
-               "state": {"authorization": {"exclusions": exclusions},
+               "state": {"authorization": {"grants": worker_grants, "exclusions": exclusions},
                          "sideagent": {"platform": platform, "session": self.SESSION, "state": "active",
                                        "mode": "node", "recipe": {"runner": str(runner), "argv": [
                                            "start", "--repo", str(self.repo), "--session", self.SESSION,
@@ -375,17 +382,17 @@ class NodeRuntimeFallback(issue255.HolderNodeMode):
     def test_failed_runtime_falls_back_through_the_eligible_worker_chain(self) -> None:
         self.prepare_recovery_host()
         self.install("claude-code", FAILING_RUNNER)
-        self.install("zcode", FAILING_RUNNER)
-        self.install("dsh", issue255.FAKE_NODE_RUNNER)
+        self.install("dsh", FAILING_RUNNER)
+        self.install("zcode", issue255.FAKE_NODE_RUNNER)
         self.install("opencode", issue255.FAKE_NODE_RUNNER)  # installed but excluded
-        self.serve("dsh")
+        self.serve("zcode")
         self.bind("claude-code", ["codex/luna", "devin/default", "dsh/commandcode", "opencode/default"])
         self.drive(lambda: len(self.fake.prompts) == 1, "a batch on the first runtime that starts")
         moves = self.events_of("sideagent_node_fallback")
         self.assertEqual([(m["from"], m.get("to"), m["chain"]) for m in moves],
-                         [("claude-code", "zcode/default", ["zcode/default", "dsh/default"]),
-                          ("zcode", "dsh/default", ["dsh/default"])],
-                         "the default runtime first, then by id; a failed runtime is not retried")
+                         [("claude-code", "dsh/default", ["dsh/default", "zcode/default"]),
+                          ("dsh", "zcode/default", ["zcode/default"])],
+                         "granted Worker presets by id; a failed runtime is not retried")
         self.assertEqual([row["session"] for row in self.events_of("sideagent_node_start_failed")],
                          [self.SESSION, self.SESSION])
         argv = json.loads((Path(self.tmp.name) / "argv").read_text())

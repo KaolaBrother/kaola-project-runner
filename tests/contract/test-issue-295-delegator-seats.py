@@ -4,9 +4,9 @@
 `state view --role delegator`, `delegator view`, and `project --seats` share
 one seat summary. It lists Elite and Expert grants from the Delegator
 ceiling, a shared group once, a Delegator-granted preset the Host grants
-omit as host-grant-missing, and admissible Worker presets in worker_pool.
-Issue #297: a Worker-class preset with a counted owner grant is a seat; the
-uncounted default Worker pool is not.
+omit as host-grant-missing, and Worker presets named by worker_grants.
+Issue #297, retargeted by #346: a Worker preset with a numeric Worker grant
+is a seat. No Worker grant means that preset is not a seat.
 """
 
 from __future__ import annotations
@@ -60,7 +60,9 @@ def delegator_auth(expert_rows: list[dict] | None = None) -> dict:
             {"preset_id": "codex/astra", "count": 1, "state": "granted",
              "lifetime": "standing"},
         ],
-        "worker_pool": ["devin/default"],
+        "worker_grants": [
+            {"preset_ids": ["devin/default"], "count": 1, "state": "granted"},
+        ],
     }
 
 
@@ -148,7 +150,10 @@ class DelegatorSeats(unittest.TestCase):
         self.assertEqual(sorted(row["id"] for row in pair["presets"]),
                          ["cursor-cli/default", "devin/fable"])
         self.assertEqual(seats["authorized_total"], 7)
-        self.assertEqual(seats["worker_pool"], [])
+        self.assertNotIn("worker_pool", seats)
+        self.assertEqual(seats["worker_grants"][0]["preset_ids"], ["devin/default"])
+        self.assertEqual(seats["worker_grants"][0]["count"], 1)
+        self.assertIn("named presets", seats["worker_grant_statement"])
         self.assertEqual(seats["expert_authorization"], "present")
         worker = groups["devin/default"]
         self.assertEqual(worker["authorized_count"], 1)
@@ -177,7 +182,8 @@ class DelegatorSeats(unittest.TestCase):
         self.assertEqual(code, 0, out)
         summary = out["summary"]
         self.assertEqual(summary["authorized_total"], 7)
-        self.assertEqual(summary["worker_pool"], [])
+        self.assertNotIn("worker_pool", summary)
+        self.assertEqual(summary["worker_grants"][0]["preset_ids"], ["devin/default"])
         self.assertEqual(
             sorted((group["group"], group["authorized_count"],
                     tuple(sorted(row["id"] for row in group["presets"])))
@@ -210,11 +216,12 @@ class DelegatorSeats(unittest.TestCase):
         seats = out["seats"]
         self.assertNotIn("duplicate grant",
                          " ".join(seats.get("unknown_reasons") or []))
-        self.assertEqual(listed_ids(seats), EXPECTED_IDS)
+        self.assertEqual(listed_ids(seats), EXPECTED_IDS | {"devin/default"})
         groups = group_index(seats)
         self.assertEqual(groups["grant:cursor-cli/default,devin/fable"]["authorized_count"], 2)
-        self.assertEqual(seats["authorized_total"], 6)
-        self.assertEqual(seats["worker_pool"], ["devin/default"])
+        self.assertEqual(seats["authorized_total"], 7)
+        self.assertNotIn("worker_pool", seats)
+        self.assertEqual(seats["worker_grants"][0]["preset_ids"], ["devin/default"])
 
     def test_delegator_grant_host_omits_is_host_grant_missing(self) -> None:
         self.write_host(host_grants(drop={"codex/astra"}))
@@ -243,15 +250,19 @@ class DelegatorSeats(unittest.TestCase):
         self.assertEqual(group_index(project["summary"])["codex/astra"]["unavailable"],
                          [{"id": "codex/astra", "reason": "host-grant-missing"}])
 
-    def test_uncounted_worker_host_grant_stays_pool(self) -> None:
+    def test_uncounted_worker_host_grant_without_a_worker_grant_is_omitted(self) -> None:
         grants = [dict(grant) for grant in host_grants()]
         for grant in grants:
             if grant.get("id") == "devin/default":
                 grant.pop("count", None)
         self.write_host(grants)
+        auth = delegator_auth()
+        auth.pop("worker_grants")
+        self.write_delegator(auth)
         seats = self.state_view_seats()
         self.assertNotIn("devin/default", listed_ids(seats))
-        self.assertEqual(seats["worker_pool"], ["devin/default"])
+        self.assertNotIn("worker_pool", seats)
+        self.assertIn("No Worker grants", seats["worker_grant_statement"])
         self.assertEqual(seats["authorized_total"], 6)
 
     def test_excluded_worker_seat_shows_unavailable(self) -> None:
@@ -268,17 +279,16 @@ class DelegatorSeats(unittest.TestCase):
 
     def test_worker_grant_above_empty_ceiling_pool_is_omitted(self) -> None:
         auth = delegator_auth()
-        auth["worker_pool"] = []
+        auth.pop("worker_grants")
         self.write_delegator(auth)
         seats = self.state_view_seats()
         self.assertNotIn("devin/default", listed_ids(seats))
-        self.assertEqual(seats["worker_pool"], [])
+        self.assertNotIn("worker_pool", seats)
+        self.assertIn("No Worker grants", seats["worker_grant_statement"])
         self.assertEqual(seats["authorized_total"], 6)
 
     def test_counted_delegator_worker_row_is_a_seat(self) -> None:
         auth = delegator_auth()
-        auth["elite_grants"].append(
-            {"preset_id": "devin/default", "count": 1, "state": "granted"})
         self.write_delegator(auth)
         self.write_host(host_grants(drop={"devin/default"}))
         seats = self.state_view_seats()
@@ -288,7 +298,7 @@ class DelegatorSeats(unittest.TestCase):
         self.assertNotIn({"id": "devin/default", "reason": "host-grant-missing"},
                          worker["unavailable"])
         self.assertEqual(seats["authorized_total"], 7)
-        self.assertEqual(seats["worker_pool"], [])
+        self.assertNotIn("worker_pool", seats)
 
     def test_worker_seats_match_project_grant_groups(self) -> None:
         self.write_host([
@@ -308,7 +318,9 @@ class DelegatorSeats(unittest.TestCase):
                 {"preset_ids": ["claude-code/default", "claude-code/opus-xhigh"],
                  "count": 1, "state": "granted"},
             ],
-            "worker_pool": ["devin/default"],
+            "worker_grants": [
+                {"preset_ids": ["devin/default"], "count": 1, "state": "granted"},
+            ],
         }):
             if auth is None:
                 self.delegator_file.unlink()

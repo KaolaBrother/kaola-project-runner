@@ -151,7 +151,12 @@ class RecordContract(unittest.TestCase):
         self.update("tasks", "reclaim", {"stage": "doing", "goal": "exact original reclaim",
                                           "session": "droid-KT-original", "holder_instance_id": "exact-holder", "next": "Host exact stop"})
         availability = self.repo / ".kaola" / "dispatch-availability.json"
-        availability.write_text(json.dumps({"present": choices + ["zcode/default"], "absent": ["droid/core"]}))
+        # droid/opus is granted and omitted here, so one eligible preset stays
+        # unknown. Ungranted Workers are not eligible (#346).
+        availability.write_text(json.dumps({
+            "present": ["droid/default", "droid/core", "zcode/default"],
+            "absent": ["droid/core"],
+        }))
         def project():
             code, out = run_dispatch(["project", "--authorization", str(self.file), "--platforms", str(PLATFORMS),
                                       "--availability", str(availability)])
@@ -168,7 +173,7 @@ class RecordContract(unittest.TestCase):
         self.assertEqual(stored, {"grants": [grant], "exclusions": []})
         out = project(); rows = {row["id"]: row for row in out["candidates"]}
         self.assertEqual(rows[choices[0]]["count"], 2); self.assertTrue(rows[choices[0]]["model_switch"])
-        self.assertIn("zcode/default", out["capability_summary"]["presets"])
+        self.assertNotIn("zcode/default", out["capability_summary"]["presets"])
         self.assertEqual(rows["droid/opus"]["special_requirements"], {"task_scope": "original review only"})
         code, host = self.state("view", "--file", str(self.file), "--role", "host")
         self.assertEqual(code, 0, host); self.assertEqual(host["catalog"]["classes"].keys(), {"Elite", "Expert", "Worker"})
@@ -590,8 +595,10 @@ class RecordContract(unittest.TestCase):
         code, out = run_dispatch(["delegator", "migrate", "--file", str(self.delegator), "--write"])
         self.assertEqual(code, 0, out)
         saved = json.loads(self.delegator.read_text())
-        self.assertEqual(saved["authorization"]["worker_pool"], ["codex/default", "codex/luna"])
-        self.assertIn("codex/default", saved["authorization"]["exclusions"])
+        self.assertNotIn("worker_pool", saved["authorization"])
+        self.assertNotIn("worker_grants", saved["authorization"])
+        self.assertNotIn("codex/default", saved["authorization"].get("exclusions") or [])
+        self.assertTrue(any("worker_pool" in item for item in out["dropped"]))
         self.assertNotIn("revoked", saved["authorization"])
         self.assertEqual(saved["authorization"]["expert_task_grants"], [])
         self.assertEqual(saved["authorization"]["elite_grants"], [{"preset_ids": ["droid/default"], "count": 2}])
@@ -1154,7 +1161,7 @@ class RecordContract(unittest.TestCase):
         classes = dict(CLASS_SENTENCES)
         pool = rows(
             { "grants": []},
-            {"worker_pool": ["dsh/default", "zcode/default"],
+            {"worker_grants": [{"preset_ids": ["zcode/default"], "count": 1, "state": "granted"}],
              "elite_grants": []},
             [{"preset": "dsh/default", "platform": "dsh", "session": "dsh-existing",
               "repo": str(self.repo.resolve()), "state": "running"}],
@@ -1557,8 +1564,13 @@ class RecordContract(unittest.TestCase):
                     self.assertEqual(evidence["path"], path)
                     self.assertIn("allowed", evidence)
                     self.assertIn("recovery", evidence)
-                    unaffected = ("zcode/default", "Worker") if scope == "Elite" else ("claude-code/default", "Elite")
-                    self.assertIsNone(dispatch.ceiling_block(ceiling, *unaffected))
+                    if scope == "Elite":
+                        self.assertEqual(
+                            dispatch.ceiling_block(ceiling, "zcode/default", "Worker"),
+                            "no-worker-grant")
+                    else:
+                        self.assertIsNone(
+                            dispatch.ceiling_block(ceiling, "claude-code/default", "Elite"))
                 self.assertEqual(json.loads(self.delegator.read_text())["watch"]["relay"]["detail"], "owner condition")
 
     def test_bad_grant_keeps_inflight_duty_and_unrelated_dispatch(self) -> None:
@@ -2033,7 +2045,7 @@ class RecordContract(unittest.TestCase):
         code, view = self.state("view", "--file", str(self.file), "--role", "host")
         self.assertEqual(code, 0, view)
         self.assertIn("droid/opus", view["capability"]["presets"])
-        self.assertIn("zcode/default", view["capability"]["presets"])
+        self.assertNotIn("zcode/default", view["capability"]["presets"])
         self.assertNotIn("classes", self.doc()["state"]["authorization"])
         self.assertIn("Worker", view["catalog"]["classes"])
 

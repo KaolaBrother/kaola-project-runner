@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Issue #345: dsh/commandcode is a default-authorized Worker pool member.
+"""Issue #345, retargeted by #346: dsh/commandcode is a Worker-class catalog preset.
 
-The exact pool is seven preset ids. ``dsh/commandcode`` needs no grant row.
-``codex/luna`` and ``zcode/default`` stay members. Antigravity stays out.
+The class list is seven preset ids. Each one, including ``dsh/commandcode``,
+is usable only after an explicit Worker grant. ``codex/luna`` and
+``zcode/default`` stay in that class. Antigravity stays out.
 """
 
 from __future__ import annotations
@@ -31,8 +32,8 @@ POOL = [
     "zcode/default",
 ]
 MEMBERS = ", ".join(f"`{preset}`" for preset in POOL)
-SENTENCE = "The Worker pool is exactly: " + MEMBERS + "."
-DELEGATOR_SENTENCE = "The pool is exactly: " + MEMBERS + "."
+SENTENCE = "Worker-class presets are exactly: " + MEMBERS + "."
+HOST_SENTENCE = "The class is exactly: " + MEMBERS + "."
 
 
 def load_render():
@@ -55,9 +56,12 @@ class ExactWorkerPool(unittest.TestCase):
             encoding="utf-8")
         api = (PROJECT / "docs" / "api.md").read_text(encoding="utf-8")
         self.assertIn(SENTENCE, profiles)
-        self.assertIn(DELEGATOR_SENTENCE, host)
+        self.assertIn(HOST_SENTENCE, host)
         self.assertIn(MEMBERS, api)
-        self.assertIn("seven-preset", profiles)
+        self.assertIn("explicit Worker grant", profiles)
+        self.assertIn("explicit grant", host)
+        self.assertNotIn("default-authorized", profiles)
+        self.assertNotIn("default-authorized", host)
         self.assertNotIn("six-preset", profiles)
         self.assertNotIn("antigravity/", SENTENCE)
         for preset in POOL:
@@ -68,10 +72,11 @@ class ExactWorkerPool(unittest.TestCase):
                      / "host-platforms.md.tmpl").read_text(encoding="utf-8")
         self.assertIn("{{WORKER_POOL_MEMBERS}}", template)
         self.assertIn("{{WORKER_POOL_MEMBERS}}", delegator)
-        self.assertIn("seven-preset", template)
-        self.assertIn("Those seven", delegator)
+        self.assertIn("explicit Worker grant", template)
+        self.assertIn("explicit grant", delegator)
+        self.assertNotIn("default-authorized", delegator)
 
-    def test_dispatch_and_delegator_authorize_commandcode_without_a_grant(self) -> None:
+    def test_commandcode_dispatches_only_after_an_explicit_grant(self) -> None:
         env = {key: value for key, value in os.environ.items()
                if not key.startswith("KAOLA_") or key == "KAOLA_LAUNCH_BACKEND"}
         env.pop("KAOLA_ACP_DISPATCHER", None)
@@ -96,32 +101,25 @@ class ExactWorkerPool(unittest.TestCase):
 
             project = run(["project", "--authorization", str(auth),
                            "--platforms", str(PLATFORMS)])
+            worker_ids = [item["id"] for item in project["candidates"] if item["class"] == "Worker"]
+            self.assertEqual(worker_ids, [])
+            self.assertNotIn("antigravity/default", worker_ids)
+
+            granted = root / "granted.json"
+            granted.write_text(json.dumps({"grants": [
+                {"id": "dsh/commandcode", "state": "granted", "count": 1},
+            ]}), encoding="utf-8")
+            project = run(["project", "--authorization", str(granted),
+                           "--platforms", str(PLATFORMS)])
             by_id = {item["id"]: item for item in project["candidates"]}
             commandcode = by_id["dsh/commandcode"]
             self.assertEqual(commandcode["class"], "Worker")
-            self.assertEqual(commandcode["state"], "default-pool")
-            self.assertTrue(commandcode["pool"])
-            self.assertIsNone(commandcode["count"])
-            self.assertNotIn("dsh/commandcode", json.loads(auth.read_text(encoding="utf-8"))["grants"])
-            self.assertIn("codex/luna", by_id)
-            self.assertIn("zcode/default", by_id)
-            self.assertEqual(by_id["codex/luna"]["state"], "default-pool")
-            self.assertEqual(by_id["zcode/default"]["state"], "default-pool")
-            self.assertNotIn("antigravity/default",
-                             [item["id"] for item in project["candidates"]
-                              if item["class"] == "Worker" and item["pool"]])
+            self.assertEqual(commandcode["state"], "granted")
+            self.assertFalse(commandcode["pool"])
+            self.assertEqual(commandcode["count"], 1)
+            self.assertNotIn("codex/luna", by_id)
+            self.assertNotIn("zcode/default", by_id)
 
-            seats = run([
-                "project", "--seats", "--repo", str(repo),
-                "--authorization", str(auth), "--live", str(live),
-                "--platforms", str(PLATFORMS),
-            ])
-            self.assertEqual(seats["summary"]["worker_pool"], POOL)
-
-            # An omitted worker_pool is ceiling-incomplete, so the seat list
-            # stays empty. Default authorization is the pool field itself:
-            # the seven ids, with no elite/expert grant row. A counted grant
-            # would become a seat and leave the pool.
             delegator = repo / ".kaola" / "delegator-heartbeat.json"
             delegator.parent.mkdir()
             delegator.write_text(json.dumps({
@@ -135,12 +133,16 @@ class ExactWorkerPool(unittest.TestCase):
                 "--repo", str(repo), "--live", str(live),
                 "--platforms", str(PLATFORMS),
             ])
-            self.assertEqual(viewed["seats"]["worker_pool"], POOL)
+            self.assertNotIn("worker_pool", viewed["seats"])
+            self.assertEqual(viewed["seats"]["worker_grants"], [])
+            self.assertIn("No Worker grants", viewed["seats"]["worker_grant_statement"])
+            self.assertIn("legacy worker_pool", viewed["authorization"]["worker_grant_statement"])
             seated = {row["id"] for group in viewed["seats"].get("groups") or []
                       for row in group.get("presets") or []}
             self.assertNotIn("dsh/commandcode", seated)
             stored = json.loads(delegator.read_text(encoding="utf-8"))["authorization"]
             self.assertEqual(stored["worker_pool"], POOL)
+            self.assertNotIn("worker_grants", stored)
             for key in ("grants", "elite_grants", "expert_task_grants"):
                 self.assertNotIn(key, stored)
 

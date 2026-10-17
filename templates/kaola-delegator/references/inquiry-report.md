@@ -35,7 +35,7 @@ row leaves stored `watch`: `update --expect-revision REV --source ORIGINAL
 evidence also removes it; `sent` remains pending. Do not move settled text to
 another field. An absent row is not created. An unresolved unclassified matter
 keeps original evidence on the current decision/reconciliation route.
-Use exact preset ids and integer counts; no standalone aggregate or Worker pool cap.
+Use exact preset ids and count or unlimited; no standalone aggregate or Worker pool cap.
 Migration removes only null or provably redundant legacy limits. Conflicting or
 total-only intent needs original owner reconciliation and a sourced, revision-bound
 null removal through the existing update; never expand authority silently. Do not infer counts or switch
@@ -126,7 +126,7 @@ is no faster carrier.
 
 Current authorization stores one grouped count, choices and switch permission.
 Choices alone do not permit switching. Derive Class/defaults and capabilities
-from the matched catalog, grants/default pool, exclusions, holds and availability;
+from the matched catalog, explicit grants, exclusions, holds and availability;
 unknown stays explicit. Store only owner overrides. Remove settled grants and
 relays; keep active exclusions, pause reopening and exact stop/handoff duties.
 Keep the current objective and source pointers, not adoption history or copied

@@ -69,6 +69,7 @@ EXPERT_WITHHELD_REASONS = frozenset({"lifetime-unreadable", "expiry-unreadable",
 CEILING_REASONS = frozenset({
     "above-ceiling", "ceiling-incomplete", "ceiling-unreadable",
     "revoked", "paused", "excluded", "expired",
+    "no-worker-grant", "worker-grant-expired",
 })
 CEILING_DUTY = {
     "revoked": "stop",
@@ -560,13 +561,23 @@ def eligibility(
         if state not in (None, "granted"):
             withhold(preset, "state-unreadable")
             continue
-        pool = row["class"] == "Worker"
+        # Issue #346: Worker is not a default pool. A grant is required.
         granted = state == "granted"
-        if not pool and not granted:
+        if not granted:
             continue
-        if not pool and not _count_ok(grant.get("count")):
+        count = grant.get("count")
+        unlimited = row["class"] == "Worker" and count == "unlimited"
+        if not unlimited and not _count_ok(count):
             withhold(preset, "count-unreadable")
             continue
+        if row["class"] == "Worker" and grant.get("expires") is not None:
+            moment = parse_expiry(grant["expires"]) if isinstance(grant.get("expires"), str) else None
+            if moment is None:
+                withhold(preset, "expiry-unreadable")
+                continue
+            if moment <= datetime.now(timezone.utc):
+                withhold(preset, "worker-grant-expired")
+                continue
         presence = available.get(preset, "unknown")
         if presence == "absent":
             withhold(preset, "absent")
@@ -600,10 +611,10 @@ def eligibility(
             "profile": row["profile"],
             "selection": dict(row["selection"]),
             "availability": presence,
-            "state": "granted" if granted else "default-pool",
-            "pool": pool,
+            "state": "granted",
+            "pool": False,
             "shared_seat": grant.get("shared_seat") if grant else None,
-            "count": grant.get("count") if grant else None,
+            "count": count,
             "model_switch": bool(grant.get("model_switch")) if grant else False,
             **expert,
         }
@@ -648,6 +659,8 @@ def current_candidates(catalog: dict[str, Any], auth: dict[str, Any], grants: li
         ceiling = admission_ceiling(ceiling)
         catalog = admission_catalog(catalog, ceiling)
     effective = apply_ceiling_to_grants(grants, ceiling, catalog) if ceiling else grants
+    if ceiling:
+        effective = apply_worker_grants(effective, ceiling)
     candidates, withheld = eligibility(catalog, auth, effective, available)
     holds = preset_holds(document)
     kept = []
@@ -914,6 +927,8 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
         ceiling = admission_ceiling(ceiling)
         catalog = admission_catalog(catalog, ceiling)
     effective = apply_ceiling_to_grants(grants, ceiling, catalog) if ceiling else grants
+    if ceiling:
+        effective = apply_worker_grants(effective, ceiling)
     availability = availability_map(load_object(Path(args.availability))) if getattr(args, "availability", None) else {}
     candidates, withheld = eligibility(catalog, auth, effective, availability)
     reasons = {item["id"]: item["reason"] for item in withheld}
@@ -990,11 +1005,14 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
         klass = catalog.get(preset, {}).get("class")
         if klass not in ("Elite", "Expert", "Worker") or grant.get("state") == "revoked" or preset in auth.get("revoked", []):
             continue
+        if klass == "Worker" and grant.get("count") == "unlimited":
+            # Listed on worker_grants. A numeric seat count is not invented.
+            continue
         if klass == "Worker" and not _count_ok(grant.get("count")):
-            # A counted Worker grant is a seat; the uncounted default pool is not.
             continue
         blocked = ceiling_block(ceiling, preset, klass, expert_grants=True) if ceiling else None
-        if blocked in ("above-ceiling", "revoked") or (klass == "Worker" and blocked == "ceiling-incomplete"):
+        if blocked in ("above-ceiling", "revoked", "no-worker-grant") or (
+                klass == "Worker" and blocked in ("ceiling-incomplete", "ceiling-unreadable")):
             continue
         if klass == "Worker":
             worker_seats.add(preset)
@@ -1004,8 +1022,8 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
     if ceiling and not ceiling_error:
         # The Delegator's authorization is the seat source: an Elite/Expert
         # preset it grants but the Host grants omit is still authorized,
-        # reported unavailable as host-grant-missing. A counted Worker row is
-        # a seat the same way, but the pool needs no Host grant.
+        # reported unavailable as host-grant-missing. A numeric Worker grant
+        # is a seat the same way. No Worker grant omits that preset.
         host_ids = {grant["id"] for grant in effective}
         extras = ((ceiling.get("elite_ids") or {}).keys()
                   | (ceiling.get("expert_ids") or {}).keys()) - host_ids
@@ -1017,7 +1035,8 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
             if klass == "Worker" and not _count_ok(count):
                 continue
             blocked = ceiling_block(ceiling, preset, klass, expert_grants=True)
-            if blocked in ("above-ceiling", "revoked") or (klass == "Worker" and blocked == "ceiling-incomplete"):
+            if blocked in ("above-ceiling", "revoked", "no-worker-grant") or (
+                    klass == "Worker" and blocked in ("ceiling-incomplete", "ceiling-unreadable")):
                 continue
             if klass == "Worker":
                 worker_seats.add(preset)
@@ -1026,16 +1045,13 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
             add_seat(preset, klass, count, None,
                      fact.get("lifetime"), None,
                      reason if klass == "Worker" else reason or "host-grant-missing")
-    worker_pool = []
-    if not ceiling_error:
-        for item in candidates:
-            preset = item["id"]
-            if item["class"] != "Worker" or preset in holds or preset in worker_seats:
-                continue
-            if ceiling and ceiling_block(ceiling, preset, "Worker", expert_grants=True):
-                continue
-            worker_pool.append(preset)
-        worker_pool.sort()
+    if ceiling:
+        worker_rows = list(ceiling.get("worker_grant_rows") or [])
+        worker_statement = ceiling.get("worker_grant_statement") or (
+            "No Worker grants. There are no Workers until the owner grants some."
+        )
+    else:
+        worker_rows, worker_statement = RECORD.project_worker_grants({})
     # Occupancy rows were computed for Worker presets too; only counted Worker
     # seat presets stay listed. Uncounted pool rows report nowhere.
     occupied = [row for row in occupied
@@ -1064,7 +1080,8 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
             "expert_authorization": "present" if any(item["class"] == "Expert" for group in groups.values()
                                                        for item in group["presets"]) else "none",
             "occupied": occupied, "authorized_total": authorized_total, "occupied_elite_expert": observed,
-            "worker_pool": worker_pool,
+            "worker_grants": worker_rows,
+            "worker_grant_statement": worker_statement,
             "idle_available_total": sum(group["idle_available"] for group in groups.values())
                 if all(group["idle_available"] is not None for group in groups.values()) else None,
             "unknown_reasons": unknown_sources,
@@ -1124,12 +1141,6 @@ def delegator_seats(args: argparse.Namespace, document: dict[str, Any], path: Pa
                     if "switch_authorization" in grant:
                         row["model_switch"] = grant["switch_authorization"]
                     auth["grants"].append(row)
-            listed = {ident for row in auth["grants"] for ident in _grant_ident_list(row)}
-            listed.update(row["id"] for row in auth["grants"] if isinstance(row.get("id"), str))
-            for ident in source.get("worker_pool") or []:
-                if isinstance(ident, str) and ident not in listed:
-                    listed.add(ident)
-                    auth["grants"].append({"id": ident, "state": "granted"})
             document = None
         else:
             auth = authorization_object(document)
@@ -1137,7 +1148,8 @@ def delegator_seats(args: argparse.Namespace, document: dict[str, Any], path: Pa
                                bound_sideagent(document), document)["summary"]
     except (OSError, ValueError) as exc:
         return {"unknown_reasons": [str(exc)], "expert_authorization": "unknown",
-                "idle_available_total": None, "worker_pool": None}
+                "idle_available_total": None, "worker_grants": [],
+                "worker_grant_statement": "No Worker grants. There are no Workers until the owner grants some."}
 
 
 def present_value(value: Any) -> Any:
@@ -1771,6 +1783,10 @@ def delegator_ceiling(repo: str, observations: list[dict[str, Any]] | None = Non
     bad_grants: set[int] = set()
     expert_bad: set[int] = set()
     worker_problem = elite_problem = expert_problem = None
+    bad_worker: set[int] = set()
+    worker_problems: dict[str, str] = {}
+    worker_problem_evidence: dict[str, dict[str, Any]] = {}
+    raw_workers = auth.get("worker_grants") if isinstance(auth.get("worker_grants"), list) else None
     # One shared group may name an Expert choice that also has its own
     # expert_task_grants row. That overlap is the Expert permission, not a
     # second seat and not a shape failure.
@@ -1803,6 +1819,27 @@ def delegator_ceiling(repo: str, observations: list[dict[str, Any]] | None = Non
                 expert_problem = expert_problem or error
         elif field in ("authorization.worker_pool", "authorization.worker_pool_cap"):
             worker_problem = worker_problem or error
+        elif field == "authorization.worker_grants" or field.startswith("authorization.worker_grants"):
+            match = re.match(r"authorization\.worker_grants\[(\d+)\]", field)
+            named_ids: list[str] = []
+            if match and raw_workers is not None:
+                index = int(match.group(1))
+                grant = raw_workers[index] if index < len(raw_workers) else None
+                if (isinstance(grant, dict) and "preset_ids" in grant and "scope" not in grant
+                        and isinstance(grant.get("preset_ids"), list)
+                        and grant["preset_ids"]
+                        and all(isinstance(item, str) and item for item in grant["preset_ids"])):
+                    named_ids = list(dict.fromkeys(grant["preset_ids"]))
+            # A named row with known ids refuses those ids. Anything else,
+            # including a bad all-worker count, refuses the Worker class.
+            # Neither path turns the count into unlimited.
+            if named_ids and "refuses the Worker class" not in (error.get("recovery") or ""):
+                bad_worker.add(int(match.group(1)))
+                for ident in named_ids:
+                    worker_problems.setdefault(ident, "ceiling-unreadable")
+                    worker_problem_evidence.setdefault(ident, error)
+            else:
+                worker_problem = worker_problem or error
         elif field in ("authorization.elite_cap", "authorization.total_cap", "authorization.elite_grants"):
             elite_problem = elite_problem or error
         elif field == "authorization.expert_task_grants":
@@ -1851,9 +1888,65 @@ def delegator_ceiling(repo: str, observations: list[dict[str, Any]] | None = Non
         expert_problem = expert_problem or RECORD.refusal(
             "authorization.expert_task_grants", "array of grant objects",
             "Delegator: source the original Expert grants before admission")
+    worker_ids: set[str] = set()
+    worker_counts: dict[str, Any] = {}
+    worker_expired: set[str] = set()
+    catalog_workers = {ident for ident, row in catalog.items() if row.get("class") == "Worker"}
+    grant_rows = raw_workers or []
+    if worker_problem is None:
+        for index, grant in enumerate(grant_rows):
+            if index in bad_worker or not isinstance(grant, dict):
+                continue
+            if grant.get("scope") == "all-worker-presets" and "preset_ids" not in grant:
+                ids = set(catalog_workers)
+            elif isinstance(grant.get("preset_ids"), list) and "scope" not in grant:
+                # Elite and Expert ids are not Worker grants, even when named.
+                ids = {ident for ident in grant["preset_ids"] if ident in catalog_workers}
+            else:
+                continue
+            state = grant.get("state") or "granted"
+            if state in ("paused", "revoked", "excluded"):
+                reason = "excluded" if state == "excluded" else state
+                for ident in ids:
+                    blocked.setdefault(ident, reason)
+                continue
+            if state != "granted":
+                continue
+            count = grant.get("count")
+            if count != "unlimited" and not _count_ok(count):
+                continue
+            window = _expiry_state(grant.get("expires"))
+            if window == "expired":
+                worker_expired.update(ids)
+                continue
+            if window == "unreadable":
+                if grant.get("scope") == "all-worker-presets":
+                    worker_problem = RECORD.refusal(
+                        "authorization.worker_grants", "ISO-8601 instant with an offset",
+                        "Delegator: an unreadable Worker expiry refuses the Worker class and is not unlimited",
+                    )
+                    worker_ids.clear()
+                    worker_counts.clear()
+                    worker_expired.clear()
+                    break
+                for ident in ids:
+                    worker_problems.setdefault(ident, "ceiling-unreadable")
+                continue
+            for ident in ids:
+                if ident in blocked or ident in worker_problems:
+                    continue
+                worker_ids.add(ident)
+                worker_counts[ident] = count
+        worker_ids -= worker_expired
+        for ident in worker_expired:
+            worker_counts.pop(ident, None)
+    if worker_problem is not None:
+        worker_ids = set()
+        worker_counts = {}
+    shown, statement = RECORD.project_worker_grants(auth)
     return {
         "blocked": blocked,
-        "worker_ids": set(auth["worker_pool"]) if isinstance(auth.get("worker_pool"), list) and worker_problem is None else None,
+        "worker_ids": worker_ids,
         "elite_ids": elite,
         "expert_ids": expert_ids,
         "by_id": by_id or {}, "expert_by_id": expert_by_id or {},
@@ -1862,6 +1955,12 @@ def delegator_ceiling(repo: str, observations: list[dict[str, Any]] | None = Non
         "expert_problems": expert_problems, "expert_problem_evidence": expert_evidence,
         "worker_problem": worker_problem, "elite_problem": elite_problem,
         "expert_problem": expert_problem,
+        "worker_counts": worker_counts,
+        "worker_expired": worker_expired,
+        "worker_problems": worker_problems,
+        "worker_problem_evidence": worker_problem_evidence,
+        "worker_grant_rows": shown,
+        "worker_grant_statement": statement,
     }, None
 
 
@@ -2139,9 +2238,16 @@ def ceiling_block(ceiling: dict[str, Any], preset: str, class_name: str,
     if preset in ceiling["blocked"]:
         return ceiling["blocked"][preset]
     if class_name == "Worker":
-        if ceiling["worker_ids"] is None:
-            return "ceiling-incomplete"
-        return None if preset in ceiling["worker_ids"] else "above-ceiling"
+        if ceiling.get("worker_problem"):
+            return "ceiling-unreadable"
+        if preset in (ceiling.get("worker_problems") or {}):
+            return ceiling["worker_problems"][preset]
+        if preset in (ceiling.get("worker_expired") or ()):
+            return "worker-grant-expired"
+        worker_ids = ceiling.get("worker_ids")
+        if not isinstance(worker_ids, set):
+            return "no-worker-grant"
+        return None if preset in worker_ids else "no-worker-grant"
     if ceiling["elite_ids"] is None:
         return "ceiling-incomplete"
     if preset in ceiling["elite_ids"]:
@@ -2159,7 +2265,10 @@ def ceiling_block(ceiling: dict[str, Any], preset: str, class_name: str,
 def ceiling_count(ceiling: dict[str, Any], preset: str, class_name: str) -> int | None:
     elite = (ceiling.get("elite_ids") or {}).get(preset)
     if class_name == "Worker":
-        return elite if _count_ok(elite) else None
+        value = (ceiling.get("worker_counts") or {}).get(preset)
+        if value == "unlimited":
+            return None
+        return value if _count_ok(value) else None
     expert = (ceiling.get("expert_ids") or {}).get(preset)
     if class_name == "Expert" and _count_ok(expert):
         if _count_ok(elite):
@@ -2280,6 +2389,35 @@ def apply_ceiling_to_grants(grants: list[dict[str, Any]], ceiling: dict[str, Any
     return narrowed
 
 
+def apply_worker_grants(grants: list[dict[str, Any]], ceiling: dict[str, Any]) -> list[dict[str, Any]]:
+    """Copy effective Worker grants onto the grants eligibility reads.
+
+    ``unlimited`` stays that literal. A numeric count stays an integer. An
+    exclusion, pause, revocation, or expiry is not copied in.
+    """
+    if ceiling.get("worker_problem"):
+        return grants
+    counts = ceiling.get("worker_counts") or {}
+    blocked = ceiling.get("blocked") or {}
+    expired = ceiling.get("worker_expired") or set()
+    out = [dict(grant) for grant in grants]
+    index = {grant["id"]: pos for pos, grant in enumerate(out) if isinstance(grant.get("id"), str)}
+    for ident, count in counts.items():
+        if ident in blocked or ident in expired:
+            continue
+        if count != "unlimited" and not _count_ok(count):
+            continue
+        if ident in index:
+            row = out[index[ident]]
+            if row.get("state") in ("paused", "revoked", "excluded"):
+                continue
+            row["state"] = "granted"
+            row["count"] = count
+        else:
+            out.append({"id": ident, "state": "granted", "count": count})
+    return out
+
+
 def command_execute(args: argparse.Namespace) -> int:
     try:
         plan = load_object(Path(args.plan))
@@ -2371,6 +2509,7 @@ def command_execute(args: argparse.Namespace) -> int:
         ceiling = admission_ceiling(ceiling)
         catalog = admission_catalog(catalog, ceiling)
         grants = apply_ceiling_to_grants(grants, ceiling, catalog)
+        grants = apply_worker_grants(grants, ceiling)
         shared_capacities = shared_seat_capacities(grants)
         candidates, withheld = eligibility(catalog, auth, grants, available)
         kept_candidates = []
@@ -2442,9 +2581,35 @@ def command_execute(args: argparse.Namespace) -> int:
                 reason = "state-unreadable"
             elif withheld_reason.get(preset) in EXPERT_WITHHELD_REASONS:
                 reason = withheld_reason[preset]
-            detail = ((ceiling or {}).get("problem_evidence", {}).get(preset)
-                      or (ceiling or {}).get("expert_problem_evidence", {}).get(preset)
-                      or (ceiling or {}).get("worker_problem" if row["class"] == "Worker" else "elite_problem"))
+            blocked_reason = ((ceiling or {}).get("blocked") or {}).get(preset)
+            if blocked_reason and reason == "not-authorized":
+                reason = blocked_reason
+            if row["class"] == "Worker" and reason in ("not-authorized", "above-ceiling", "ceiling-incomplete"):
+                if (ceiling or {}).get("worker_problem") or preset in ((ceiling or {}).get("worker_problems") or {}):
+                    reason = "ceiling-unreadable"
+                elif preset in ((ceiling or {}).get("worker_expired") or ()):
+                    reason = "worker-grant-expired"
+                else:
+                    reason = "no-worker-grant"
+            elif row["class"] == "Worker" and withheld_reason.get(preset) == "worker-grant-expired":
+                reason = "worker-grant-expired"
+            if row["class"] == "Worker" and reason == "no-worker-grant":
+                detail = {
+                    "preset": preset,
+                    "class": "Worker",
+                    "detail": f"No Worker grant covers {preset}.",
+                }
+            elif row["class"] == "Worker" and reason == "worker-grant-expired":
+                detail = {
+                    "preset": preset,
+                    "class": "Worker",
+                    "detail": f"The Worker grant for {preset} expired.",
+                }
+            else:
+                detail = ((ceiling or {}).get("problem_evidence", {}).get(preset)
+                          or (ceiling or {}).get("worker_problem_evidence", {}).get(preset)
+                          or (ceiling or {}).get("expert_problem_evidence", {}).get(preset)
+                          or (ceiling or {}).get("worker_problem" if row["class"] == "Worker" else "elite_problem"))
             if not isinstance(detail, dict):
                 # No ceiling defect to quote: name the grant rows that were read, so the refusal is never empty (#332).
                 detail = {

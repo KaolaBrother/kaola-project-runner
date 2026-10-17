@@ -261,7 +261,7 @@ class PresetCatalogTest(unittest.TestCase):
     def test_worker_pool_line_names_exact_ids(self) -> None:
         text = (ORCHESTRATOR / "references" / "worker-profiles.md").read_text(encoding="utf-8")
         self.assertIn(
-            "The Worker pool is exactly: " + ", ".join(f"`{pid}`" for pid in sorted(WORKER)) + ".",
+            "Worker-class presets are exactly: " + ", ".join(f"`{pid}`" for pid in sorted(WORKER)) + ".",
             text)
 
     def test_platform_reference_bullets_tie_id_tier_name_native_id(self) -> None:
@@ -404,7 +404,7 @@ class AuthorizationNotationTest(unittest.TestCase):
         self.assertIn("| **Expert** | 3 |", readme)
         self.assertIn("no default seat and no preset-specific", readme)
         pool = (ORCHESTRATOR / "references" / "worker-profiles.md").read_text(encoding="utf-8")
-        membership = pool.split("The Worker pool is exactly:", 1)[1].split(".", 1)[0]
+        membership = pool.split("Worker-class presets are exactly:", 1)[1].split(".", 1)[0]
         self.assertNotIn("claude-code/sonnet", membership)
         self.assertIn("`claude-code/haiku`", membership)
         self.assertIn("`claude-code/opus-xhigh` plans, designs and reviews but does not implement", pool)
@@ -415,10 +415,9 @@ class AuthorizationNotationTest(unittest.TestCase):
                      for preset in (grant.get("preset_ids") or [grant["id"]])]
         self.assertNotIn("claude-code/sonnet", grant_ids)
         self.assertNotIn("claude-code/haiku", grant_ids)
-        # be04bd09 moved the pool statement; the skeleton keeps the
-        # current-only "Worker pool unchanged" rule.
-        self.assertIn("Worker 池不变", skeleton)
-        self.assertIn("The Worker pool is exactly:", pool)
+        # #346: the skeleton states explicit Worker grants, not an unchanged pool.
+        self.assertIn("没有 Worker grant 就没有 Worker", skeleton)
+        self.assertIn("Worker-class presets are exactly:", pool)
         stale = (
             "five Worker", "Five Worker", "five-preset", "these five presets",
             "Disciplined implementation", "strongest in Worker Class",
@@ -460,17 +459,26 @@ class AuthorizationNotationTest(unittest.TestCase):
             project = run(["project", "--authorization", str(auth),
                            "--platforms", str(PLATFORMS)])
             by_id = {item["id"]: item for item in project["candidates"]}
-            haiku = by_id["claude-code/haiku"]
+            self.assertNotIn("claude-code/haiku", by_id)
+            self.assertNotIn("claude-code/sonnet", by_id)
+            granted = root / "granted.json"
+            granted.write_text(json.dumps({"grants": [
+                {"id": "claude-code/haiku", "state": "granted", "count": 1},
+                {"id": "codex/luna", "state": "granted", "count": 1},
+            ]}), encoding="utf-8")
+            granted_project = run(["project", "--authorization", str(granted),
+                                   "--platforms", str(PLATFORMS)])
+            granted_ids = {item["id"]: item for item in granted_project["candidates"]}
+            haiku = granted_ids["claude-code/haiku"]
             self.assertEqual(haiku["class"], "Worker")
             self.assertEqual(haiku["profile"], HAIKU_PROFILE)
             self.assertEqual(haiku["selection"]["effort"], "high")
             self.assertEqual(haiku["selection"]["model_id"], "haiku")
             self.assertEqual(haiku["selection"]["model_name"], "Claude Haiku")
             self.assertEqual(haiku["selection"]["parameters"], "effort=high")
-            self.assertEqual(haiku["state"], "default-pool")
-            self.assertTrue(haiku["pool"])
-            self.assertNotIn("claude-code/sonnet", by_id)
-            luna = by_id["codex/luna"]
+            self.assertEqual(haiku["state"], "granted")
+            self.assertFalse(haiku["pool"])
+            luna = granted_ids["codex/luna"]
             self.assertEqual(luna["class"], "Worker")
             self.assertEqual(luna["profile"], LUNA_PROFILE)
             self.assertEqual(luna["selection"]["effort"], "max")
@@ -480,8 +488,8 @@ class AuthorizationNotationTest(unittest.TestCase):
                 "--authorization", str(auth), "--live", str(live),
                 "--platforms", str(PLATFORMS),
             ])
-            # Dispatch sorts the pool by preset id. Catalog order stays on WORKER.
-            self.assertEqual(seats["summary"]["worker_pool"], sorted(WORKER))
+            self.assertNotIn("worker_pool", seats["summary"])
+            self.assertIn("No Worker grants", seats["summary"]["worker_grant_statement"])
 
             delegator = repo / ".kaola" / "delegator-heartbeat.json"
             delegator.parent.mkdir()
@@ -491,7 +499,11 @@ class AuthorizationNotationTest(unittest.TestCase):
                 "updated_at": "2026-10-11T00:00:00+00:00",
                 "authorization": {
                     "dispatch_enabled": True,
-                    "worker_pool": ["claude-code/haiku"],
+                    "worker_grants": [{
+                        "preset_ids": ["claude-code/haiku"],
+                        "count": 1,
+                        "state": "granted",
+                    }],
                 },
             }), encoding="utf-8")
             narrowed = run([
@@ -499,13 +511,19 @@ class AuthorizationNotationTest(unittest.TestCase):
                 "--authorization", str(auth), "--live", str(live),
                 "--platforms", str(PLATFORMS),
             ])
-            self.assertEqual(narrowed["summary"]["worker_pool"], ["claude-code/haiku"])
+            self.assertNotIn("worker_pool", narrowed["summary"])
+            self.assertEqual(
+                narrowed["summary"]["worker_grants"][0]["preset_ids"],
+                ["claude-code/haiku"])
             viewed = run([
                 "delegator", "view", "--file", str(delegator),
                 "--repo", str(repo), "--live", str(live),
                 "--platforms", str(PLATFORMS),
             ])
-            self.assertEqual(viewed["seats"]["worker_pool"], ["claude-code/haiku"])
+            self.assertNotIn("worker_pool", viewed["seats"])
+            self.assertEqual(
+                viewed["seats"]["worker_grants"][0]["preset_ids"],
+                ["claude-code/haiku"])
 
 
 if __name__ == "__main__":

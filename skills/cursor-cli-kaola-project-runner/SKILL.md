@@ -48,7 +48,7 @@ A `start` with no `--text` or `--stdin` only brings the seat up (`ready`, no tur
 
 The controlling Agent owns model selection for each `start`. This Skill declares its per-run
 presets — `--tier default` (**Grok 4.7**: `grok-4.7-high`, effort=high (encoded in model ID), fast=false) and `--tier opus` (**Claude Opus 5.5**: `claude-opus-5-5-high`, effort=high (encoded in model ID)) — and `default` applies whenever nothing more specific was chosen. Pass
-another `--tier` when the human or an existing authorization — the default-authorized Worker pool included —
+another `--tier` when the human or an existing authorization — an explicit Worker grant included —
 names that preset; never infer one from code size, failures, elapsed time, or your own assessment.
 An undeclared name is refused (`tier-not-declared`), never resolved to `default`.
 

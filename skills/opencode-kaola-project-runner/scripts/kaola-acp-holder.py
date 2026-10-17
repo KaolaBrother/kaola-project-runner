@@ -282,8 +282,8 @@ HOLDER_FEATURES = ("heartbeat-state/2", "sideagent-relay/1", "preserve-dispatche
 # batch from the binding's exact Runner argv (never a shell string), and
 # exact-stops it after its turn end. Bounds on that one start and stop only.
 NODE_START_TIMEOUT = 180.0
-# Issue #324: the default maintenance node runtime; only the first choice of
-# the Worker fallback chain, never a pin.
+# Issue #346: the maintenance chain is granted Worker presets in id order.
+# zcode/default is not a privileged first choice and is not a default grant.
 NODE_DEFAULT_PRESET = "zcode/default"
 NODE_STOP_CONFIRM_SECONDS = 30.0
 # Issue #336: how long a carrier waits for its own still-starting node holder
@@ -4940,11 +4940,12 @@ class Holder:
                 "runner": str(target), "argv": [*head, *kept, "--tier", tier]}
 
     def _node_chain(self, binding: dict[str, Any], tried: list[str]) -> list[dict[str, Any]]:
-        """Fallback runtimes for the bound node, in order: the default
-        ``zcode/default`` first, then the other Worker presets by id. The
-        list is the existing dispatch eligibility (grants, exclusions, holds,
-        Delegator ceiling, availability) for Worker seats, read now through
-        the state tool, so an excluded or withheld preset is never tried."""
+        """Fallback runtimes for the bound node: granted Worker presets, by id.
+
+        The list is the current dispatch eligibility (explicit Worker grants,
+        exclusions, holds, Delegator ceiling, availability). An ungranted
+        preset is not a candidate. No grant means an empty chain; the caller
+        fails once and does not try another preset."""
         tool = self._state_tool()
         state_file = Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"
         if tool is None or not state_file.is_file():
@@ -4963,7 +4964,7 @@ class Holder:
                 and row.get("class") == "Worker" and row.get("availability") != "absent"
                 and isinstance(row.get("platform"), str) and row["platform"] not in tried
                 and isinstance(row.get("tier"), str) and isinstance(row.get("id"), str)]
-        rows.sort(key=lambda row: (row["id"] != NODE_DEFAULT_PRESET, row["id"]))
+        rows.sort(key=lambda row: row["id"])
         chain = []
         for row in rows:
             recipe = self._fallback_recipe(binding, row["platform"], row["tier"])

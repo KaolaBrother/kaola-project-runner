@@ -59,7 +59,7 @@ python3 "$ENTRY" project \
 `capability_summary` lists eligible preset ids. It does not read a capability
 out of profile wording and does not copy each profile. Ungranted Expert does
 not appear. `candidates` still carry the exact id, Class, catalog profile,
-and selection. The tools derive this output from grants, default Worker pool, exclusions,
+and selection. The tools derive this output from grants, explicit Worker grants, exclusions,
 current holds and availability. Class definitions and preset defaults come
 from version-matched catalog/templates; only owner overrides are stored.
 
@@ -280,13 +280,15 @@ The existing `project --seats` output adds a derived `summary`. The Delegator
 The summary reads the same Delegator ceiling as admission, so Elite and
 Expert grants from both keys appear, and a shared group appears once. A
 Delegator-granted preset the Host grants omit is listed `host-grant-missing`:
-counted as authorized, not available. A Worker-class preset with a counted
-owner grant — a Host grant `count`, or a counted Delegator `elite_grants` row
-admitted by `worker_pool` — is a seat group and counts in `authorized_total`
-and `idle_available_total`; the Delegator ceiling still applies (a blocked
-grant shows `unavailable` with its reason; above-ceiling, revoked, or no
-Delegator `worker_pool` key omits it). Admissible uncounted pool presets stay
-in `worker_pool` only: they are not seats and not part of `authorized_total`.
+counted as authorized, not available. A Worker preset with a numeric Worker
+grant — a Host grant `count` when no Delegator file exists, or a Delegator
+`worker_grants` count — is a seat group and counts in `authorized_total`
+and `idle_available_total`. An explicit `unlimited` grant is listed on
+`worker_grants` and is not a numeric seat. The Delegator ceiling still applies
+(a blocked grant shows `unavailable` with its reason; above-ceiling, revoked,
+`no-worker-grant`, or an unreadable Worker grant omits the seat). An expired
+Worker grant and an exclusion stay visible as unavailable. No Worker grant
+means no Workers: the summary says so and does not derive a `worker_pool`.
 No seat summary is stored in either current JSON or added to Host injection.
 Use existing `--live`, `--index`, `--availability` and `--skills-root` inputs
 when an original source requires an explicit locator. Without `--live`, the
@@ -355,7 +357,7 @@ For a current file it maps known legacy copies through the existing migration
 before section validation. It does not infer missing counts or discard a pause.
 Do not move the old limit to a note or renamed field.
 A missing Elite/Expert count is `count-unreadable`; source the exact count.
-Worker pool defaults and grant-specific restrictions remain unchanged.
+Worker grants are explicit. A legacy `worker_pool` is not a Worker grant. Grant-specific restrictions remain unchanged.
 
 ### Owner correction: minimal current facts and owner requirements only (2026-10-06)
 
@@ -365,10 +367,10 @@ Personal source review found seven concrete groups to consolidate in this issue:
 
 1. Remove independently writable aggregate concurrency limits, as already specified above. Capacity comes from individual/shared seat grants.
 2. Keep model-switch authorization in one canonical grant/group location. Do not independently maintain both per-grant `model_switch` and a second `model_switches` list. Preserve the exact owner-approved choices and switching permission; a list of permitted tiers alone must not invent permission to switch a running seat.
-3. Derive eligible/capability preset lists from current grants, the declared default Worker pool, exclusions, scoped holds and actual availability evidence. `capability_summary.presets` must not be a second manually maintained authority or a shortcut that bypasses those sources. Preserve unknown availability honestly.
+3. Derive eligible/capability preset lists from current grants, explicit Worker grants, exclusions, scoped holds and actual availability evidence. `capability_summary.presets` must not be a second manually maintained authority or a shortcut that bypasses those sources. Preserve unknown availability honestly. No Worker grant means that preset is not eligible.
 4. Derive catalog-owned Class definitions, preset Class, profile and default model/effort from the existing version-matched catalog/templates. They remain visible in the appropriate Host view/candidate tool and user report, but are not separately agent-authored routine state. Retain explicit owner overrides as overrides, not copied defaults.
 5. A shared grant has one authoritative count and one set of permitted choices/restrictions. Repeated tier rows must not each own a competing copy of the group count. Reuse the existing grouped owner grant representation and generate any compatibility rows mechanically. Do not add another group registry or lose per-choice restrictions.
-6. Revoked/expired/completed entries are not authorization history to retain in current JSON. Remove settled entries. A still-effective exclusion of a default-authorized Worker preset remains a current exclusion; a revoked seat still requiring exact stop/handoff retains that CURRENT recovery duty until resolved. Do not erase those duties or silently restore default-pool authorization. A paused/on-hold grant remains authorized but unavailable, with its current reason and reopening route. No duplicate pause state in several independently writable collections.
+6. Revoked/expired/completed entries are not authorization history to retain in current JSON. Remove settled entries. A still-effective exclusion of a Worker preset remains a current exclusion and vetoes every grant, including `unlimited` and an all-Worker scope; a revoked seat still requiring exact stop/handoff retains that CURRENT recovery duty until resolved. Do not erase those duties or invent a Worker grant. A paused/on-hold grant remains authorized but unavailable, with its current reason and reopening route. No duplicate pause state in several independently writable collections.
 7. Keep one concise current objective and original source pointers. Do not append issue-by-issue adoption history, earlier decisions, copied Skill rules or completed relay narratives into `project.goal`, `rules`, `requirements_source`, `watch` or equivalent fields. Task details stay with their current task/forge source. Resolved relays and exceptions leave routine state; history remains in the existing original evidence/Git/forge/Runner locations.
 
 Owner requirements: project-specific owner requirements stay in the existing user section of AGENTS.md; current operating settings and grants use their existing typed configuration fields. Keep only a source reference in routine views when the source owns the full text. Do not create a second requirements narrative or let an agent invent requirements. Reflect a new owner correction by replacing superseded current content while preserving unfulfilled duties.

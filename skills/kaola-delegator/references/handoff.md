@@ -2,7 +2,7 @@
 
 Outer Agents start, continue, or restore the project's one CLI Host here;
 Project Runner inside it owns workers, heartbeat, and close-out. No new tool,
-queue, registry, scheduler, or Delegator file but its snapshot — Git, Workflow, Issues,
+queue or Delegator file but its snapshot — Git, Workflow, Issues,
 and Runner records hold the facts.
 
 ```bash
@@ -15,7 +15,8 @@ HOST="$PLATFORM-<PROJECT_CODE>-orchestrator-main"  # codex-KPR-orchestrator-main
 `<skills>`: the sibling Skill directory, or the bridge's `ROOT/skills`. No
 `$RUNNER`, no Host. `<PROJECT_CODE>`: the project's short code (ask once if
 unrecorded); workers are `<platform>-<PROJECT_CODE>-i<ISSUE>-<purpose>` (#72),
-the Host is not one (no `i0`). A live Host fixes `$PLATFORM` to its own.
+the Host is not one (no `i0`). Workers need a grant.
+A live Host fixes `$PLATFORM` to its own.
 
 Read these separate identities from Runner receipts/events:
 

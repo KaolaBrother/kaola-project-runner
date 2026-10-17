@@ -27,8 +27,8 @@ dispatches workers, accepts work before finalize, prefers selected Workflow sync
 is not required, advances actionable open PRs on contested capacity in parallel with other
 authorized work, treats the authorized count as a hard cap on live worker processes (including
 ACP holders) with stop-before-start at the cap and an exact stop in the beat a delivery is
-accepted (the seven Worker-class presets in worker-profiles.md are default-authorized and outside
-that cap; Elite presets need explicit grants and Expert presets fresh per-task permission), and defaults to finishing in-hand issues with a clean workspace close-out after a run.
+accepted (a Worker-class preset in worker-profiles.md counts outside
+that cap only after an explicit Worker grant; no Worker grant means no Workers; Elite presets need explicit grants and Expert presets fresh per-task permission), and defaults to finishing in-hand issues with a clean workspace close-out after a run.
 The Runner owns exact-session control, evidence collection, prompt/key transfer, response
 readback, and truthful mechanical receipts. Kaola Workflow owns lifecycle state only when the Agent
 chooses to invoke it.

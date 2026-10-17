@@ -10,7 +10,7 @@ start behavior. The class attaches to the preset, not the whole runtime.
 | Class | Responsibility | Authorization and lifecycle |
 |---|---|---|
 | **Expert** | Complex thinking only: difficult analysis, design, objective decomposition and review judgments. No concrete implementation or execution; not an ordinary worker seat. | An explicit grant. A task grant (the default) ends with its task. A standing grant lets the Host invoke that preset within its stated scope, count and resource limits until revoked or expired, without asking again; never infer one from a task or finished grant. The Host judges completion and reclaims (exact-stops) the seat; that stop revokes no standing grant. Continuing turns or recovery of the same approved task need no repeated approval. |
-| **Worker** | Cheaper and generally weaker; simpler, bounded work supporting parallel throughput. | The exact seven-preset pool below is default-authorized for authorized project tasks. |
+| **Worker** | Cheaper and generally weaker; simpler, bounded work supporting parallel throughput. | An explicit Worker grant is required. |
 | **Elite** | Main execution workforce: primary implementation and demanding execution. | Existing explicit runtime/preset/count grants, shared counts, service/resource restrictions and seat-switch rules. A valid grant stays valid within its scope; no per-task permission. |
 
 Expert review informs the Host; it never replaces Host acceptance or
@@ -84,13 +84,8 @@ Do not keep a universal model ranking, invent a complexity classifier or
 routing engine, fix per-runtime quotas, create work to fill
 capacity, or interrupt useful work.
 
-The Worker pool is exactly: `claude-code/haiku`, `codex/luna`, `devin/default`, `dsh/commandcode`, `dsh/default`, `opencode/default`, `zcode/default`.
-For an authorized project
-task, these seven presets need no per-seat, count, or priority approval. Their live seats do not consume Elite/Expert grants. A runtime's `default` is not automatically a pool member. Real account, service, and resource limits
-and explicit owner restrictions still apply; an unspecified quota is not
-unlimited. Default authorization is permission, not a preference over
-suitable authorized Elite; never wait on a less suitable Worker. Existing grants stay valid within scope; the pool is not
-a model-switch grant and does not extend Host model selection.
+Worker-class presets are exactly: `claude-code/haiku`, `codex/luna`, `devin/default`, `dsh/commandcode`, `dsh/default`, `opencode/default`, `zcode/default`.
+Each needs an explicit grant; none means no Workers. Seats do not consume Elite/Expert grants. A runtime `default` is not a grant. Limits and exclusions apply; an exclusion vetoes `unlimited`. `unlimited` is explicit, not a number. A grant is permission, not a preference over Elite. Existing grants stay valid; a Worker grant is not a model-switch grant.
 
 ## Computer interaction
 
@@ -98,8 +93,8 @@ The owner designates exactly two presets for tasks that operate a computer:
 `codex/default` (GPT-6.1 Sol, effort=high; Elite) and `codex/luna` (GPT-6
 Luna, effort=max; Worker). Prefer Sol only when its local row is discovered,
 available for the task, and covered by the user's explicit preset/seat grant.
-If no eligible Sol is available, use locally available Luna under the Worker
-pool rules, with no extra seat approval for an authorized project task. If
+If no eligible Sol is available, use locally available Luna when an explicit
+Worker grant covers it. If
 neither qualifies, report the concrete availability or authorization gap;
 never silently switch tiers or substitute another preset.
 
