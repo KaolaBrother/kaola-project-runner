@@ -440,6 +440,38 @@ def classify_delegator_attention(rows: list | None) -> str | None:
     return None
 
 
+COMPLETED_TURN_OUTCOMES = ("turn_completed", "agent_turn_completed")
+AGENT_TURN_QUIET_DEFAULT = 1.5
+AGENT_TURN_QUIET_MAX = 60.0
+
+
+def is_agent_work_update(update: dict[str, Any]) -> bool:
+    """True when an idle-session ``session/update`` carries real agent work.
+
+    Issue #341: agent-initiated continuation (e.g. a background task finishing
+    after the last ``session/prompt`` already returned ``end_turn``) streams
+    assistant text, thoughts, tool activity, or a plan without a new prompt
+    request. Stray empty chunks and metadata/usage/config notifications are not
+    agent work and must not open a synthetic turn or wake the Delegator.
+    """
+    if not isinstance(update, dict):
+        return False
+    variant = update.get("sessionUpdate", "unknown")
+    if variant in ("agent_message_chunk", "agent_thought_chunk"):
+        return bool(_as_text(update.get("content")).strip())
+    if variant in ("tool_call", "tool_call_update"):
+        return bool(
+            update.get("toolCallId")
+            or update.get("title")
+            or update.get("status")
+            or update.get("kind")
+            or update.get("content")
+        )
+    if variant == "plan":
+        return bool(update.get("entries"))
+    return False
+
+
 def delegator_turn_wake_reason(
         *,
         outcome: str | None,
@@ -514,7 +546,7 @@ def delegator_turn_wake_reason(
     There is no time throttle. A canceled turn under a requested stop is
     covered by the exact-stop wake.
     """
-    if outcome not in ("turn_completed", "turn_canceled"):
+    if outcome not in (*COMPLETED_TURN_OUTCOMES, "turn_canceled"):
         return None
     if outcome == "turn_canceled" and stop_requested:
         return None
@@ -1810,6 +1842,22 @@ class ViewProjection:
                 del self.turns[: len(self.turns) - TIMELINE_MAX]
                 self.turns_dropped = True
 
+    def start_agent_turn(self, cursor: int, started_at: float | None = None) -> None:
+        """Issue #341: an agent-initiated continuation turn has no user prompt message."""
+        with self.lock:
+            self._open_message = None
+            self.turns.append({
+                "started_at": started_at,
+                "ended_at": None,
+                "outcome": None,
+                "stop_reason": None,
+                "start_cursor": cursor,
+                "end_cursor": None,
+            })
+            if len(self.turns) > TIMELINE_MAX:
+                del self.turns[: len(self.turns) - TIMELINE_MAX]
+                self.turns_dropped = True
+
     def end_turn(self, ended_at: float, cursor: int, outcome: Any, stop_reason: Any) -> None:
         with self.lock:
             self._open_message = None
@@ -2840,7 +2888,64 @@ class Holder:
     def on_session_update(self, params: dict[str, Any]) -> None:
         update = params.get("update") or {}
         variant = update.get("sessionUpdate", "unknown")
-        turn = self.turn
+        same_session = params.get("sessionId") in (None, self.acp_session_id)
+        received_at = round(time.time(), 3)
+        opened_agent_turn: dict[str, Any] | None = None
+        with self.lock:
+            if (
+                not self.turn["active"]
+                and self.state == "ready"
+                and not self.stop_requested
+                and self.agent.proc is not None
+                and not self.agent.exited.is_set()
+                and self.acp_session_id
+                and same_session
+                and is_agent_work_update(update)
+            ):
+                # Issue #341: agent-initiated activity while no turn is active
+                # opens a synthetic turn so the holder record reports the seat
+                # working again and closes with a durable turn_ended + wake.
+                previous = self.last_prompt if isinstance(self.last_prompt, dict) else {}
+                now_mono = time.monotonic()
+                turn = self._empty_turn()
+                turn.update({
+                    "active": True,
+                    "request_id": None,
+                    "fingerprint": None,
+                    "written_at": received_at,
+                    "mutation_status": "in_progress",
+                    "started_at": now_mono,
+                    "prompt_source": "self",
+                    "agent_initiated": True,
+                    "last_update_mono": now_mono,
+                    "idle_signaled": False,
+                })
+                self.turn = turn
+                self.last_prompt = {
+                    "fingerprint": previous.get("fingerprint"),
+                    "written_at": received_at,
+                    "transport": "acp",
+                    "mutation_status": "in_progress",
+                    "stop_reason": None,
+                }
+                self._note_delegator_working_again()
+                start_cursor = self.events.append(
+                    {"kind": "turn_started", "prompt_source": "self", "agent_initiated": True},
+                    ts=received_at,
+                )
+                self.projection.start_agent_turn(start_cursor, received_at)
+                opened_agent_turn = turn
+            turn = self.turn
+            if turn["active"] and turn.get("agent_initiated") and same_session:
+                if is_agent_work_update(update):
+                    turn["last_update_mono"] = time.monotonic()
+                stop_val = update.get("stopReason")
+                if isinstance(stop_val, str) and stop_val:
+                    turn["stop_reason"] = stop_val
+                    turn["idle_signaled"] = True
+                thread_status = ((update.get("_meta") or {}).get("codex") or {}).get("threadStatus")
+                if isinstance(thread_status, dict) and thread_status.get("type") == "idle":
+                    turn["idle_signaled"] = True
         if turn["active"] and turn["mutation_status"] == "in_progress":
             turn["mutation_status"] = "accepted"
             self.note_agent_children()
@@ -2864,10 +2969,10 @@ class Holder:
             if not known:
                 turn["tool_order"].append(tool_id)
         elif variant == "usage_update":
-            if params.get("sessionId") in (None, self.acp_session_id):
+            if same_session:
                 turn["context_usage"] = {"used": update.get("used"), "size": update.get("size")}
         elif variant == "config_option_update":
-            if params.get("sessionId") in (None, self.acp_session_id):
+            if same_session:
                 self._apply_config_options(
                     update.get("configOptions"), "config_option_update")
         elif variant not in KNOWN_UPDATES:
@@ -2881,15 +2986,14 @@ class Holder:
         # child thread, and an update outside a turn belongs to no turn at all.
         # The LAST status in the turn wins, so a turn that recovers (idle) stays
         # healthy; only an explicit `systemError` marks it.
-        if turn["active"] and params.get("sessionId") in (None, self.acp_session_id):
+        if turn["active"] and same_session:
             thread_status = ((update.get("_meta") or {}).get("codex") or {}).get("threadStatus")
             if isinstance(thread_status, dict):
                 turn["error"] = (
                     {"code": "agent-system-error", "threadStatus": thread_status["type"]}
                     if thread_status.get("type") == "systemError" else None
                 )
-        received_at = round(time.time(), 3)
-        if variant != "usage_update" or params.get("sessionId") in (None, self.acp_session_id):
+        if variant != "usage_update" or same_session:
             self.projection.apply(update, self.events.cursor + 1, received_at)
         cursor = self.events.append({"kind": "session_update", "sessionId": params.get("sessionId"),
                                      "update": update}, ts=received_at)
@@ -2897,6 +3001,13 @@ class Holder:
         self.fanout_follow_delta()
         # Issue #264: recognize a completed compaction after it is durable.
         self._observe_compact_signal({"method": "session/update", "params": params})
+        if opened_agent_turn is not None:
+            threading.Thread(
+                target=self._await_agent_turn, args=(opened_agent_turn,), daemon=True,
+            ).start()
+        if turn.get("agent_initiated") and turn.get("idle_signaled"):
+            with self.turn_cond:
+                self.turn_cond.notify_all()
 
     def on_prompt_response(self, request_id: int, response: dict[str, Any] | None) -> None:
         turn = self.turn
@@ -3331,6 +3442,97 @@ class Holder:
         response = self.agent.wait_response(request_id, None)
         self.on_prompt_response(request_id, response)
 
+    def _agent_turn_quiet_seconds(self) -> float:
+        raw = os.environ.get("KAOLA_ACP_AGENT_TURN_QUIET_SECONDS")
+        val = bounded_seconds(raw, AGENT_TURN_QUIET_MAX)
+        return val if val is not None else AGENT_TURN_QUIET_DEFAULT
+
+    def _await_agent_turn(self, turn: dict[str, Any]) -> None:
+        quiet = self._agent_turn_quiet_seconds()
+        with self.turn_cond:
+            while True:
+                if not turn["active"] or self.turn is not turn:
+                    return
+                if self.agent.exited.is_set():
+                    return
+                if turn.get("idle_signaled"):
+                    break
+                if self.pending_permissions:
+                    self.turn_cond.wait(timeout=min(quiet, 0.25))
+                    continue
+                last = float(turn.get("last_update_mono") or time.monotonic())
+                remaining = (last + quiet) - time.monotonic()
+                if remaining <= 0:
+                    break
+                self.turn_cond.wait(timeout=min(remaining, 0.25))
+        self._finish_agent_turn(turn)
+
+    def _finish_agent_turn(self, turn: dict[str, Any], *, canceled: bool = False) -> None:
+        with self.lock:
+            if not turn["active"] or self.turn is not turn or not turn.get("agent_initiated"):
+                return
+            stop = turn.get("stop_reason")
+            if canceled or turn.get("cancel_requested") or stop == "cancelled":
+                outcome = "turn_canceled"
+            elif turn.get("error"):
+                outcome = "turn_failed"
+            else:
+                outcome = "agent_turn_completed"
+            turn["outcome"] = outcome
+            turn["mutation_status"] = "completed"
+            turn["active"] = False
+            turn["ended_at"] = round(time.time(), 3)
+            self.projection.close_message()
+            end_cursor = self.events.append(
+                {
+                    "kind": "turn_ended",
+                    "outcome": outcome,
+                    "stop_reason": stop,
+                    "prompt_fingerprint": turn.get("fingerprint"),
+                    "prompt_source": turn.get("prompt_source") or "self",
+                    "agent_initiated": True,
+                },
+                ts=turn["ended_at"],
+            )
+            self.projection.end_turn(turn["ended_at"], end_cursor, outcome, stop)
+            previous = self.last_prompt if isinstance(self.last_prompt, dict) else {}
+            self.last_prompt = {
+                "fingerprint": previous.get("fingerprint"),
+                "written_at": turn["written_at"],
+                "transport": "acp",
+                "mutation_status": "completed",
+                "stop_reason": stop,
+            }
+            self.write_record()
+        self.fanout_follow_delta()
+        with self.turn_cond:
+            self.turn_cond.notify_all()
+        sideagent = self.session_role in SIDEAGENT_ROLES
+        if (
+            (outcome in (*COMPLETED_TURN_OUTCOMES, "turn_failed") or (sideagent and outcome == "turn_canceled"))
+            and not self.agent.exited.is_set()
+        ):
+            extra = (
+                {
+                    "holder_instance_id": self.holder_instance_id,
+                    "turn_fingerprint": turn.get("fingerprint"),
+                    "turn_outcome": outcome,
+                    **({"turn_stop_reason": turn["stop_reason"]}
+                       if isinstance(turn.get("stop_reason"), str) else {}),
+                }
+                if sideagent else None
+            )
+            self._notify_heartbeat_host_now(
+                "idle", f"outcome={outcome} stop_reason={turn.get('stop_reason')}", extra,
+            )
+        self._worker_event_turn_end(turn.get("fingerprint"), outcome)
+        if outcome == "turn_failed":
+            self._delegator_wake("error", "turn_failed", "turn_failed")
+        elif outcome in COMPLETED_TURN_OUTCOMES or (
+            outcome == "turn_canceled" and not self.stop_requested
+        ):
+            self._finish_delegator_turn_wake(turn, self._delegator_turn_end_reason(turn))
+
     # -- event-driven heartbeat carrier (Issue #62 phase 2) --------------------
 
     def _notify_heartbeat_host_now(self, kind: str, reason: str,
@@ -3676,7 +3878,7 @@ class Holder:
                 if self._all_ended_busy or not self._all_idle_woken:
                     self._all_ended_deferred = True
             return
-        if self.turn.get("outcome") not in ("turn_completed", "turn_canceled"):
+        if self.turn.get("outcome") not in (*COMPLETED_TURN_OUTCOMES, "turn_canceled"):
             return
         reason = self._delegator_turn_end_reason(self.turn)
         self._finish_delegator_turn_wake(self.turn, reason)
@@ -3718,7 +3920,7 @@ class Holder:
             return
         if self.turn.get("active") or self._delegator_followups:
             return
-        if self.turn.get("outcome") not in ("turn_completed", "turn_canceled"):
+        if self.turn.get("outcome") not in (*COMPLETED_TURN_OUTCOMES, "turn_canceled"):
             return
         if holders_dispatched_by(self.holder_instance_id, working=True,
                                  ignore_sessions=ignore_sessions):
@@ -5735,7 +5937,7 @@ class Holder:
                         self.overflow_confirmed_generation = overflow_confirmed_generation
                 self.overflow_inflight_generation = None
                 self.overflow_inflight_fingerprint = None
-        if not was_notification or outcome == "turn_completed":
+        if not was_notification or outcome in COMPLETED_TURN_OUTCOMES:
             if self.agent.proc is not None and not self.agent.exited.is_set():
                 self._deliver_worker_events()
         # Issue #264: a compact completion that landed mid-turn is delivered
@@ -6051,6 +6253,8 @@ class Holder:
             if entry is None:
                 return {"error": {"code": "unknown-request",
                                   "message": f"no pending permission with id {request_id}"}}
+            if self.turn.get("active") and self.turn.get("agent_initiated"):
+                self.turn["last_update_mono"] = time.monotonic()
             self.events.append({"kind": "permission_answered", "request_id": request_id,
                                 "option": option}, ts=entry["answered_at"])
             self.write_record()
@@ -6115,7 +6319,7 @@ class Holder:
                         "outcome": original.get("outcome"),
                         "stop_reason": original.get("stop_reason"),
                         "final_text": original.get("final_text")}
-                    if original.get("outcome") != "turn_completed":
+                    if original.get("outcome") not in COMPLETED_TURN_OUTCOMES:
                         sent = {"outcome": "prior_turn_not_completed",
                                 "mutation_status": "not_started", "mutation_performed": False,
                                 "error": {"code": "prior-turn-not-completed",
@@ -6664,6 +6868,9 @@ class Holder:
                 {"jsonrpc": "2.0", "method": "session/cancel",
                  "params": {"sessionId": self.acp_session_id}}
             )
+            agent_initiated = bool(target.get("agent_initiated"))
+        if agent_initiated:
+            self._finish_agent_turn(target, canceled=True)
         if timeout is None:
             timeout = CANCEL_GRACE
         deadline = time.monotonic() + timeout
@@ -7007,6 +7214,8 @@ class Holder:
                     {"jsonrpc": "2.0", "method": "session/cancel",
                      "params": {"sessionId": self.acp_session_id}}
                 )
+                if self.turn.get("agent_initiated"):
+                    self._finish_agent_turn(self.turn, canceled=True)
                 deadline = time.monotonic() + CANCEL_GRACE
                 with self.turn_cond:
                     while self.turn["active"] and time.monotonic() < deadline:
