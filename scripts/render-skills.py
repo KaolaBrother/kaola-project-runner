@@ -461,14 +461,18 @@ def worker_pool_members(manifests: list[dict[str, str]]) -> str:
     """Compact exact Worker membership without injecting every profile row.
 
     Issue #218: members are named by their exact preset IDs so the pool line,
-    the catalog and an authorization row compare without display-name guesses."""
+    the catalog and an authorization row compare without display-name guesses.
+    Issue #345: the exact-pool sentence is sorted by preset id, the same order
+    as the dispatch worker view. ``dsh/commandcode`` therefore precedes
+    ``dsh/default``."""
     members = []
     for manifest in manifests:
         for tier in ["default", *named_tiers(manifest)]:
             prefix = tier.replace("-", "_")
             if manifest[f"{prefix}_model_class"] == "Worker":
-                members.append(f"`{preset_id(manifest, tier)}`")
-    return ", ".join(members)
+                members.append(preset_id(manifest, tier))
+    members.sort()
+    return ", ".join(f"`{member}`" for member in members)
 
 
 def readme_presets_region(manifests: list[dict[str, str]]) -> str:

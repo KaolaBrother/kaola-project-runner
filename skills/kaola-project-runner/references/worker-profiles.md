@@ -84,7 +84,7 @@ Do not keep a universal model ranking, invent a complexity classifier or
 routing engine, fix per-runtime quotas, create work to fill
 capacity, or interrupt useful work.
 
-The Worker pool is exactly: `claude-code/haiku`, `codex/luna`, `devin/default`, `dsh/default`, `dsh/commandcode`, `opencode/default`, `zcode/default`.
+The Worker pool is exactly: `claude-code/haiku`, `codex/luna`, `devin/default`, `dsh/commandcode`, `dsh/default`, `opencode/default`, `zcode/default`.
 For an authorized project
 task, these seven presets need no per-seat, count, or priority approval. Their live seats do not consume Elite/Expert grants. A runtime's `default` is not automatically a pool member. Real account, service, and resource limits
 and explicit owner restrictions still apply; an unspecified quota is not

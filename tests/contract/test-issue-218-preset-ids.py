@@ -261,7 +261,7 @@ class PresetCatalogTest(unittest.TestCase):
     def test_worker_pool_line_names_exact_ids(self) -> None:
         text = (ORCHESTRATOR / "references" / "worker-profiles.md").read_text(encoding="utf-8")
         self.assertIn(
-            "The Worker pool is exactly: " + ", ".join(f"`{pid}`" for pid in WORKER) + ".",
+            "The Worker pool is exactly: " + ", ".join(f"`{pid}`" for pid in sorted(WORKER)) + ".",
             text)
 
     def test_platform_reference_bullets_tie_id_tier_name_native_id(self) -> None:

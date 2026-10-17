@@ -2390,7 +2390,7 @@ is the same display name Opus 5.5, preset `claude-code/opus-xhigh`, native alias
 implementation). The preset ID is not the alias. `--tier sonnet` is Sonnet (`sonnet`)
 at `effort=high` (Elite; an explicit preset and count grant, not a Worker-pool member).
 `--tier haiku` is Claude Haiku (`haiku`) at `effort=high` (Worker; a default-authorized
-pool member). Codex's `--tier luna` is GPT-6 Luna (`gpt-6-luna`) at `effort=max`
+pool member). The Worker pool is exactly: `claude-code/haiku`, `codex/luna`, `devin/default`, `dsh/commandcode`, `dsh/default`, `opencode/default`, `zcode/default`. Each of those seven is default-authorized and needs no grant row. `dsh/commandcode` is the Command Code DeepSeek V4.1 Flash preset in that pool. Codex's `--tier luna` is GPT-6 Luna (`gpt-6-luna`) at `effort=max`
 (Issue #188, profile narrowed in #301): a computer-use-only Worker, not an upgrade
 and not a general implementation preset. These are applied as ordinary ACP config
 options; a native rejection is a `config_application` limitation, never a substitute.
