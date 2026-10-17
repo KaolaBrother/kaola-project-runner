@@ -4,9 +4,9 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.9.17 — 2026-10-18 (start --stdin brief is the first verified turn; dsh/commandcode Command Code tier)
 
-`start` with `--stdin` or `--text` delivers that brief as the session's first prompt turn and verifies admission before the receipt returns (Issue #344).
+Fixes #344 (`start` with a brief delivers it as the first prompt turn and verifies admission before reporting ready) and adds #345 (the `dsh/commandcode` tier: Command Code DeepSeek V4.1 Flash at max effort, with a Command Code quota catalog entry).
 
 Seats: restart required
 
