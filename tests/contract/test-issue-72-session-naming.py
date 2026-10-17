@@ -176,14 +176,32 @@ class ExamplesDoNotTeachTheOldName(unittest.TestCase):
                     f"{surface} teaches {name!r}, which bypasses the Issue #72 contract",
                 )
 
-    def test_the_startup_reference_keeps_one_exact_name_across_the_five_operations(self) -> None:
+    def test_the_startup_reference_keeps_one_exact_name_across_its_operations(self) -> None:
+        """Issue #344: the example dispatches with one start brief.
+
+        The invariant is still one exact issue-scoped name on every command in
+        that example. The commands are ``start --no-wait --text``, then
+        ``observe``, ``capture``, and ``stop``. A second ``send`` of the same
+        brief is not part of the example.
+        """
         body = (ORCHESTRATOR / "references" / "host-startup.md").read_text(encoding="utf-8")
         self.assertNotIn("codex-kaola-issue-77", body)
         worker = [n for s, n in self.rendered_session_examples()
                   if s == "host-startup.md" and n not in self.NOT_ISSUE_BACKED]
         self.assertEqual(len(set(worker)), 1, f"the worker example must be one exact name: {worker}")
-        for operation in ("start", "send", "observe", "capture", "stop"):
-            self.assertRegex(body, rf'"\$WORKER" {operation}\s+--repo "\$PROJECT" --session {worker[0]}')
+        name = re.escape(worker[0])
+        self.assertRegex(
+            body,
+            rf'"\$WORKER" start\s+--repo "\$PROJECT" --session {name}[^\n]*--no-wait --text ',
+        )
+        for operation in ("observe", "capture", "stop"):
+            self.assertRegex(body, rf'"\$WORKER" {operation}\s+--repo "\$PROJECT" --session {name}')
+        self.assertNotRegex(body, rf'"\$WORKER" send\s+--repo "\$PROJECT" --session {name}')
+        start_at = body.find('"$WORKER" start')
+        observe_at = body.find('"$WORKER" observe')
+        capture_at = body.find('"$WORKER" capture')
+        stop_at = body.find('"$WORKER" stop')
+        self.assertTrue(0 <= start_at < observe_at < capture_at < stop_at, "the example order is start, observe, capture, stop")
         self.assertIn("](issue-dispatch.md)", body, "the example must point at the rule it follows")
 
 
