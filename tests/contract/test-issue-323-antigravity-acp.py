@@ -656,27 +656,35 @@ class ManifestAndRegistrations(unittest.TestCase):
         self.assertEqual(self.values["default_model_id"], "gemini-4-argon-medium")
         self.assertEqual(self.values["default_model_name"], "Gemini 4 Argon")
         self.assertEqual(self.values["default_model_effort"], "medium")
+        # Issue #343: every Antigravity tier is UI and 3D design implementation only.
         self.assertEqual(self.values["default_model_profile"],
-                         "High-throughput, multimodal agentic implementer. Think senior generalist engineer, "
-                         "strong on coding, long context, and parallel agent work, with a real creative streak "
-                         "in interactive front-end and 3D. Best with a clear brief and a defined 'done'.")
+                         "Strong at UI and 3D design implementation only. Do not use for any other task "
+                         "(research, design docs, review, backend, debugging, investigation).")
         self.assertEqual(self.values["named_tiers"], "xhigh,opus")
         self.assertEqual(self.values["xhigh_model_id"], "gemini-4-argon-high")
         self.assertEqual(self.values["xhigh_model_name"], "Gemini 4 Argon")
         self.assertEqual(self.values["xhigh_model_effort"], "high")
         self.assertEqual(self.values["xhigh_model_class"], "Elite")
         self.assertEqual(self.values["xhigh_model_profile"],
-                         "Escalation level: use it when Argon medium cannot solve the task, especially hard "
-                         "debugging that needs a root-cause fix or long multi-step work. Slower and uses more quota.")
+                         "Strong at UI and 3D design implementation only; higher-effort level for harder UI and "
+                         "3D work, slower and uses more quota. Do not use for any other task (research, design "
+                         "docs, review, backend, debugging, investigation).")
         self.assertEqual(self.values["opus_model_id"], "claude-opus-5-5-high")
         self.assertEqual(self.values["opus_model_name"], "Claude Opus 5.5")
         self.assertEqual(self.values["opus_model_parameters"], "effort=high (encoded in model ID)")
         self.assertEqual(self.values["opus_model_effort"], "high")
         self.assertEqual(self.values["opus_model_class"], "Elite")
         self.assertEqual(self.values["opus_model_profile"],
-                         "Deep-reasoning escalation seat for tasks beyond the Argon tiers: architecture and "
-                         "cross-cutting design review, hardest debugging, and final-quality passes. Not a default "
-                         "worker; select when depth outweighs latency.")
+                         "Strong at UI and 3D design implementation only; Opus level for UI and 3D work that "
+                         "needs more depth than the Argon tiers. Do not use for any other task (research, design "
+                         "docs, review, backend, debugging, investigation).")
+        for tier in ("default", "xhigh", "opus"):
+            profile = self.values[f"{tier}_model_profile"]
+            self.assertTrue(profile.startswith("Strong at UI and 3D design implementation only"), tier)
+            self.assertIn("Do not use for any other task", profile)
+            for broad in ("generalist", "long context", "parallel agent", "architecture",
+                          "root-cause", "final-quality", "Escalation level"):
+                self.assertNotIn(broad, profile, tier)
         # Effort rides the slug: the manifest declares no effort option, so the
         # Runner cannot apply the preset effort a second time.
         self.assertEqual(self.values["acp_effort_config_id"], "")

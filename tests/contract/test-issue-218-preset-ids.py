@@ -207,7 +207,14 @@ class PresetCatalogTest(unittest.TestCase):
         self.assertEqual(agy_opus["parameters"].strip(), "effort=high (encoded in model ID)")
         self.assertEqual(
             agy_opus["profile"].strip(),
-            "Deep-reasoning escalation seat for tasks beyond the Argon tiers: architecture and cross-cutting design review, hardest debugging, and final-quality passes. Not a default worker; select when depth outweighs latency.")
+            "Strong at UI and 3D design implementation only; Opus level for UI and 3D work that needs more depth than the Argon tiers. Do not use for any other task (research, design docs, review, backend, debugging, investigation).")
+        # Issue #343: every Antigravity row is UI and 3D design implementation only.
+        for tier in ("default", "xhigh", "opus"):
+            profile = rows[f"antigravity/{tier}"]["profile"].strip()
+            self.assertTrue(profile.startswith("Strong at UI and 3D design implementation only"), tier)
+            self.assertIn("Do not use for any other task (research, design docs, review, backend, "
+                          "debugging, investigation).", profile)
+            self.assertNotIn("generalist", profile)
         agy_manifest, _ = self.by_id["antigravity/opus"]
         self.assertEqual(agy_manifest["named_tiers"], "xhigh,opus")
         self.assertEqual(agy_manifest["opus_model_id"], "claude-opus-5-5-high")
