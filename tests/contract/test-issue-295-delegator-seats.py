@@ -154,7 +154,7 @@ class DelegatorSeats(unittest.TestCase):
         self.assertEqual(worker["authorized_count"], 1)
         self.assertEqual(worker["presets"],
                          [{"id": "devin/default", "class": "Worker", "count": 1,
-                           "default_model": "swe-2-max", "default_effort": ""}])
+                           "default_model": "swe-2-max", "default_effort": "max"}])
         astra = next(row for group in seats["groups"] for row in group["presets"]
                      if row["id"] == "codex/astra")
         self.assertEqual(astra["lifetime"], "standing")
