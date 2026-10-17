@@ -23,10 +23,10 @@ authorization (handoff Recover step 4). Say that this is a new ACP session
 and a new holder. Do not retry the dead session.
 
 ```bash
-"$RUNNER" start --repo "$PROJECT" --session "$HOST"
+"$RUNNER" start --repo "$PROJECT" --session "$HOST" --no-wait --text '<handoff>'
 ```
 
-`$RUNNER` is `runtime-tmux.sh` beside `kaola-acp.py`.
+A start with no brief only brings the seat up. `$RUNNER` is `runtime-tmux.sh` beside `kaola-acp.py`.
 
 ## 2. Hand the new Host the previous session
 

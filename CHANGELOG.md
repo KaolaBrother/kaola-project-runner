@@ -4,6 +4,14 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+`start` with `--stdin` or `--text` delivers that brief as the session's first prompt turn and verifies admission before the receipt returns (Issue #344).
+
+Seats: restart not required
+
+- **A start brief is the first turn (#344).** `start --stdin` or `start --text` writes that text through the holder prompt path before the receipt returns. `ready` is a dispatch only when `brief_delivered` is true and the receipt carries that turn's `turn_request_id` and `prompt_fingerprint`. `--no-wait` waits for admission, not for the turn to end, and does not skip the check. A start with neither flag is unchanged (`ready`, no turn, no fingerprint). An empty brief is refused before a seat exists (`brief-empty`). A brief that does not verify is `brief_delivered: false` with a typed reason and a non-zero exit, and that receipt is not a dispatch. `scripts/kaola-acp.py` is the per-call CLI; the holder prompt path is unchanged.
+
 ## 0.9.16 — 2026-10-17 (Agent-initiated turns wake the Delegator; Devin max effort via thought_level; Antigravity UI/3D only; kimi-cli provider errors recorded)
 
 Fixes #341 (an agent-initiated turn after the last prompt ends durably and wakes the Delegator), #342 (Devin default effort is `thought_level` max and the argv model is verified), #343 (Antigravity profiles are UI and 3D design implementation only) and #335 (kimi-cli turn failures record the provider error).

@@ -92,7 +92,8 @@ uniquely adopted live nonstandard name — never any other session. Refuse any
    is not a new session: do not re-ask the full set.
 5. With step 4 complete and no live Host: start once under `$HOST` at
    `$PROJECT`. Confirm `session`/`repo`/`acp_session_id`/`holder_instance_id`
-   from the start receipt, then send the first handoff. `host-exists`:
+   from the start receipt. Handoff via `--text`/`--stdin` `--no-wait`
+   (`brief_delivered`, `turn_request_id`, `prompt_fingerprint`); no resend. `host-exists`:
    attach its `existing_host` (step 2). A `host-model-*` refusal escalates.
 
 ## Handoff and updates

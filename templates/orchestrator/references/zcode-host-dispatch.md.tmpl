@@ -16,20 +16,20 @@ Platform-pinned wrappers take **no** platform argument.
 ### Execute first; direct start as fallback
 
 Planned dispatch: `execute` ([dispatch-collect.md](dispatch-collect.md)) from
-this Host counts, starts absent seats, sends and records facts. Direct calls:
+this Host counts, starts absent seats (no brief), sends. Direct calls:
 standalone, degraded or same-assignment recovery.
 
 ```bash
 W="/abs/path/to/codex-{{SKILL_NAME}}/scripts/runtime-tmux.sh"
 WORK_REPO="/abs/path/to/project"
-"$W" start --repo "$WORK_REPO" --session codex-KT-i274-parser --tier luna
+"$W" start --repo "$WORK_REPO" --session codex-KT-i274-parser --tier luna --no-wait --text '<task>'
 ```
 
 Run `start` from your own session: it binds the worker to you and refuses
 (`result: refused`, `reason: heartbeat-host-…`, exit 1) instead of starting
 unbound. The binding derives from `KAOLA_ACP_DISPATCHER`; an explicit
 `KAOLA_ACP_HEARTBEAT_HOST` that differs refuses `heartbeat-host-conflict`. PTY
-is refused (`transport-pty-retired`): ACP-only. Worker names
+is refused (`transport-pty-retired`). Worker names
 are issue-scoped: `<platform>-<CODE>-i<ISSUE>-<purpose>`.
 
 Count before every direct `start`: identity-verified live owned sessions

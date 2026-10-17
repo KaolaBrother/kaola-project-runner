@@ -44,6 +44,8 @@ SESSION="<exact-name>"   # under Project Runner: <platform>-<CODE>-i<ISSUE>-<pur
 "$SKILL_DIR/scripts/runtime-tmux.sh" capture --repo "$REPO" --session "$SESSION" --lines 200
 ```
 
+A `start` with no `--text` or `--stdin` only brings the seat up (`ready`, no turn). That receipt is not a dispatch. Pass the task as `--text` or `--stdin` (`--no-wait` admits the turn and does not wait for it to end). `ready` is a dispatch only with `brief_delivered` true, that turn's `turn_request_id`, and its `prompt_fingerprint`. A later `send` is another turn; do not send the same brief again.
+
 The controlling Agent owns model selection for each `start`. This Skill declares its per-run
 presets — `--tier default` (**Grok 4.7**: `grok-4.7`, effort=high, fast=false) and `--tier xhigh` (**Grok 4.7**: `grok-4.7`, effort=xhigh, fast=false) — and `default` applies whenever nothing more specific was chosen. Pass
 another `--tier` when the human or an existing authorization — the default-authorized Worker pool included —

@@ -2406,7 +2406,14 @@ later-output-barrier interpretations.
 `send` writes the text as one `session/prompt` text block over the agent's stdio JSON-RPC, never
 through a shell or a terminal, and returns `prompt_fingerprint` (`sha256:` of the text) with
 `mutation_performed: true` once the frame is written; a frame that was not written is
-`acp-write-failed` with `mutation_performed: false`. `key` accepts only `escape`, which maps to
+`acp-write-failed` with `mutation_performed: false`. `start --text` or `start --stdin` uses that
+same prompt path as the session's first turn (Issue #344). The receipt is a dispatch only when
+`brief_delivered` is true and it carries that turn's `turn_request_id` and `prompt_fingerprint`.
+`--no-wait` waits for admission (`mutation_status` `in_progress` or later), not for the turn to
+end, and does not skip that check. A start with neither flag is unchanged: `ready`, no turn, and
+no `prompt_fingerprint`, and that receipt is not a dispatch. An empty brief is refused
+`brief-empty` before a seat exists. A brief whose turn does not verify is `brief_delivered: false`
+with a typed reason and a non-zero exit, and is not a ready dispatch. `key` accepts only `escape`, which maps to
 ACP `cancel`; every other key is `key-unsupported`. `answer` is `answer-unsupported` ("use send;
 --decision-id maps to permit --request-id"). There is no native key, menu, or editor-replacement
 transfer on ACP, and no Runner path to one since the PTY transport was retired (Issue #130).
@@ -2474,7 +2481,9 @@ session evidence. `--help` still prints usage text and exits 0.
 
 Runner `send` accepts `--text TEXT`, or prompt text from stdin when `--text`
 is omitted. It does not accept `--text-file`. The direct Python entry accepts
-`--stdin`. To send a file through the platform Runner, redirect stdin:
+`--stdin`. `start` reads a brief only when `--stdin` or `--text` is passed
+(`--stdin` wins); that brief is the first turn above. A start with neither
+flag does not read stdin. To send a file through the platform Runner, redirect stdin:
 
 ```bash
 bash /absolute/path/to/scripts/kaola-tmux.sh codex send \

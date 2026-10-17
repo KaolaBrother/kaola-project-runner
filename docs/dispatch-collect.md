@@ -77,8 +77,12 @@ judged against the other live rows only, `execute` does not start it again
 and sends the first prompt to that holder (`evidence.seat_note`). Any other
 live row of the preset still counts against the item, and a refused attempt
 (`not-run`, no holder) binds no assignment for a later retry. Planned Host
-dispatch runs through `execute`; a direct Runner `start`/`send` is the
-standalone, degraded, or same-assignment recovery path.
+dispatch runs through `execute`: an absent seat is started with no brief, then
+`send --no-wait` is the first turn. A direct `start` with `--text` or `--stdin`
+is that first turn only when the receipt has `brief_delivered` true,
+`turn_request_id`, and that turn's `prompt_fingerprint`; do not send it again.
+A direct Runner `start`/`send` remains the standalone, degraded, or
+same-assignment recovery path.
 When `<repo>/.kaola/delegator-heartbeat.json` has schema `kaola-delegator-heartbeat/1`,
 that file is the eligibility ceiling for new dispatch.
 Host grants may be narrower. They cannot add a preset or enlarge a granted/shared count.

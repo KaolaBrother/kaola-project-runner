@@ -51,7 +51,7 @@ grants, count/shared occupancy and unknown reasons. No authority verdict.
 [--availability "$AVAIL"] [--prior-index "$PRIOR"] [--index "$INDEX"] [--live "$LIVE"]`.
 - `collect --index "$INDEX" --skills-root "$SKILLS"`: update correlation.
 - Add `--item <exact item_id>` to `collect` for a read-only turn view.
-Identity/cursor-bound outcome, permissions/failures survive the 480-char excerpt. Full native capture reads rotated logs; source/as-of, raw pointers and truncation reasons are visible. Missing ranges are uncertainty.
+Identity/cursor-bound outcome, permissions/failures survive the 480-char excerpt. Missing ranges are uncertainty.
 - `snapshot --state "$STATE" --out "$PROJECT/.kaola/heartbeat-prompt.json"`: atomically replaces
 `--out` with only `body`; a v2 `--out` is `state-managed`: use `state`.
 
@@ -96,8 +96,8 @@ start/send. Same `--index` is prior.
 Rejected re-execution keeps correlation, adds `evidence.blocked_attempt`.
 `--dry-run` writes no index (admitted: `reconciled`, new: `dry-run`).
 
-New items call `status`, `start` only for absent (`no-session`), then
-`send --no-wait`. An item's own verified, unprompted live seat is its count, not a new start. Stopped records need a new name, even with no residual PIDs. The start holder is stored and sent as
+New items call `status`, `start` only for absent (`no-session`, no brief), then
+`send --no-wait`. A direct start with `brief_delivered` true is already the turn: do not send it again. An item's own verified, unprompted live seat is its count, not a new start. Stopped records need a new name, even with no residual PIDs. The start holder is stored and sent as
 `--expected-holder-instance-id` when known. An expected holder whose session
 is absent is `not-run`, not started. Duplicate session names are
 `not-run`. Admission is `in-flight` / `admitted`, `acceptance: pending`, not

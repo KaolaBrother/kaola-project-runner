@@ -15,20 +15,20 @@ You keep authorization, dispatch, acceptance and close-out in your own session.
 Nothing below in this file applies: no event binding, no heartbeat file, no Host.
 
 ```bash
-"$WORKER" start   --repo "$PROJECT" --session codex-KT-i274-parser --tier luna
-"$WORKER" send    --repo "$PROJECT" --session codex-KT-i274-parser --text '<the task>'
+"$WORKER" start   --repo "$PROJECT" --session codex-KT-i274-parser --tier luna --no-wait --text '<the task>'
 "$WORKER" observe --repo "$PROJECT" --session codex-KT-i274-parser
 "$WORKER" capture --repo "$PROJECT" --session codex-KT-i274-parser --lines 200
 "$WORKER" stop    --repo "$PROJECT" --session codex-KT-i274-parser
 ```
 
 That exact name is the issue-scoped name of [issue-dispatch.md](issue-dispatch.md),
-unchanged across all five operations.
+unchanged across these operations.
 
-Check each receipt: a `start` without a ready session started nothing, a `send`
-`error` dispatched nothing, and a `prompt_timeout` or missing receipt leaves
-consumption **unknown** — `observe` establishes the fact before anything is
-re-sent. Blocking `send` is for non-Hosts; Host Workflow tasks use C.
+Check each receipt: `ready` dispatches only with `brief_delivered` true,
+`turn_request_id`, and `prompt_fingerprint`. No brief is seat-only. A false
+`brief_delivered` dispatched nothing. `prompt_timeout` with that turn id still
+admitted it; a missing receipt is **unknown** — `observe` before a resend.
+Blocking `send` is for non-Hosts; Host Workflow tasks use C.
 
 ## B. Outer Agent: starting a Host
 

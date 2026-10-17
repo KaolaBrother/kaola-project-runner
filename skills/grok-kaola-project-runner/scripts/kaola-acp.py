@@ -5932,9 +5932,201 @@ def spawn_holder_outside(args: argparse.Namespace, repo: str, directory: Path,
     return {"launch": out}
 
 
+_BRIEF_ADMITTED = frozenset({"in_progress", "accepted", "completed"})
+
+
+def read_start_brief(args: argparse.Namespace) -> str | None:
+    """Text this start was asked to deliver, or None when no brief was requested.
+
+    ``--stdin`` wins over ``--text``, matching ``send``. Whitespace is a brief.
+    An empty string means the caller asked for a brief and supplied none.
+    """
+    if not getattr(args, "stdin", False) and getattr(args, "text", None) is None:
+        return None
+    if getattr(args, "stdin", False):
+        return sys.stdin.read()
+    text = getattr(args, "text", None)
+    return text if isinstance(text, str) else ""
+
+
+def brief_empty_receipt(args: argparse.Namespace, repo: str) -> dict[str, Any]:
+    receipt = base_receipt(args, repo)
+    receipt.update({
+        "result": "refused",
+        "reason": "brief-empty",
+        "action": "start",
+        "brief_delivered": False,
+        "mutation_status": "not_started",
+        "mutation_performed": False,
+        "detail": "start with --stdin or --text received no brief text; nothing was started",
+    })
+    return receipt
+
+
+def stamp_brief_undelivered(receipt: dict[str, Any], reason: str, *,
+                            detail: str | None = None, admitted: bool = False,
+                            turn_id: Any = None) -> dict[str, Any]:
+    """A requested brief was not verified as a dispatch.
+
+    Drop ``ready`` and ``prompt_fingerprint`` so neither can be read as one.
+    A turn that was admitted keeps its id and mutation.
+    """
+    receipt.pop("prompt_fingerprint", None)
+    if admitted and turn_id is not None:
+        receipt["turn_request_id"] = turn_id
+    else:
+        receipt.pop("turn_request_id", None)
+    if receipt.get("state") == "ready":
+        receipt.pop("state", None)
+    receipt["brief_delivered"] = False
+    if receipt.get("result") != "refused":
+        receipt["result"] = "refused"
+        receipt["reason"] = reason
+        receipt.setdefault("action", "start")
+    elif not receipt.get("reason"):
+        receipt["reason"] = reason
+    if (not admitted and receipt.get("mutation_status")
+            in (None, "in_progress", "accepted", "completed")):
+        receipt["mutation_status"] = "not_started"
+        receipt["mutation_performed"] = False
+    if detail and "detail" not in receipt:
+        receipt["detail"] = detail
+    return receipt
+
+
+def _brief_failure_reason(reply: dict[str, Any], probed: dict[str, Any] | None,
+                          seen_fingerprint: str | None, expected: str) -> str:
+    if seen_fingerprint and seen_fingerprint != expected:
+        return "brief-fingerprint-mismatch"
+    error = reply.get("error")
+    if isinstance(error, dict) and isinstance(error.get("code"), str) and error["code"]:
+        return error["code"]
+    if isinstance(probed, dict):
+        probe_error = probed.get("error")
+        if isinstance(probe_error, dict) and isinstance(probe_error.get("code"), str):
+            return probe_error["code"]
+    outcome = reply.get("outcome")
+    if outcome in ("turn_failed", "process_exited", "no_session", "stopping"):
+        return str(outcome)
+    return "brief-turn-unverified"
+
+
+def deliver_start_brief(args: argparse.Namespace, repo: str, receipt: dict[str, Any],
+                        text: str) -> dict[str, Any]:
+    """Send ``text`` as this session's first prompt and require admission.
+
+    Wait resolution matches ``send``. ``--no-wait`` returns at admission and
+    does not wait for the turn to end. ``ready`` is a dispatch only when the
+    turn id, the real fingerprint, and an admitted mutation are all present.
+    """
+    directory = record_dir(args, repo)
+    wait_selection, bound_holder_id = resolve_send_wait(args, repo, directory)
+    timeout = args.timeout
+    sock_timeout = (timeout + 30.0) if timeout else None
+    prompt_params: dict[str, Any] = {
+        "text": text,
+        "wait": wait_selection["wait"],
+        "timeout": timeout,
+        "max_final_chars": args.max_final_chars,
+    }
+    if args.expected_holder_instance_id is not None:
+        prompt_params["expected_holder_instance_id"] = args.expected_holder_instance_id
+    elif bound_holder_id is not None:
+        prompt_params["expected_holder_instance_id"] = bound_holder_id
+    reply = op_or_holder_lost(args, repo, directory, "prompt", prompt_params, sock_timeout)
+    expected = "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+    probed: dict[str, Any] | None = None
+    sock = sock_path(args, repo)
+    if sock.exists():
+        probed = socket_request(sock, "state", {}, 5.0)
+    probe_ok = isinstance(probed, dict) and bool(probed.get("state")) and "error" not in probed
+    last: dict[str, Any] = {}
+    turn_id = reply.get("turn_request_id")
+    seen_fp = reply.get("prompt_fingerprint")
+    if probe_ok and isinstance(probed, dict):
+        raw_last = probed.get("last_prompt")
+        if isinstance(raw_last, dict):
+            last = raw_last
+        if turn_id is None:
+            turn_id = probed.get("turn_request_id")
+        if not isinstance(seen_fp, str) or not seen_fp:
+            seen_fp = last.get("fingerprint")
+    reply_mutation = reply.get("mutation_status")
+    last_mutation = last.get("mutation_status")
+    admitted_mutation = reply_mutation if reply_mutation in _BRIEF_ADMITTED else last_mutation
+    verified = (
+        probe_ok
+        and turn_id is not None
+        and admitted_mutation in _BRIEF_ADMITTED
+        and last_mutation in _BRIEF_ADMITTED
+        and seen_fp == expected
+        and last.get("fingerprint") == expected
+    )
+    if verified and isinstance(probed, dict):
+        receipt["brief_delivered"] = True
+        receipt["turn_request_id"] = turn_id
+        receipt["prompt_fingerprint"] = expected
+        receipt["mutation_status"] = admitted_mutation
+        receipt["mutation_performed"] = True
+        receipt["outcome"] = reply.get("outcome")
+        if reply.get("dispatch_event_cursor") is not None:
+            receipt["dispatch_event_cursor"] = reply["dispatch_event_cursor"]
+        if reply.get("stop_reason") is not None:
+            receipt["stop_reason"] = reply["stop_reason"]
+        receipt["wait_selection"] = wait_selection
+        holder_state = probed.get("state")
+        if isinstance(holder_state, str) and holder_state:
+            receipt["state"] = holder_state
+        return receipt
+    reason = _brief_failure_reason(
+        reply, probed if isinstance(probed, dict) else None,
+        seen_fp if isinstance(seen_fp, str) else None, expected)
+    admitted = admitted_mutation in _BRIEF_ADMITTED and turn_id is not None
+    detail = None
+    if receipt.get("acp_session_id") or receipt.get("holder_pid"):
+        detail = ("the seat is up but this start did not verify the brief turn; "
+                  "this receipt is not a dispatch")
+    stamp_brief_undelivered(receipt, reason, detail=detail, admitted=admitted, turn_id=turn_id)
+    reply_error = reply.get("error")
+    if isinstance(reply_error, dict) and "error" not in receipt:
+        receipt["error"] = reply_error
+    return receipt
+
+
+def apply_start_brief(args: argparse.Namespace, repo: str, receipt: dict[str, Any],
+                      text: str) -> dict[str, Any]:
+    if (receipt.get("state") == "ready" and receipt.get("result") != "refused"
+            and "error" not in receipt and receipt.get("acp_session_id")):
+        return deliver_start_brief(args, repo, receipt, text)
+    reason = receipt.get("reason")
+    if not isinstance(reason, str) or not reason:
+        error = receipt.get("error")
+        code = error.get("code") if isinstance(error, dict) else None
+        reason = code if isinstance(code, str) and code else "brief-not-started"
+    detail = None
+    if receipt.get("state") == "ready" or receipt.get("acp_session_id"):
+        detail = ("the seat is up but this start did not deliver the brief; "
+                  "this receipt is not a dispatch")
+    return stamp_brief_undelivered(receipt, reason, detail=detail)
+
+
 def command_start(args: argparse.Namespace, repo: str,
                   decided: tuple[dict[str, Any] | None, dict[str, Any]] | None = None
                   ) -> dict[str, Any]:
+    # Issue #344: a brief is the first prompt turn. No brief leaves this start
+    # exactly as it was (ready, no turn).
+    brief = read_start_brief(args)
+    if brief == "":
+        return brief_empty_receipt(args, repo)
+    receipt = _command_start_seat(args, repo, decided)
+    if brief is None:
+        return receipt
+    return apply_start_brief(args, repo, receipt, brief)
+
+
+def _command_start_seat(args: argparse.Namespace, repo: str,
+                        decided: tuple[dict[str, Any] | None, dict[str, Any]] | None = None
+                        ) -> dict[str, Any]:
     # A caller that already ran the pre-spawn decision, like drain-restart
     # before it stops anything, hands its result in so the installed Skill
     # roots are scanned once, not twice.
