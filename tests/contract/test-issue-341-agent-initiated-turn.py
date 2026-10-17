@@ -17,7 +17,13 @@ Covers:
       open a synthetic turn and the first real prompt still completes;
   (e) chunks the agent emits after its prompt turn was canceled are a
       post-cancel tail, not an agent-initiated continuation: no synthetic
-      turn, no extra wake.
+      turn, no extra wake;
+  (f1) the ZCode bridge emits one usage_update{stopReason} when a backend
+      turn terminal has no ACP prompt in flight (the holder's idle signal)
+      and keeps the rid path byte-identical;
+  (f2) that explicit idle signal closes the synthetic turn at once instead
+      of waiting out the quiet window (run at KAOLA_ACP_AGENT_TURN_QUIET_
+      SECONDS=30 so the effect is observable in seconds).
 """
 
 from __future__ import annotations
@@ -121,7 +127,8 @@ def _run_autonomous_mock(argv: list[str]) -> int:
             return True
         session_id = next(iter(agent.sessions), "")
 
-        if args.mode in ("autonomous_burst", "mid_continuation", "pre_prompt_noise"):
+        if args.mode in ("autonomous_burst", "mid_continuation", "pre_prompt_noise",
+                         "explicit_idle"):
             def autonomous_continuation() -> None:
                 if continuation_canceled.wait(max(args.delay_ms, 0) / 1000.0):
                     return
@@ -150,6 +157,14 @@ def _run_autonomous_mock(argv: list[str]) -> int:
                         session_id,
                         f"autonomous chunk {idx + 1}/{max(1, args.chunks)}; ",
                     )
+                if args.mode == "explicit_idle":
+                    # The kaola-zcode-acp bridge frame for a backend turn
+                    # terminal with no ACP prompt in flight: the holder's
+                    # explicit idle signal.
+                    mock.session_update(session_id, {
+                        "sessionUpdate": "usage_update",
+                        "stopReason": "end_turn",
+                    })
 
             threading.Thread(target=autonomous_continuation, daemon=True).start()
         elif args.mode == "noise_only":
@@ -613,6 +628,159 @@ class AgentInitiatedTurnTest(unittest.TestCase):
             "tail after cancel", self._chunk_texts(events),
             "the post-cancel tail must have really arrived",
         )
+
+    def test_agent_turn_quiet_window_defaults(self) -> None:
+        """Issue #341: the synthetic-turn quiet window defaults to 60 s with a
+        600 s cap; the env override still wins inside the cap.
+        """
+        quiet = holder.Holder._agent_turn_quiet_seconds
+        self.assertEqual(holder.AGENT_TURN_QUIET_DEFAULT, 60.0)
+        self.assertEqual(holder.AGENT_TURN_QUIET_MAX, 600.0)
+        saved = dict(os.environ)
+        try:
+            os.environ.pop("KAOLA_ACP_AGENT_TURN_QUIET_SECONDS", None)
+            self.assertEqual(quiet(None), 60.0)
+            os.environ["KAOLA_ACP_AGENT_TURN_QUIET_SECONDS"] = "0.45"
+            self.assertEqual(quiet(None), 0.45)
+            os.environ["KAOLA_ACP_AGENT_TURN_QUIET_SECONDS"] = "601"
+            self.assertEqual(quiet(None), 60.0)
+        finally:
+            os.environ.clear()
+            os.environ.update(saved)
+
+    def test_case_f1_bridge_emits_idle_signal_for_promptless_turn(self) -> None:
+        """Case (f1): a backend turn terminal with no ACP prompt in flight
+        (rid None) emits one usage_update{stopReason} — the holder's idle
+        signal — while the rid path stays byte-identical.
+        """
+        spec = importlib.util.spec_from_file_location(
+            "zcode_bridge_341", REPO / "scripts" / "kaola-zcode-acp.py")
+        assert spec is not None and spec.loader is not None
+        bridge = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bridge)
+
+        agent = bridge.ZCodeAcpAgent("entry", "node", "/tmp", "yolo")
+        sent: list[dict[str, Any]] = []
+        agent.send = sent.append
+        session = bridge.Session("acp-1", "/tmp", "yolo")
+
+        def updates() -> list[dict[str, Any]]:
+            return [
+                m["params"]["update"] for m in sent
+                if m.get("method") == "session/update"
+            ]
+
+        usage = {"inputTokens": 11, "outputTokens": 7, "totalTokens": 18}
+
+        # rid None: turn.completed emits usage first, then the idle signal.
+        self.assertIsNone(session.turn_request_id)
+        agent.translate_event(session, "turn.completed", {"usage": usage})
+        self.assertEqual(updates(), [
+            {"sessionUpdate": "usage_update", "usage": usage},
+            {"sessionUpdate": "usage_update", "stopReason": "end_turn"},
+        ])
+        self.assertEqual([m for m in sent if "id" in m], [], sent)
+        sent.clear()
+
+        # turn.terminal: exactly the idle signal.
+        agent.translate_event(session, "turn.terminal", {"reason": "stopped"})
+        self.assertEqual(updates(), [
+            {"sessionUpdate": "usage_update", "stopReason": "end_turn"},
+        ])
+        sent.clear()
+
+        # turn.failed: the failure chunk, then the refusal idle signal.
+        agent.translate_event(session, "turn.failed",
+                              {"error": {"code": 1308, "message": "boom"}})
+        self.assertEqual(updates(), [
+            {"sessionUpdate": "agent_message_chunk",
+             "content": {"type": "text", "text": "[zcode turn failed] boom"}},
+            {"sessionUpdate": "usage_update", "stopReason": "refusal"},
+        ])
+        sent.clear()
+
+        # rid set: the normal prompt path is unchanged — usage update plus the
+        # response carrying stopReason and usage, no stopReason update.
+        session.turn_request_id = 7
+        agent.translate_event(session, "turn.completed", {"usage": usage})
+        self.assertEqual(updates(), [
+            {"sessionUpdate": "usage_update", "usage": usage},
+        ])
+        self.assertEqual(
+            [m for m in sent if "result" in m],
+            [{"jsonrpc": "2.0", "id": 7,
+              "result": {"stopReason": "end_turn", "usage": usage}}],
+            sent,
+        )
+        self.assertIsNone(session.turn_request_id)
+
+    def test_case_f2_explicit_idle_signal_closes_synthetic_turn(self) -> None:
+        """Case (f2): the bridge's usage_update{stopReason} idle signal closes
+        the synthetic turn at once. The quiet window is set to 30 s, so a
+        close within seconds proves the signal was honored, not the timeout.
+        """
+        self.endpoint = issue302.Endpoint()
+        self.configure_endpoint()
+        self.session = "grok-w341-orchestrator-f"
+        cmd = self.autonomous_command(
+            mode="explicit_idle", delay_ms=150, chunk_ms=60, chunks=3,
+        )
+        env = {"KAOLA_ACP_AGENT_TURN_QUIET_SECONDS": "30"}
+        _, _ = self.acp_custom("start", agent_cmd=cmd, extra_env=env)
+
+        _, send1 = self.acp_custom(
+            "send", "--text", "kickoff", "--wait", agent_cmd=cmd, extra_env=env)
+        self.assertEqual(send1.get("outcome"), "turn_completed")
+        wait_for(lambda: len(self.endpoint.posts) >= 1, 10, "first prompt wake")
+
+        def second_ended() -> list[dict[str, Any]] | None:
+            _, cap = self.acp_custom(
+                "capture", "--since", "0", agent_cmd=cmd, extra_env=env)
+            ended = [e for e in cap.get("events", []) if e.get("kind") == "turn_ended"]
+            return ended if len(ended) >= 2 else None
+
+        ended_events = wait_for(second_ended, 10, "synthetic turn_ended")
+        assert ended_events is not None
+        self.assertEqual(
+            [e.get("outcome") for e in ended_events],
+            ["turn_completed", "agent_turn_completed"],
+            ended_events,
+        )
+        self.assertEqual(ended_events[1].get("stop_reason"), "end_turn")
+        self.assertEqual(ended_events[1].get("prompt_source"), "self")
+        self.assertIs(ended_events[1].get("agent_initiated"), True)
+
+        _, cap_all = self.acp_custom(
+            "capture", "--since", "0", agent_cmd=cmd, extra_env=env)
+        events = cap_all.get("events", [])
+        started = [e for e in events if e.get("kind") == "turn_started"]
+        self.assertEqual(len(started), 1, started)
+        self.assertEqual(started[0].get("prompt_source"), "self")
+        self.assertIs(started[0].get("agent_initiated"), True)
+
+        stop_updates = [
+            e for e in events
+            if e.get("kind") == "session_update"
+            and isinstance(e.get("update"), dict)
+            and e["update"].get("stopReason") == "end_turn"
+        ]
+        self.assertTrue(stop_updates, events[-8:])
+        delta = ended_events[1].get("ts", 0) - stop_updates[-1].get("ts", 0)
+        self.assertLess(
+            delta, 2.0,
+            f"turn_ended must follow the idle signal, not the 30 s quiet "
+            f"window (delta={delta:.3f}s)",
+        )
+
+        wait_for(lambda: len(self.endpoint.posts) >= 2, 10, "second wake")
+        time.sleep(1.0)
+        _, cap2 = self.acp_custom(
+            "capture", "--since", "0", agent_cmd=cmd, extra_env=env)
+        self.assertEqual(
+            len([e for e in cap2.get("events", []) if e.get("kind") == "turn_ended"]),
+            2,
+        )
+        self.assertEqual(len(self.endpoint.posts), 2, self.endpoint.posts)
 
     def test_attention_reason_and_unit_predicates_on_agent_initiated_turn(self) -> None:
         """Verify #302 wake reason mapping (e.g. question_waiting / delivery_review)

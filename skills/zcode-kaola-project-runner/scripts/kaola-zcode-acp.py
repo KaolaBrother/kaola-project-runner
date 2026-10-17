@@ -1733,6 +1733,10 @@ class ZCodeAcpAgent:
                 steer["turn_ended"] = True
                 steer["done"].set()
         if rid is None:
+            # Issue #341: a backend turn with no ACP prompt has no response to
+            # carry its stopReason; this update is the holder's idle signal
+            # for the agent-initiated turn.
+            self.update(session, {"sessionUpdate": "usage_update", "stopReason": stop})
             return
         result: dict[str, Any] = {"stopReason": stop}
         if usage:

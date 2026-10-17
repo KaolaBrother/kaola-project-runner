@@ -441,8 +441,12 @@ def classify_delegator_attention(rows: list | None) -> str | None:
 
 
 COMPLETED_TURN_OUTCOMES = ("turn_completed", "agent_turn_completed")
-AGENT_TURN_QUIET_DEFAULT = 1.5
-AGENT_TURN_QUIET_MAX = 60.0
+# Issue #341: in the real incident thought chunks inside one turn were 25-50 s
+# apart, so 1.5 s split one burst into ~58 pseudo turns; 60 s matches its 4
+# self-completed zcode turn boundaries. Agents with an explicit idle signal
+# close sooner.
+AGENT_TURN_QUIET_DEFAULT = 60.0
+AGENT_TURN_QUIET_MAX = 600.0
 
 
 def is_agent_work_update(update: dict[str, Any]) -> bool:
