@@ -381,7 +381,7 @@ explicit `--model` choices, not a separate Fast toggle.
 | Elite | Kimi CLI | `kimi-k2-8` | `kimi-cli/kimi-k2-8` | Kimi K2.8 | thinking=max | All-round implementation worker for every kind of hands-on development and implementation task. |
 | Worker | Claude Code | `haiku` | `claude-code/haiku` | Claude Haiku | effort=high | Fast all-round execution worker, well suited to well-scoped work, especially UI and 3D visual implementation. |
 | Worker | Codex CLI | `luna` | `codex/luna` | GPT-6 Luna | effort=max | Computer-use worker only: drives GUI/browser/desktop QA and verification with screenshots and verdicts; not for general implementation, debugging, or design. |
-| Worker | Devin CLI | `default` | `devin/default` | SWE-2 | effort=max (encoded in model ID) | Capable full-cycle engineering worker. |
+| Worker | Devin CLI | `default` | `devin/default` | SWE-2 | effort=max via ACP option thought_level | Capable full-cycle engineering worker. |
 | Worker | dsh | `default` | `dsh/default` | DeepSeek V4.1 Flash | effort=max via ACP option reasoning_effort | Fast implementation worker for tasks with clear goals and boundaries; emphasizes autonomous progress, iterative validation, and self-repair. |
 | Worker | OpenCode | `default` | `opencode/default` | DeepSeek V4.1 Flash | effort=max via ACP option effort | Fast implementation worker for tasks with clear goals and boundaries; tends to investigate deeper root causes and reduce unrelated changes. |
 | Worker | ZCode | `default` | `zcode/default` | GLM 5.3 | thought=max | Autonomous engineering worker inclined to investigate, make decisions, iterate through failures, and carry substantial tasks toward completion with less hand-holding. |

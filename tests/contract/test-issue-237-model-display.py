@@ -79,8 +79,10 @@ class ModelDisplayContract(unittest.TestCase):
         self.assertIsNone(shared["components"])
 
     def test_devin_identities_keep_component_efforts_off_the_launch(self) -> None:
+        # Issue #342: devin/default declares launch effort max (thought_level).
+        # Fusion and fable component efforts stay off the launch.
         manifest = self.manifests["devin"]
-        self.assertEqual(manifest["acp_effort_config_id"], "")
+        self.assertEqual(manifest["acp_effort_config_id"], "thought_level")
         expected = {
             "default": (
                 "SWE-2",
@@ -110,11 +112,15 @@ class ModelDisplayContract(unittest.TestCase):
         for tier, (name, model_id, command, components) in expected.items():
             basis = self.acp.selection_basis(args("devin", manifest, tier=tier))
             display = self.acp.model_display_fact(basis)
-            self.assertEqual(basis["effort"], "", tier)
+            if tier == "default":
+                self.assertEqual(basis["effort"], "max", tier)
+                self.assertEqual(display["preset_effort"], "max", tier)
+            else:
+                self.assertEqual(basis["effort"], "", tier)
+                self.assertIsNone(display["preset_effort"], tier)
             self.assertEqual(basis["candidate"], model_id, tier)
             self.assertEqual(self.acp.tier_agent_command(args("devin", manifest, tier=tier)), command)
             self.assertEqual(display["name"], name, tier)
-            self.assertIsNone(display["preset_effort"], tier)
             self.assertEqual(display["components"], components, tier)
             self.assertEqual(display["components"][0]["role"], "main", tier)
         fable = expected["fable"][3]

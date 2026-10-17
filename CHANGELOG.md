@@ -4,6 +4,12 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+Seats: restart required
+
+- **Devin default effort is `thought_level` max (#342).** `platforms/devin.yaml` sets `acp_effort_config_id: "thought_level"` and `devin/default` `default_model_effort: "max"`. A plain start sends `thought_level=max` and does not set the model through ACP. The start receipt reads that option's `currentValue` as `effective_effort` and sets `model_verified` true only when the argv model and that thought level match the resolved selection. `opus-fusion` and `fable` keep their fusion model ids and empty launch effort, and are not verified from `thought_level`. `scripts/adapters/devin.sh` matches the manifest.
+
 ## 0.9.15 — 2026-10-17 (Sideagent fallback on refused node turns; dsh/opencode max effort by default; rejected model refuses start; Devin argv model id)
 
 Fixes #336 (a sideagent node whose runtime refused or failed its turn moves to the next Worker runtime), #337 (Devin verified on CLI 3000.11.92), #338 (dsh/default and opencode/default pass max reasoning effort through ACP), #339 (a rejected requested model option refuses the start) #340 (Devin receipts, status and observe show the argv model id) and #309 (the #339 refusal code carries its recovery route).

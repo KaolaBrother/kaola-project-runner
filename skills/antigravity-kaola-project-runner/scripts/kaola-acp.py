@@ -3811,7 +3811,8 @@ def apply_argv_model(effective: dict[str, Any], application: Any) -> dict[str, A
     """An ``acp_command_<tier>`` argv model is the effective model (#140, #340).
 
     Devin's advertised model option cannot report the argv id, so its
-    currentValue stays evidence as ``advertised_model``. Nothing is verified.
+    currentValue stays evidence as ``advertised_model``. A thought_level
+    readback beside this overlay is ``argv_thought_verification``.
     """
     model = application.get("model") if isinstance(application, dict) else None
     if not isinstance(model, dict) or model.get("applied_via") != "argv" \
@@ -3909,6 +3910,54 @@ def echo_model_verification(
             result["model_verified"] = False
             result["model_mismatch_reason"] = f"actual-{key}-mismatch:{actual_parameters[key]}"
             return result
+    result["model_verified"] = True
+    return result
+
+
+def argv_thought_verification(
+    policy: dict[str, Any], effective: dict[str, Any], application: Any,
+) -> dict[str, Any] | None:
+    """Issue #342. A thought_level readback beside an argv model.
+
+    ``None`` unless the model was applied via argv, the effort option is
+    ``thought_level``, one expected effort is resolved, the model id is not a
+    fusion (``-sidekick-``), and ``thought_level`` currentValue is a non-empty
+    string. ``true`` only when ``effective_model`` equals the resolved model
+    and that thought level equals the resolved effort. The ACP model
+    currentValue (``advertised_model``) is not compared: it is not the running
+    model (Issue #197, #340). A missing thought level stays unverified.
+    Reported evidence only; it never gates a start.
+    """
+    model = application.get("model") if isinstance(application, dict) else None
+    if not isinstance(model, dict) or model.get("applied_via") != "argv":
+        return None
+    if effective.get("effort_config_id") != "thought_level":
+        return None
+    expected_id = policy.get("resolved_runtime_model_id") or ""
+    if not isinstance(expected_id, str) or not expected_id or "-sidekick-" in expected_id:
+        return None
+    parameters = policy.get("resolved_parameters") or {}
+    expected_effort = parameters.get("effort") if isinstance(parameters, dict) else ""
+    if not isinstance(expected_effort, str) or not expected_effort:
+        return None
+    thought = effective.get("effective_effort")
+    if not isinstance(thought, str) or not thought:
+        return None
+    actual_id = effective.get("effective_model")
+    result: dict[str, Any] = {
+        "actual_runtime_model_id": actual_id,
+        "actual_parameters": {"effort": thought},
+        "model_verified": "unknown",
+        "model_mismatch_reason": None,
+    }
+    if actual_id != expected_id:
+        result["model_verified"] = False
+        result["model_mismatch_reason"] = f"actual-model-mismatch:{actual_id}"
+        return result
+    if thought != expected_effort:
+        result["model_verified"] = False
+        result["model_mismatch_reason"] = f"actual-effort-mismatch:{thought}"
+        return result
     result["model_verified"] = True
     return result
 
@@ -4176,8 +4225,8 @@ def annotate_session_model_evidence(
 
     A runtime model the holder already recorded wins. Claude Code, and only
     Claude Code, then reads its session JSONL. No evidence leaves the start
-    snapshot as it was, including a Droid echo and
-    ``actual-model-evidence-not-yet-read``. This does not write ``record.json``.
+    snapshot as it was, including a Droid echo, a Devin thought_level verdict,
+    and ``actual-model-evidence-not-yet-read``. This does not write ``record.json``.
     """
     if directory is None or not isinstance(receipt, dict):
         return
@@ -6341,13 +6390,19 @@ def command_start(args: argparse.Namespace, repo: str,
         # initial value when the argv set the model; keep it as evidence.
         apply_argv_model(effective, application)
         receipt["effective_selection"] = effective
-        if echo_verdict is not None:
-            receipt.update(echo_verdict)
+        # Issue #342: Devin's thought_level currentValue is the effort readback.
+        # It runs after the argv overlay, so effective_model is the argv id and
+        # the stale ACP model currentValue is not the compared model.
+        thought_verdict = argv_thought_verification(policy, effective, application)
+        verdict = echo_verdict if echo_verdict is not None else thought_verdict
+        if verdict is not None:
+            receipt.update(verdict)
             provenance = policy.setdefault("model_evidence_provenance", {})
             provenance["actual"] = {
-                "source": "acp-config-echo",
-                "model_id": echo_verdict["actual_runtime_model_id"],
-                "parameters": echo_verdict["actual_parameters"],
+                "source": ("acp-config-echo" if echo_verdict is not None
+                           else "acp-thought-level"),
+                "model_id": verdict["actual_runtime_model_id"],
+                "parameters": verdict["actual_parameters"],
             }
             receipt["model_evidence_provenance"] = provenance
         continuity = reconcile_selection_continuity(

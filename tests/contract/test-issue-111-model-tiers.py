@@ -69,12 +69,13 @@ LIVE_PRESETS = {
         "named": [],
     },
     "devin": {
-        "default": ("SWE-2", "swe-2-max", ""),
+        # Issue #342: devin/default launch effort is max, read from ACP thought_level.
+        "default": ("SWE-2", "swe-2-max", "max"),
         # Issue #144: `fable` is the Fable fusion; the pure
         # claude-fable-5-1-high preset is retired.
-        # Issue #237: display names drop the encoded effort; launch effort stays empty.
-        # Issue #243: the preset id is the high main-component slug. Launch effort
-        # stays empty; the SWE-2 sidekick effort stays on the component list.
+        # Issue #237: display names drop the encoded effort.
+        # Issue #243: the preset id is the high main-component slug. Fusion launch
+        # effort stays empty; the SWE-2 sidekick effort stays on the component list.
         "named": [("opus-fusion", "Opus Fusion",
                    "fusion-claude-opus-5-5-high-sidekick-swe-2-medium", ""),
                   ("fable", "Fable Fusion",

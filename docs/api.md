@@ -2101,8 +2101,9 @@ Model evidence under `model` on the `start`/`preflight` receipt includes `reques
 `resolved_parameters`, `resolved_fast`, and structured provenance. `actual_runtime_model_id` and
 `actual_parameters` are `null` and `model_verified` is `unknown`
 (`model_mismatch_reason: actual-model-evidence-not-yet-read`) on most platforms, because ACP
-computes no true/false verdict from the launch request alone. Droid is the exception (Issue #185):
-its selection is verified from the agent's own live current-model echo. Droid's only read-only
+computes no true/false verdict from the launch request alone. Droid (Issue #185) and a Devin
+default start that can read `thought_level` (Issue #342, below) are the exceptions. Droid's
+selection is verified from the agent's own live current-model echo. Droid's only read-only
 catalog probe is `droid --version` (no readable model catalog), and
 `session_meta.models.currentModelId` is a frozen `session/new` snapshot a later set never
 refreshes, so neither can verify a selection; the `config_option_update` echo is refreshed on
@@ -2126,8 +2127,20 @@ model option ignores `--model` and need not list the preset (a `devin/default` s
 authoritative and the advertised `currentValue` is never the effective model (Issue #340).
 `status`/`observe` of such a session carry the same top-level `effective_selection` (argv id as
 `effective_model`, `applied_via: "argv"`, the live advertised `currentValue` — or the start's when
-the holder is gone — as `advertised_model`, named by `advertised_source`). This is not
-verification: `model_verified` stays as the start recorded it (`unknown` for Devin).
+the holder is gone — as `advertised_model`, named by `advertised_source`).
+Devin `devin/default` verifies from `thought_level` at start (Issue #342). The effort option id is
+`thought_level`. The argv path does not set the model through ACP (`set_config_option
+model=swe-2-max` stays rejected). It does send `thought_level` at the resolved effort (`max` for
+the default preset). `effective_selection.effective_effort` is that option's `currentValue`.
+`model_verified` is `true` only when `effective_model` equals the resolved model and that thought
+level equals the resolved effort. `model_evidence_provenance.actual.source` is `acp-thought-level`
+and `actual_runtime_model_id` is the argv model. A readable disagreement is `false`
+(`actual-effort-mismatch:<value>` or `actual-model-mismatch:<id>`). A missing `thought_level`
+`currentValue` leaves `model_verified` `unknown`. The advertised model `currentValue` (often
+`swe-2-high`) is not compared. `opus-fusion` and `fable` keep component efforts inside the fusion
+model id, declare no launch effort, and are not verified from `thought_level`. The verdict is
+evidence only and does not gate the start. `status` and `observe` keep that start snapshot unless
+a later runtime-model update replaces it.
 On such a launch-argv start Droid's `model_verified` compares that echoed
 `advertised_model`, never the argv value the Runner itself supplied, so a session whose argv model
 the agent never adopted verifies `false` instead of comparing the argv value to itself.
@@ -2152,8 +2165,8 @@ id carries the requested effort as its suffix (antigravity `gemini-4-argon-{low,
 ### Session model evidence
 
 Issue #316. `start` still reports `model_verified: "unknown"` and
-`model_mismatch_reason: actual-model-evidence-not-yet-read` unless the platform verifies from
-its own echo (Droid, above). `status` and `observe` then read an actual model the session
+`model_mismatch_reason: actual-model-evidence-not-yet-read` unless the platform already verified
+at start (Droid's echo, or Devin's `thought_level` readback, above). `status` and `observe` then read an actual model the session
 already exposed. They do not write `record.json`. The on-disk `start_evidence` stays the start
 snapshot. When a model is read, the status copy of `start_evidence` and four top-level fields
 (`model_verified`, `model_mismatch_reason`, `actual_runtime_model_id`, `actual_parameters`)

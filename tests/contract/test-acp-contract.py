@@ -1880,6 +1880,9 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual(fast.get("applied_via"), "model-id")
 
     def start_devin_argv_tier(self, tier: str, model: str, advertised: str) -> dict:
+        # Each tier is its own start. The mock log is cumulative across subTests.
+        if self.mock_log.is_file():
+            self.mock_log.write_text("", encoding="utf-8")
         command = self.mock_command(caps="strict-config") + f" --model {model}"
         env = self.env()
         # The advertised option does not echo, and here does not list, the argv model.
@@ -1906,8 +1909,8 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         # Issue #197: the advertised value is not actual-model evidence (a
         # default seat advertised swe-2-high while Devin's native session
         # recorded swe-2-max). Issue #243 launches the high opus-fusion slug;
-        # an advertisement of the earlier medium slug stays stale, so the
-        # verdict stays unknown for every tier.
+        # an advertisement of the earlier medium slug stays stale. This fixture
+        # offers no thought_level, so the verdict stays unknown for every tier.
         for tier, model, advertised in (
             ("default", "swe-2-max", "swe-2-high"),
             ("opus-fusion", "fusion-claude-opus-5-5-high-sidekick-swe-2-medium",
@@ -1919,15 +1922,30 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
                     self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
                     self.assertEqual(receipt.get("requested_tier"), tier)
                     self.assertEqual(receipt.get("resolved_runtime_model_id"), model)
-                    self.assertNotIn("model", [config_id for config_id, _ in self.config_events()])
-                    self.assertNotIn("effort", [config_id for config_id, _ in self.config_events()])
-                    self.assertEqual((receipt.get("config_application") or {}).get("model"),
-                                     {"applied": True, "applied_via": "argv", "value": model})
-                    self.assertEqual((receipt.get("config_application") or {}).get("effort"),
-                                     {"applied": False, "reason": "no-resolved-value"})
+                    sent_ids = [config_id for config_id, _ in self.config_events()]
+                    self.assertNotIn("model", sent_ids)
                     display = receipt["model_display"]
                     self.assertEqual(display["preset_id"], f"devin/{tier}")
-                    self.assertIsNone(display["preset_effort"])
+                    self.assertEqual((receipt.get("config_application") or {}).get("model"),
+                                     {"applied": True, "applied_via": "argv", "value": model})
+                    if tier == "default":
+                        # Issue #342: the fixture does not offer thought_level, so
+                        # strict-config rejects the set and verification stays unknown.
+                        self.assertIn(("thought_level", "max"), self.config_events())
+                        effort = (receipt.get("config_application") or {}).get("effort") or {}
+                        self.assertFalse(effort.get("applied"))
+                        self.assertEqual(effort.get("config_id"), "thought_level")
+                        self.assertEqual(effort.get("value"), "max")
+                        self.assertIs(effort.get("advertised"), False)
+                        self.assertEqual((effort.get("error") or {}).get("code"),
+                                         "config-option-failed")
+                        self.assertEqual(display["preset_effort"], "max")
+                    else:
+                        self.assertNotIn("thought_level", sent_ids)
+                        self.assertNotIn("effort", sent_ids)
+                        self.assertEqual((receipt.get("config_application") or {}).get("effort"),
+                                         {"applied": False, "reason": "no-resolved-value"})
+                        self.assertIsNone(display["preset_effort"])
                     self.assertEqual(display["components"][0]["role"], "main")
                     if tier == "default":
                         self.assertEqual(display["name"], "SWE-2")
@@ -1960,9 +1978,12 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         receipt = self.start("devin", "--tier", "default", "--mode", "agent",
                              "--allow-unapplied-model", caps="strict-config", check=False)
         self.assertIn(("model", "swe-2-max"), self.config_events())
-        self.assertNotIn("effort", [config_id for config_id, _ in self.config_events()])
-        self.assertEqual((receipt.get("config_application") or {}).get("effort"),
-                         {"applied": False, "reason": "no-resolved-value"})
+        self.assertIn(("thought_level", "max"), self.config_events())
+        effort = (receipt.get("config_application") or {}).get("effort") or {}
+        self.assertFalse(effort.get("applied"))
+        self.assertEqual(effort.get("config_id"), "thought_level")
+        self.assertEqual(effort.get("value"), "max")
+        self.assertEqual((effort.get("error") or {}).get("code"), "config-option-failed")
         model = (receipt.get("config_application") or {}).get("model") or {}
         self.assertNotIn("applied_via", model)
         self.assertNotIn("effective_model_source", receipt.get("effective_selection") or {})
