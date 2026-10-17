@@ -64,6 +64,10 @@ RESUME_TIMEOUT_MAX = 600.0
 # Issue #203: ceiling for the start selection/application evidence a record keeps.
 START_EVIDENCE_BYTES = 16384
 SENSITIVE_KEYS = ("_API_KEY", "TOKEN", "Authorization")
+# Issue #335: provider text kept on a failed turn. #51 scrub() rewrites dict
+# keys only, so the message is redacted and capped before it is stored.
+PROVIDER_ERROR_MESSAGE_MAX = 400
+KIMI_WIRE_TAIL_BYTES = 2 * 1024 * 1024
 
 
 def canonical(value: Any) -> bytes:
@@ -1047,6 +1051,195 @@ def scrub(value: Any) -> Any:
     if isinstance(value, list):
         return [scrub(item) for item in value]
     return value
+
+
+# kimi-cli 2.2.0 maps provider.auth_error onto JSON-RPC -32000
+# ("Authentication required: …"). A non-string engine error becomes the
+# literal "[object Object]" (store errorMessage uses String(error); the same
+# interpolation happens in authRequired). The structured error remains on
+# that session's wire.jsonl turn.ended line. fatal_error stays the
+# start/resume failure; this summary is the turn's.
+_OBJECT_OBJECT = "[object Object]"
+_PROVIDER_CODE = re.compile(r"^(?:provider|auth)\.[A-Za-z0-9_]+$")
+_WIRE_BRACKET = re.compile(r"\[((?:provider|auth)\.[A-Za-z0-9_]+)\]\s*(.*)")
+_HTTP_STATUS = re.compile(
+    r"(?:authentication required:\s*)?(\d{3})\b", re.IGNORECASE)
+_SECRET_TEXT = re.compile(
+    r"(?i)("
+    r"authorization\s*[:=]\s*(?:bearer\s+)?"
+    r"|bearer\s+"
+    r"|cookie\s*[:=]\s*"
+    r"|(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password)\s*[=:]\s*"
+    r")\S+"
+    r"|(sk-[A-Za-z0-9_-]{8,})"
+)
+
+
+def redact_provider_text(text: str) -> str:
+    """Replace credential-shaped spans. scrub() does not scan string values."""
+    def replace(match: re.Match[str]) -> str:
+        prefix = match.group(1)
+        if prefix:
+            return prefix + "<redacted>"
+        return "<redacted>"
+    return _SECRET_TEXT.sub(replace, text)
+
+
+def bound_provider_message(text: object) -> str:
+    if not isinstance(text, str):
+        return ""
+    cleaned = redact_provider_text(text).strip()
+    if cleaned == _OBJECT_OBJECT:
+        return ""
+    return cleaned[:PROVIDER_ERROR_MESSAGE_MAX]
+
+
+def provider_http_status(message: str, details: object) -> int | None:
+    if isinstance(details, dict):
+        raw = details.get("statusCode")
+        if isinstance(raw, int) and not isinstance(raw, bool) and 100 <= raw <= 599:
+            return raw
+    matched = _HTTP_STATUS.match(message or "")
+    if not matched:
+        return None
+    status = int(matched.group(1))
+    if 100 <= status <= 599:
+        return status
+    return None
+
+
+def kimi_workdir_key(work_dir: str) -> str:
+    """kimi-cli 2.2.0 encodeWorkDirKey. Not realpath; trailing slashes drop."""
+    normalized = work_dir.replace("\\", "/").rstrip("/")
+    name = normalized.rsplit("/", 1)[-1] if normalized else ""
+    slug = re.sub(r"[^a-z0-9._-]+", "-", name.lower())
+    slug = re.sub(r"^-+|-+$", "", slug)
+    slug = slug[:40]
+    slug = re.sub(r"^-+|-+$", "", slug)
+    if slug in ("", ".", ".."):
+        slug = "workspace"
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12]
+    return f"wd_{slug}_{digest}"
+
+
+def unavailable_provider_summary(reason: str) -> dict[str, Any]:
+    return {
+        "source": "unavailable",
+        "code": "provider-error-unavailable",
+        "message": "no provider error available",
+        "reason": reason,
+    }
+
+
+def acp_error_is_usable(error: object) -> bool:
+    """Numeric JSON-RPC code alone, or a message that is only [object Object], is not."""
+    if not isinstance(error, dict):
+        return False
+    if bound_provider_message(error.get("message")):
+        return True
+    code = error.get("code")
+    if not isinstance(code, str) or not code.strip():
+        return False
+    token = code.strip()
+    return not token.lstrip("-").isdigit()
+
+
+def summary_from_acp(error: dict[str, Any]) -> dict[str, Any]:
+    summary: dict[str, Any] = {"source": "acp"}
+    code = error.get("code")
+    if isinstance(code, str) and code.strip():
+        summary["code"] = code.strip()
+    elif isinstance(code, int) and not isinstance(code, bool):
+        summary["code"] = code
+    raw_message = error.get("message") if isinstance(error.get("message"), str) else ""
+    message = bound_provider_message(raw_message)
+    if not message:
+        thread = error.get("threadStatus")
+        if isinstance(thread, str) and thread.strip():
+            message = bound_provider_message(f"threadStatus={thread.strip()}")
+        elif isinstance(code, str) and code.strip():
+            message = bound_provider_message(code.strip())
+    if message:
+        summary["message"] = message
+    status = provider_http_status(raw_message, None)
+    if status is not None:
+        summary["status"] = status
+    return summary
+
+
+def summary_from_wire_object(obj: dict[str, Any]) -> dict[str, Any] | None:
+    kind = obj.get("type")
+    if kind == "turn.ended":
+        err = obj.get("error")
+        if not isinstance(err, dict):
+            return None
+        code = err.get("code")
+        if not isinstance(code, str) or _PROVIDER_CODE.match(code) is None:
+            return None
+        raw = err.get("message") if isinstance(err.get("message"), str) else ""
+        summary: dict[str, Any] = {"source": "kimi-wire", "code": code}
+        status = provider_http_status(raw, err.get("details"))
+        if status is not None:
+            summary["status"] = status
+        message = bound_provider_message(raw)
+        if message:
+            summary["message"] = message
+        return summary
+    if kind == "turn.step.interrupted":
+        raw_message = obj.get("message")
+        if not isinstance(raw_message, str):
+            return None
+        matched = _WIRE_BRACKET.search(raw_message)
+        if matched is None or _PROVIDER_CODE.match(matched.group(1)) is None:
+            return None
+        body = matched.group(2)
+        summary = {"source": "kimi-wire", "code": matched.group(1)}
+        status = provider_http_status(body, None)
+        if status is not None:
+            summary["status"] = status
+        message = bound_provider_message(body)
+        if message:
+            summary["message"] = message
+        return summary
+    return None
+
+
+def _path_within(root: Path, candidate: Path) -> bool:
+    try:
+        return candidate.resolve().is_relative_to(root.resolve())
+    except (OSError, ValueError):
+        return False
+
+
+def read_latest_kimi_wire_error(path: Path) -> dict[str, Any] | None:
+    """Latest provider.* / auth.* hit in the tail. None when the tail has none.
+
+    A file larger than the tail bound can hide an older error; that degrades
+    instead of reading an unbounded session log. Bad lines are skipped.
+    """
+    with path.open("rb") as handle:
+        handle.seek(0, os.SEEK_END)
+        size = handle.tell()
+        handle.seek(max(0, size - KIMI_WIRE_TAIL_BYTES))
+        blob = handle.read(KIMI_WIRE_TAIL_BYTES)
+    if size > KIMI_WIRE_TAIL_BYTES:
+        cut = blob.find(b"\n")
+        if cut >= 0:
+            blob = blob[cut + 1:]
+    text = blob.decode("utf-8", errors="replace")
+    for line in reversed(text.splitlines()):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            obj = json.loads(stripped)
+        except ValueError:
+            continue
+        if isinstance(obj, dict):
+            summary = summary_from_wire_object(obj)
+            if summary is not None:
+                return summary
+    return None
 
 
 def config_option_choices(option: dict) -> list[dict]:
@@ -2301,6 +2494,10 @@ class Holder:
             previous_record = {}
         self.last_prompt: dict[str, Any] = previous_record.get("last_prompt") or {}
         self.fatal_error: dict[str, Any] | None = None
+        # Issue #335: last settled turn's provider-error summary, or None when
+        # that turn did not fail. Cleared on the next non-failed terminal
+        # outcome. The event log keeps each failed turn's own copy.
+        self.turn_error: dict[str, Any] | None = None
         # Issue #308: a resume that outlives its wait. The reader corrects the
         # record when the agent answers after the wait; run() must not publish
         # state=error over that correction. Never nest agent.lock under this.
@@ -2508,6 +2705,7 @@ class Holder:
             "malformed_stdout_lines": self.agent.malformed_lines,
             "agent_message_errors": self.agent.handler_errors,
             "fatal_error": self.fatal_error,
+            "turn_error": self.turn_error,
             "resume_pending": self.resume_pending_id is not None,
             "created_at": getattr(self, "created_at", None),
             "updated_at": round(time.time(), 3),
@@ -3019,6 +3217,86 @@ class Holder:
             with self.turn_cond:
                 self.turn_cond.notify_all()
 
+    def _kimi_wire_file(self) -> tuple[Path | None, str]:
+        """The main agent's wire.jsonl for this ACP session, or why it is not.
+
+        Directory name is the ACP session id. The ``session_`` spelling is
+        tried only when that directory is absent. A path that leaves the
+        sessions root is not opened.
+        """
+        session_id = self.acp_session_id
+        repo = self.args.repo
+        if not isinstance(session_id, str) or not session_id or not isinstance(repo, str) or not repo:
+            return None, "wire-missing"
+        home = os.environ.get("KIMI_CODE_HOME") or str(Path.home() / ".kimi-code")
+        root = Path(home) / "sessions"
+        names = [session_id]
+        alternate = (session_id[len("session_"):] if session_id.startswith("session_")
+                     else "session_" + session_id)
+        if alternate and alternate != session_id:
+            names.append(alternate)
+        chosen: Path | None = None
+        bucket = kimi_workdir_key(repo)
+        for index, name in enumerate(names):
+            # One path segment. A slash or ".." would leave this session's
+            # directory; that is a miss, not a file to open.
+            if not name or name in (".", "..") or "/" in name or "\\" in name:
+                return None, "wire-missing"
+            session_dir = root / bucket / name
+            wire = session_dir / "agents" / "main" / "wire.jsonl"
+            if not _path_within(root, wire):
+                return None, "wire-missing"
+            if index == 0:
+                try:
+                    exact_dir = session_dir.is_dir()
+                except OSError:
+                    return None, "wire-unreadable"
+                chosen = wire
+                if exact_dir:
+                    break
+                continue
+            chosen = wire
+        if chosen is None:
+            return None, "wire-missing"
+        try:
+            if chosen.is_file():
+                return chosen, ""
+            if chosen.exists():
+                return None, "wire-unreadable"
+        except OSError:
+            return None, "wire-unreadable"
+        return None, "wire-missing"
+
+    def _provider_failure_summary(self, acp_error: object) -> dict[str, Any]:
+        """Bounded redacted summary for a turn_failed. Never raises."""
+        try:
+            if acp_error_is_usable(acp_error) and isinstance(acp_error, dict):
+                return scrub(summary_from_acp(acp_error))
+            if self.args.platform != "kimi-cli":
+                return scrub(unavailable_provider_summary("acp-unusable"))
+            path, reason = self._kimi_wire_file()
+            if path is None:
+                return scrub(unavailable_provider_summary(reason or "wire-missing"))
+            found = read_latest_kimi_wire_error(path)
+            if found is None:
+                return scrub(unavailable_provider_summary("wire-no-provider-error"))
+            return scrub(found)
+        except Exception:
+            return scrub(unavailable_provider_summary("wire-unreadable"))
+
+    def _turn_failure_event(self, outcome: str, turn: dict[str, Any]) -> dict[str, Any] | None:
+        """Set ``turn_error`` for this terminal outcome. Return the event field.
+
+        Only a failed turn carries the summary. A later success or cancel
+        clears the record field; events already written stay.
+        """
+        if outcome != "turn_failed":
+            self.turn_error = None
+            return None
+        summary = self._provider_failure_summary(turn.get("error"))
+        self.turn_error = summary
+        return summary
+
     def on_prompt_response(self, request_id: int, response: dict[str, Any] | None) -> None:
         turn = self.turn
         if response is None or not turn["active"]:
@@ -3057,10 +3335,13 @@ class Holder:
         # otherwise leave nothing behind to count afterwards. Written verbatim:
         # whatever stopReason the agent reported is what the log says.
         turn["ended_at"] = round(time.time(), 3)
-        end_cursor = self.events.append({"kind": "turn_ended", "outcome": outcome,
-                                         "stop_reason": turn.get("stop_reason"),
-                                         "prompt_fingerprint": turn.get("fingerprint")},
-                                        ts=turn["ended_at"])
+        ended: dict[str, Any] = {"kind": "turn_ended", "outcome": outcome,
+                                 "stop_reason": turn.get("stop_reason"),
+                                 "prompt_fingerprint": turn.get("fingerprint")}
+        failure = self._turn_failure_event(outcome, turn)
+        if failure is not None:
+            ended["error"] = failure
+        end_cursor = self.events.append(ended, ts=turn["ended_at"])
         self.projection.end_turn(turn["ended_at"], end_cursor, outcome, turn.get("stop_reason"))
         sideagent = self.session_role in SIDEAGENT_ROLES
         if ((outcome in ("turn_completed", "turn_failed") or (sideagent and outcome == "turn_canceled"))
@@ -3212,6 +3493,7 @@ class Holder:
             "unknown_update_variants": self.agent.unknown_updates,
             "agent_message_errors": self.agent.handler_errors,
             "fatal_error": self.fatal_error,
+            "turn_error": self.turn_error,
             "resume_pending": self.resume_pending_id is not None,
         }
 
@@ -3493,17 +3775,18 @@ class Holder:
             turn["active"] = False
             turn["ended_at"] = round(time.time(), 3)
             self.projection.close_message()
-            end_cursor = self.events.append(
-                {
-                    "kind": "turn_ended",
-                    "outcome": outcome,
-                    "stop_reason": stop,
-                    "prompt_fingerprint": turn.get("fingerprint"),
-                    "prompt_source": turn.get("prompt_source") or "self",
-                    "agent_initiated": True,
-                },
-                ts=turn["ended_at"],
-            )
+            ended_event: dict[str, Any] = {
+                "kind": "turn_ended",
+                "outcome": outcome,
+                "stop_reason": stop,
+                "prompt_fingerprint": turn.get("fingerprint"),
+                "prompt_source": turn.get("prompt_source") or "self",
+                "agent_initiated": True,
+            }
+            failure = self._turn_failure_event(outcome, turn)
+            if failure is not None:
+                ended_event["error"] = failure
+            end_cursor = self.events.append(ended_event, ts=turn["ended_at"])
             self.projection.end_turn(turn["ended_at"], end_cursor, outcome, stop)
             previous = self.last_prompt if isinstance(self.last_prompt, dict) else {}
             self.last_prompt = {
