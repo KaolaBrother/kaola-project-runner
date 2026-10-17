@@ -4,7 +4,9 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.9.16 — 2026-10-17 (Agent-initiated turns wake the Delegator; Devin max effort via thought_level; Antigravity UI/3D only; kimi-cli provider errors recorded)
+
+Fixes #341 (an agent-initiated turn after the last prompt ends durably and wakes the Delegator), #342 (Devin default effort is `thought_level` max and the argv model is verified), #343 (Antigravity profiles are UI and 3D design implementation only) and #335 (kimi-cli turn failures record the provider error).
 
 Seats: restart required
 
