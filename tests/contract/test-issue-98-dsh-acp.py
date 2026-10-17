@@ -213,7 +213,7 @@ class DshManifestMatchesTheMeasuredSurface(unittest.TestCase):
     def test_model_map_values_are_well_formed_two_element_routes(self) -> None:
         """set_config_option only accepts the agent's own [provider, model] strings."""
         entries = manifest_values()["acp_model_map"].split(";")
-        self.assertEqual(len(entries), 8)
+        self.assertEqual(len(entries), 9)
         for entry in entries:
             key, separator, value = entry.partition("=")
             with self.subTest(entry=key):

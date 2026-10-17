@@ -2235,7 +2235,7 @@ sidekick `SWE-2` at `medium`). Devin `fable` is `Fable Fusion` (main `Fable 5.1`
 sidekick `SWE-2` at `medium`). Codex `default` now selects `gpt-6.1-sol` at `high`.
 Other display identities are:
 `Fable`, `Sonnet`, `GPT-6.1 Sol`, `GPT-6 Astra`, `GPT-6 Luna`, `Grok 4.7`, `Claude Opus 5.5`,
-`Auto Model`, `DeepSeek V4.1 Flash`, `Kimi K3`, `Kimi K2.8`, `GLM 5.3`. `Flash` is the model
+`Auto Model`, `DeepSeek V4.1 Flash`, `DeepSeek V4.1 Flash (Command Code)`, `Kimi K3`, `Kimi K2.8`, `GLM 5.3`. `Flash` is the model
 variant, `Auto Model` is the `auto` catalog identity, and Cursor's `Claude` prefix is the
 declared family name.
 

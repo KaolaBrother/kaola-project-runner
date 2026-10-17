@@ -27,7 +27,7 @@ dispatches workers, accepts work before finalize, prefers selected Workflow sync
 is not required, advances actionable open PRs on contested capacity in parallel with other
 authorized work, treats the authorized count as a hard cap on live worker processes (including
 ACP holders) with stop-before-start at the cap and an exact stop in the beat a delivery is
-accepted (the six Worker-class presets in worker-profiles.md are default-authorized and outside
+accepted (the seven Worker-class presets in worker-profiles.md are default-authorized and outside
 that cap; Elite presets need explicit grants and Expert presets fresh per-task permission), and defaults to finishing in-hand issues with a clean workspace close-out after a run.
 The Runner owns exact-session control, evidence collection, prompt/key transfer, response
 readback, and truthful mechanical receipts. Kaola Workflow owns lifecycle state only when the Agent
@@ -38,7 +38,7 @@ ACP Watch（见 `docs/acp-watch/` / issues #25–#27）：人类旁观订阅 hol
 Main-model choice is a per-run transport fact. A current-request `--model` wins; otherwise
 `--tier NAME` selects the manifest's declared preset (`default` when unset), resolved against the
 current catalog. Only `default` is common; other names are the platform's own words listed in
-`named_tiers` (e.g. `--tier sonnet`, `--tier haiku`, `--tier opus-xhigh`, `--tier opus-fusion`, `--tier kimi-k2-8`) with no universal
+`named_tiers` (e.g. `--tier sonnet`, `--tier haiku`, `--tier opus-xhigh`, `--tier opus-fusion`, `--tier kimi-k2-8`, `--tier commandcode`) with no universal
 ranking, and a tier the platform does not declare (including the retired `upgrade`) is refused by
 name rather than resolved to `default`. `--effort` applies only to the model selected in the same request, and
 `--fast on` is an explicit per-run opt-in applied through an ACP config option (the Claude

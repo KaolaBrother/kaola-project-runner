@@ -379,7 +379,7 @@ class NodeRuntimeFallback(issue255.HolderNodeMode):
         self.install("dsh", issue255.FAKE_NODE_RUNNER)
         self.install("opencode", issue255.FAKE_NODE_RUNNER)  # installed but excluded
         self.serve("dsh")
-        self.bind("claude-code", ["codex/luna", "devin/default", "opencode/default"])
+        self.bind("claude-code", ["codex/luna", "devin/default", "dsh/commandcode", "opencode/default"])
         self.drive(lambda: len(self.fake.prompts) == 1, "a batch on the first runtime that starts")
         moves = self.events_of("sideagent_node_fallback")
         self.assertEqual([(m["from"], m.get("to"), m["chain"]) for m in moves],
@@ -403,7 +403,7 @@ class NodeRuntimeFallback(issue255.HolderNodeMode):
         self.install("zcode", FAILING_RUNNER)
         self.install("claude-code", FAILING_RUNNER)
         self.install("dsh", issue255.FAKE_NODE_RUNNER)  # installed but excluded
-        excluded = ["codex/luna", "devin/default", "dsh/default", "opencode/default"]
+        excluded = ["codex/luna", "devin/default", "dsh/default", "dsh/commandcode", "opencode/default"]
         self.bind("zcode", excluded)
         self.drive(lambda: self.holder.node.get("failed") is not None, "the exhausted chain")
         self.wait_for(lambda: len(self.agent.prompts()) == 1, "the Host told once")
@@ -427,7 +427,7 @@ class NodeRuntimeFallback(issue255.HolderNodeMode):
         self.prepare_recovery_host()
         self.install("claude-code", issue255.FAKE_NODE_RUNNER)
         self.serve("claude-code")
-        self.bind("zcode", ["codex/luna", "devin/default", "dsh/default", "opencode/default"])
+        self.bind("zcode", ["codex/luna", "devin/default", "dsh/default", "dsh/commandcode", "opencode/default"])
         self.drive(lambda: len(self.fake.prompts) == 1, "a batch on the installed runtime")
         self.assertIn("sideagent_node_recipe_refused", self.log_kinds())
         self.assertEqual([(m["from"], m.get("to")) for m in self.events_of("sideagent_node_fallback")],

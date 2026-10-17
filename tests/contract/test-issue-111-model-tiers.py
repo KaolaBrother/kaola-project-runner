@@ -62,7 +62,10 @@ LIVE_PRESETS = {
         # Issue #338: the opencode-go route accepts reasoning_effort max, and
         # the default preset applies it on a plain start.
         "default": ("DeepSeek V4.1 Flash", "opencode-go/deepseek-v4.1-flash", "max"),
-        "named": [],
+        # Issue #345: commandcode is the Command Code provider route. The
+        # compact ACP wire value is pinned in test-issue-345.
+        "named": [("commandcode", "DeepSeek V4.1 Flash (Command Code)",
+                   "commandcode/deepseek/deepseek-v4.1-flash", "max")],
     },
     "zcode": {
         "default": ("GLM 5.3", "GLM-5.3", "max"),

@@ -335,7 +335,7 @@ roles, not benchmark claims, and they do not change which model a Host itself ru
 | Class | Presets | Role | Authorization |
 |---|---|---|---|
 | **Expert** | 3 | Complex thinking only: difficult analysis, design, objective decomposition, and review judgments. No concrete implementation or execution; not an ordinary worker seat. | Your explicit grant. A task grant (the default) ends with its task. A standing grant, only when you say so, lets the Host use that preset within its stated scope, count and limits until you revoke it or it expires. The Host judges completion and exact-stops the seat; that stop revokes no standing grant, and the same approved task continues across turns and recovery without asking again. |
-| **Worker** | 6 | Cheaper and generally weaker; simpler, bounded work that adds parallel throughput. | Default-authorized: no approval is required for each seat, count, or priority. Actual account, token and service limits and your explicit restrictions still apply. |
+| **Worker** | 7 | Cheaper and generally weaker; simpler, bounded work that adds parallel throughput. | Default-authorized: no approval is required for each seat, count, or priority. Actual account, token and service limits and your explicit restrictions still apply. |
 | **Elite** | 17 | The main execution workforce: primary implementation and demanding execution. | Your explicit runtime/preset/count grant, within its caps and seat-switch rules. A valid grant stays valid for its scope; no per-task permission. |
 
 An Expert review informs the Host; it never replaces the Host's acceptance or its
@@ -383,6 +383,7 @@ explicit `--model` choices, not a separate Fast toggle.
 | Worker | Codex CLI | `luna` | `codex/luna` | GPT-6 Luna | effort=max | Computer-use worker only: drives GUI/browser/desktop QA and verification with screenshots and verdicts; not for general implementation, debugging, or design. |
 | Worker | Devin CLI | `default` | `devin/default` | SWE-2 | effort=max via ACP option thought_level | Capable full-cycle engineering worker. |
 | Worker | dsh | `default` | `dsh/default` | DeepSeek V4.1 Flash | effort=max via ACP option reasoning_effort | Fast implementation worker for tasks with clear goals and boundaries; emphasizes autonomous progress, iterative validation, and self-repair. |
+| Worker | dsh | `commandcode` | `dsh/commandcode` | DeepSeek V4.1 Flash (Command Code) | effort=max via ACP option reasoning_effort | Fast implementation worker for tasks with clear goals and boundaries; emphasizes autonomous progress, iterative validation, and self-repair. |
 | Worker | OpenCode | `default` | `opencode/default` | DeepSeek V4.1 Flash | effort=max via ACP option effort | Fast implementation worker for tasks with clear goals and boundaries; tends to investigate deeper root causes and reduce unrelated changes. |
 | Worker | ZCode | `default` | `zcode/default` | GLM 5.3 | thought=max | Autonomous engineering worker inclined to investigate, make decisions, iterate through failures, and carry substantial tasks toward completion with less hand-holding. |
 | Expert | Claude Code | `fable` | `claude-code/fable` | Fable | effort=high | Design, goal definition and decomposition, issue creation, and review; only under an explicit task or standing grant; no concrete implementation or execution, not a regular worker. |
@@ -436,6 +437,8 @@ and `references/acp.md`; transport and bridge internals are in the
   The shipped profile also pins the `deepseek-official` route, so a session can
   report `ready` and still fail its first prompt without an API key: supply
   `DEEPSEEK_API_KEY` or pass `--model` to select a credentialed route.
+  `--tier default` and `--tier commandcode` each set their own credentialed route.
+  A start that sets no model still hits `deepseek-official`.
 - **Droid** defaults to Auto Model and **full bypass**; its `--permission-mode`
   values map to ACP autonomy levels ([command reference](docs/api.md)).
 - **Claude Code** runs through a pinned ACP bridge shipped inside its worker Skill,
@@ -450,9 +453,9 @@ Workers run only under authorization, and what you authorize depends on the
 
 ### Authorization by class
 
-- **Worker presets** — the six Worker rows of the catalog — need nothing more than an
+- **Worker presets** — the seven Worker rows of the catalog — need nothing more than an
   authorized project task: no per-seat or per-preset approval and no priority order.
-  Their live seats use pool permission; Elite/Expert grant counts do not limit them. Membership is exactly those six rows; `claude-code/sonnet` is
+  Their live seats use pool permission; Elite/Expert grant counts do not limit them. Membership is exactly those seven rows; `claude-code/sonnet` is
   Elite and is not a member. Being a runtime's `default`
   preset does not make a preset a Worker. Actual account/token/service and resource
   limits still apply (an unspecified quota is not unlimited), and any explicit owner
@@ -556,7 +559,7 @@ labeled quota or authentication.
 If a live delegated Host is confirmed stopped and its native resume id cannot restore
 it, start a new standard-named Host as a new ACP session only after current
 authorization is complete (goal, remaining work, platforms/members,
-counts/concurrency, quota, priority, delivery/stop boundary; the six Worker
+counts/concurrency, quota, priority, delivery/stop boundary; the seven Worker
 presets need no per-seat entries). Missing key values: ask,
 do not `start`, do not guess a stale quota. Quota travels in the units the user
 actually gave: a unit the user never gave is carried as unspecified and does not

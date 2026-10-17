@@ -57,8 +57,8 @@ acp_paths = importlib.util.module_from_spec(paths_spec)
 assert paths_spec.loader is not None
 paths_spec.loader.exec_module(acp_paths)
 
-WORKERS_OFF = ["codex/luna", "devin/default", "opencode/default"]
-ALL_OFF = ["codex/luna", "devin/default", "dsh/default", "opencode/default"]
+WORKERS_OFF = ["codex/luna", "devin/default", "dsh/commandcode", "opencode/default"]
+ALL_OFF = ["codex/luna", "devin/default", "dsh/default", "dsh/commandcode", "opencode/default"]
 
 # The fake node runner, also noting the record root its start was given.
 ROOT_NOTING_RUNNER = issue255.FAKE_NODE_RUNNER.replace(

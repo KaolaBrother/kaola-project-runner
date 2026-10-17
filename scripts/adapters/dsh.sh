@@ -12,7 +12,10 @@ ADAPTER_ANSWER_MODE="unsupported"
 ADAPTER_DEFAULT_MODEL_NAME="DeepSeek V4.1 Flash"
 ADAPTER_DEFAULT_MODEL_ID="opencode-go/deepseek-v4.1-flash"
 ADAPTER_DEFAULT_MODEL_EFFORT="max"
-ADAPTER_NAMED_TIERS=""
+ADAPTER_NAMED_TIERS="commandcode"
+ADAPTER_COMMANDCODE_MODEL_NAME="DeepSeek V4.1 Flash (Command Code)"
+ADAPTER_COMMANDCODE_MODEL_ID="commandcode/deepseek/deepseek-v4.1-flash"
+ADAPTER_COMMANDCODE_MODEL_EFFORT="max"
 ADAPTER_FAST_MECHANISM="none"
 
 # dsh discovers local skills from these roots (dsh-skill-filesystem ranks
