@@ -11,7 +11,13 @@ Covers:
   (b) a holder prompt / steer arriving mid-continuation behaves as steer/send
       does for an active turn today: no double turn_ended and no duplicate wake;
   (c) stray/empty updates and usage/config/foreign-session noise when idle do
-      not open a synthetic turn, do not emit turn_ended, and do not wake.
+      not open a synthetic turn, do not emit turn_ended, and do not wake;
+  (d) agent output streamed right after session/new (backend replay before any
+      prompt, e.g. the ZCode app-server's [interaction-result] echo) does not
+      open a synthetic turn and the first real prompt still completes;
+  (e) chunks the agent emits after its prompt turn was canceled are a
+      post-cancel tail, not an agent-initiated continuation: no synthetic
+      turn, no extra wake.
 """
 
 from __future__ import annotations
@@ -48,20 +54,63 @@ def _run_autonomous_mock(argv: list[str]) -> int:
     agent = mock.MockAgent(
         scenario="normal",
         caps=set(),
-        turn_ms=40,
+        turn_ms=1500 if args.mode == "cancel_tail" else 40,
         flood_bytes=0,
         steering=args.steering,
     )
     orig_finish = agent.finish_turn
     orig_cancel = agent.on_cancel_notification
+    orig_session_new = agent.on_session_new
     done_count = [0]
     continuation_canceled = threading.Event()
 
     def patched_cancel(params: dict[str, Any]) -> None:
         continuation_canceled.set()
         orig_cancel(params)
+        if args.mode != "cancel_tail":
+            return
+        session_id = params.get("sessionId") or next(iter(agent.sessions), "")
+
+        def tail_chunk() -> None:
+            time.sleep(0.1)
+            mock.message_chunk(session_id, "tail after cancel")
+
+        threading.Thread(target=tail_chunk, daemon=True).start()
 
     agent.on_cancel_notification = patched_cancel
+
+    def patched_session_new(request_id: Any, params: dict[str, Any]) -> None:
+        orig_session_new(request_id, params)
+        if args.mode != "pre_prompt_noise":
+            return
+        session_id = next(iter(agent.sessions), "")
+        if not session_id:
+            return
+
+        def pre_prompt_replay() -> None:
+            # The hermetic fake ZCode app-server replay: an [interaction-result]
+            # echo and replayed context streamed before any prompt.
+            time.sleep(max(args.delay_ms, 0) / 1000.0)
+            mock.session_update(session_id, {
+                "sessionUpdate": "agent_message_chunk",
+                "content": {"type": "text",
+                            "text": '[interaction-result] {"memoryEnabled": false}'},
+            })
+            mock.thought_chunk(session_id, "replayed thought")
+            mock.session_update(session_id, {
+                "sessionUpdate": "tool_call",
+                "toolCallId": "tc-replay-1",
+                "title": "replayed",
+                "kind": "read",
+                "status": "completed",
+            })
+            mock.session_update(session_id, {
+                "sessionUpdate": "usage_update", "used": 512, "size": 128000,
+            })
+
+        threading.Thread(target=pre_prompt_replay, daemon=True).start()
+
+    agent.on_session_new = patched_session_new
 
     def patched_finish(request_id: Any, stop: str = "end_turn") -> bool:
         ok = orig_finish(request_id, stop)
@@ -72,7 +121,7 @@ def _run_autonomous_mock(argv: list[str]) -> int:
             return True
         session_id = next(iter(agent.sessions), "")
 
-        if args.mode in ("autonomous_burst", "mid_continuation"):
+        if args.mode in ("autonomous_burst", "mid_continuation", "pre_prompt_noise"):
             def autonomous_continuation() -> None:
                 if continuation_canceled.wait(max(args.delay_ms, 0) / 1000.0):
                     return
@@ -370,6 +419,17 @@ class AgentInitiatedTurnTest(unittest.TestCase):
             ["turn_completed", "agent_turn_completed", "turn_completed"],
             ended_final,
         )
+        # The queued steer really reached the agent once the synthetic turn
+        # closed.
+        followups = [
+            e for e in cap_final.get("events", []) if e.get("kind") == "steer_followup"
+        ]
+        self.assertTrue(followups, cap_final.get("events", []))
+        self.assertIs(
+            (followups[-1].get("receipt") or {}).get("mutation_performed"),
+            True,
+            followups,
+        )
 
         # Also verify `steer --steer-mode interrupt` during a synthetic turn on
         # a fresh session cancels the synthetic turn once and runs the new prompt
@@ -423,6 +483,136 @@ class AgentInitiatedTurnTest(unittest.TestCase):
         self.assertEqual(started, [], f"noise must not open a synthetic turn: {started}")
         self.assertEqual(len(ended), 1, f"noise must not emit a second turn_ended: {ended}")
         self.assertEqual(len(self.endpoint.posts), 1, f"noise must not wake: {self.endpoint.posts}")
+
+    def _chunk_texts(self, events: list[dict[str, Any]]) -> list[str]:
+        texts = []
+        for event in events:
+            update = event.get("update")
+            if not isinstance(update, dict):
+                continue
+            content = update.get("content")
+            if isinstance(content, dict) and isinstance(content.get("text"), str):
+                texts.append(content["text"])
+        return texts
+
+    def test_case_d_pre_prompt_output_does_not_open_turn(self) -> None:
+        """Case (d): agent output streamed right after session/new (backend
+        replay before any prompt) must not open a synthetic turn, and the
+        first real prompt must still complete instead of refusing
+        prompt-in-progress.
+        """
+        self.endpoint = issue302.Endpoint()
+        self.configure_endpoint()
+        self.session = "grok-w341-orchestrator-d"
+        cmd = self.autonomous_command(mode="pre_prompt_noise", delay_ms=300)
+        _, start_receipt = self.acp_custom("start", agent_cmd=cmd)
+        self.assertEqual(start_receipt.get("session_role"), "host")
+
+        def replay_seen() -> bool:
+            _, cap = self.acp_custom("capture", "--since", "0", agent_cmd=cmd)
+            return any(
+                "[interaction-result]" in text
+                for text in self._chunk_texts(cap.get("events", []))
+            ) or None
+
+        wait_for(replay_seen, 8, "pre-prompt replay update captured")
+        # One more quiet window: the replay must not have opened a turn.
+        time.sleep(0.6)
+        _, cap_idle = self.acp_custom("capture", "--since", "0", agent_cmd=cmd)
+        idle_events = cap_idle.get("events", [])
+        self.assertEqual(
+            [e for e in idle_events if e.get("kind") == "turn_started"], [],
+            idle_events,
+        )
+        self.assertEqual(
+            [e for e in idle_events if e.get("kind") == "turn_ended"], [],
+            idle_events,
+        )
+        self.assertEqual(self.endpoint.posts, [], self.endpoint.posts)
+
+        # The first real prompt must complete (this regressed: the replay
+        # opened a synthetic turn and send refused prompt-in-progress).
+        _, send1 = self.acp_custom("send", "--text", "kickoff", "--wait", agent_cmd=cmd)
+        self.assertEqual(send1.get("outcome"), "turn_completed", send1)
+        wait_for(lambda: len(self.endpoint.posts) >= 1, 10, "first prompt wake")
+
+        # The autonomous continuation after prompt 1 still opens exactly one
+        # synthetic turn.
+        def second_ended() -> list[dict[str, Any]] | None:
+            _, cap = self.acp_custom("capture", "--since", "0", agent_cmd=cmd)
+            ended = [e for e in cap.get("events", []) if e.get("kind") == "turn_ended"]
+            return ended if len(ended) >= 2 else None
+
+        ended_events = wait_for(second_ended, 12, "synthetic turn_ended after kickoff")
+        assert ended_events is not None
+        self.assertEqual(
+            [e.get("outcome") for e in ended_events],
+            ["turn_completed", "agent_turn_completed"],
+            ended_events,
+        )
+        _, cap_all = self.acp_custom("capture", "--since", "0", agent_cmd=cmd)
+        started = [e for e in cap_all.get("events", []) if e.get("kind") == "turn_started"]
+        self.assertEqual(len(started), 1, started)
+        self.assertEqual(started[0].get("prompt_source"), "self")
+        self.assertIs(started[0].get("agent_initiated"), True)
+        wait_for(lambda: len(self.endpoint.posts) >= 2, 10, "second wake after continuation")
+        time.sleep(0.4)
+        self.assertEqual(len(self.endpoint.posts), 2, self.endpoint.posts)
+
+    def test_case_e_tail_after_canceled_turn_does_not_open_turn(self) -> None:
+        """Case (e): with turn_ms=1500 the mock's prompt thread is still
+        sleeping when the turn is canceled; the chunks it emits afterwards are
+        a post-cancel tail, not an agent-initiated continuation.
+        """
+        self.endpoint = issue302.Endpoint()
+        self.configure_endpoint()
+        self.session = "grok-w341-orchestrator-e"
+        cmd = self.autonomous_command(mode="cancel_tail")
+        _, _ = self.acp_custom("start", agent_cmd=cmd)
+
+        _, send1 = self.acp_custom("send", "--text", "first", "--wait", agent_cmd=cmd)
+        self.assertEqual(send1.get("outcome"), "turn_completed")
+        wait_for(lambda: len(self.endpoint.posts) >= 1, 10, "first turn wake")
+
+        _, send2 = self.acp_custom("send", "--text", "slow", "--no-wait", agent_cmd=cmd)
+        self.assertNotIn("error", send2, send2)
+        wait_for(
+            lambda: holder.seat_turn_blocks_all_idle(self.holder_record()),
+            5, "slow turn active",
+        )
+        _, cancel = self.acp_custom("cancel", "--timeout", "10", agent_cmd=cmd)
+        self.assertNotIn("error", cancel, cancel)
+
+        def turn_canceled() -> bool:
+            _, cap = self.acp_custom("capture", "--since", "0", agent_cmd=cmd)
+            return any(
+                e.get("kind") == "turn_ended" and e.get("outcome") == "turn_canceled"
+                for e in cap.get("events", [])
+            ) or None
+
+        wait_for(turn_canceled, 10, "turn_canceled turn_ended")
+        time.sleep(0.5)  # let the cancel wake settle
+        settled_posts = len(self.endpoint.posts)
+        # Sleep past the mock's 1.5 s tail plus the 0.45 s quiet window.
+        time.sleep(2.2)
+        _, cap_final = self.acp_custom("capture", "--since", "0", agent_cmd=cmd)
+        events = cap_final.get("events", [])
+        ended = [e for e in events if e.get("kind") == "turn_ended"]
+        self.assertEqual(
+            [e.get("outcome") for e in ended],
+            ["turn_completed", "turn_canceled"],
+            ended,
+        )
+        started = [e for e in events if e.get("kind") == "turn_started"]
+        self.assertEqual(started, [], f"post-cancel tail must not open a turn: {started}")
+        self.assertEqual(
+            len(self.endpoint.posts), settled_posts,
+            f"post-cancel tail must not wake: {self.endpoint.posts}",
+        )
+        self.assertIn(
+            "tail after cancel", self._chunk_texts(events),
+            "the post-cancel tail must have really arrived",
+        )
 
     def test_attention_reason_and_unit_predicates_on_agent_initiated_turn(self) -> None:
         """Verify #302 wake reason mapping (e.g. question_waiting / delivery_review)

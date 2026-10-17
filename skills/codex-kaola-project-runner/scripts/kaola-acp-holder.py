@@ -2894,6 +2894,12 @@ class Holder:
         with self.lock:
             if (
                 not self.turn["active"]
+                # Only after a turn this holder saw complete: the incident
+                # resumed after end_turn. Output before any prompt (backend
+                # text streamed while the session is created, session/load
+                # replay) and tails after a canceled or failed turn are not
+                # agent-initiated continuation.
+                and self.turn.get("outcome") in COMPLETED_TURN_OUTCOMES
                 and self.state == "ready"
                 and not self.stop_requested
                 and self.agent.proc is not None
