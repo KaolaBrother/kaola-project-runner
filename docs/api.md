@@ -56,8 +56,9 @@ Devin declares them, as `devin acp --model <preset id>`): when the tier preset s
 `KAOLA_ACP_COMMAND`, an explicit `--model`, or a preserved resume keep the base; an empty value, or
 `acp_command_<w>` for an undeclared tier, is rejected. `acp_session_new_timeout` is an optional
 number of seconds in (0, 600] the holder waits for the `session/new` answer in `start` and the
-`preflight` probe (Issue #146; absent keeps 15 s; only Codex declares it, `60`, because live Codex
-answered after ~18 s). The client start window (20 s) and the probe bound (60 s) grow by the
+`preflight` probe (Issue #146; absent keeps 15 s; Codex declares `60` because live Codex
+answered after ~18 s, and Droid declares `60` because live Droid answered after ~24 s,
+Issue #352). The client start window (20 s) and the probe bound (60 s) grow by the
 amount it exceeds 15 s, keeping the margins they had over the default wait; the holder reports
 no answer in time as `acp-session-timeout`. Model-selection fields are
 `default_model_name`/`default_model_id`/`default_model_parameters`/`default_model_effort`/`default_model_profile`,

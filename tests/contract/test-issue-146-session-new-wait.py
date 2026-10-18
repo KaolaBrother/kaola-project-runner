@@ -85,8 +85,10 @@ class TestManifestFact(unittest.TestCase):
         self.assertEqual(self.acp.SESSION_NEW_TIMEOUT, 15.0)
         self.assertEqual(self.acp.START_WAIT, 20.0)
         self.assertEqual(self.acp.PROBE_WAIT, 60.0)
+        # Codex (#146) and Droid (#352) declare a wait. Droid's value is
+        # test-issue-352. Every other platform stays on the shared default.
         for path in sorted(PLATFORMS.glob("*.yaml")):
-            if path.stem == "codex":
+            if path.stem in {"codex", "droid"}:
                 continue
             with self.subTest(platform=path.stem):
                 manifest = self.render.parse_manifest(path)
