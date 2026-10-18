@@ -17,9 +17,9 @@ from pathlib import Path
 PROJECT = Path(__file__).resolve().parents[2]
 PROFILE = (
     "Fast, low-cost worker for self-contained tasks with clear goals, "
-    "boundaries and acceptance criteria; strong at 3D and frontend; builds in "
-    "one pass; iterative validation and self-repair. Review each requirement; "
-    "split long multi-step work into bounded tasks."
+    "boundaries, acceptance criteria; strong at 3D and frontend; one-pass "
+    "complete features; iterative validation, self-repair. Review each "
+    "output; split long chain."
 )
 OLD = (
     "Fast implementation worker for tasks with clear goals and boundaries; "
@@ -84,8 +84,12 @@ class DshProfileText(unittest.TestCase):
             row_profile(readme, "commandcode"),
         ]
         self.assertEqual(samples, [PROFILE] * len(samples))
+        self.assertLessEqual(len(PROFILE), 225)
         self.assertIn("3D", PROFILE)
         self.assertIn("frontend", PROFILE)
+        catalog_bytes = (PROJECT / "skills" / "kaola-project-runner" / "references"
+                         / "profile-catalog.md").stat().st_size
+        self.assertLessEqual(catalog_bytes, 8130)
         self.assertEqual(leftover_old_sentence(), [])
 
     def test_opencode_profile_is_a_different_preset(self) -> None:
