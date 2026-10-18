@@ -4,6 +4,12 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+Seats: restart required
+
+- **A wrong verb on an unchanged Host-owned checkpoint input settles as retained (#349).** A selected `host:<kind>/<id>@<rev>` whose current record is still that revision, was written by the Host (`writer` `host` or `host:…`), and names `owner`, `next` or `wait`, settles as retained whichever verb the node used. It is not returned and does not open `maintenance-returned`. A wrong verb on a present, owned, unchanged row is not "not applied". A vanished row, a later rewrite, a record with no `owner`, `next` or `wait`, a record a node wrote, and an input outside the selected batch keep the existing returned, superseded, and already-settled paths. The node prompt says once that a Host decision row is retained, or `retired:decisions/<id>` when the row is gone, never applied. A `maintenance-returned` alert whose inputs are all of this class does not wake the Host. Delegator dedup (#302, #324) and coverage (#310) are unchanged. One unreproduced `checkpoint: missing` with no `missing_sources` is not part of this change. `scripts/kaola-acp-holder.py` and `scripts/kaola-record-contract.py` are in the operator restart set (`docs/conventions.md`), so a running holder keeps the old prompt and predicate until it restarts. This content commit leaves the Grok Bot bridge at the unpinned content stage (`saveable: false`) so renderer checks stay green; the bridge is pinned in the release's follow-up pin commit.
+
 ## 0.9.18 — 2026-10-18 (Worker presets need an explicit grant; Command Code live usage probe)
 
 Fixes #346 (a Worker preset runs only after an explicit Worker grant; no Worker grant means no Workers) and adds #347 (a read-only Command Code usage probe for the `dsh/commandcode` tier).

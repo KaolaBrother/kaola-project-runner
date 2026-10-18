@@ -86,13 +86,13 @@ $S checkpoint --writer sideagent --source B --batch B --through-host-revision R 
 ```
 
 `applied` names current records this node's holder wrote.
+A Host decision row is `retained`, or `retired:decisions/<id>` when the row is gone, never `applied`.
 For an input whose record was removed, `retired:<kind>/<id>` names that
-absence; it stores no retirement record. Host `retire --kind decisions --id ID --absent --evidence E` closes a decision id with no row. The receipt cites `host_revision` and stores no row. `retired:decisions/ID` stays valid. `retained` names a current record with `next`, `owner` or `wait`,
-or a Host `section/<name>`. Older or foreign evidence settles nothing. The
+absence; it stores no retirement record. Host `retire --kind decisions --id ID --absent --evidence E` closes a decision id with no row. `retained` names a current record with `next`, `owner` or `wait`,
+or a Host `section/<name>`. The
 result is `maintenance.last_checkpoint`; `last_verified` moves only when every
-input settled. `acked_host_revision` never passes an unsettled change; a later
-Host write stays pending. An input the Host rewrote during the batch is
-`superseded`: its rewrite is the next batch's input. Unsettled inputs go to the Host once, in one
+input settled. An input the Host rewrote during the batch is
+`superseded`. Unsettled inputs go to the Host once, in one
 `maintenance-returned` alert, and are never sent to another node.
 
 For `recovery#N`, use only `input`, `checked`, `unavailable` and optional `applied`;

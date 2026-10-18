@@ -5341,7 +5341,9 @@ class Holder:
                      "its next reader. `applied` names only current records this node's holder wrote "
                      "through an authorized state operation, or `retired:<kind>/<id>` for its authorized "
                      "removal. Use `retained` for an unchanged Host record with `next`, `owner` or `wait`; "
-                     "do not rewrite it just for accounting. Record one checkpoint naming every input: "
+                     "do not rewrite it just for accounting. "
+                     "A Host decision row is `retained`, or `retired:decisions/<id>` when the row is gone, never `applied`. "
+                     "Record one checkpoint naming every input: "
                      f"`{state} checkpoint --file {shlex.quote(str(state_file))} --writer sideagent "
                      f"--source {batch} --batch {batch} --through-host-revision {through} "
                      f"--entries '[{{\"input\": ID, \"retained\": \"tasks/ID\" or \"section/NAME\"}}, ...]'`.")
@@ -5455,6 +5457,18 @@ class Holder:
             changed = (verified and attention is not None and attention != node.get("attention_sent")
                        and attention != self.host_attention_seen
                        and self._node_wrote_attention(doc, body, node["holder"]))
+            if changed and self._attention_is_only_standing_return(doc, body, node["holder"]):
+                changed = False
+            state = (doc or {}).get("state") or {}
+            returned_map = last.get("returned_to_host") if ours and isinstance(last, dict) else None
+            predicate = getattr(_RECORD, "standing_host_owned_input", None) if _RECORD else None
+            standing_return = bool(
+                ours and not short_range and recovery_covered
+                and end.get("turn_outcome") == "turn_completed"
+                and isinstance(last, dict) and last.get("verified") is not True
+                and isinstance(returned_map, dict) and returned_map
+                and callable(predicate)
+                and all(predicate(state, ident) for ident in returned_map))
             missing: dict[str, Any] = {}
             if ours:
                 reader = getattr(_RECORD, "missing_sources_of", None)
@@ -5464,7 +5478,7 @@ class Holder:
                     missing = last["missing_sources"]
             named = ", ".join(f"{ident} {why}" for ident, why in sorted(missing.items())
                               if isinstance(ident, str) and isinstance(why, str))
-            if verified and not changed:
+            if (verified and not changed) or standing_return:
                 end["node_quiet"] = True
             elif moved is not None:
                 # The batch is the next runtime's at the next boundary: its
@@ -5505,7 +5519,7 @@ class Holder:
                                 **({"missing_sources": missing} if missing else {}),
                                 **({"turn_refused": refusal} if refusal else {}),
                                 **({"runtime_moved": moved["preset"]} if moved is not None else {})})
-            if not verified and moved is None:
+            if not verified and moved is None and not standing_return:
                 self._maintenance_failure("checkpoint-partial" if ours else "checkpoint-missing", sent,
                                           recovery, wake=False,
                                           missing_sources=missing or None)
@@ -5536,6 +5550,37 @@ class Holder:
             if isinstance(record, dict) and record.get("writer_holder") == holder:
                 return True
         return False
+
+    def _attention_is_only_standing_return(self, doc: dict[str, Any] | None, body: str | None,
+                                           holder: str) -> bool:
+        """True when every attention row this node wrote is ``maintenance-returned``
+        and every input of that alert is an unchanged Host-owned record."""
+        predicate = getattr(_RECORD, "standing_host_owned_input", None) if _RECORD else None
+        if not callable(predicate):
+            return False
+        try:
+            rows = json.loads(body or "").get("attention")
+        except (ValueError, AttributeError):
+            return False
+        if not isinstance(rows, list):
+            return False
+        state = (doc or {}).get("state") or {}
+        wrote = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            records = state.get(row.get("kind"))
+            record = records.get(row.get("id")) if isinstance(records, dict) else None
+            if isinstance(record, dict) and record.get("writer_holder") == holder:
+                wrote.append(row)
+        if not wrote or any(row.get("kind") != "alerts" or row.get("id") != "maintenance-returned"
+                            for row in wrote):
+            return False
+        alert = (state.get("alerts") or {}).get("maintenance-returned")
+        inputs = alert.get("inputs") if isinstance(alert, dict) else None
+        if not isinstance(inputs, dict) or not inputs:
+            return False
+        return all(predicate(state, ident) for ident in inputs)
 
     def _node_directory(self, platform: str, session: str) -> Path | None:
         """The node session's record directory. Its holder may have written

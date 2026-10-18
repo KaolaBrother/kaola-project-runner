@@ -666,6 +666,13 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   either `applied` (current records this node's holder wrote, or
   `retired:<kind>/<id>` for a removed input record, without a stored stone) or
   `retained` (a current record with `next`, `owner` or `wait`, or a Host `section/<name>`).
+  A Host decision row is `retained`, or `retired:decisions/<id>` when the row is gone, never `applied`.
+  An unchanged current Host-owned record (`writer` is `host` or begins `host:`) that still
+  names `owner`, `next` or `wait` at the selected `@rev` settles as retained whichever verb the
+  node used. It is not returned and does not open `maintenance-returned`. A wrong verb on a
+  present, owned, unchanged row is not "not applied". A vanished row, a later rewrite, a record
+  with no `owner`, `next` or `wait`, a record a node wrote, and an input outside the selected
+  batch stay on the existing returned, superseded, and already-settled paths.
   The checkpoint lands in `maintenance.last_checkpoint`; `last_verified` moves only when every
   selected input settled; an entry for a batch change the Host rewrote after `R` is listed
   under `superseded`, not returned, since the rewrite is the next batch's input; `acked_host_revision` never passes an unsettled change or one still
@@ -740,7 +747,11 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   once (`verified; Host attention changed`) only when an attention item is a record that node
   wrote and the Host view's attention fingerprint differs both from what the Host last saw and
   from the batch's start, and is quiet otherwise (the Host's own writes during the batch
-  are not news to it); partial, missing, or a checkpoint `through` below the sent range reaches the Host
+  are not news to it). A `maintenance-returned` alert whose inputs are all unchanged current
+  Host-owned records with `owner`, `next` or `wait` is not attention news and does not wake the
+  Host; a partial checkpoint is quiet the same way when every returned input is that class.
+  Delegator dedup of standing Host maintenance is unchanged. A partial that returns anything
+  else, a missing checkpoint, or a checkpoint `through` below the sent range reaches the Host
   once naming the unhandled range, and that range is not sent again. A batch the node does not
   admit, a failed start and a lost node are staged for the Host once as a `node` item naming
   the unhandled range; the first two start no further node until the binding changes. The

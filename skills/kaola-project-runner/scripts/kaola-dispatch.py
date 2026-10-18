@@ -7446,6 +7446,10 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
         ident, problem = checkpoint_entry(state, entry, holder)
         if ident is None:
             raise StateRefusal("invalid-input", "each entry names its `input`")
+        # A wrong verb on a present, owned, unchanged Host record is not
+        # "not applied". Only a selected input settles this way.
+        if problem and ident in selected and RECORD.standing_host_owned_input(state, ident):
+            problem = None
         seen.add(ident)
         revision = revision_of(ident)
         if ident.startswith("recovery#") and ident not in recovery_ids:

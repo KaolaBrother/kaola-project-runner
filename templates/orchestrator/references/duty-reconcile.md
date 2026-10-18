@@ -121,20 +121,17 @@ Invent, accept and judge no tasks. Add `--recovery-seq N` to the sent checkpoint
 ```
 
 Use `unavailable:{scope:reason}` for unread originals.
-Missing/empty sources cannot PASS and stay visible Host duties. Optional `applied`
-needs records this node wrote. Settlement requires the original sent batch,
+Missing/empty sources cannot PASS and stay visible Host duties. A Host decision row is `retained`, or `retired:decisions/<id>` when the row is gone, never `applied`. Optional `applied` needs records this node wrote. Settlement requires the original sent batch,
 selected input and node holder. Revision-only checkpoints and `last_verified`
 cannot settle it. Related alerts need separate scoped entries and unchanged
 selection evidence. Keep newer/unrelated inputs; checkpoint N leaves N+1 pending.
 
 Recipe/start/admission/lost-node/checkpoint/stop failures keep the duty and a
 `maintenance-returned` input with original evidence and Host next action.
-One safe wake and both current views expose it. Reconcile original effects,
-confirm the old holder stopped, repair the binding, then request a bounded check.
+Reconcile original effects, confirm the old holder stopped, repair the binding, then request a bounded check.
 If checkpoint B settled one input or verified its failed `batch:` range, remove
 only it: `update --evidence checkpoint:B --set '{"inputs":{"ID":null}}'`.
 Recovery-only proves no business range; a stop duty needs its exact stop.
-Equal sequence, elapsed time or a justified live node needs no repeated reminder.
 
 The existing resume event scan reoffers an unregistered Host completion. Failed
 writes retain the signal locator and Host notice; the existing tick can retry.

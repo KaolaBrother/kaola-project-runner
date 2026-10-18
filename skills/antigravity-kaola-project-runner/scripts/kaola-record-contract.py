@@ -364,6 +364,36 @@ def host_input_revision(ident: Any) -> int | None:
     return int(tail) if head.startswith("host:") and tail.isdigit() else None
 
 
+def standing_host_owned_input(state: Any, ident: Any) -> bool:
+    """An unchanged current Host-owned record named by a selected input.
+
+    The row is still the revision the id names, a Host wrote it (`host` or
+    `host:…`), and it names `owner`, `next` or `wait`. A wrong checkpoint
+    verb on that row is not "not applied". A vanished row, a later rewrite,
+    a section, a retirement, and a record a node wrote are not this case.
+    """
+    if not isinstance(state, dict) or not isinstance(ident, str):
+        return False
+    revision = host_input_revision(ident)
+    if revision is None:
+        return False
+    body = ident[len("host:"):].rpartition("@")[0]
+    kind, _, record_id = body.partition("/")
+    if kind not in RECORD_KEYS or not record_id:
+        return False
+    records = state.get(kind)
+    record = records.get(record_id) if isinstance(records, dict) else None
+    if not isinstance(record, dict):
+        return False
+    stored = record.get("host_revision")
+    if isinstance(stored, bool) or stored != revision:
+        return False
+    writer = record.get("writer")
+    if not isinstance(writer, str) or not (writer == "host" or writer.startswith("host:")):
+        return False
+    return any(record.get(key) not in (None, "", [], {}) for key in ("next", "owner", "wait"))
+
+
 def returned_input_revision(row: Any) -> int | None:
     """The originating batch revision stored on a returned input, if it has one."""
     if not isinstance(row, dict) or "host_revision_through" not in row:
