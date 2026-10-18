@@ -4,7 +4,7 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.9.18 — 2026-10-18 (Worker presets need an explicit grant; Command Code live usage probe)
 
 Fixes #346 (a Worker preset runs only after an explicit Worker grant; no Worker grant means no Workers) and adds #347 (a read-only Command Code usage probe for the `dsh/commandcode` tier).
 
