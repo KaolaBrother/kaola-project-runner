@@ -4,7 +4,9 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.9.20 — 2026-10-19 (computer-use-only presets skipped in automatic selection; DSH profile and verified CLI; Droid session/new wait)
+
+Fixes #350 (a computer-use-only preset such as `codex/luna` is never picked by the Sideagent fallback or another automatic Worker selection), updates the DSH profile and verified CLI (#351) and raises the Droid `session/new` wait to 60 s (#352).
 
 Seats: restart required
 
