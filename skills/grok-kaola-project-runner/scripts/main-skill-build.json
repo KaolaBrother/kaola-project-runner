@@ -1,5 +1,5 @@
 {
-  "build": "1ca885307a3c",
+  "build": "bb3bc5fe3d1a",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "6c508525bfd5daad232cededdf05678a7605a8d4aeec3e548e759706bde131e1",
@@ -12,7 +12,7 @@
     "references/host-startup.md": "804748a4f8f751d9d71e2adced9fae18a44d3c47fe48f23c33bc21e262851aa7",
     "references/issue-dispatch.md": "6407f91879482c6645c37eb439bd5ec09285bbe1f4860fbaf260ac9b715a4bda",
     "references/lifecycle-state.md": "9756ee9f6f5a03225c11ec2de89bf9575136cb796559fda5f998f3de937468dd",
-    "references/profile-catalog.md": "dcb644c7f3e3ceec11d9c04941d83b20776534f323feafb410628b592272bce9",
+    "references/profile-catalog.md": "e6daa0674591f68e2082fa32ee2836d524df682bb4bf8b33e605fe91cf3fb579",
     "references/public-research.md": "86e2ad1cd11840fd58900cde429e9b45457f149b67fa91a32e5fe6429a58407c",
     "references/qa-evidence.md": "bf9c3beff60f4407d0bf951ce7a67da4450ac6cca96062a960cd009c38daae7a",
     "references/quota-packages.md": "57f207ac3ca3814929befdf9b824a60598be8b23f88bcc20508d451cf31b5b57",

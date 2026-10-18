@@ -38,8 +38,10 @@ DEFAULT_WIRE = '["opencode-go","deepseek-v4.1-flash"]'
 DEFAULT_NAME = "DeepSeek V4.1 Flash"
 PARAMETERS = "effort=max via ACP option reasoning_effort"
 PROFILE = (
-    "Fast implementation worker for tasks with clear goals and boundaries; "
-    "emphasizes autonomous progress, iterative validation, and self-repair."
+    "Fast, low-cost worker for self-contained tasks with clear goals, "
+    "boundaries and acceptance criteria; strong at 3D and frontend; builds in "
+    "one pass; iterative validation and self-repair. Review each requirement; "
+    "split long multi-step work into bounded tasks."
 )
 SPACED_WIRE = '["commandcode", "deepseek/deepseek-v4.1-flash"]'
 
