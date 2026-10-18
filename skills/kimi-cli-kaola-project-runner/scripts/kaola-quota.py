@@ -52,10 +52,15 @@ import os
 import re
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
+from collections.abc import Mapping
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -898,6 +903,476 @@ def probe_antigravity_usage(
     return result
 
 
+COMMANDCODE_API_BASE = "https://api.commandcode.ai"
+COMMANDCODE_KEY_NAME = "COMMANDCODE_API_KEY"
+COMMANDCODE_PACKAGE = "dsh:commandcode"
+COMMANDCODE_CREDITS_PATH = "/alpha/billing/credits"
+COMMANDCODE_SUBSCRIPTIONS_PATH = "/alpha/billing/subscriptions"
+COMMANDCODE_SUMMARY_PATH = "/alpha/usage/summary"
+# Published monthly grants for planId values the subscriptions route returns.
+# Amounts are the Command Code usage-limits table (Go 10, GOAT 70, Pro 80,
+# Max 10x 150, Max 20x 300, Team Pro 40). Any other id leaves the monthly
+# limit unknown. The remaining balance is never turned into a limit.
+COMMANDCODE_PLAN_GRANTS: dict[str, int] = {
+    "individual-go": 10,
+    "individual-goat": 70,
+    "individual-pro-v1": 80,
+    "individual-max": 150,
+    "individual-ultra": 300,
+    "teams-pro": 40,
+}
+_COMMANDCODE_GRANT_FIELDS = ("grant", "creditGrant", "includedCredits", "monthlyGrant", "planCredits")
+_COMMANDCODE_WINDOW_ORDER = ("5h", "weekly", "monthly")
+_PLAN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
+
+
+class _CommandCodeNoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        return None
+
+
+def _commandcode_number(value: Any) -> int | float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return value
+
+
+def _commandcode_home(env: Mapping[str, str]) -> Path:
+    raw = env.get("DSH_HOME")
+    if isinstance(raw, str) and raw.strip():
+        return Path(raw).expanduser()
+    home = env.get("HOME")
+    base = Path(home).expanduser() if isinstance(home, str) and home.strip() else Path.home()
+    return base / ".dsh"
+
+
+def _read_limited(path: Path, limit: int = 65536) -> str | None:
+    try:
+        return path.read_bytes()[:limit].decode("utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def _dotenv_named(text: str, name: str) -> str | None:
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("export "):
+            stripped = stripped[len("export "):].strip()
+        key, separator, raw = stripped.partition("=")
+        if not separator or key.strip() != name:
+            continue
+        value = raw.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        value = value.strip()
+        return value or None
+    return None
+
+
+def _yaml_scalar(raw: str) -> str | None:
+    if raw == "" or raw in {"~", "null", "Null", "NULL"}:
+        return None
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "'\"":
+        raw = raw[1:-1]
+    elif " #" in raw:
+        raw = raw.split(" #", 1)[0].rstrip()
+    raw = raw.strip()
+    return raw or None
+
+
+def _credentials_ref(text: str, name: str) -> str | None:
+    in_refs = False
+    refs_indent = -1
+    for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        stripped = line.strip()
+        if not in_refs:
+            if stripped == "refs:" or stripped.startswith("refs:"):
+                in_refs = True
+                refs_indent = indent
+            continue
+        if indent <= refs_indent:
+            in_refs = False
+            continue
+        key, separator, raw = stripped.partition(":")
+        if separator and key.strip() == name:
+            return _yaml_scalar(raw.strip())
+    return None
+
+
+def read_commandcode_api_key(env: Mapping[str, str] | None = None) -> str | None:
+    """``COMMANDCODE_API_KEY`` from the process env, then dsh ``.env``, then ``refs:``.
+
+    A non-empty ``DSH_HOME`` replaces ``~/.dsh`` and does not fall back to it.
+    The returned string is for the request header only. Callers must not log it.
+    """
+    source: Mapping[str, str] = os.environ if env is None else env
+    direct = source.get(COMMANDCODE_KEY_NAME)
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+    home = _commandcode_home(source)
+    dotenv = _read_limited(home / ".env")
+    if dotenv:
+        found = _dotenv_named(dotenv, COMMANDCODE_KEY_NAME)
+        if found:
+            return found
+    credentials = _read_limited(home / ".credentials.yaml")
+    if credentials:
+        found = _credentials_ref(credentials, COMMANDCODE_KEY_NAME)
+        if found and found.strip():
+            return found.strip()
+    return None
+
+
+def _commandcode_reset_at(value: Any) -> str | None:
+    """Epoch milliseconds, or an ISO timestamp, as ``YYYY-MM-DDTHH:MM:SSZ``.
+
+    Zero and missing values are null. This is the Antigravity ``reset_at`` form.
+    """
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        if value <= 0 or value < 1e11:
+            return None
+        try:
+            stamp = datetime.fromtimestamp(float(value) / 1000.0, timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return None
+        return stamp.strftime("%Y-%m-%dT%H:%M:%SZ")
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip().replace("Z", "+00:00")
+    try:
+        stamp = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return stamp.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _commandcode_metrics(
+    name: str,
+    used: int | float,
+    cap: int | float,
+    exceeded: bool,
+    reset_at: str | None,
+) -> dict[str, Any]:
+    rem_fraction = None
+    used_fraction = None
+    rem_pct = None
+    used_pct = None
+    if isinstance(cap, (int, float)) and not isinstance(cap, bool) and cap > 0:
+        rem_fraction = max(0.0, min(1.0, (float(cap) - float(used)) / float(cap)))
+        used_fraction = max(0.0, min(1.0, 1.0 - rem_fraction))
+        rem_pct = round(rem_fraction * 100.0, 2)
+        used_pct = round(used_fraction * 100.0, 2)
+    if exceeded and rem_fraction is not None:
+        rem_fraction = 0.0
+        used_fraction = 1.0
+        rem_pct = 0.0
+        used_pct = 100.0
+    return {
+        "window": name,
+        "used": used,
+        "limit": cap,
+        "used_percent": used_pct,
+        "remaining_percent": rem_pct,
+        "remaining_fraction": rem_fraction,
+        "used_fraction": used_fraction,
+        "reset_at": reset_at,
+        "exceeded": exceeded,
+    }
+
+
+def _commandcode_limit_window(name: str, raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    used = _commandcode_number(raw.get("used"))
+    cap = _commandcode_number(raw.get("cap"))
+    if used is None or cap is None:
+        return None
+    return _commandcode_metrics(
+        name,
+        used,
+        cap,
+        raw.get("exceeded") is True,
+        _commandcode_reset_at(raw.get("resetAt")),
+    )
+
+
+def _commandcode_plan_id(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text or "@" in text or _PLAN_ID.fullmatch(text) is None:
+        return None
+    return text
+
+
+def _commandcode_subscription(payload: dict[str, Any] | None) -> tuple[str | None, str | None, int | float | None]:
+    if not isinstance(payload, dict):
+        return None, None, None
+    data = payload.get("data")
+    source = data if isinstance(data, dict) else payload
+    plan_id = _commandcode_plan_id(source.get("planId"))
+    if plan_id is None:
+        plan_id = _commandcode_plan_id(source.get("plan_id"))
+    period_end = _commandcode_reset_at(source.get("currentPeriodEnd"))
+    if period_end is None:
+        period_end = _commandcode_reset_at(source.get("current_period_end"))
+    grant = None
+    for field in _COMMANDCODE_GRANT_FIELDS:
+        number = _commandcode_number(source.get(field))
+        if number is not None and number >= 0:
+            grant = number
+            break
+    return plan_id, period_end, grant
+
+
+def _commandcode_monthly_limit(plan_id: str | None, grant: int | float | None) -> int | float | None:
+    if grant is not None:
+        return grant
+    if not plan_id:
+        return None
+    return COMMANDCODE_PLAN_GRANTS.get(plan_id.lower())
+
+
+def _commandcode_monthly_window(
+    remaining: int | float | None,
+    limit: int | float | None,
+    reset_at: str | None,
+) -> dict[str, Any]:
+    if remaining is None or limit is None or limit <= 0:
+        return {
+            "window": "monthly",
+            "used": None,
+            "limit": limit,
+            "used_percent": None,
+            "remaining_percent": None,
+            "remaining_fraction": None,
+            "used_fraction": None,
+            "reset_at": reset_at,
+            "exceeded": False,
+        }
+    used = limit - remaining
+    if used < 0:
+        used = 0
+    return _commandcode_metrics("monthly", used, limit, remaining <= 0, reset_at)
+
+
+def _commandcode_period(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    data = payload.get("data")
+    source = data if isinstance(data, dict) else payload
+    period: dict[str, Any] = {}
+    spend = _commandcode_number(source.get("totalCost"))
+    requests = _commandcode_number(source.get("totalCount"))
+    tokens = _commandcode_number(source.get("totalTokens"))
+    if spend is not None:
+        period["spend"] = spend
+    if requests is not None:
+        period["requests"] = requests
+    if tokens is not None:
+        period["tokens"] = tokens
+    return period or None
+
+
+def _most_constrained_window(windows: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+    ranked: list[tuple[float, int, dict[str, Any]]] = []
+    for index, name in enumerate(_COMMANDCODE_WINDOW_ORDER):
+        window = windows.get(name)
+        if not isinstance(window, dict):
+            continue
+        fraction = window.get("remaining_fraction")
+        if isinstance(fraction, bool) or not isinstance(fraction, (int, float)):
+            continue
+        ranked.append((float(fraction), index, window))
+    if not ranked:
+        return None
+    ranked.sort(key=lambda item: (item[0], item[1]))
+    return dict(ranked[0][2])
+
+
+def _commandcode_envelope(model: str | None, status: str, reason: str | None = None) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "platform": "dsh",
+        "packageId": COMMANDCODE_PACKAGE,
+        "provider": "commandcode",
+        "status": status,
+        "model": model,
+        "quota": None,
+        "windows": {},
+    }
+    if reason is not None:
+        result["reason"] = reason
+    return result
+
+
+def _commandcode_get(url: str, key: str, timeout: float) -> tuple[int | None, bytes | str]:
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": "Bearer " + key,
+            "Accept": "application/json",
+            "User-Agent": "kaola-quota",
+        },
+        method="GET",
+    )
+    opener = urllib.request.build_opener(_CommandCodeNoRedirect)
+    try:
+        with opener.open(request, timeout=timeout) as response:
+            status = getattr(response, "status", None) or response.getcode()
+            return int(status), response.read(1_000_000)
+    except urllib.error.HTTPError as exc:
+        try:
+            body = exc.read(64_000)
+        except Exception:
+            body = b""
+        return int(exc.code), body
+    except urllib.error.URLError as exc:
+        reason = exc.reason
+        text = str(reason).lower()
+        if isinstance(reason, (TimeoutError, socket.timeout)) or "timed out" in text:
+            return None, "timeout"
+        return None, "network"
+    except (TimeoutError, socket.timeout):
+        return None, "timeout"
+    except OSError:
+        return None, "network"
+
+
+def _commandcode_json(body: bytes | str) -> dict[str, Any] | None:
+    if not isinstance(body, (bytes, bytearray)):
+        return None
+    try:
+        payload = json.loads(bytes(body).decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _upgrade_required(body: bytes | str) -> bool:
+    payload = _commandcode_json(body)
+    if not isinstance(payload, dict):
+        return False
+
+    def token(value: Any, depth: int = 0) -> bool:
+        if depth > 3:
+            return False
+        if value == "upgrade_required":
+            return True
+        if isinstance(value, dict):
+            return any(token(value.get(key), depth + 1) for key in ("error", "code", "type", "reason", "message"))
+        return False
+
+    return token(payload)
+
+
+def _http_reason(status: int, body: bytes | str) -> str:
+    if status == 403 and _upgrade_required(body):
+        return "upgrade_required"
+    return f"http {status}"
+
+
+def _commandcode_selected(catalog: Catalog, model: str | None) -> bool:
+    if catalog.platform != "dsh" or not isinstance(model, str) or not model.strip():
+        return False
+    return resolve_model(catalog, model).get("packageId") == COMMANDCODE_PACKAGE
+
+
+def probe_commandcode_usage(
+    model: str | None = None,
+    timeout: float = 20.0,
+    env: Mapping[str, str] | None = None,
+    base_url: str = COMMANDCODE_API_BASE,
+) -> dict[str, Any]:
+    """Read-only Command Code usage for package ``dsh:commandcode``.
+
+    One attempt per route, no retry. Optional subscription and summary failures
+    omit ``plan`` and ``period``. The key and every field other than the named
+    billing fields are dropped before the result is returned. This function
+    does not write a file and does not raise.
+    """
+    model_text = model.strip() if isinstance(model, str) else None
+    try:
+        return _probe_commandcode_usage(model_text, timeout, env, base_url)
+    except Exception:
+        return _commandcode_envelope(model_text, "error", "probe failed")
+
+
+def _probe_commandcode_usage(
+    model: str | None,
+    timeout: float,
+    env: Mapping[str, str] | None,
+    base_url: str,
+) -> dict[str, Any]:
+    key = read_commandcode_api_key(env)
+    if not key:
+        return _commandcode_envelope(model, "key_missing", "COMMANDCODE_API_KEY is not set")
+    limit = max(0.1, float(timeout))
+    root = (base_url or COMMANDCODE_API_BASE).rstrip("/")
+    status, body = _commandcode_get(root + COMMANDCODE_CREDITS_PATH, key, limit)
+    if status is None:
+        reason = body if body in {"timeout", "network"} else "network"
+        if reason == "network":
+            reason = "network failure"
+        return _commandcode_envelope(model, "unavailable", str(reason))
+    if status != 200:
+        return _commandcode_envelope(model, "unavailable", _http_reason(status, body))
+    payload = _commandcode_json(body)
+    windows_raw = payload.get("windowLimits") if isinstance(payload, dict) else None
+    if not isinstance(windows_raw, dict):
+        return _commandcode_envelope(model, "unavailable", "response shape changed")
+    five = _commandcode_limit_window("5h", windows_raw.get("fiveHour"))
+    weekly = _commandcode_limit_window("weekly", windows_raw.get("weekly"))
+    if five is None and weekly is None:
+        return _commandcode_envelope(model, "unavailable", "response shape changed")
+    credits_raw = payload.get("credits") if isinstance(payload, dict) else None
+    credits_raw = credits_raw if isinstance(credits_raw, dict) else {}
+    monthly_remaining = _commandcode_number(credits_raw.get("monthlyCredits"))
+    purchased = _commandcode_number(credits_raw.get("purchasedCredits"))
+    free = _commandcode_number(credits_raw.get("freeCredits"))
+
+    plan_id = None
+    period_end = None
+    grant = None
+    sub_status, sub_body = _commandcode_get(root + COMMANDCODE_SUBSCRIPTIONS_PATH, key, limit)
+    if sub_status == 200:
+        plan_id, period_end, grant = _commandcode_subscription(_commandcode_json(sub_body))
+    period = None
+    sum_status, sum_body = _commandcode_get(root + COMMANDCODE_SUMMARY_PATH, key, limit)
+    if sum_status == 200:
+        period = _commandcode_period(_commandcode_json(sum_body))
+
+    monthly_limit = _commandcode_monthly_limit(plan_id, grant)
+    windows: dict[str, dict[str, Any]] = {}
+    if five is not None:
+        windows["5h"] = five
+    if weekly is not None:
+        windows["weekly"] = weekly
+    windows["monthly"] = _commandcode_monthly_window(monthly_remaining, monthly_limit, period_end)
+    result = _commandcode_envelope(model, "ok")
+    result["windows"] = windows
+    result["quota"] = _most_constrained_window(windows)
+    result["credits"] = {"monthly": monthly_remaining, "purchased": purchased, "free": free}
+    plan: dict[str, Any] = {}
+    if plan_id:
+        plan["id"] = plan_id
+    if period_end:
+        plan["period_end"] = period_end
+    if plan:
+        result["plan"] = plan
+    if period:
+        result["period"] = period
+    return result
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Quota package catalog, model->package resolution, and live usage probe."
@@ -917,18 +1392,23 @@ def main(argv: list[str] | None = None) -> int:
     if args.model is not None:
         output["resolved"] = resolve_model(catalog, args.model)
     if args.probe:
-        if args.platform != "antigravity":
-            output["usage"] = {
-                "platform": args.platform,
-                "status": "unsupported",
-                "error": f"live CLI probe in kaola-quota.py is only implemented for antigravity (got {args.platform})",
-            }
-        else:
+        if args.platform == "antigravity":
             output["usage"] = probe_antigravity_usage(
                 binary=args.binary,
                 model=args.model,
                 timeout=args.timeout,
             )
+        elif _commandcode_selected(catalog, args.model):
+            output["usage"] = probe_commandcode_usage(
+                model=args.model,
+                timeout=args.timeout,
+            )
+        else:
+            output["usage"] = {
+                "platform": args.platform,
+                "status": "unsupported",
+                "error": f"live CLI probe in kaola-quota.py is only implemented for antigravity (got {args.platform})",
+            }
     print(json.dumps(output, indent=2))
     return 0
 

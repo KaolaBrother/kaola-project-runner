@@ -1651,6 +1651,79 @@ A platform with several packages:
 {"installed_only": false, "platforms": [{"packages": [{"binds_models": true, "id": "droid:standard", "name": "Standard", "windows": ["5h", "weekly", "monthly"]}, {"binds_models": true, "id": "droid:core", "name": "Core", "windows": ["weekly", "monthly"]}, {"binds_models": true, "id": "droid:extra_usage", "name": "Extra usage", "windows": []}], "platform": "droid"}], "schema": "kaola-acp-packages/1"}
 ```
 
+### Command Code live usage (`dsh:commandcode`)
+
+Issue #347. KaolaTerminal reads one stdout JSON object from:
+
+```bash
+python3 scripts/kaola-quota.py --platform dsh --model commandcode/deepseek/deepseek-v4.1-flash --probe
+```
+
+Exit code is 0 for `ok`, `key_missing`, `unavailable`, and `error`. The same process exit stays 0 for a catalog query with no `--probe`, and for `--probe` on any other platform or model (that result stays `usage.status: "unsupported"`). `--timeout` is seconds for each HTTP attempt (default 20). There is one attempt per route and no retry.
+
+The probe runs only when the model resolves to `dsh:commandcode`. `commandcode/...` on `dsh` is that package. `opencode-go/...` resolves to `dsh:opencode-go` or `opencode:opencode-go` and is not queried, mixed, or summed with Command Code. `--platform opencode --model commandcode/...` stays unmapped.
+
+Stdout shape (catalog fields unchanged, then `usage`):
+
+```json
+{
+  "platform": "dsh",
+  "packages": [],
+  "resolved": {"packageId": "dsh:commandcode", "status": "mapped"},
+  "usage": {
+    "platform": "dsh",
+    "packageId": "dsh:commandcode",
+    "provider": "commandcode",
+    "status": "ok",
+    "model": "commandcode/deepseek/deepseek-v4.1-flash",
+    "quota": {"window": "5h", "used": 9, "limit": 10, "used_percent": 90.0, "remaining_percent": 10.0, "remaining_fraction": 0.1, "used_fraction": 0.9, "reset_at": "2025-10-21T01:35:54Z", "exceeded": false},
+    "windows": {
+      "5h": {},
+      "weekly": {},
+      "monthly": {}
+    },
+    "credits": {"monthly": 40, "purchased": 3, "free": 1},
+    "plan": {"id": "individual-goat", "period_end": "2026-11-17T15:23:56Z"},
+    "period": {"spend": 1.25, "requests": 5, "tokens": 40345}
+  }
+}
+```
+
+`usage.status` is `ok`, `key_missing`, `unavailable`, or `error`. Every non-ok object has `quota: null`, `windows: {}`, a short `reason`, and no `credits`, `plan`, or `period`.
+
+| status | reason | when |
+| --- | --- | --- |
+| `key_missing` | `COMMANDCODE_API_KEY is not set` | the named key is absent |
+| `unavailable` | `http 401`, `http 403`, `http 404`, `http 410`, `http 429`, `http <5xx>` | that status on `GET /alpha/billing/credits` |
+| `unavailable` | `upgrade_required` | HTTP 403 whose `error`, `code`, `type`, `reason`, or `message` is exactly `upgrade_required` (Go plan) |
+| `unavailable` | `timeout` | the credits request exceeds `--timeout` |
+| `unavailable` | `network failure` | the credits host cannot be reached |
+| `unavailable` | `response shape changed` | HTTP 200 without a `windowLimits` object, or without a usable `fiveHour` or `weekly` window |
+| `error` | `probe failed` | an unexpected local failure; the exception text is discarded |
+
+`quota` is the window with the smallest `remaining_fraction`. Windows with a null fraction are not candidates. Equal fractions break ties in order `5h`, `weekly`, `monthly`.
+
+A limit window (`5h` from `windowLimits.fiveHour`, `weekly` from `windowLimits.weekly`) copies `used` and `cap` as `used` and `limit` (absolute credits, not a percent). `exceeded` is the boolean on that window. `remaining_fraction` is `clamp((limit - used) / limit, 0, 1)` when `limit > 0`, and `used_fraction` is `1 - remaining_fraction`. `used_percent` and `remaining_percent` are those fractions times 100, rounded to two places, the same rounding as the Antigravity normalizer. `reset_at` is `windowLimits.*.resetAt` (epoch milliseconds) rendered as UTC `YYYY-MM-DDTHH:MM:SSZ`, the Antigravity `reset_at` form. `0`, a missing value, and a number below `1e11` are `null`.
+
+`credits.monthly` / `purchased` / `free` are `credits.monthlyCredits` / `purchasedCredits` / `freeCredits`. The `monthly` window's remaining balance is `credits.monthly`. Its `limit` is the subscription grant when that lookup returns HTTP 200, otherwise `null`. A numeric `grant`, `creditGrant`, `includedCredits`, `monthlyGrant`, or `planCredits` on the subscription object is that grant. Otherwise a known `planId` uses the published plan grant below. Any other id, or a failed lookup, leaves `limit` null. The probe does not invent a limit from the remaining balance. When `limit` is null, monthly `used`, percents, and fraction are null. When both are known, `used` is `max(0, limit - remaining)` and `reset_at` is the billing period end in the same UTC form.
+
+| planId | monthly limit |
+| --- | --- |
+| `individual-go` | 10 |
+| `individual-goat` | 70 |
+| `individual-pro-v1` | 80 |
+| `individual-max` | 150 |
+| `individual-ultra` | 300 |
+| `teams-pro` | 40 |
+
+Those amounts are the published Command Code usage-limits table (Go, GOAT, Pro, Max 10×, Max 20×, Team Pro) for the `planId` spellings the subscriptions route returns.
+
+`plan` is present only when the subscription lookup returns a plan id or period end: `{"id","period_end"}`. `period` is present only when `GET /alpha/usage/summary` returns numbers: `spend` is `totalCost`, `requests` is `totalCount`, `tokens` is `totalTokens`. A failed subscription or summary omits that object and does not change `status`.
+
+Routes, each `GET` with `Authorization: Bearer <COMMANDCODE_API_KEY>` and one attempt: `/alpha/billing/credits` (required), `/alpha/billing/subscriptions`, `/alpha/usage/summary`. The probe does not call `/alpha/whoami`. It copies only the fields named above and drops every other key, including `email`, user id, org id, price id, and subscription id, before anything is returned. It does not print, log, cache, or write the key or the raw response.
+
+The key is read by name at probe time: process environment `COMMANDCODE_API_KEY`, then `$DSH_HOME/.env` (or `~/.dsh/.env` when `DSH_HOME` is unset), then `.credentials.yaml` `refs.COMMANDCODE_API_KEY`. A set `DSH_HOME` does not fall back to `~/.dsh`. An empty value is missing. A missing key is `key_missing`, not an exception.
+
 ## Post-compaction Skill reread
 
 The holder reads completed compaction signals for its exact ACP session through the pinned

@@ -439,6 +439,9 @@ and `references/acp.md`; transport and bridge internals are in the
   `DEEPSEEK_API_KEY` or pass `--model` to select a credentialed route.
   `--tier default` and `--tier commandcode` each set their own credentialed route.
   A start that sets no model still hits `deepseek-official`.
+  Live Command Code usage for `dsh/commandcode` is a read-only probe:
+  `python3 scripts/kaola-quota.py --platform dsh --model commandcode/deepseek/deepseek-v4.1-flash --probe`.
+  The result schema is in `docs/api.md`. OpenCode Go stays on its own package and is not mixed into that probe.
 - **Droid** defaults to Auto Model and **full bypass**; its `--permission-mode`
   values map to ACP autonomy levels ([command reference](docs/api.md)).
 - **Claude Code** runs through a pinned ACP bridge shipped inside its worker Skill,
