@@ -277,7 +277,8 @@ HEARTBEAT_PROMPT_MAX_BYTES = 65536
 HEARTBEAT_STATE_FILE_MAX_BYTES = 1048576
 HEARTBEAT_STATE_SCHEMA = "kaola-heartbeat-prompt/2"
 HOLDER_FEATURES = ("heartbeat-state/2", "sideagent-relay/1", "preserve-dispatched/1", "steer-after-turn/1",
-                   "sideagent-node/1", "project-compact-notice/1", "host-compact-maintenance/1")
+                   "sideagent-node/1", "project-compact-notice/1", "host-compact-maintenance/1",
+                   "sideagent-sweep/1")
 # Issue #255 node mode: the Host carrier starts one fresh maintenance node per
 # batch from the binding's exact Runner argv (never a shell string), and
 # exact-stops it after its turn end. Bounds on that one start and stop only.
@@ -292,6 +293,16 @@ NODE_ADOPT_READY_SECONDS = 60.0
 # A carrier's own stop waits this long for a node start in flight and for the
 # node stop, inside the Runner's 30 s stop request.
 NODE_RECLAIM_SECONDS = 8.0
+# Issue #348: the node-mode backstop sweep's interval. An upgrade or a HEAD
+# move makes it due earlier once; a failed scan or a missing checkpoint is
+# not retried inside the interval. Evaluated only at existing relay
+# boundaries - no new thread loop or timer.
+try:
+    SWEEP_INTERVAL_SECONDS = float(os.environ.get("KAOLA_SWEEP_INTERVAL_HOURS") or 24) * 3600
+    if not SWEEP_INTERVAL_SECONDS > 0:
+        raise ValueError
+except ValueError:
+    SWEEP_INTERVAL_SECONDS = 24 * 3600.0
 SIDEAGENT_ROLES = ("sideagent", "sidekick")
 # Issue #299: a wake state_detail carries the agent's stopReason verbatim only
 # when it is one clean token; anything else reads "other".
@@ -5207,10 +5218,20 @@ class Holder:
                     item["host_owned"] = True
         if node.get("phase") == "running" and node.get("batch") and self._sideagent_relay_target() is None:
             self.events.append({"kind": "sideagent_node_lost", "holder": node.get("holder"),
-                                "batch": node["batch"]})
-            self._node_to_host(binding, f"sideagent node {node.get('holder')} was lost during batch "
-                                        f"{node['batch']}; {self._unhandled(node.get('sent_through'))}")
-            node.update(phase="stopped", batch=None, fingerprint=None)
+                                "batch": node["batch"],
+                                **({"sweep": True} if node.get("sweep_batch") else {})})
+            if node.get("sweep_batch"):
+                # A lost sweep node writes no maintenance-returned row; the
+                # attempt cools down for the interval and the Host sees it.
+                node["sweep"] = {"phase": "cooldown",
+                                 "until": time.monotonic() + SWEEP_INTERVAL_SECONDS}
+                self._node_to_host(binding, f"sideagent node {node.get('holder')} was lost during "
+                                            f"sweep batch {node['batch']}", record=False)
+                node.update(phase="stopped", batch=None, fingerprint=None, sweep_batch=False)
+            else:
+                self._node_to_host(binding, f"sideagent node {node.get('holder')} was lost during batch "
+                                            f"{node['batch']}; {self._unhandled(node.get('sent_through'))}")
+                node.update(phase="stopped", batch=None, fingerprint=None)
         failed = node.get("failed")
         fingerprint = json.dumps({key: binding.get(key) for key in ("session", "recipe", "since")},
                                  sort_keys=True)
@@ -5232,17 +5253,21 @@ class Holder:
         recovery = self._node_recovery_pending(doc)
         target = self._sideagent_relay_target()
         if through is None and recovery is None:
+            queued_sweep = (isinstance(node.get("sweep"), dict)
+                            and node["sweep"].get("phase") == "queued")
             if (doc and isinstance(doc.get("host_revision"), int)
                     and not isinstance(doc["host_revision"], bool)
                     and callable(getattr(_RECORD, "host_changes", None))
                     and node.get("phase") == "running" and node.get("binding") == fingerprint
-                    and not node.get("fingerprint") and target is not None):
+                    and not node.get("fingerprint") and target is not None and not queued_sweep):
                 # Our fresh node finished startup after its current input
                 # disappeared. No batch was sent. Exact-stop that holder;
                 # no handled/acked revision or checkpoint proof is written.
                 node.update(phase="stopping")
                 threading.Thread(target=self._stop_node,
                                  args=(target["holder_instance_id"],), daemon=True).start()
+            else:
+                self._sweep_pass(binding, doc, target, result)
             return result
         if target is None:
             old = self._node_record(binding) or {}
@@ -5297,6 +5322,205 @@ class Holder:
             threading.Thread(target=self._stop_node, args=(holder, None, binding), daemon=True).start()
             result["receipt"] = {"relayed": 0, "reason": reason}
         return result
+
+    # -- Issue #348: backstop sweep (node mode only) --------------------------
+    #
+    # At a relay boundary with no reconcile input, no node batch in flight and
+    # no active Host turn, a due sweep runs `sweep --dry-run` in a daemon
+    # thread, then either records the empty result itself or queues exactly
+    # one node batch keyed by the candidate set. A sweep never starts during
+    # a Host turn; a reconcile input always goes first, and one arriving
+    # during a sweep batch runs right after it.
+
+    def _sweep_due(self, doc: dict[str, Any] | None) -> str | None:
+        """Why a backstop sweep is owed now, or None. Only ``rev-parse`` is
+        spent when nothing is due; an event only makes it due earlier, and a
+        recorded sweep of the new head/revision handles it."""
+        sweep = self.node.get("sweep")
+        if isinstance(sweep, dict) and sweep.get("phase") == "cooldown":
+            until = sweep.get("until")
+            if isinstance(until, (int, float)) and time.monotonic() < until:
+                return None
+        maintenance = ((doc or {}).get("state") or {}).get("maintenance") or {}
+        last = maintenance.get("last_sweep")
+        if not isinstance(last, dict):
+            return "first"
+        accepted = self.runner_identity.get("accepted_revision") or None
+        if (last.get("accepted_revision") or None) != accepted:
+            return "upgrade"
+        try:
+            head = subprocess.run(["git", "-C", self.args.repo, "rev-parse", "HEAD"],
+                                  capture_output=True, text=True, timeout=10).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            head = ""
+        if head and last.get("head") != head:
+            return "merge"
+        try:
+            at = datetime.fromisoformat(str(last.get("at") or ""))
+            elapsed = time.time() - at.timestamp()
+        except (ValueError, OSError):
+            return "interval"
+        return "interval" if elapsed >= SWEEP_INTERVAL_SECONDS else None
+
+    def _sweep_tool(self, argv: list[str]) -> dict[str, Any]:
+        """`kaola-dispatch.py sweep` under this carrier's own identity."""
+        tool = self._state_tool()
+        if tool is None:
+            return {"error": "state tool unavailable; the Host can run `sweep` itself"}
+        env = dict(os.environ)
+        env[DISPATCHER_ENV] = json.dumps(self.dispatcher_identity(), sort_keys=True)
+        env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_dir.parent.parent.parent)
+        try:
+            run = subprocess.run([sys.executable, tool, "sweep", "--repo", self.args.repo, "--file",
+                                  str(Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"),
+                                  *argv],
+                                 cwd=self.args.repo, env=env, stdin=subprocess.DEVNULL,
+                                 capture_output=True, text=True)
+            try:
+                value = json.loads(run.stdout)
+            except ValueError:
+                return {"error": "sweep receipt unreadable", "exit": run.returncode}
+            if run.returncode:
+                return {"error": value, "exit": run.returncode}
+            return value
+        except (OSError, ValueError) as exc:
+            return {"error": str(exc)}
+
+    def _sweep_scan(self, reason: str) -> None:
+        """The due scan: outside the lock like ``_register_compact_maintenance``.
+        ``record-empty`` runs in this same thread; its ``candidates`` answer is
+        queued like a scan's."""
+        receipt = self._sweep_tool(["--dry-run"])
+        planned = isinstance(receipt, dict) and "error" not in receipt \
+            and receipt.get("result") == "planned"
+        candidates = [item["id"] for item in (receipt.get("candidates") or [])
+                      if isinstance(item, dict) and isinstance(item.get("id"), str)] if planned else []
+        recorded: dict[str, Any] | None = None
+        if planned and not candidates:
+            recorded = self._sweep_tool(["--record-empty"])
+            if recorded.get("result") == "candidates":
+                receipt = recorded
+                candidates = [item["id"] for item in (recorded.get("candidates") or [])
+                              if isinstance(item, dict) and isinstance(item.get("id"), str)]
+            elif recorded.get("result") != "recorded-empty":
+                # Any other answer is a failed scan, not an empty one.
+                planned = False
+                receipt = recorded
+        with self.worker_events_lock:
+            sweep = self.node.get("sweep")
+            if not isinstance(sweep, dict) or sweep.get("phase") != "scanning":
+                return
+            if not planned:
+                # No storm: the attempt is not retried until the interval
+                # after it, whatever the state file says.
+                self.node["sweep"] = {"phase": "cooldown",
+                                      "until": time.monotonic() + SWEEP_INTERVAL_SECONDS}
+                self.events.append({"kind": "sideagent_sweep_scan_failed",
+                                    "reason": reason, "receipt": receipt})
+                return
+            if not candidates and recorded is not None:
+                self.node.pop("sweep", None)
+                self.events.append({"kind": "sideagent_sweep_empty", "key": "",
+                                    "kept": len(recorded.get("kept") or []),
+                                    "receipt_result": recorded.get("result")})
+                return
+            self.node["sweep"] = {"phase": "queued", "key": receipt.get("key") or "",
+                                  "candidates": candidates, "reason": reason}
+        self._kick_worker_events()
+
+    def _sweep_prompt(self, batch: str) -> str:
+        tool = self._state_tool()
+        state_file = Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"
+        command = (f"python3 {shlex.quote(tool)} sweep --apply --batch {batch} "
+                   f"--repo {shlex.quote(self.args.repo)} --file {shlex.quote(str(state_file))}"
+                   if tool else f"python3 kaola-dispatch.py sweep --apply --batch {batch}")
+        return "\n".join([
+            f"{RELAY_SCHEMA}: maintenance sweep batch {batch} from the {self.host_name} Host holder "
+            f"{self.args.session}",
+            f"Run exactly once: `{command}`. The tool re-verifies each planned candidate, removes "
+            "only what still qualifies, keeps and reports the rest, and writes "
+            "maintenance.last_sweep (this batch's checkpoint). Do not remove, stop or edit "
+            "anything yourself; do not dispatch, start or send to any session; report the "
+            "receipt's removed and kept ids in the final reply and end the turn; the carrier "
+            "stops this node."])
+
+    def _sweep_pass(self, binding: dict[str, Any], doc: dict[str, Any] | None,
+                    target: dict[str, Any] | None, result: dict[str, Any]) -> None:
+        """One sweep step at a boundary with no reconcile input. Caller holds
+        ``worker_events_lock``. Reconcile batches always win; a sweep never
+        starts during a Host turn (the caller already returned then)."""
+        node = self.node
+        sweep = node.get("sweep")
+        if not isinstance(sweep, dict) or sweep.get("phase") not in ("scanning", "queued"):
+            reason = self._sweep_due(doc)
+            if reason is None:
+                return
+            node["sweep"] = {"phase": "scanning", "reason": reason}
+            threading.Thread(target=self._sweep_scan, args=(reason,), daemon=True).start()
+            return
+        if sweep.get("phase") != "queued":
+            return
+        key = sweep.get("key") or ""
+        if target is None:
+            if node.get("phase") in ("starting", "stopping"):
+                return
+            old = self._node_record(binding) or {}
+            old_holder = old.get("holder_instance_id")
+            if old_holder and self._node_holder_alive(binding, old_holder):
+                # A foreign or old node holds the session. A sweep never makes
+                # a maintenance-returned row; it stays queued for the next
+                # boundary once the holder is gone.
+                node["stop_unconfirmed"] = {"holder": old_holder,
+                                            "platform": binding["platform"],
+                                            "session": binding["session"]}
+                return
+            fingerprint = json.dumps({k: binding.get(k) for k in ("session", "recipe", "since")},
+                                     sort_keys=True)
+            node.update(phase="starting", binding=fingerprint)
+            self.node_start = threading.Thread(target=self._start_node, args=(binding, fingerprint),
+                                               daemon=True)
+            self.node_start.start()
+            result["receipt"] = {"relayed": 0, "reason": "node-starting"}
+            return
+        batch = "s-" + hashlib.sha256(json.dumps([target["holder_instance_id"], key])
+                                      .encode("utf-8")).hexdigest()[:12]
+        receipt = self._relay_send(target, self._sweep_prompt(batch))
+        error = receipt.get("error") if isinstance(receipt.get("error"), dict) else None
+        if (error is None and receipt.get("outcome") == "in_progress"
+                and isinstance(receipt.get("prompt_fingerprint"), str)):
+            maintenance = ((doc or {}).get("state") or {}).get("maintenance") or {}
+            handled = maintenance.get("handled_host_revision") or 0
+            node.update(batch=batch, fingerprint=receipt["prompt_fingerprint"],
+                        sweep_batch=True, attention_sent=target["attention"])
+            sweep["phase"] = "sent"
+            sweep["batch"] = batch
+            self.events.append({"kind": "sideagent_node_batch", "batch": batch,
+                                "target_holder": target["holder_instance_id"],
+                                "host_holder": self.holder_instance_id,
+                                "host_revision_through": int(handled)
+                                if isinstance(handled, int) else 0,
+                                "prompt_fingerprint": receipt["prompt_fingerprint"],
+                                "sweep": {"key": key, "candidates": sweep.get("candidates") or [],
+                                          "reason": sweep.get("reason")}})
+            result["receipt"] = {"batch": batch, "target_session": binding["session"]}
+            return
+        reason = (error or {}).get("code") or "relay-unadmitted"
+        self.events.append({"kind": "worker_event_relay_failed", "target_session": binding["session"],
+                            "receipt": receipt})
+        if self._node_fallback(binding, binding["platform"], f"batch-unadmitted:{reason}") is not None:
+            # The next runtime's boundary retries the same queued sweep.
+            return
+        fingerprint = json.dumps({k: binding.get(k) for k in ("session", "recipe", "since")},
+                                 sort_keys=True)
+        node.update(failed={"binding": fingerprint, "code": reason})
+        self.events.append({"kind": "sideagent_sweep_dropped", "key": key, "reason": reason})
+        node.pop("sweep", None)
+        self._node_to_host(binding, f"sideagent node {target['holder_instance_id']} did not admit "
+                                    f"sweep batch {batch} ({reason})", record=False)
+        holder = target["holder_instance_id"]
+        node.update(phase="stopping", batch=None, fingerprint=None)
+        threading.Thread(target=self._stop_node, args=(holder, None, binding), daemon=True).start()
+        result["receipt"] = {"relayed": 0, "reason": reason}
 
     def _unhandled(self, through: Any) -> str:
         maintenance = (((self._lifecycle_state() or {}).get("state") or {}).get("maintenance") or {})
@@ -5433,6 +5657,56 @@ class Holder:
                 continue
             doc, body, _ = read_heartbeat_file(Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json")
             doc = doc if isinstance(doc, dict) and doc.get("schema") == HEARTBEAT_STATE_SCHEMA else None
+            if node.get("sweep_batch"):
+                # Issue #348: a sweep batch's checkpoint is
+                # ``maintenance.last_sweep`` written by the tool with this
+                # batch id and this node holder. Verified and quiet otherwise;
+                # the kept-items alert is the only attention it can change.
+                sweep_state = node.get("sweep") or {}
+                last_sweep = (((doc or {}).get("state") or {}).get("maintenance") or {}).get("last_sweep")
+                ours = (isinstance(last_sweep, dict) and last_sweep.get("batch") == node["batch"]
+                        and last_sweep.get("holder") == node["holder"])
+                verified = bool(ours and end.get("turn_outcome") == "turn_completed")
+                refusal = None if ours else self._node_turn_refusal(end)
+                binding = self._node_binding() if refusal else None
+                moved = (self._node_fallback(binding, binding["platform"], f"turn-refused:{refusal}")
+                         if refusal and binding is not None else None)
+                attention = attention_fingerprint(body) if doc else None
+                changed = (verified and attention is not None and attention != node.get("attention_sent")
+                           and attention != self.host_attention_seen
+                           and self._node_wrote_attention(doc, body, node["holder"]))
+                if verified and not changed:
+                    end["node_quiet"] = True
+                elif moved is not None:
+                    # The same sweep stays queued for the next runtime's node.
+                    end["node_quiet"] = True
+                    if isinstance(node.get("sweep"), dict):
+                        node["sweep"]["phase"] = "queued"
+                else:
+                    end["host_owned"] = True
+                    detail = "verified; Host attention changed" if changed else "checkpoint missing"
+                    end["reason"] = (f"{end.get('reason')} maintenance sweep batch "
+                                     f"{node['batch']} {detail}")
+                if verified or moved is not None:
+                    if verified:
+                        node.pop("sweep", None)
+                else:
+                    node["sweep"] = {"phase": "cooldown",
+                                     "until": time.monotonic() + SWEEP_INTERVAL_SECONDS}
+                self.events.append({"kind": "sideagent_sweep_settled", "batch": node["batch"],
+                                    "holder": node["holder"], "key": sweep_state.get("key"),
+                                    "checkpoint": "verified" if verified else "missing",
+                                    "removed": (last_sweep.get("removed") or []) if ours else [],
+                                    "host_woken": bool(end.get("host_owned")),
+                                    **({"attention_changed": True} if changed else {}),
+                                    **({"turn_refused": refusal} if refusal else {}),
+                                    **({"runtime_moved": moved["preset"]} if moved is not None else {})})
+                holder = node["holder"]
+                node.update(phase="stopping", batch=None, fingerprint=None, sweep_batch=False)
+                threading.Thread(target=self._stop_node,
+                                 args=(holder, None, binding), kwargs={"sweep": True},
+                                 daemon=True).start()
+                continue
             last = (((doc or {}).get("state") or {}).get("maintenance") or {}).get("last_checkpoint")
             ours = (isinstance(last, dict) and last.get("batch") == node["batch"]
                     and (last.get("node") or {}).get("holder_instance_id") == node["holder"])
@@ -5790,10 +6064,13 @@ class Holder:
 
     def _stop_node(self, holder: str, wait: float | None = None,
                    binding: dict[str, Any] | None = None,
-                   failure: tuple[Any, Any] | None = None) -> None:
+                   failure: tuple[Any, Any] | None = None,
+                   sweep: bool = False) -> None:
         """``failure`` is the (host revision through, recovery input) the batch
         this holder carried, for an unconfirmed stop's maintenance failure;
-        the caller may already have restored the node's own fields (#336)."""
+        the caller may already have restored the node's own fields (#336).
+        ``sweep`` marks a #348 sweep node: it never writes a
+        maintenance-returned row, even when its stop is unconfirmed."""
         wait = NODE_STOP_CONFIRM_SECONDS if wait is None else wait
         # Issue #324: a caller that just moved to a fallback runtime names the
         # runtime this holder runs on.
@@ -5809,7 +6086,8 @@ class Holder:
                                     "receipt": receipt})
                 through, recovery = (failure if failure is not None
                                      else (self.node.get("sent_through"), self.node.get("recovery_input")))
-                self._maintenance_failure("stop-unconfirmed", through, recovery)
+                if not sweep:
+                    self._maintenance_failure("stop-unconfirmed", through, recovery)
             else:
                 confirmed = True
                 self.node.update(phase="stopped")

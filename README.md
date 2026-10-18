@@ -708,6 +708,10 @@ the task, interprets the output, and decides what to do next.
   platform Runners. An on-demand Sideagent may
   prepare that plan, synthesize evidence, or do explicitly scoped light work.
   The Host still adopts the plan, accepts the result, and exact-stops seats.
+  In node mode its carrier also runs a bounded backstop sweep (Issue #348):
+  `kaola-dispatch.py sweep` re-verifies and removes only closed-issue worker
+  sessions, linked worktrees, prunable worktree metadata and stale `.kaola`
+  temporaries - details in `docs/api.md`.
 - **Skill names**: `<platform>-kaola-project-runner` for each of the eleven runtimes,
   `kaola-project-runner` (display name Project Runner) as the control plane, and
   `kaola-delegator` (display name Kaola-Delegator) for external delegation.

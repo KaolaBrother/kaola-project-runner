@@ -99,8 +99,11 @@ SIDEAGENT_KEYS = frozenset({
 })
 RECIPE_KEYS = frozenset({"argv", "runner", "state_tool"})
 MAINTENANCE_KEYS = frozenset({"last_verified", "acked_host_revision", "handled_host_revision",
-                              "last_checkpoint", "recovery_seq", "recovery_input"})
+                              "last_checkpoint", "recovery_seq", "recovery_input", "last_sweep"})
 RECOVERY_INPUT_KEYS = frozenset({"seq", "kind", "occurrence_id", "source", "holder", "at", "evidence"})
+# Issue #348: the backstop sweep's one current fact. Overwritten per sweep,
+# like last_checkpoint; never a history.
+SWEEP_KEYS = frozenset({"at", "key", "batch", "holder", "accepted_revision", "head", "removed"})
 RECOVERY_SCOPES = frozenset({"authorization", "duties", "links"})
 
 
@@ -126,6 +129,18 @@ def maintenance_blockers(value: Any) -> list[dict[str, str]]:
         if not valid:
             bad.append(refusal("maintenance.recovery_input", "closed typed recovery input",
                                "keep the duty; repair from the signal or inquiry receipt"))
+    sweep = value.get("last_sweep")
+    if sweep is not None:
+        valid = (
+            isinstance(sweep, dict) and sweep.keys() == SWEEP_KEYS
+            and all(isinstance(sweep.get(key), str) for key in ("at", "key", "holder"))
+            and all(sweep.get(key) is None or isinstance(sweep.get(key), str)
+                    for key in ("batch", "accepted_revision", "head"))
+            and isinstance(sweep.get("removed"), list)
+            and all(isinstance(item, str) for item in sweep["removed"]))
+        if not valid:
+            bad.append(refusal("maintenance.last_sweep", "closed typed sweep receipt",
+                               "keep the duty; repair from the sweep receipt or Host events log"))
     return bad
 
 

@@ -841,6 +841,104 @@ limit (`carrier-limit`). `state migrate` without `--live` uses the 1 MiB bound: 
 live rows are not an old holder. `carrier-limit` applies when `--live` is supplied and that
 holder does not advertise `heartbeat-state/2`. The tool refuses rather than truncating a record.
 
+#### Backstop sweep (`kaola-dispatch.py sweep`, Issue #348)
+
+`sweep --repo ROOT (--dry-run | --apply | --record-empty) [--file STATE] [--batch B]
+[--skills-root DIR] [--live FILE]` removes residues the main flow missed. `--file` defaults to
+`<repo>/.kaola/heartbeat-prompt.json`. Exactly one mode is required. Output is one
+`kaola-sweep/1` receipt: `{result: planned|nothing|swept|recorded-empty|candidates|refused,
+mode, key, candidates, kept, removed, skipped, head, accepted_revision, forge}`.
+`accepted_revision` is the verified caller record's value on apply/record-empty, null
+otherwise. `key` is the
+first 16 hex of the sha256 of the sorted candidate ids (`""` when none). Candidate ids are
+stable: `session:<platform>/<session>@<holder>`, `worktree:<resolved path>@<HEAD sha>`,
+`worktree-prune:<resolved path>`, `stale-file:<resolved path>@<int mtime>`.
+
+The candidate set is a closed rule set; everything else is never touched:
+
+- **S1** a `list --repo ROOT --include-dead` row whose repo is ROOT, `name_role` `worker`,
+  issue parsed from the session name, issue CLOSED, `identity` `verified` - never a
+  `session_role` host/sideagent row, the bound Sideagent session, or the caller's own session;
+  a dead row is not a candidate. `status` is then read: `turn-active`, `permission-pending`
+  and `identity-mismatch` keep the session. `old_version: true` marks `stale` or `pin-drift`
+  rows (informational). Apply exact-stops with `--expected-holder-instance-id` and re-lists;
+  a holder still live is kept `stop-unconfirmed`.
+- **W1** a linked worktree (never the main worktree) bound to issue N by branch
+  `refs/heads/workflow/issue-N` or basename `issue-N`, issue CLOSED, inside the resolved
+  project root, unlocked, clean (`git status --porcelain` empty, including untracked), merged
+  (HEAD an ancestor of `refs/remotes/origin/HEAD`'s target, else `origin/main`, or equal to
+  the merged PR's `headRefOid`; no fetch), with no live verified session for issue N in ROOT
+  or in the worktree itself. Keep reasons: `outside-project`, `locked`, `uncommitted-changes`,
+  `unmerged-or-unpushed`, `live-session`. A worktree whose only live session is itself an S1
+  candidate is still a candidate (the stop goes first). Every check is re-verified
+  immediately before `git worktree remove <path>` (no `--force`); the branch is kept.
+- **W2** a `prunable` worktree entry inside ROOT: `git -C ROOT worktree prune`, once per apply.
+- **F1** a regular `*.tmp` file directly in `.kaola/` older than 24 h
+  (`SWEEP_STALE_SECONDS`). Nothing else in `.kaola/` - state, backups, dispatch indices,
+  locks, webhook files, session records - is touched.
+
+Completion is a forge fact only: `gh issue view N --json state` (cwd ROOT, ~20 s) reports the
+issue CLOSED. `gh` missing or failing is `forge: "unavailable"`: every issue-linked item goes
+to `skipped` as `forge-unknown`, never to kept, and nothing is removed. An open issue is
+silently not a candidate. Only issue numbers appearing in sessions or worktrees are queried.
+`--dry-run` writes nothing at all (no state write, no prune, no stop, no fetch); it still runs
+the read-only list/status/gh/git calls.
+
+`--apply` needs an identity: the verified Host carrier of this repo (plan = the current scan),
+or the bound node with `--batch B`, verified like `recovery-input` batches - the node record's
+dispatcher is this repo's Host carrier and that carrier's events hold `sideagent_node_batch`
+with `batch` B, `target_holder` the caller, and a `sweep` object; the plan is then that event's
+`sweep.candidates`. Only planned ids still candidates on re-scan are applied (others land in
+`skipped` as `no-longer-candidate`; new candidates wait for the next sweep). Apply order:
+sessions, worktrees, prune, files. Then, under the state lock, `maintenance.last_sweep` is
+written and the kept alert synced; without a state file the actions stand and nothing is
+written. Any other caller is refused (nonzero exit). `--record-empty` is Host-only: a re-scan
+with candidates answers `result: candidates` and writes nothing; otherwise it writes
+`last_sweep` (`batch` null) and syncs the alert - `recorded-empty`.
+
+`maintenance.last_sweep` is `{at, key, batch, holder, accepted_revision, head, removed}` -
+one current fact overwritten per sweep, like `last_checkpoint.settled`, never a history.
+`accepted_revision` is the Host carrier's record (`accepted_revision` of the caller's own
+record for a Host apply, of the dispatcher record for a node); `head` is `rev-parse HEAD` or
+null; `removed` lists this sweep's removed ids. It never appears in the Host view `attention`
+and does not change its fingerprint. Items kept are reported in `alerts["sweep-kept"]`
+(owner `host`, level `warn`): `inputs` maps each kept id to `{why, evidence, next}`, written
+by `tool:sweep` with the caller's `writer_holder`, rewritten only when the kept set changes
+(an identical kept set leaves the alert's bytes untouched) and removed atomically when the set
+empties. No other routine field holds kept or removed text. `last_sweep` itself is written on
+every apply and record-empty: it is the due mark and a node batch's checkpoint, so `at`,
+`batch`, `head` and `accepted_revision` move even when nothing was removed. A second run is a
+no-op in actions only - no stop, no remove, no prune, no file deletion, alert unchanged.
+
+The Host carrier runs the sweep due check inside the existing node relay boundary - only in
+node mode, only for a `session_role: host` holder, no new thread, loop or timer. Due when
+`last_sweep` is absent (`first`), the carrier's accepted revision differs (`upgrade`), HEAD
+moved (`merge`), or `at` is older than the interval (`interval`; `KAOLA_SWEEP_INTERVAL_HOURS`,
+positive float hours, default 24, invalid falls back to 24). An event only makes it due
+earlier; once a sweep records the new head/revision it is handled. Not due spends nothing but
+the cheap `rev-parse` - no scan subprocess, no event, no node, no wake. Due runs
+`sweep --dry-run` in a daemon thread. A scan error is one `sideagent_sweep_scan_failed` event,
+not retried inside the interval. No candidates runs `sweep --record-empty`, moves the due mark
+and appends `sideagent_sweep_empty` - no node, no staged Host event, no wake, `host_revision`
+unchanged. Candidates queue exactly one batch keyed by `key`. The send reuses the reconcile
+start/send path (a fresh node from the recipe when no live node target): batch id
+`s-<sha256([target holder, key])[:12]>`, one prompt carrying the exact
+`sweep --apply --batch B` command, and a `sideagent_node_batch` event with `batch`,
+`target_holder`, `host_holder`, the unchanged handled `host_revision_through`,
+`prompt_fingerprint` and `sweep: {key, candidates, reason}`. A sweep batch never touches
+`sent_through`, `recovery_sent`, `sent_prior` or the handled/acked revisions, never writes a
+`maintenance-returned` row and never calls the maintenance-failure path; a lost or unadmitted
+sweep node is staged to the Host with `record=False` or kept queued when the runtime moved.
+Settle is verified only when `last_sweep.batch` is the batch, `last_sweep.holder` the node
+holder and the turn completed; `sideagent_sweep_settled` carries `batch`, `holder`, `key`,
+`checkpoint` (`verified`|`missing`), the durable `removed` receipt and `host_woken`. Verified
+with a node-written attention change wakes the Host once (`maintenance sweep batch B verified;
+Host attention changed`); verified otherwise is quiet (`node_quiet`); unverified reaches the
+Host once (`checkpoint missing`) and is not re-queued inside the interval; a runtime-refused
+turn moves the runtime like a reconcile batch and keeps the sweep queued. The node is then
+exact-stopped as today. Without an active node binding there is no periodic sweep - the Host
+can run the tool itself. Holders advertise `sideagent-sweep/1`.
+
 ## Delegator webhook wake (#299)
 
 A Host holder (and only a `session_role: host` holder) fires a wake signal when
