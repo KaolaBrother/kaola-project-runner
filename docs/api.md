@@ -860,9 +860,9 @@ The candidate set is a closed rule set; everything else is never touched:
   issue parsed from the session name, issue CLOSED, `identity` `verified` - never a
   `session_role` host/sideagent row, the bound Sideagent session, or the caller's own session;
   a dead row is not a candidate. `status` is then read: `turn-active`, `permission-pending`
-  and `identity-mismatch` keep the session. `old_version: true` marks `stale` or `pin-drift`
-  rows (informational). Apply exact-stops with `--expected-holder-instance-id` and re-lists;
-  a holder still live is kept `stop-unconfirmed`.
+  and `identity-mismatch` keep the session. `old_version: true` marks a `stale` row or one whose
+  `reported_drift` carries the skill-pin drift value (informational). Apply exact-stops with
+  `--expected-holder-instance-id` and re-lists; a holder still live is kept `stop-unconfirmed`.
 - **W1** a linked worktree (never the main worktree) bound to issue N by branch
   `refs/heads/workflow/issue-N` or basename `issue-N`, issue CLOSED, inside the resolved
   project root, unlocked, clean (`git status --porcelain` empty, including untracked), merged
