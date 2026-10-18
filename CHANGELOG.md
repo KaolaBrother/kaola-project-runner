@@ -4,7 +4,9 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.9.19 — 2026-10-18 (Sideagent periodic backstop sweep; false checkpoint-missing alert fix)
+
+Fixes #349 (a wrong verb on an unchanged Host-owned checkpoint input no longer returns it to the Host or wakes it) and adds #348 (the Sideagent backstop sweep for cleanup the main flow missed).
 
 Seats: restart required
 
