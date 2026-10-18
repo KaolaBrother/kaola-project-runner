@@ -4,6 +4,12 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+Seats: restart required
+
+- **Sideagent fallback skips computer-use-only presets (#350).** `platforms/<id>.yaml` may set `<tier>_model_roles` (and `default_model_roles`) to a comma-separated closed vocabulary. The only value is `computer-use-only`. Absent or empty means none. An unknown, empty, or repeated token rejects that catalog row at render and at `project`; profile prose is not a role. Only `codex/luna` sets the mark. `project --authorization` candidates carry `roles` (a sorted list). The Sideagent node chain (`_node_chain` / `_node_fallback`, including a dsh `turn_failed`) drops every Worker whose roles include `computer-use-only`. Explicit Host dispatch of a granted marked preset is unchanged. A chain that becomes empty fails once on the existing exhausted path. There is no new wake reason. `scripts/kaola-acp-holder.py` and `platforms/codex.yaml` are in the operator restart set (`docs/conventions.md`), so a running holder keeps the old chain until it restarts. This content change leaves the Grok Bot bridge at the unpinned content stage (`saveable: false`) so renderer checks stay green; the bridge is pinned in a later release commit.
+
 ## 0.9.19 — 2026-10-18 (Sideagent periodic backstop sweep; false checkpoint-missing alert fix)
 
 Fixes #349 (a wrong verb on an unchanged Host-owned checkpoint input no longer returns it to the Host or wakes it) and adds #348 (the Sideagent backstop sweep for cleanup the main flow missed).

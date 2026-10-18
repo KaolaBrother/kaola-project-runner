@@ -57,6 +57,9 @@ def _load_record_contract():
 RECORD = _load_record_contract()
 
 
+# Issue #350: closed role vocabulary on a catalog row. Absent means none.
+# Profile prose is not a role. Keep this set equal to render-skills.MODEL_ROLES.
+MODEL_ROLES = frozenset({"computer-use-only"})
 SCOPES = frozenset({"research", "qa", "report", "implementation"})
 # Only an implementation plan may declare repository mutation; the worker's
 # own Workflow owns its claim, worktree, ledger and finalize.
@@ -229,6 +232,22 @@ def parse_flat_yaml(path: Path) -> dict[str, str]:
     return data
 
 
+def parse_model_roles(preset: str, raw: str | None) -> list[str]:
+    """Closed role tokens for one preset. Absent or empty means none.
+
+    An unknown token, an empty token, or a repeat rejects the row. The value
+    is never replaced with a silent default, and profile prose is not read.
+    """
+    if raw is None or raw == "":
+        return []
+    tokens = [part.strip() for part in raw.split(",")]
+    if (not tokens or any(not token for token in tokens)
+            or len(tokens) != len(set(tokens))
+            or any(token not in MODEL_ROLES for token in tokens)):
+        raise ValueError(f"{preset}: unknown model role {raw!r}")
+    return sorted(tokens)
+
+
 def catalog_from_files(paths: list[Path]) -> dict[str, dict[str, Any]]:
     catalog: dict[str, dict[str, Any]] = {}
     for path in paths:
@@ -256,6 +275,7 @@ def catalog_from_files(paths: list[Path]) -> dict[str, dict[str, Any]]:
                 "tier": tier,
                 "class": klass,
                 "profile": manifest.get(f"{prefix}_model_profile") or "",
+                "roles": parse_model_roles(preset, manifest.get(f"{prefix}_model_roles")),
                 "selection": {
                     "model_name": manifest.get(f"{prefix}_model_name") or "",
                     "model_id": manifest.get(f"{prefix}_model_id") or "",
@@ -610,6 +630,7 @@ def eligibility(
             "tier": row["tier"],
             "class": row["class"],
             "profile": row["profile"],
+            "roles": list(row.get("roles") or []),
             "selection": dict(row["selection"]),
             "availability": presence,
             "state": "granted",

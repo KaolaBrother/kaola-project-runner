@@ -67,7 +67,7 @@ limits (source pointers only, no restated result, dispatch or judgment;
 exact-stop only a Host-recorded reclaim), and reads the node's
 checkpoint at its turn end. A turn end alone acknowledges nothing. A missing
 Runner, failed start or unadmitted batch moves the node to the next eligible
-Worker preset (`zcode/default` first), never back. A refused recipe or empty
+Worker preset in id order, skipping a `computer-use-only` role, never back. A refused recipe or empty
 chain reaches both views and wakes the Host once. An idle binding with no owed input stays quiet.
 With the shared current-input selector, retirement alone starts or sends no
 node and advances no checkpoint revision when no input remains. A node whose

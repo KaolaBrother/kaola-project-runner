@@ -8,6 +8,7 @@ discovered on the bound execution target and its installed platform Runner to
 declare the tier. The Host then fetches only exact locally available rows allowed
 by current authorization
 ([worker-profiles.md](worker-profiles.md) §Local availability and authorized rows).
+A preset may set `<tier>_model_roles` to the closed value `computer-use-only` (absent means none; an unknown value rejects the row). This table has no column for that field.
 
 Each row's **Preset ID** `<platform>/<tier>` is its one stable ID (the manifest
 platform id and its declared `--tier` word, e.g. `claude-code/default` vs

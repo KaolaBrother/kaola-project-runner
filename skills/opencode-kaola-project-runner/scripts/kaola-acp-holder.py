@@ -286,6 +286,16 @@ NODE_START_TIMEOUT = 180.0
 # Issue #346: the maintenance chain is granted Worker presets in id order.
 # zcode/default is not a privileged first choice and is not a default grant.
 NODE_DEFAULT_PRESET = "zcode/default"
+
+
+def automatic_worker_barred(row: dict[str, Any]) -> bool:
+    """Issue #350: a computer-use-only role is not an automatic Worker choice.
+
+    The mark is a catalog role, not a preset name and not an authorization
+    decision. A missing or empty roles list keeps the preset selectable.
+    """
+    roles = row.get("roles") if isinstance(row, dict) else None
+    return isinstance(roles, list) and "computer-use-only" in roles
 NODE_STOP_CONFIRM_SECONDS = 30.0
 # Issue #336: how long a carrier waits for its own still-starting node holder
 # (the Runner gave up first) before it exact-stops it and moves on.
@@ -4954,8 +4964,9 @@ class Holder:
         """Fallback runtimes for the bound node: granted Worker presets, by id.
 
         The list is the current dispatch eligibility (explicit Worker grants,
-        exclusions, holds, Delegator ceiling, availability). An ungranted
-        preset is not a candidate. No grant means an empty chain; the caller
+        exclusions, holds, Delegator ceiling, availability). A preset whose
+        roles include computer-use-only is omitted. An ungranted preset is
+        not a candidate. No remaining preset means an empty chain; the caller
         fails once and does not try another preset."""
         tool = self._state_tool()
         state_file = Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"
@@ -4973,6 +4984,7 @@ class Holder:
             candidates = None
         rows = [row for row in (candidates or []) if isinstance(row, dict)
                 and row.get("class") == "Worker" and row.get("availability") != "absent"
+                and not automatic_worker_barred(row)
                 and isinstance(row.get("platform"), str) and row["platform"] not in tried
                 and isinstance(row.get("tier"), str) and isinstance(row.get("id"), str)]
         rows.sort(key=lambda row: row["id"])

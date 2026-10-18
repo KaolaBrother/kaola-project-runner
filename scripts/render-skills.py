@@ -98,10 +98,15 @@ OPTIONAL = {"acp_command_default",
             # Issue #237: declared component identity/effort for the default
             # preset. Absent on presets whose `*_model_effort` is already the
             # consumer-facing preset effort. Never a launch parameter.
-            "default_model_components"}
+            "default_model_components",
+            # Issue #350: closed role vocabulary for the default preset.
+            # Absent means none. Keep this set equal to kaola-dispatch.MODEL_ROLES.
+            "default_model_roles"}
 
 
 TIER_FIELDS = ("name", "id", "parameters", "effort", "profile", "class")
+# Issue #350: closed role vocabulary. Absent means none. Unknown rejects.
+MODEL_ROLES = frozenset({"computer-use-only"})
 # Issue #237: optional per-preset JSON (a string whose content is a JSON
 # array). Not a second registry and not read by the effort apply path.
 COMPONENT_FIELD = "components"
@@ -117,7 +122,17 @@ def named_tiers(manifest: dict[str, str]) -> list[str]:
 def tier_keys(word: str) -> set[str]:
     prefix = word.replace("-", "_")
     return ({f"{prefix}_model_{field}" for field in TIER_FIELDS}
-            | {f"{prefix}_model_{COMPONENT_FIELD}", f"acp_command_{prefix}"})
+            | {f"{prefix}_model_{COMPONENT_FIELD}", f"{prefix}_model_roles",
+               f"acp_command_{prefix}"})
+
+
+def validate_model_roles(path: Path, key: str, raw: str) -> None:
+    """Issue #350: comma-separated closed tokens. Unknown rejects the row."""
+    tokens = [part.strip() for part in raw.split(",")]
+    if (not tokens or any(not token for token in tokens)
+            or len(tokens) != len(set(tokens))
+            or any(token not in MODEL_ROLES for token in tokens)):
+        raise ValueError(f"{path}: {key} has an unknown model role {raw!r}")
 
 
 def validate_model_components(path: Path, key: str, raw: str) -> None:
@@ -229,6 +244,8 @@ def parse_manifest(path: Path) -> dict[str, str]:
             raise ValueError(f"{path}: {key} must be one of {', '.join(CLASSES)}")
     for key in [k for k in result if k.endswith("_model_components")]:
         validate_model_components(path, key, result[key])
+    for key in [k for k in result if k.endswith("_model_roles")]:
+        validate_model_roles(path, key, result[key])
     # A named tier resolves to a declared model: name and id are required,
     # parameters, effort and profile are present (possibly empty).
     for word in words:

@@ -66,7 +66,10 @@ optional `default_model_components`, `named_tiers`, and `fast_support`/`fast_sum
 each word `W` carries `<w>_model_name`/`<w>_model_id`/`<w>_model_parameters`/`<w>_model_effort`/`<w>_model_profile`
 and may carry `<w>_model_components`
 with `w` = `W` with `-` as `_` (name and id required; a profile may be empty and has no `|`,
-Issue #190). Profiles are selection guidance rendered only into Project Runner's
+Issue #190). Optional `default_model_roles` and `<w>_model_roles` are a comma-separated closed
+vocabulary. The only value is `computer-use-only`. Absent or empty means no roles. An unknown,
+empty, or repeated token rejects that catalog row at render and at `project`; it is never a
+silent default. Profile prose is not a role (Issue #350). Profiles are selection guidance rendered only into Project Runner's
 `references/worker-profiles.md`; they never change a preset or gate `start`. The words are unordered names, not a
 ranking. They reach the generated Skill through the computed `PRESETS` (SKILL.md) and
 `PRESET_LINES` (references/platform.md) blocks. They render as `ACP_COMMAND`, `ACP_QUIRKS`, and `ACP_LOGIN_REQUIRES_PTY`
@@ -553,7 +556,7 @@ The orchestrator Skill ships one entry, `scripts/kaola-dispatch.py`, for an
 adopted research, QA, or report plan. `project` prints a compact capability
 summary taken from the profile text of presets that are authorized and marked
 present, plus the eligible candidates' exact preset ids, Class, catalog
-profile, selection parameters, and structured restrictions. `execute` admits
+profile, `roles` (a sorted list, empty when the preset has none), selection parameters, and structured restrictions. `roles` is a catalog fact, not a grant. `execute` admits
 that plan through each platform's existing `runtime-tmux.sh` and writes a
 correlation index (`correlation_only`); a `--no-wait` admission is `in-flight`,
 not a result. `collect` later correlates one status and, for a completed
@@ -768,7 +771,9 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   instead of failing: only Worker presets that `kaola-dispatch.py project` finds
   eligible now (an explicit Worker grant, exclusions, holds, Delegator ceiling, availability not `absent`),
   sorted by preset id, skipping every runtime already tried for this
-  binding. No granted Worker preset means the chain fails once and returns; it does not try an ungranted preset. The fallback start is the same Runner start from the sibling installed Skill
+  binding, and skipping every candidate whose `roles` include `computer-use-only` (Issue #350).
+  That skip is not an authorization change: grants, exclusions, holds, and availability stay as they are,
+  and `project` still lists the preset for an explicit dispatch. No remaining Worker preset means the chain fails once and returns; it does not try an ungranted preset and it does not add a wake reason. The fallback start is the same Runner start from the sibling installed Skill
   (`<root>/<platform>-kaola-project-runner/scripts/<runner>`, or the checkout entrypoint with
   that platform first), the bound `--session`, this `--repo`, `--role sideagent` and the
   preset's `--tier`; the bound `--model`/`--effort` are dropped. A preset whose Runner is not
@@ -2574,7 +2579,8 @@ at `effort=high` (Elite; an explicit preset and count grant, not a Worker-class 
 `--tier haiku` is Claude Haiku (`haiku`) at `effort=high` (Worker; usable only after an explicit Worker grant).
 Worker-class presets are exactly: `claude-code/haiku`, `codex/luna`, `devin/default`, `dsh/commandcode`, `dsh/default`, `opencode/default`, `zcode/default`. Each of those seven is usable only after an explicit Worker grant. `dsh/commandcode` is the Command Code DeepSeek V4.1 Flash preset in that class, and it needs a grant the same way. Codex's `--tier luna` is GPT-6 Luna (`gpt-6-luna`) at `effort=max`
 (Issue #188, profile narrowed in #301): a computer-use-only Worker, not an upgrade
-and not a general implementation preset. These are applied as ordinary ACP config
+and not a general implementation preset. Its catalog row sets `luna_model_roles` to
+`computer-use-only` (Issue #350). These are applied as ordinary ACP config
 options; a native rejection is a `config_application` limitation, never a substitute.
 
 ## Agent-directed transport results
