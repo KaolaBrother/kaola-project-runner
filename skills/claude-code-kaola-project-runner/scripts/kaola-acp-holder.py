@@ -8064,12 +8064,12 @@ class Holder:
         # could not reach because it died first, is terminated here. Only a
         # group whose recorded member identity still holds is touched.
         live = live_child_groups(self.agent_child_groups)
-        if self.session_role in SIDEAGENT_ROLES or getattr(self, "preserve_dispatched", False):
-            # Issue #255: a Sideagent's dispatched workers, and a Host's under
-            # an explicit preserve intent, are their own Runner sessions with
-            # their own exact stop; replacing the dispatcher must not end them
-            # (holder, native agent, or its tools). Only other leftovers are
-            # swept.
+        if (self.session_role in SIDEAGENT_ROLES + ("host",)
+                or getattr(self, "preserve_dispatched", False)):
+            # Issue #255/#361: workers a Sideagent dispatched, and seats a Host
+            # opened, are their own Runner sessions with their own exact stop;
+            # stopping or replacing the dispatcher must not end them (holder,
+            # native agent, or its tools). Only other leftovers are swept.
             spared = dispatched_worker_groups(self.record_dir / CHILD_RECORD_NAME, live,
                                               holder_instance_id=self.holder_instance_id)
             self.spared_child_pgids = sorted(spared)

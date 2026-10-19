@@ -1638,14 +1638,16 @@ scripts/kaola-tmux.sh PLATFORM stop      --repo ABS_PATH --session NAME \
   [--if-snapshot ID] [--force] [--preserve-dispatched-workers]
 ```
 
-`--preserve-dispatched-workers` (also on `drain-restart`) is an explicit Host continuity
-intent: the stop keeps the complete process tree (holder, native agent, tools) of each worker
-this Host dispatched, proven by its spawn line or a live worker record naming this exact
-holder as `dispatcher`, on a cooperative stop and on dead-holder cleanup; other recorded
-children are still swept. A live holder that does not advertise `preserve-dispatched/1`
-returns `{"result":"refused","reason":"preserve-unsupported"}` with `mutation_status:
-not_started`. Without the flag a Host stop is unchanged. The successor Host then runs
-`rebind-host` per seat; a start still in flight is not covered and needs reconciliation.
+`--preserve-dispatched-workers` (also on `drain-restart`) asks the stop to keep the
+complete process tree (holder, native agent, tools) of each Runner session this seat
+started, proven by its spawn line or a live worker record naming this exact holder as
+`dispatcher`, on a cooperative stop and on dead-holder cleanup; other recorded
+children are still swept. A Host or Sideagent keeps them with or without the flag:
+stopping or replacing the dispatcher never ends a verified Runner session — each seat
+has its own exact stop (#361). A live holder that does not advertise
+`preserve-dispatched/1` returns `{"result":"refused","reason":"preserve-unsupported"}`
+with `mutation_status: not_started`. The successor Host then runs `rebind-host` per
+seat; a start still in flight is not covered and needs reconciliation.
 
 ACP records default to `/tmp/kaola-<uid>` and new admin sockets to
 `/tmp/kaola-<uid>-acp`; caller `TMPDIR` and `XDG_RUNTIME_DIR` do not change

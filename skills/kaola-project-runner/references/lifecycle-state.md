@@ -115,8 +115,8 @@ notify target. Workers report to the live Host holder (`sideagent-host`). A
 Host advertising `sideagent-relay/1` relays them to the bound Sideagent and
 wakes the Host only when attention changed. A dead, failed, or cancelled turn
 returns them. Delivery is at-least-once. `"mode": "node"` keeps events with
-the Host ([sideagent-node.md](sideagent-node.md)). After
-`--preserve-dispatched-workers`, the new Host runs `rebind-host` for that seat
+the Host ([sideagent-node.md](sideagent-node.md)). After a Host stop kept its
+seats, the new Host runs `rebind-host` for that seat
 only. `unknown-op`: `drain-restart` the seat at idle.
 
 ## Size

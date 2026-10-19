@@ -2539,13 +2539,13 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None,
         delta = spawned_at / 1000.0 - started
         if -SPAWN_RECORD_SLACK <= delta <= SPAWN_RECORD_TOLERANCE:
             groups.append(child)
-    if (record.get("session_role") in ("sideagent", "sidekick") or preserve_dispatched) and groups:
-        # Issue #255: workers a Sideagent dispatched keep running when it is
-        # replaced; each has its own exact stop. Only this script's `start`
-        # appends to the spawn record, so a verified entry is a Runner holder
-        # this agent started; a live holder whose own record names this
-        # Sideagent's holder as dispatcher is one too. Its whole process tree
-        # is kept.
+    if (record.get("session_role") in ("sideagent", "sidekick", "host") or preserve_dispatched) and groups:
+        # Issue #255/#361: workers a Sideagent dispatched and seats a Host
+        # opened keep running when it is stopped or replaced; each has its own
+        # exact stop. Only this script's `start` appends to the spawn record,
+        # so a verified entry is a Runner holder this agent started; a live
+        # holder whose own record names this agent's holder as dispatcher is
+        # one too. Its whole process tree is kept.
         kept = dispatched_worker_groups(spawned, record.get("holder_instance_id"))
         groups = [group for group in groups if group not in kept]
     return groups
@@ -6073,8 +6073,12 @@ def spawn_holder_outside(args: argparse.Namespace, repo: str, directory: Path,
                           "message": (result.stderr or result.stdout or "no broker receipt")[-300:]},
                 "holder_may_exist": True}
     if out.get("result") not in ("ready", "existing"):
-        if requested == "auto" and out.get("reason") == "launch-backend-unsupported":
-            return {"degraded": True, "detail": out.get("detail")}
+        # Issue #361: job-state-unknown under auto is the same class as
+        # launch-backend-unsupported — the outside launcher cannot operate
+        # (a sandboxed Host shell cannot read launchd state), so the seat
+        # degrades to the direct path rather than refusing outright.
+        if requested == "auto" and out.get("reason") in ("launch-backend-unsupported", "job-state-unknown"):
+            return {"degraded": True, "detail": out.get("detail"), "reason": out.get("reason")}
         error = {"code": out.get("reason") or "launch-broker-failed",
                  "message": out.get("detail") or "outside launch refused"}
         if out.get("recovery"):
@@ -6437,6 +6441,10 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
             # auto: the outside launcher is unavailable; fall back to the
             # explicit direct path and say so in the receipt.
             receipt["launch_backend_degraded"] = True
+            if launched.get("reason"):
+                receipt["launch_backend_fallback_reason"] = launched["reason"]
+            if launched.get("detail"):
+                receipt["launch_backend_fallback_detail"] = launched["detail"]
             launched = None
         elif "error" in launched:
             receipt["error"] = launched["error"]
@@ -6462,6 +6470,11 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
         if child_record is not None:
             receipt["child_record"] = child_record
     else:
+        # Issue #361: report the actual backend the broker used so the receipt
+        # proves whether auto resolved to launchd, systemd-user, or an
+        # explained fallback.
+        if launched["launch"].get("backend"):
+            receipt["launch_backend"] = launched["launch"]["backend"]
         holder_pid_hint = launched["launch"].get("holder_pid")
         if launched["launch"].get("child_record") is not None:
             receipt["child_record"] = launched["launch"]["child_record"]

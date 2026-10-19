@@ -10,7 +10,7 @@ bridge. It proves the composed candidate, not the helper alone:
 * a Worker dispatched by that Host is recorded in the Host's child record and
   also starts outside the caller;
 * a job unload does not erase that ownership or sweep the Worker;
-* the Host stop with ``--preserve-dispatched-workers`` keeps the Worker;
+* a plain Host stop keeps the seat the Host opened (#361);
 * the later exact Worker stop leaves no residual.
 
 All spawned pids are killed at the end. No install, no login, no live session.
@@ -311,6 +311,9 @@ def main() -> int:
         check(sb.record(host).get("start_selection", {}).get("launch_backend") in ("auto", "launchd"),
               "the normal Host entry records the outside backend",
               selection=sb.record(host).get("start_selection"))
+        check(host_start.get("launch_backend") == "launchd",
+              "the start receipt names the actual backend the broker used",
+              backend=host_start.get("launch_backend"))
         holder_env = subprocess.run(["ps", "eww", "-o", "command=", "-p", str(host_pid)],
                                     capture_output=True, text=True).stdout
         check("KAOLA_LAUNCH_BACKEND=" in holder_env,
@@ -348,12 +351,14 @@ def main() -> int:
         time.sleep(0.4)
         check(pid_alive(worker_pid), "the Worker survives a job unload")
 
-        # Host stop with preserve-dispatched-workers keeps the Worker.
-        host_stop = sb.cli("stop", host, "--force", "--preserve-dispatched-workers")
+        # Issue #361: a plain Host stop keeps the seat the Host opened; the
+        # seat is its own Runner session with its own exact stop, not a
+        # holder-owned child the sweep may end.
+        host_stop = sb.cli("stop", host, "--force")
         check("residual_pids" in host_stop and host_stop["residual_pids"] == [],
               "the Host stop leaves no residual", stop={k: host_stop.get(k) for k in ("stopped", "residual_pids")})
         wait_until(lambda: not pid_alive(host_pid), 10, "Host holder gone")
-        check(pid_alive(worker_pid), "the preserved Worker still runs after the Host stop")
+        check(pid_alive(worker_pid), "the seat the Host opened still runs after the Host stop")
 
         # Later exact Worker stop: no residual.
         worker_stop = sb.cli("stop", worker, "--force")

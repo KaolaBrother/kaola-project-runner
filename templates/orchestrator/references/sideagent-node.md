@@ -81,14 +81,14 @@ write. See [duty-reconcile.md](duty-reconcile.md).
 
 ## Host continuity stop
 
-`stop`/`drain-restart` with `--preserve-dispatched-workers` on a Host whose
-holder advertises `preserve-dispatched/1` keeps each worker tree it
-dispatched (spawn line or a worker record naming its holder) on a cooperative
-or dead-holder stop; other children are swept. An older live holder
-refuses `preserve-unsupported`, stops nothing: `drain-restart` at
-idle first. The successor runs each seat's `rebind-host`. A start still in
-flight is not covered: reconcile it. Default stop and final close-out are
-unchanged; close-out reclaims workers one by one first.
+`stop`/`drain-restart` on a Host keeps each worker tree it dispatched (spawn
+line or a worker record naming its holder) on a cooperative or dead-holder
+stop; other children are swept. `--preserve-dispatched-workers` is accepted
+and still gates an older live holder that does not advertise
+`preserve-dispatched/1`, which refuses `preserve-unsupported` and stops
+nothing: `drain-restart` at idle first. The successor runs each seat's
+`rebind-host`. A start still in flight is not covered: reconcile it. Final
+close-out reclaims workers one by one first.
 
 An undelivered worker `idle` wake is kept like a permission wake, re-sent
 when reachable; a newer replaces it, a stop drops it.
