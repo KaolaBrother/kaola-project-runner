@@ -30,7 +30,10 @@ def arrays() -> dict[str, list[str]]:
     src = VALIDATE.read_text(encoding="utf-8")
     found: dict[str, list[str]] = {}
     for name in ("python_suites_all", "python_suites_a", "python_suites_b", "shell_suites"):
-        match = re.search(name + r"=\((.*?)\n\)", src, re.S)
+        # Arrays are plain quoted basenames; no entry contains ")". The closing
+        # paren may share the last entry's line (#359), so stopping at the
+        # first ")" avoids swallowing the following array.
+        match = re.search(r"(?m)^" + re.escape(name) + r"=\((.*?)\)", src, re.S)
         if match is None:
             raise AssertionError(f"validate.sh array {name} not found")
         found[name] = re.findall(r'"([^"]+)"', match.group(1))

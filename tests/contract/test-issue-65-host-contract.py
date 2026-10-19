@@ -65,7 +65,8 @@ class HostDispatchContract(unittest.TestCase):
         # points at the reference, which alone carries the beat mechanics.
         self.assertRegex(self.main, r"A Host \(any platform with a `host_skill_entry`\) is\s+"
                                     r"event-driven: no\s+Routine, cron, or sleep loop")
-        self.assertRegex(self.main, r"ending the\s+turn as the wait: \[references/zcode-host-dispatch\.md\]")
+        # #369 tightened the sentence; the end-turn wait and reference are unchanged.
+        self.assertRegex(self.main, r"end the\s+turn as the wait: \[references/zcode-host-dispatch\.md\]")
         for fragment in (
             "KAOLA_ACP_HEARTBEAT_HOST",
             "heartbeat-host-conflict",
@@ -167,7 +168,7 @@ class HostDispatchContract(unittest.TestCase):
         self.assertIn("<<<heartbeat-prompt", holder)
         # events only reach an idle host, through the ordinary prompt path
         self.assertIn('return {"delivered": False, "reason": "prompt-in-progress"}', holder)
-        self.assertIn('WORKER_EVENT_KINDS = ("terminated", "idle", "permission_required")',
+        self.assertIn('WORKER_EVENT_KINDS = ("terminated", "idle", "permission_required", "cwd_repaired")',
                       holder)
         # and a worker event is never converted into a steer
         self.assertNotIn('op_steer(self._heartbeat', holder)

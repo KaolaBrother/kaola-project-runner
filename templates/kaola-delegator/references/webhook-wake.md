@@ -115,7 +115,7 @@ working. A Sideagent is not a seat. A confirmed node stop or the last worker
 A dead holder with no signal gets one `error`/`holder_lost` wake per
 `holder_instance_id`, on a new `event_seq`. `start` or a dead-holder `stop`
 sends it; so does `status` when the record dir is wiped — `state_detail`
-`record_lost`, detected via `.kaola/host-registry.json`. The inquiry runs
+`record_lost`, detected from the project's host record. The inquiry runs
 `$HOOK status --project "$PROJECT"`; no Host start. `test` does not
 scan. `status` wakes a Host whose holder pid is dead, `state` not
 `stopped`, even if the agent lives. A live holder pid waits for `start` or

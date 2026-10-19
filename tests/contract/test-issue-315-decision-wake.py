@@ -80,7 +80,8 @@ class RegistrationText(unittest.TestCase):
         self.assertIn(".kaola/run", skill)
         self.assertIn("does not wake the runner", skill)
         self.assertIn("The runner reads `state.decisions` and wakes `needs_decision`", lifecycle)
-        self.assertIn("A note only in `.kaola/run/*.md` or the turn text does not", lifecycle)
+        # #362 compacted "or the turn text" to "or turn text"; the rule is unchanged.
+        self.assertIn("A note only in `.kaola/run/*.md` or turn text does not", lifecycle)
         self.assertIn("wakes `needs_decision` only from `state.decisions`", wake)
         self.assertIn("A `.kaola/run` file or turn text does not", wake)
         self.assertIn("including the turn after a compaction reload", wake)
