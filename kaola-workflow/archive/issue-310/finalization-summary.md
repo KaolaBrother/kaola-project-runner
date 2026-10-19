@@ -17,8 +17,7 @@ sources.
   every-beat reminder for recovery#76-class stale alerts ends.
 - `scripts/kaola-dispatch.py` + checkpoint records: a `partial`
   checkpoint names each unsettled input's reason —
-  `recovery-sources-empty`, `not-in-batch`, `unaccounted` — the same
-  vocabulary the kaola-project-manager Host's own diagnosis used, surfaced in the record
+  `recovery-sources-empty`, `not-in-batch`, `unaccounted`, surfaced in the record
   and to the Host.
 - Tests: `test-issue-255-lifecycle-state.py` (+230): verified
   checkpoint clears covered inputs and keeps uncovered; holder omits a
@@ -40,7 +39,7 @@ sources.
 
 - Host diff review (this run): clearing rule is exactly
   coverage-or-satisfaction with a stay-uncleared negative test; the
-  partial vocabulary matches the kaola-project-manager evidence (recovery#76/#80, batch
+  partial vocabulary matches the evidence (recovery#76/#80, batch
   b-cb80e71acb90).
 - `./scripts/render-skills.py --check` — PASS.
 - Affected suites, all exit 0: `test-issue-255-lifecycle-state.py`
@@ -111,8 +110,6 @@ Files this branch changed outside the kaola-workflow/ run-state band:
 
 ## Follow-Up Items
 
-- kaola-project-manager mirror comment on KaolaBrother/kaola-project-manager#138 after
-  merge (owner instruction: comment only).
 
 ## Final readiness
 

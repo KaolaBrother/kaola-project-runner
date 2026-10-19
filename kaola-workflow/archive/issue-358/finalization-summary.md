@@ -58,8 +58,6 @@ Files this branch changed outside the kaola-workflow/ run-state band:
 - docs/ddd/packs/c4-state-retire.md
 - docs/ddd/packs/kw-c8-seam.md
 - docs/host-compact-capabilities.md
-- docs/kpm-transfer/HANDOFF.md
-- docs/kpm-transfer/RETIREMENT-RECEIPT-2026-10-07.md
 - docs/release-candidate-2026-10-08/rqa-clean-render.log.txt
 - docs/release-candidate-2026-10-08/rqa-clean-validate.log.txt
 - scripts/kaola-acp-holder.py

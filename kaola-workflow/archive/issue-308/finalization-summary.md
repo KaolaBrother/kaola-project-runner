@@ -120,8 +120,7 @@ Files this branch changed outside the kaola-workflow/ run-state band:
 
 ## Follow-Up Items
 
-- kaola-project-manager mirror comment on KaolaBrother/kaola-project-manager#131 after
-  merge; the owner's compaction question answered as a comment on #308
+- The owner's compaction question answered as a comment on #308
   by the Host.
 
 ## Final readiness

@@ -91,7 +91,7 @@ Files this branch changed outside the kaola-workflow/ run-state band:
 
 ## Follow-Up Items
 
-- None filed. The kaola-project-manager-side mirror rule does not apply (no kaola-project-manager mirror per directive).
+- None filed.
 - searched: duplicate probe `gh issue list --state all --search "selection-mismatch
   antigravity"` before filing → no hits.
 

@@ -123,8 +123,7 @@ to the candidate worktree).
   inventory was not run (`--suite` subsets only).
 - CHANGELOG untouched (release notes are prepared at release time); the
   holder, `platforms/`, and adapters changed, so the next release carries
-  `Seats: restart required`. No tag/release/install; kaola-project-manager mirror #441 exists
-  (not touched).
+  `Seats: restart required`. No tag/release/install.
 
 ## Validation
 

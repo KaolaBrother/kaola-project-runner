@@ -42,7 +42,7 @@ CHANGELOG with `Seats: restart required`).
 ## Known failures / unverified scope
 
 - None for this candidate's own scope. The pin-blocking render findings on clean
-  origin/main are the standing pre-release state (P2/P3 classification belongs to kaola-project-manager),
+  origin/main are the standing pre-release state,
   not a defect of this run; the two render facts are reported apart per the
   finalize-residue alert.
 

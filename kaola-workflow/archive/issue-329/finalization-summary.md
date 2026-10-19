@@ -87,8 +87,7 @@ Files this branch changed outside the kaola-workflow/ run-state band:
 
 ## Follow-Up Items
 
-- None filed (no new KPR issues without owner direction; no kaola-project-manager mirror — kaola-project-manager aligns from this
-  issue).
+- None filed (no new KPR issues without owner direction).
 
 ## Final readiness
 

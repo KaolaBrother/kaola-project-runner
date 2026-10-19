@@ -16,7 +16,7 @@ legitimate wake from a pre-upgrade holder is not lost across an install.
   - Payload validation: the key set is split into
     `DELEGATOR_WEBHOOK_PAYLOAD_CORE_KEYS` (the first #299 sender shape)
     and optional `state_detail`/`reason` (v0.9.6 / v0.9.7 additions), so
-    a running pre-upgrade holder's payload (the kaola-project-manager evidence: events
+    a running pre-upgrade holder's payload (events
     3626/3635/3639 refused `invalid-payload` during the v0.9.7 switch)
     delivers with an honest `reason: null`; genuinely malformed payloads
     (wrong schema, missing core identity keys) are still refused.
@@ -39,7 +39,7 @@ legitimate wake from a pre-upgrade holder is not lost across an install.
 ## Evidence
 
 - Host diff review (this run): receipt schema and tolerant validation
-  verified against the issue's expected behavior and the kaola-project-manager evidence.
+  verified against the issue's expected behavior.
 - `./scripts/render-skills.py --check` — PASS.
 - Affected suites, all exit 0: `test-issue-299-delegator-webhook.py`
   (updated), `test-issue-302-delegator-wake-gate.py`,
