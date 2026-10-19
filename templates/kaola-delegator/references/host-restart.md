@@ -22,6 +22,13 @@ A fresh Host is `start` without `--resume`, and only after the current
 authorization (handoff Recover step 4). Say that this is a new ACP session
 and a new holder. Do not retry the dead session.
 
+A dsh Host session keeps the permission preset it was born with: the resume
+receipt reports `config_application.mode.applied: false` with
+`reason: resumed-session-permission` and the session's recorded values under
+`effective`. A session born confined (`workspace-write`) stays confined no
+matter how it is resumed — gaining full access takes this fresh-session path
+with a handoff summary, never another resume.
+
 ```bash
 "$RUNNER" start --repo "$PROJECT" --session "$HOST" --no-wait --text '<handoff>'
 ```

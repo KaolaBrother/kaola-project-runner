@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: ./scripts/render-skills.py --write && ./scripts/render-skills.py --check && ./scripts/validate.sh --suite test-issue-362-versionless-retire.py --suite test-issue-354-state-bloat.py --suite test-issue-259-record-contract.py --suite test-issue-255-lifecycle-state.py --suite test-issue-286-retire-input.py --suite test-issue-327-obsolete-returned-inputs.py --suite test-issue-298-absent-decision-retire.py --suite test-issue-349-checkpoint-verb.py --suite test-issue-309-recovery-routes.py --suite test-issue-348-backstop-sweep.py
+validated_candidate_hash: 8f06f2e3f6fc4c0d40634af4b633ecf701912f4e4d297cd268898b2f14084443

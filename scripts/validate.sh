@@ -248,6 +248,7 @@ python_suites_all=(
   "test-issue-50-runner-integration.py"
   "test-issue-266-launch-broker.py"
   "test-issue-266-launch-broker-composed.py"
+  "test-issue-371-launchd-unreadable.py"
   "test-zcode-acp-contract.py"
   "test-droid-acp-contract.py"
   "test-issue-51-runner-integration.py"
@@ -314,6 +315,7 @@ python_suites_all=(
   "test-issue-259-record-contract.py"
   "test-issue-286-retire-input.py"
   "test-issue-354-state-bloat.py"
+  "test-issue-362-versionless-retire.py"
   "test-issue-267-rejection-count.py"
   "test-issue-268-selection-continuity.py"
   "test-issue-273-list-identity.py"
@@ -351,10 +353,12 @@ python_suites_all=(
   "test-issue-352-droid-session-timeout.py"
   "test-issue-316-resume-model-evidence.py"
   "test-issue-308-resume-reconcile.py"
+  "test-issue-363-dsh-resume-permission.py"
   "test-issue-309-recovery-routes.py"
   "test-issue-313-name-advisory.py"
   "test-issue-312-seat-drift.py"
   "test-issue-289-dead-holder-stop.py"
+  "test-issue-359-record-loss.py"
   "test-issue-274-package-closure.py"
   "test-issue-271-dispatch-help.py"
   "test-issue-264-validate-lane-integrity.py"
@@ -401,6 +405,7 @@ python_suites_a=(
   "test-issue-354-state-bloat.py"
   "test-issue-266-launch-broker.py"
   "test-issue-266-launch-broker-composed.py"
+  "test-issue-371-launchd-unreadable.py"
   "test-issue-267-rejection-count.py"
   "test-issue-268-selection-continuity.py"
   "test-issue-273-list-identity.py"
@@ -497,9 +502,11 @@ python_suites_b=(
   "test-issue-352-droid-session-timeout.py"
   "test-issue-316-resume-model-evidence.py"
   "test-issue-308-resume-reconcile.py"
+  "test-issue-363-dsh-resume-permission.py"
   "test-issue-309-recovery-routes.py"
   "test-issue-289-dead-holder-stop.py"
-)
+  "test-issue-362-versionless-retire.py"
+  "test-issue-359-record-loss.py")
 
 # Selectable shell contract suites: they run serially before the Python lanes.
 shell_suites=(

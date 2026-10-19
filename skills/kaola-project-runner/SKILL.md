@@ -43,7 +43,7 @@ Routine, cron, or sleep loop. Its first prompt names its
 Every Host assignment uses `--no-wait` and ends the turn: direct Runner/Workflow,
 continuation, repair and finalize. Beat mechanics - end the turn as the wait: [references/zcode-host-dispatch.md](references/zcode-host-dispatch.md).
 Each inner worker is its own session and process group: an inner stop never
-reaches the Host; the Host's stop sweeps only recorded inner sessions.
+reaches the Host; the Host's stop keeps the Runner sessions it opened.
 Grok Bot is not an entry for this Skill: it loads generated `kaola-delegator`,
 which starts one Host that loads this Skill. `--platform grok` is the
 Grok CLI worker; `--platform grok-bot` is invalid. Do not create a Grok Bot

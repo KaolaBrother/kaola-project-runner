@@ -393,8 +393,9 @@ def normalize_grants(auth: dict[str, Any]) -> list[dict[str, Any]]:
         if switch is not None and not isinstance(switch, bool):
             raise ValueError(f"{preset}: model_switch must be a boolean")
         count = item.get("count")
-        if count is not None and (not isinstance(count, int) or isinstance(count, bool) or count < 0):
-            raise ValueError(f"{preset}: count must be a non-negative integer")
+        if count is not None and count != "unlimited" and (
+                not isinstance(count, int) or isinstance(count, bool) or count < 0):
+            raise ValueError(f"{preset}: count must be a non-negative integer or the literal unlimited")
         shared = item.get("shared_seat")
         if shared is not None and not isinstance(shared, str):
             raise ValueError(f"{preset}: shared_seat must be a string")
@@ -1854,8 +1855,8 @@ def delegator_ceiling(repo: str, observations: list[dict[str, Any]] | None = Non
                         and all(isinstance(item, str) and item for item in grant["preset_ids"])):
                     named_ids = list(dict.fromkeys(grant["preset_ids"]))
             # A named row with known ids refuses those ids. Anything else,
-            # including a bad all-worker count, refuses the Worker class.
-            # Neither path turns the count into unlimited.
+            # including a row whose ids cannot be read, refuses the Worker
+            # class. Neither path turns the count into unlimited.
             if named_ids and "refuses the Worker class" not in (error.get("recovery") or ""):
                 bad_worker.add(int(match.group(1)))
                 for ident in named_ids:
@@ -1920,9 +1921,7 @@ def delegator_ceiling(repo: str, observations: list[dict[str, Any]] | None = Non
         for index, grant in enumerate(grant_rows):
             if index in bad_worker or not isinstance(grant, dict):
                 continue
-            if grant.get("scope") == "all-worker-presets" and "preset_ids" not in grant:
-                ids = set(catalog_workers)
-            elif isinstance(grant.get("preset_ids"), list) and "scope" not in grant:
+            if isinstance(grant.get("preset_ids"), list) and "scope" not in grant:
                 # Elite and Expert ids are not Worker grants, even when named.
                 ids = {ident for ident in grant["preset_ids"] if ident in catalog_workers}
             else:
@@ -1943,15 +1942,6 @@ def delegator_ceiling(repo: str, observations: list[dict[str, Any]] | None = Non
                 worker_expired.update(ids)
                 continue
             if window == "unreadable":
-                if grant.get("scope") == "all-worker-presets":
-                    worker_problem = RECORD.refusal(
-                        "authorization.worker_grants", "ISO-8601 instant with an offset",
-                        "Delegator: an unreadable Worker expiry refuses the Worker class and is not unlimited",
-                    )
-                    worker_ids.clear()
-                    worker_counts.clear()
-                    worker_expired.clear()
-                    break
                 for ident in ids:
                     worker_problems.setdefault(ident, "ceiling-unreadable")
                 continue
@@ -5624,9 +5614,35 @@ def validate_record(kind: str, record: dict[str, Any]) -> str | None:
     return None
 
 
+def record_versionless(record: Any) -> bool:
+    """Issue #362: a record written before record revisions carries no usable
+    `rev`, so no `--expect-rev` value can ever name it."""
+    return (isinstance(record, dict)
+            and (not isinstance(record.get("rev"), int) or isinstance(record.get("rev"), bool)))
+
+
+def migrate_command(args: argparse.Namespace) -> str:
+    """The read-only `state migrate` plan the operator reviews before --write."""
+    return shlex.join([sys.executable, str(Path(__file__).resolve()), "state", "migrate",
+                       "--file", str(args.file)])
+
+
+def versionless_recovery(args: argparse.Namespace) -> str:
+    """The documented repair for a record that predates record revisions (#362)."""
+    return (f"{migrate_command(args)} is the read-only plan whose removed list names each "
+            "record assigned rev 1; rerun it with --write, then `state check` shows the "
+            "record's rev and the normal command applies")
+
+
 def record_recovery(args: argparse.Namespace, doc: dict[str, Any], current: dict[str, Any] | None) -> str:
     """Name the existing operation. The Agent decides whether the duty is handled."""
     target = f"{args.kind}/{args.id}"
+    if current is not None and record_versionless(current):
+        return (f"{target} exists at file revision {doc['revision']} but predates record "
+                f"revisions (rev {current.get('rev')!r}); no --expect-rev value can name it. "
+                f"{versionless_recovery(args)}. If the matter is unresolved, retain its "
+                "original evidence and use the current decision/reconciliation route until "
+                "its proper type is established. Unknown is not resolved.")
     if current is None:
         text = (f"{target} is absent at file revision {doc['revision']}. Do not create a handled or "
                 "inapplicable row or move its text to another field. ")
@@ -6099,11 +6115,14 @@ def settle_recovery(args: argparse.Namespace, doc: dict[str, Any], current: dict
     maintenance = state.get("maintenance") if isinstance(state.get("maintenance"), dict) else {}
     last = maintenance.get("last_checkpoint") if isinstance(maintenance.get("last_checkpoint"), dict) else {}
     span = last.get("host_revision") or {}
-    command = shlex.join([sys.executable, str(Path(__file__).resolve()), "state", "update",
-                          "--file", str(args.file), "--writer", args.writer, "--source", "ORIGINAL_SOURCE",
-                          "--kind", "alerts", "--id", args.id, "--expect-rev", str(current.get("rev")),
-                          "--evidence", f"checkpoint:{last.get('batch') or 'BATCH'}",
-                          "--set", json.dumps({"inputs": {ident: None}})])
+    if record_versionless(current):
+        command = f"{versionless_recovery(args)}; the same update then removes the input"
+    else:
+        command = shlex.join([sys.executable, str(Path(__file__).resolve()), "state", "update",
+                              "--file", str(args.file), "--writer", args.writer, "--source", "ORIGINAL_SOURCE",
+                              "--kind", "alerts", "--id", args.id, "--expect-rev", str(current.get("rev")),
+                              "--evidence", f"checkpoint:{last.get('batch') or 'BATCH'}",
+                              "--set", json.dumps({"inputs": {ident: None}})])
     others = len((current.get("inputs") or {})) - 1
     inputs = current.get("inputs") if isinstance(current.get("inputs"), dict) else {}
     hint = _OBSOLETE_RETIRE_ROUTE if obsolete_input_class(ident, inputs.get(ident)) is not None else ""
@@ -6130,6 +6149,11 @@ def settle_inputs(args: argparse.Namespace, doc: dict[str, Any], current: dict[s
     if current is None:
         raise StateRefusal("record-missing", f"alerts/{args.id} is not current",
                            recovery=record_recovery(args, doc, current), unapplied=patch)
+    if record_versionless(current):
+        raise StateRefusal("record-versionless",
+                           f"alerts/{args.id} predates record revisions (rev "
+                           f"{current.get('rev')!r}); no --expect-rev value can name it",
+                           recovery=versionless_recovery(args), unapplied=patch)
     if args.expect_rev != current.get("rev"):
         raise StateRefusal("expect-rev-required" if args.expect_rev is None else "conflict",
                            f"alerts/{args.id} is at rev {current.get('rev')}, not {args.expect_rev}",
@@ -6239,6 +6263,12 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
     expected = args.expect_rev
     if not coalesce:
         actual = current.get("rev") if current else 0
+        if record_versionless(current):
+            raise StateRefusal("record-versionless",
+                               f"{kind}/{record_id} predates record revisions (rev "
+                               f"{current.get('rev')!r}); no --expect-rev value can name it",
+                               current=current, recovery=versionless_recovery(args),
+                               unapplied=patch)
         if current is not None and expected is None:
             raise StateRefusal("expect-rev-required", f"{kind}/{record_id} exists; pass --expect-rev",
                                current=current)
@@ -6651,6 +6681,10 @@ def _index_arguments(args: argparse.Namespace) -> list[str]:
 
 def retire_command(args: argparse.Namespace, kind: str, ident: str, record: dict[str, Any]) -> str:
     """One host retire the operator can run. It rewrites nothing by being built."""
+    if record_versionless(record):
+        # Issue #362: the assigned rev follows `state migrate --write`; the
+        # read-only plan is the next runnable step.
+        return migrate_command(args)
     parts = [sys.executable, str(Path(__file__).resolve()), "state", "retire",
              "--file", str(args.file), "--writer", "host", "--source", "ORIGINAL_SOURCE",
              "--kind", kind, "--id", str(ident), "--expect-rev", str(record.get("rev")),
@@ -6668,6 +6702,8 @@ def retire_command(args: argparse.Namespace, kind: str, ident: str, record: dict
 
 
 def update_hint_command(args: argparse.Namespace, kind: str, ident: str, record: dict[str, Any]) -> str:
+    if record_versionless(record):
+        return migrate_command(args)
     parts = [sys.executable, str(Path(__file__).resolve()), "state", "update",
              "--file", str(args.file), "--writer", "host", "--source", "ORIGINAL_SOURCE",
              "--kind", kind, "--id", str(ident), "--expect-rev", str(record.get("rev")),
@@ -7115,6 +7151,11 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
     if current is None:
         raise StateRefusal("record-missing", f"{kind}/{record_id} is not current",
                            recovery=record_recovery(args, doc, current))
+    if record_versionless(current):
+        raise StateRefusal("record-versionless",
+                           f"{kind}/{record_id} predates record revisions (rev "
+                           f"{current.get('rev')!r}); no --expect-rev value can name it",
+                           current=current, recovery=versionless_recovery(args))
     if args.expect_rev is None:
         raise StateRefusal("expect-rev-required", "retire needs --expect-rev of the current record")
     if args.expect_rev != current.get("rev"):
@@ -8727,6 +8768,7 @@ SWEEP_KAOLA_OWN = frozenset({
     "delegator-webhook-receipts.json", "delegator-webhook-receipts.lock",
     "delegator-webhook-claims.json", "dispatch-index.json",
     "dispatch-availability.json", "dispatch-plan.json", "dispatch-live.json",
+    "host-registry.json", "host-registry.lock",
     "run",
 })
 SWEEP_RECEIPT_SCHEMA = "kaola-sweep/1"
@@ -10365,7 +10407,11 @@ def command_delegator_migrate(args: argparse.Namespace) -> int:
     try:
         with StateLock(path):
             doc = _delegator_read(path)
-            migrated, blockers, dropped = RECORD.delegator_migrated(doc, frozenset(ident for ident, row in catalog_from_files(platform_paths(Path(__file__), None)).items() if row["class"] == "Expert"))
+            catalog = catalog_from_files(platform_paths(Path(__file__), None))
+            migrated, blockers, dropped = RECORD.delegator_migrated(
+                doc,
+                frozenset(ident for ident, row in catalog.items() if row["class"] == "Expert"),
+                frozenset(ident for ident, row in catalog.items() if row["class"] == "Worker"))
             if blockers or migrated is None:
                 delegator_recovery(args, doc, blockers)
                 return emit({"result": "blocked", "writes": False, "blockers": blockers,
@@ -10395,6 +10441,16 @@ def command_delegator_update(args: argparse.Namespace) -> int:
             limits = RECORD.aggregate_limit_blockers({key: value for key, value in auth_patch.items() if value is not None}, delegator=True)
             if limits:
                 return emit({"result": "refused", "reason": "invalid-input", **limits[0], "blockers": limits}, 2)
+            worker_rows = auth_patch.get("worker_grants")
+            if isinstance(worker_rows, list) and any(
+                    isinstance(row, dict) and "scope" in row for row in worker_rows):
+                refused = RECORD.refusal(
+                    "authorization.worker_grants",
+                    "one worker_grants row per preset in preset_ids",
+                    "Delegator: write one row per preset with its own count; granting all presets is one "
+                    "row per preset. A stored all-worker-presets row is expanded once by delegator migrate; "
+                    "the file was not changed")
+                return emit({"result": "refused", "reason": "invalid-input", **refused}, 2)
         receipt: dict[str, Any] | None = None
         with StateLock(path):
             doc = _delegator_read(path)
@@ -10441,7 +10497,11 @@ def command_delegator_update(args: argparse.Namespace) -> int:
                            for key, value in auth_patch.items() if value is not None and key not in RECORD.DELEGATOR_AUTH_KEYS]
                 if invalid:
                     return emit({"result": "refused", "reason": "invalid-input", "blockers": invalid, **invalid[0]}, 2)
-            normalized, blockers, _dropped = RECORD.delegator_migrated(merged, frozenset(ident for ident, row in catalog_from_files(platform_paths(Path(__file__), None)).items() if row["class"] == "Expert"))
+            catalog = catalog_from_files(platform_paths(Path(__file__), None))
+            normalized, blockers, _dropped = RECORD.delegator_migrated(
+                merged,
+                frozenset(ident for ident, row in catalog.items() if row["class"] == "Expert"),
+                frozenset(ident for ident, row in catalog.items() if row["class"] == "Worker"))
             for ident, item in (patch.get("watch") or {}).items() if isinstance(patch.get("watch"), dict) else []:
                 if (isinstance(item, dict) and item.get("status") in ("adopted", "settled")
                         and ident not in (doc.get("watch") or {})):

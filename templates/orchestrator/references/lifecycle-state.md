@@ -32,7 +32,7 @@ The Host gets outcomes, capacity and pending decisions.
 - `$S update --kind tasks|holds|alerts|decisions --id ID --set PATCH
   [--expect-rev N]`: JSON merge patch of one record (`null` deletes a key;
   `@path` reads a file). An existing record needs `--expect-rev`; a stale one
-  exits 3 with `current` and `unapplied`: reconcile and retry. `--coalesce` counts a repeated alert.
+  exits 3 with `current` and `unapplied`. `--coalesce` counts a repeated alert.
 - `$S update --section project|authorization|sideagent|recovery|unverified
   --expect-revision N --set PATCH`: first three Host-only.
 - `$S retire --kind K --id ID --expect-rev N --evidence REF [--outcome T]
@@ -46,11 +46,12 @@ The Host gets outcomes, capacity and pending decisions.
   `sideagent-not-live`, `carrier-unproven`, `state-bloat`. `state-bloat`
   lists accepted-done and cancelled tasks, settled decisions, alerts whose
   `inputs` is empty, and shell tasks (evidence is only `retired:tasks/ID`,
-  duty fields empty). Each names the collection, id, rev, and a `state retire`
+  duty fields empty). Each names kind, id, rev, and a `state retire`
   command. A large row is a hint in `diagnosis`, not a gate. `done-not-retired`
-  stays watch until `maintenance.handled_host_revision` covers that task, then
-  warn, and does not refuse writes. `carrier-unproven` names `state migrate
-  --live`. Check stores nothing.
+  stays watch until `maintenance.handled_host_revision` covers it, then
+  warns without refusing writes. `carrier-unproven` names `state migrate
+  --live`. A row lacking `rev` is `record-versionless` and names the
+  `migrate` plan; `--write` assigns `rev 1`. Check stores nothing.
 - `$S migrate [--index I] [--live L] [--repo R] [--write]`; `$S timer`
   is the Delegator's.
 
@@ -69,7 +70,7 @@ The Host gets outcomes, capacity and pending decisions.
 - `decisions` (`owner` `host|delegator|user`, `question`): open owner answers.
   A Delegator decision is a row here (`owner` `delegator` or `user`, `status`
   `pending`). The runner reads `state.decisions` and wakes `needs_decision`.
-  A note only in `.kaola/run/*.md` or the turn text does not. Host settles
+  A note only in `.kaola/run/*.md` or turn text does not. Host settles
   with `update --set status/evidence ORIGINAL` or `retire --evidence ORIGINAL`.
   A Sideagent copy needs `--host-turn` and stays pending Host adoption. No row:
   `retire --kind decisions --id ID --absent --evidence E` (receipt; stores nothing).
@@ -114,8 +115,8 @@ notify target. Workers report to the live Host holder (`sideagent-host`). A
 Host advertising `sideagent-relay/1` relays them to the bound Sideagent and
 wakes the Host only when attention changed. A dead, failed, or cancelled turn
 returns them. Delivery is at-least-once. `"mode": "node"` keeps events with
-the Host ([sideagent-node.md](sideagent-node.md)). After
-`--preserve-dispatched-workers`, the new Host runs `rebind-host` for that seat
+the Host ([sideagent-node.md](sideagent-node.md)). After a Host stop kept its
+seats, the new Host runs `rebind-host` for that seat
 only. `unknown-op`: `drain-restart` the seat at idle.
 
 ## Size
@@ -136,7 +137,7 @@ After a Skill update, at a safe point, run `$S migrate --index I --live L`;
 without `--write` it only plans. With `--write`, each v1 `active` row becomes
 a `doing` task, `pending` keeps its stated stage or stays `todo`, and
 `recovery.protected_untracked` stays for a list of strings. Other
-legacy names leave and are not copied. Unknown keys become `unverified`
+legacy names leave. Unknown keys become `unverified`
 locators. A critical mapping writes nothing. Do not write
 `heartbeat-prompt.v1-<sha12>.json`. `state-overwritten` is not raised from
 those copies. Hash-named copies are not deleted or trusted. An unknown schema

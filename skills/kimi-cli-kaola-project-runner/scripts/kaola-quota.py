@@ -6,14 +6,21 @@ Platform manifests store two JSON documents as ordinary JSON strings
 
 ``quota_packages``
     A JSON array. Each object has ``id`` (``^[a-z][a-z0-9_-]*$``), ``name``
-    (non-empty string), optional ``binds_models`` (bool, default true), and
-    optional ``windows`` (null or an array of non-empty strings). Current
-    period values are ``5h``, ``weekly``, and ``monthly``; multiple windows
-    may apply to one package. An empty array means the package is verified to
-    have no time-based reset window. Null means its period is not established.
-    No other keys. ``binds_models: false`` is a balance the Usage page can
-    list and that a ``native_field`` rule may name, and that ``single`` /
-    ``explicit`` / ``provider_prefix`` must not target.
+    (non-empty string), optional ``binds_models`` (bool, default true),
+    optional ``windows`` (null or an array of non-empty strings), and optional
+    ``pool`` (a bare token). ``pool`` names the provider-side quota pool the
+    package bills to; packages declared on different runtimes that carry the
+    same ``pool`` describe the same shared pool — Issue #368 merges Grok and
+    Cursor usage into pool ``cursor-grok``, which each runtime acquires from
+    its own source (Cursor reads Cursor usage, Grok reads Grok billing) with
+    no cross-mapping, mirroring, or derivation. A package without ``pool`` is
+    its own pool, addressed by its qualified id ``<platform>:<token>``.
+    Current period values are ``5h``, ``weekly``, and ``monthly``; multiple
+    windows may apply to one package. An empty array means the package is
+    verified to have no time-based reset window. Null means its period is not
+    established. No other keys. ``binds_models: false`` is a balance the Usage
+    page can list and that a ``native_field`` rule may name, and that
+    ``single`` / ``explicit`` / ``provider_prefix`` must not target.
 
 ``model_package_rule``
     One JSON object. ``kind`` is exactly one of:
@@ -70,7 +77,7 @@ PLATFORM_ORDER = (
     "antigravity", "claude-code", "codex", "cursor-cli", "devin", "droid",
     "dsh", "grok", "kimi-cli", "opencode", "zcode",
 )
-PACKAGE_KEYS = {"id", "name", "binds_models", "windows"}
+PACKAGE_KEYS = {"id", "name", "binds_models", "windows", "pool"}
 TOKEN = re.compile(r"^[a-z][a-z0-9_-]*$")
 FIELD_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _MISSING = object()
@@ -124,11 +131,19 @@ def parse_packages(raw: str) -> list[dict[str, Any]]:
                 raise QuotaError(
                     f"quota_packages[{index}].windows must be null or an array of strings"
                 )
+        pool = item.get("pool")
+        if pool is not None and (
+            not isinstance(pool, str) or TOKEN.fullmatch(pool) is None
+        ):
+            raise QuotaError(
+                f"quota_packages[{index}].pool must be a bare pool token"
+            )
         packages.append({
             "id": token,
             "name": name,
             "binds_models": binds,
             "windows": windows,
+            "pool": pool,
         })
     return packages
 
@@ -357,23 +372,30 @@ class Catalog:
                  model_config_id: str) -> None:
         self.platform = platform
         self.packages = packages
+        self.packages_by_id = {package["id"]: package for package in packages}
         self.rule = rule
         self.model_config_id = model_config_id
 
     def qualified(self, token: str) -> str:
         return f"{self.platform}:{token}"
 
+    def package_for(self, token: str) -> dict[str, Any]:
+        return self.packages_by_id[token]
+
     def public_packages(self) -> list[dict[str, Any]]:
         """Consumer rows. ``id`` is ``<platform>:<token>``; null windows mean unknown."""
-        return [
-            {
+        rows: list[dict[str, Any]] = []
+        for package in self.packages:
+            row = {
                 "id": self.qualified(package["id"]),
                 "name": package["name"],
                 "windows": package["windows"],
                 "binds_models": package["binds_models"],
             }
-            for package in self.packages
-        ]
+            if package["pool"] is not None:
+                row["pool"] = package["pool"]
+            rows.append(row)
+        return rows
 
 
 def load_catalog(platform: str, script_dir: Path | None = None) -> Catalog:
@@ -408,12 +430,16 @@ def provider_segment(model_id: str) -> str | None:
 
 
 def resolve_model(catalog: Catalog, model_id: Any, row: dict[str, Any] | None = None) -> dict[str, Any]:
-    """``{packageId, status}``. ``packageId`` is ``<platform>:<token>`` or null."""
+    """``{packageId, pool?, status}``. ``packageId`` is ``<platform>:<token>`` or null."""
     text = model_id.strip() if isinstance(model_id, str) else ""
     token = _resolve_token(catalog, text, row if isinstance(row, dict) else None)
     if token is None:
         return {"packageId": None, "status": "unmapped"}
-    return {"packageId": catalog.qualified(token), "status": "mapped"}
+    result: dict[str, Any] = {"packageId": catalog.qualified(token), "status": "mapped"}
+    pool = catalog.package_for(token).get("pool")
+    if pool is not None:
+        result["pool"] = pool
+    return result
 
 
 def _resolve_token(catalog: Catalog, model_id: str, row: dict[str, Any] | None) -> str | None:
@@ -461,7 +487,10 @@ def _native_token(catalog: Catalog, row: dict[str, Any] | None) -> str | None:
 
 def _stamp(row: dict[str, Any], catalog: Catalog, model_id: str, evidence: dict[str, Any]) -> None:
     resolved = resolve_model(catalog, model_id, evidence)
-    row["quotaPool"] = resolved["packageId"]
+    # ``quotaPool`` names the billed pool: the shared ``pool`` id when the
+    # package declares one (several runtimes may share it), else the
+    # package's qualified id.
+    row["quotaPool"] = resolved.get("pool") or resolved["packageId"]
     if resolved["status"] == "unmapped":
         row["quotaPoolStatus"] = "unmapped"
     else:
@@ -901,6 +930,450 @@ def probe_antigravity_usage(
     result = parse_antigravity_usage(raw_stdout, model=model, stderr=raw_stderr)
     result["command"] = cmd
     return result
+
+
+CURSOR_API_BASE = "https://api2.cursor.sh"
+CURSOR_KEY_NAME = "CURSOR_API_KEY"
+CURSOR_USAGE_PATH = "/auth/usage"
+CURSOR_PACKAGE = "cursor-cli:account"
+GROK_BILLING_BASE = "https://code.grok.com"
+GROK_KEY_NAME = "GROK_API_KEY"
+GROK_BILLING_PATH = "/billing?format=credits"
+GROK_PACKAGE = "grok:account"
+# Issue #368: the Grok+Cursor shared pool. Both manifests declare this pool
+# token; each runtime acquires it from its own source with no cross-mapping.
+CURSOR_GROK_POOL = "cursor-grok"
+
+
+def _cursor_home(env: Mapping[str, str]) -> Path:
+    raw = env.get("CURSOR_HOME")
+    if isinstance(raw, str) and raw.strip():
+        return Path(raw).expanduser()
+    home = env.get("HOME")
+    base = Path(home).expanduser() if isinstance(home, str) and home.strip() else Path.home()
+    return base / ".cursor"
+
+
+def read_cursor_api_key(env: Mapping[str, str] | None = None) -> str | None:
+    """``CURSOR_API_KEY`` from the process env, then ``~/.cursor/.env``, then ``refs:``.
+
+    A non-empty ``CURSOR_HOME`` replaces ``~/.cursor`` and does not fall back
+    to it. The returned string is for the request header only. Callers must
+    not log it.
+    """
+    source: Mapping[str, str] = os.environ if env is None else env
+    direct = source.get(CURSOR_KEY_NAME)
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+    home = _cursor_home(source)
+    dotenv = _read_limited(home / ".env")
+    if dotenv:
+        found = _dotenv_named(dotenv, CURSOR_KEY_NAME)
+        if found:
+            return found
+    credentials = _read_limited(home / ".credentials.yaml")
+    if credentials:
+        found = _credentials_ref(credentials, CURSOR_KEY_NAME)
+        if found and found.strip():
+            return found.strip()
+    return None
+
+
+def _grok_home(env: Mapping[str, str]) -> Path:
+    raw = env.get("GROK_HOME")
+    if isinstance(raw, str) and raw.strip():
+        return Path(raw).expanduser()
+    home = env.get("HOME")
+    base = Path(home).expanduser() if isinstance(home, str) and home.strip() else Path.home()
+    return base / ".grok"
+
+
+def _grok_expiry_seconds(value: Any) -> float | None:
+    """Parse an ``expires_at`` field (epoch s/ms or ISO text) to epoch seconds."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        raw = float(value)
+        return raw / 1000.0 if raw > 1e12 else raw
+    if isinstance(value, str) and value.strip():
+        text = value.strip().replace("Z", "+00:00")
+        try:
+            return datetime.fromisoformat(text).timestamp()
+        except ValueError:
+            return None
+    return None
+
+
+def read_grok_api_key(env: Mapping[str, str] | None = None) -> str | None:
+    """A Grok billing bearer: ``GROK_API_KEY`` env, ``~/.grok/.env``, then
+    the ``grok login`` session key in ``~/.grok/auth.json``.
+
+    A non-empty ``GROK_HOME`` replaces ``~/.grok`` and does not fall back to
+    it. The returned string is for the request header only. Callers must not
+    log it.
+    """
+    source: Mapping[str, str] = os.environ if env is None else env
+    direct = source.get(GROK_KEY_NAME)
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+    home = _grok_home(source)
+    dotenv = _read_limited(home / ".env")
+    if dotenv:
+        found = _dotenv_named(dotenv, GROK_KEY_NAME)
+        if found:
+            return found
+    auth = _read_limited(home / "auth.json")
+    if not auth:
+        return None
+    try:
+        parsed = json.loads(auth)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    now = time.time()
+    fallback: str | None = None
+    for entry in parsed.values():
+        if not isinstance(entry, dict):
+            continue
+        key = entry.get("key")
+        if not isinstance(key, str) or not key.strip():
+            continue
+        expiry = _grok_expiry_seconds(entry.get("expires_at"))
+        if expiry is None or expiry > now:
+            return key.strip()
+        if fallback is None:
+            fallback = key.strip()
+    return fallback
+
+
+def _usage_get(url: str, headers: dict[str, str], timeout: float) -> tuple[int | None, bytes | str]:
+    request = urllib.request.Request(url, headers=headers, method="GET")
+    opener = urllib.request.build_opener(_CommandCodeNoRedirect)
+    try:
+        with opener.open(request, timeout=timeout) as response:
+            status = getattr(response, "status", None) or response.getcode()
+            return int(status), response.read(1_000_000)
+    except urllib.error.HTTPError as exc:
+        try:
+            body = exc.read(64_000)
+        except Exception:
+            body = b""
+        return int(exc.code), body
+    except urllib.error.URLError as exc:
+        reason = exc.reason
+        text = str(reason).lower()
+        if isinstance(reason, (TimeoutError, socket.timeout)) or "timed out" in text:
+            return None, "timeout"
+        return None, "network"
+    except (TimeoutError, socket.timeout):
+        return None, "timeout"
+    except OSError:
+        return None, "network"
+
+
+def _cursor_envelope(model: str | None, status: str, reason: str | None = None) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "platform": "cursor-cli",
+        "packageId": CURSOR_PACKAGE,
+        "pool": CURSOR_GROK_POOL,
+        "status": status,
+        "model": model,
+        "quota": None,
+        "windows": {},
+    }
+    if reason is not None:
+        result["reason"] = reason
+    return result
+
+
+def _grok_envelope(model: str | None, status: str, reason: str | None = None) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "platform": "grok",
+        "packageId": GROK_PACKAGE,
+        "pool": CURSOR_GROK_POOL,
+        "status": status,
+        "model": model,
+        "quota": None,
+        "windows": {},
+    }
+    if reason is not None:
+        result["reason"] = reason
+    return result
+
+
+def _monthly_metrics(
+    used: int | float | None,
+    limit: int | float | None,
+    used_percent: int | float | None,
+    reset_at: str | None,
+) -> dict[str, Any]:
+    rem_pct = None
+    used_pct = used_percent
+    rem_fraction = None
+    used_fraction = None
+    if isinstance(used_pct, (int, float)) and not isinstance(used_pct, bool):
+        used_pct = max(0.0, min(100.0, round(float(used_pct), 2)))
+        rem_pct = round(100.0 - used_pct, 2)
+        used_fraction = round(used_pct / 100.0, 4)
+        rem_fraction = round(1.0 - used_fraction, 4)
+    elif isinstance(limit, (int, float)) and not isinstance(limit, bool) and limit > 0 and isinstance(used, (int, float)) and not isinstance(used, bool):
+        rem_fraction = max(0.0, min(1.0, (float(limit) - float(used)) / float(limit)))
+        used_fraction = round(1.0 - rem_fraction, 4)
+        used_pct = round(used_fraction * 100.0, 2)
+        rem_pct = round(rem_fraction * 100.0, 2)
+    return {
+        "window": "monthly",
+        "used": used,
+        "limit": limit,
+        "used_percent": used_pct,
+        "remaining_percent": rem_pct,
+        "remaining_fraction": rem_fraction,
+        "used_fraction": used_fraction,
+        "reset_at": reset_at,
+    }
+
+
+def _next_month_reset(start_of_month: str | None) -> str | None:
+    """The monthly reset: one calendar month after ``startOfMonth``."""
+    if not isinstance(start_of_month, str) or not start_of_month.strip():
+        return None
+    text = start_of_month.strip().replace("Z", "+00:00")
+    try:
+        start = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    year = start.year + (1 if start.month == 12 else 0)
+    month = 1 if start.month == 12 else start.month + 1
+    try:
+        end = start.replace(year=year, month=month)
+    except ValueError:
+        return None
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    return end.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def parse_cursor_usage(
+    raw: str,
+    model: str | None = None,
+    stderr: str = "",
+) -> dict[str, Any]:
+    """Parse ``GET {CURSOR_API_ENDPOINT|api2.cursor.sh}/auth/usage`` output.
+
+    The response is per-model-bucket request counters plus ``startOfMonth``;
+    the unified account reads one shared pool, so buckets aggregate into a
+    single monthly window. Returns the standard usage envelope for pool
+    ``cursor-grok`` with ``status`` ``ok`` | ``login_required`` |
+    ``unavailable`` | ``error``.
+    """
+    base = _cursor_envelope(model, "error")
+    stderr_text = (stderr or "").strip()
+    raw_text = (raw or "").strip()
+    payload: Any = None
+    if raw_text:
+        try:
+            payload = json.loads(raw_text)
+        except json.JSONDecodeError:
+            payload = None
+    if not isinstance(payload, dict):
+        lowered = stderr_text.lower()
+        if "auth" in lowered or "log in" in lowered or "401" in lowered:
+            base["status"] = "login_required"
+            base["error"] = stderr_text or "authentication required"
+        else:
+            base["error"] = stderr_text or "invalid JSON from cursor /auth/usage"
+        return base
+    error_text = payload.get("error")
+    if isinstance(error_text, str) and error_text.strip():
+        lowered = error_text.lower()
+        base["status"] = "login_required" if "auth" in lowered or "log in" in lowered else "unavailable"
+        base["error"] = error_text.strip()
+        return base
+    buckets = {
+        key: value
+        for key, value in payload.items()
+        if isinstance(value, dict) and isinstance(value.get("numRequests"), (int, float))
+    }
+    if not buckets:
+        base["status"] = "unavailable"
+        base["error"] = "no usage buckets in cursor /auth/usage response"
+        return base
+    used = 0.0
+    limit = 0.0
+    saw_limit = False
+    for value in buckets.values():
+        used += float(value.get("numRequests") or 0)
+        cap = value.get("maxRequestUsage")
+        if isinstance(cap, (int, float)) and not isinstance(cap, bool) and cap > 0:
+            limit += float(cap)
+            saw_limit = True
+    start_of_month = payload.get("startOfMonth")
+    start_text = start_of_month.strip() if isinstance(start_of_month, str) else None
+    window = _monthly_metrics(
+        used,
+        limit if saw_limit else None,
+        None,
+        _next_month_reset(start_text),
+    )
+    base["status"] = "ok"
+    base["windows"] = {"monthly": window}
+    base["quota"] = dict(window)
+    if start_text:
+        base["start_of_month"] = start_text
+    return base
+
+
+def probe_cursor_usage(
+    model: str | None = None,
+    timeout: float = 20.0,
+    env: Mapping[str, str] | None = None,
+    base_url: str | None = None,
+) -> dict[str, Any]:
+    """Read-only Cursor usage for the shared ``cursor-grok`` pool.
+
+    One GET, no retry. The base is ``base_url``, else the runtime's own
+    ``CURSOR_API_ENDPOINT`` env, else ``https://api2.cursor.sh``. The key and
+    every field other than the named usage fields are dropped before the
+    result is returned. This function does not write a file, does not spawn
+    a binary, and does not raise.
+    """
+    model_text = model.strip() if isinstance(model, str) else None
+    try:
+        return _probe_cursor_usage(model_text, timeout, env, base_url)
+    except Exception:
+        return _cursor_envelope(model_text, "error", "probe failed")
+
+
+def _probe_cursor_usage(
+    model: str | None,
+    timeout: float,
+    env: Mapping[str, str] | None,
+    base_url: str | None,
+) -> dict[str, Any]:
+    source: Mapping[str, str] = os.environ if env is None else env
+    key = read_cursor_api_key(source)
+    if not key:
+        return _cursor_envelope(model, "key_missing", "CURSOR_API_KEY is not set")
+    override = source.get("CURSOR_API_ENDPOINT")
+    root = (base_url or (override.strip() if isinstance(override, str) else "") or CURSOR_API_BASE).rstrip("/")
+    status, body = _usage_get(
+        root + CURSOR_USAGE_PATH,
+        {"Authorization": "Bearer " + key, "Accept": "application/json",
+         "User-Agent": "kaola-quota"},
+        max(0.1, float(timeout)),
+    )
+    if status is None:
+        reason = "timeout" if body == "timeout" else "network failure"
+        return _cursor_envelope(model, "unavailable", reason)
+    if status == 401 or status == 403:
+        return _cursor_envelope(model, "login_required", _http_reason(status, body))
+    if status != 200:
+        return _cursor_envelope(model, "unavailable", _http_reason(status, body))
+    text = body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else ""
+    return parse_cursor_usage(text, model=model)
+
+
+def parse_grok_usage(
+    raw: str,
+    model: str | None = None,
+    stderr: str = "",
+) -> dict[str, Any]:
+    """Parse ``GET {GROK_WEB_BASE_URL|code.grok.com}/billing?format=credits``.
+
+    The response is ``{"config": BillingConfig, ...}``; the unified account's
+    shared pool normalizes to one monthly window from ``includedUsed`` /
+    ``monthlyLimit`` / ``creditUsagePercent`` / ``currentPeriod.end``.
+    Returns the standard usage envelope for pool ``cursor-grok``.
+    """
+    base = _grok_envelope(model, "error")
+    stderr_text = (stderr or "").strip()
+    raw_text = (raw or "").strip()
+    payload: Any = None
+    if raw_text:
+        try:
+            payload = json.loads(raw_text)
+        except json.JSONDecodeError:
+            payload = None
+    if not isinstance(payload, dict):
+        lowered = stderr_text.lower()
+        if "auth" in lowered or "log in" in lowered or "401" in lowered:
+            base["status"] = "login_required"
+            base["error"] = stderr_text or "authentication required"
+        else:
+            base["error"] = stderr_text or "invalid JSON from grok /billing"
+        return base
+    config = payload.get("config") if isinstance(payload.get("config"), dict) else payload
+    used = _commandcode_number(config.get("includedUsed"))
+    if used is None:
+        used = _commandcode_number(config.get("totalUsed"))
+    limit = _commandcode_number(config.get("monthlyLimit"))
+    percent = _commandcode_number(config.get("creditUsagePercent"))
+    if used is None and limit is None and percent is None:
+        base["status"] = "unavailable"
+        base["error"] = "no billing counters in grok /billing response"
+        return base
+    period = config.get("currentPeriod")
+    reset_at = None
+    if isinstance(period, dict):
+        reset_at = _commandcode_reset_at(period.get("end"))
+    if reset_at is None:
+        reset_at = _commandcode_reset_at(config.get("currentPeriodEnd"))
+    window = _monthly_metrics(used, limit, percent, reset_at)
+    base["status"] = "ok"
+    base["windows"] = {"monthly": window}
+    base["quota"] = dict(window)
+    return base
+
+
+def probe_grok_usage(
+    model: str | None = None,
+    timeout: float = 20.0,
+    env: Mapping[str, str] | None = None,
+    base_url: str | None = None,
+) -> dict[str, Any]:
+    """Read-only Grok billing usage for the shared ``cursor-grok`` pool.
+
+    One GET, no retry. The base is ``base_url``, else the runtime's own
+    ``GROK_WEB_BASE_URL`` env, else ``https://code.grok.com``. The bearer is
+    ``GROK_API_KEY`` or the ``grok login`` session key in ``~/.grok/auth.json``.
+    This function does not write a file, does not spawn a binary, and does
+    not raise.
+    """
+    model_text = model.strip() if isinstance(model, str) else None
+    try:
+        return _probe_grok_usage(model_text, timeout, env, base_url)
+    except Exception:
+        return _grok_envelope(model_text, "error", "probe failed")
+
+
+def _probe_grok_usage(
+    model: str | None,
+    timeout: float,
+    env: Mapping[str, str] | None,
+    base_url: str | None,
+) -> dict[str, Any]:
+    source: Mapping[str, str] = os.environ if env is None else env
+    key = read_grok_api_key(source)
+    if not key:
+        return _grok_envelope(model, "key_missing", "GROK_API_KEY is not set and no grok login key is stored")
+    override = source.get("GROK_WEB_BASE_URL")
+    root = (base_url or (override.strip() if isinstance(override, str) else "") or GROK_BILLING_BASE).rstrip("/")
+    status, body = _usage_get(
+        root + GROK_BILLING_PATH,
+        {"Authorization": "Bearer " + key, "Accept": "application/json",
+         "x-grok-client-mode": "billing", "User-Agent": "kaola-quota"},
+        max(0.1, float(timeout)),
+    )
+    if status is None:
+        reason = "timeout" if body == "timeout" else "network failure"
+        return _grok_envelope(model, "unavailable", reason)
+    if status == 401 or status == 403:
+        return _grok_envelope(model, "login_required", _http_reason(status, body))
+    if status != 200:
+        return _grok_envelope(model, "unavailable", _http_reason(status, body))
+    text = body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else ""
+    return parse_grok_usage(text, model=model)
 
 
 COMMANDCODE_API_BASE = "https://api.commandcode.ai"
@@ -1395,6 +1868,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.platform == "antigravity":
             output["usage"] = probe_antigravity_usage(
                 binary=args.binary,
+                model=args.model,
+                timeout=args.timeout,
+            )
+        elif args.platform == "cursor-cli":
+            output["usage"] = probe_cursor_usage(
+                model=args.model,
+                timeout=args.timeout,
+            )
+        elif args.platform == "grok":
+            output["usage"] = probe_grok_usage(
                 model=args.model,
                 timeout=args.timeout,
             )

@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: ./scripts/render-skills.py --check; ./scripts/validate.sh --suite test-issue-148-quota-packages.py (21 OK); --suite test-issue-346-worker-grants.py (14 OK); --suite test-issue-363-dsh-resume-permission.py (10 OK); --suite test-issue-345-dsh-commandcode.py (3 OK); --suite test-issue-347-commandcode-usage.py (23 OK); --suite test-issue-147-installed-survey.py (10 OK); --suite test-issue-33-config-meta.py (9 OK); --suite test-generated-skills.py (PASS) — all at candidate 981bee10
+validated_candidate_hash: 4722d0e7d8cc8da2604cb00b92989481770b5be5c0471c9ad3b8ce6c37ba58a1

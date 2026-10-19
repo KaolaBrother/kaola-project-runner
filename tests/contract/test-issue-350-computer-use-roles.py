@@ -87,11 +87,10 @@ class ComputerUseRoles(unittest.TestCase):
             "elite_grants": [],
             "exclusions": [],
             "expert_task_grants": [],
-            "worker_grants": [{
-                "count": "unlimited",
-                "scope": "all-worker-presets",
-                "state": "granted",
-            }],
+            "worker_grants": [
+                {"preset_ids": [preset], "count": "unlimited", "state": "granted"}
+                for preset in sorted(OTHER_WORKERS + [LUNA])
+            ],
         }
         if extra:
             auth.update(extra)
@@ -207,7 +206,10 @@ class ComputerUseRoles(unittest.TestCase):
             ]),
             encoding="utf-8",
         )
-        self.write_grant()
+        self.write_grant({"worker_grants": [
+            {"preset_ids": [preset], "count": "unlimited", "state": "granted"}
+            for preset in ("futureplat/cu", "futureplat/default", "futureplat/luna")
+        ]})
         tool = tree / "scripts" / "kaola-dispatch.py"
         projected = self.project(tree / "platforms", tool)
         self.assertEqual(projected.returncode, 0, projected.stdout + projected.stderr)

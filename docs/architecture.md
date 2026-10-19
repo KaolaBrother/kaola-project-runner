@@ -90,7 +90,9 @@ speaks ACP to the holder and agy's headless stream-json protocol to one long-liv
 `droid exec --output-format acp`; dsh uses its shipped automation-only ACP profile
 `dsh --profile acp`. dsh's ACP composition sends no permission request: its mode is
 the launch variable `DSH_PERMISSION_MODE` (the Runner starts `danger-full-access`).
-Under dsh's own default `workspace-write`, a Runner start launched from that shell
+dsh pins that preset into the session log at creation and keeps it on resume, so a
+resumed session's start receipt reports the recorded effective permission, not the
+launch variable. Under dsh's own default `workspace-write`, a Runner start launched from that shell
 inherits the sandbox, so a nested dsh worker cannot boot under it.
 
 Grok Bot is a **bridge host** for Kaola-Delegator, not a Project Runner host.

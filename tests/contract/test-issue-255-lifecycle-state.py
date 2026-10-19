@@ -1477,6 +1477,11 @@ class HolderRelay(HolderFixture):
         self.assertEqual(self.holder.holder_instance_id, instance)
         record = json.loads((Path(self.holder.args.record_dir) / "record.json").read_text())
         self.assertEqual(record["heartbeat_host"]["session"], "zcode-KT-orchestrator-main")
+        # Issue #365: the seat's dispatcher moves with the carrier so the
+        # replacement Host counts it as a live seat.
+        self.assertEqual(record["dispatcher"], {
+            "platform": "zcode", "session": "zcode-KT-orchestrator-main",
+            "repo": str(self.repo), "holder_instance_id": "host-2"})
         self.assertEqual(record["holder_instance_id"], instance)
         events = (Path(self.holder.args.record_dir) / "events.jsonl").read_text().splitlines()
         self.assertIn("heartbeat_host_rebound", [json.loads(line)["kind"] for line in events])
@@ -1771,7 +1776,8 @@ class ProcessPreservation(unittest.TestCase):
         self.spawn_record()
         host = acp_module.recorded_groups({"session_role": "host"}, self.dir)
         side = acp_module.recorded_groups({"session_role": "sideagent"}, self.dir)
-        self.assertIn(self.child.pid, host, "a Host stop still sweeps its recorded inner sessions")
+        self.assertNotIn(self.child.pid, host,
+                         "a dead Host holder's sweep spares the Runner sessions it recorded")
         self.assertNotIn(self.child.pid, side, "a Sideagent stop spares the workers it dispatched")
         live = {self.child.pid: [self.child.pid]}
         self.assertEqual(holder_module.dispatched_worker_groups(self.dir / "children.jsonl", live),
@@ -1783,6 +1789,87 @@ class ProcessPreservation(unittest.TestCase):
         side = acp_module.recorded_groups(record, self.dir)
         self.assertIn(self.child.pid, side, "a detached agent child that is no Runner holder is swept")
         self.assertEqual(holder_module.dispatched_worker_groups(self.dir / "children.jsonl", {}), set())
+
+
+FAKE_BROKER = (
+    "import os, sys\n"
+    "sys.stdout.write(os.environ.get('K361_BROKER_RECEIPT', '{}'))\n"
+)
+
+
+class OutsideLaunchDegradation(unittest.TestCase):
+    """Issue #361: under ``auto`` the outside launcher degrades to the direct
+    path with an explicit reason when it cannot operate — a sandboxed Host
+    shell cannot read the service-manager state (``job-state-unknown``) or has
+    no usable backend — while an explicit backend request still refuses."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory(prefix="kpr-i361-launch-")
+        root = Path(self.tmp.name)
+        self.dir = root / "record"
+        self.dir.mkdir()
+        self.broker = root / "broker.py"
+        self.broker.write_text(FAKE_BROKER, encoding="utf-8")
+        self.args = argparse.Namespace(platform="dsh", session="dsh-KT-i361-a",
+                                       repo=str(root), launch_backend=None,
+                                       resume=False, use_continue=False,
+                                       manifest={"acp_env_allowlist": ""})
+        self.saved_broker = acp_module.LAUNCH_BROKER
+        self.saved_env = os.environ.pop("KAOLA_LAUNCH_BACKEND", None)
+        acp_module.LAUNCH_BROKER = self.broker
+
+    def tearDown(self) -> None:
+        acp_module.LAUNCH_BROKER = self.saved_broker
+        if self.saved_env is not None:
+            os.environ["KAOLA_LAUNCH_BACKEND"] = self.saved_env
+        self.tmp.cleanup()
+
+    def spawn(self, receipt: dict) -> dict:
+        env = {"K361_BROKER_RECEIPT": json.dumps(receipt)}
+        return acp_module.spawn_holder_outside(
+            self.args, str(self.dir.parent), self.dir,
+            ["holder"], env, self.dir / "h.log", self.dir / "h.sock")
+
+    def test_job_state_unknown_under_auto_degrades_with_the_reason(self) -> None:
+        out = self.spawn({"result": "refused", "reason": "job-state-unknown",
+                          "detail": "the service-manager state is unreadable"})
+        self.assertTrue(out.get("degraded"), out)
+        self.assertEqual(out.get("reason"), "job-state-unknown")
+        self.assertIn("unreadable", out.get("detail") or "")
+
+    def test_an_unsupported_backend_under_auto_still_degrades(self) -> None:
+        out = self.spawn({"result": "refused", "reason": "launch-backend-unsupported",
+                          "detail": "backend systemd-user is not supported on darwin"})
+        self.assertTrue(out.get("degraded"), out)
+        self.assertEqual(out.get("reason"), "launch-backend-unsupported")
+
+    def test_an_explicit_backend_refusal_is_not_a_degradation(self) -> None:
+        self.args.launch_backend = "launchd"
+        out = self.spawn({"result": "refused", "reason": "job-state-unknown",
+                          "detail": "the service-manager state is unreadable",
+                          "recovery": {"command": "kaola-acp.py dsh stop --force"}})
+        self.assertNotIn("degraded", out)
+        self.assertEqual((out.get("error") or {}).get("code"), "job-state-unknown", out)
+        self.assertIn("recovery", out.get("error") or {})
+
+    def test_other_broker_refusals_under_auto_are_errors(self) -> None:
+        out = self.spawn({"result": "refused", "reason": "holder-not-ready",
+                          "detail": "the holder did not report", "holder_may_exist": True})
+        self.assertNotIn("degraded", out)
+        self.assertEqual((out.get("error") or {}).get("code"), "holder-not-ready", out)
+        self.assertTrue(out.get("holder_may_exist"))
+
+    def test_a_missing_broker_degrades_only_under_auto(self) -> None:
+        acp_module.LAUNCH_BROKER = self.dir / "no-such-broker.py"
+        out = acp_module.spawn_holder_outside(
+            self.args, str(self.dir.parent), self.dir,
+            ["holder"], {}, self.dir / "h.log", self.dir / "h.sock")
+        self.assertTrue(out.get("degraded"), out)
+        self.args.launch_backend = "launchd"
+        out = acp_module.spawn_holder_outside(
+            self.args, str(self.dir.parent), self.dir,
+            ["holder"], {}, self.dir / "h.log", self.dir / "h.sock")
+        self.assertEqual((out.get("error") or {}).get("code"), "launch-broker-missing", out)
 
 
 FAKE_WORKER_HOLDER = """
@@ -1880,7 +1967,8 @@ class NestedWorkerTopology(WorkerTree):
             side = acp_module.recorded_groups(record, self.side_dir, verified_only=verified_only)
             self.assertEqual(side, [self.unrelated.pid], f"verified_only={verified_only}")
         host = acp_module.recorded_groups(dict(record, session_role="host"), self.side_dir)
-        self.assertEqual(sorted(host), sorted(self.groups), "a Host stop keeps sweeping everything")
+        self.assertEqual(host, [self.unrelated.pid],
+                         "a dead Host holder's cleanup spares the workers it dispatched too")
 
     def test_cooperative_stop_keeps_the_whole_worker_tree(self) -> None:
         live = {pgid: [pgid] for pgid in self.groups}
@@ -4025,8 +4113,8 @@ class HolderNodeMode(HolderFixture):
 
 
 class HostPreserveStop(WorkerTree):
-    """An explicit preserve intent keeps a Host's dispatched worker trees
-    across its stop; the default Host stop is unchanged."""
+    """A Host's stop, with or without the preserve intent, keeps the seats it
+    opened: each is its own Runner session with its own exact stop (#361)."""
 
     def host(self, preserve: bool):
         args = argparse.Namespace(record_dir=str(self.side_dir), socket=str(self.side_dir / "h.sock"),
@@ -4047,17 +4135,21 @@ class HostPreserveStop(WorkerTree):
         for pid in (self.holder.pid, self.native, self.tool, self.orphan.pid):
             self.assertTrue(self.alive(pid), f"worker process {pid} survived the Host stop")
 
-    def test_preserve_on_dead_holder_cleanup_and_default_stop_unchanged(self) -> None:
+    def test_stop_keeps_opened_seats_on_dead_cleanup_and_cooperative_stop(self) -> None:
         record = {"session_role": "host",
                   "agent_child_groups": {str(g): {str(p): s for p, s in m.items()} for g, m in self.noted.items()}}
-        self.assertEqual(acp_module.recorded_groups(record, self.side_dir, verified_only=True,
-                                                    preserve_dispatched=True), [self.unrelated.pid])
-        self.assertEqual(sorted(acp_module.recorded_groups(record, self.side_dir, verified_only=True)),
-                         sorted(self.groups), "without the intent a Host stop sweeps as before")
+        for preserve in (False, True):
+            self.assertEqual(acp_module.recorded_groups(record, self.side_dir, verified_only=True,
+                                                        preserve_dispatched=preserve),
+                             [self.unrelated.pid],
+                             f"a dead Host holder's cleanup spares the seats it opened (preserve={preserve})")
         holder = self.host(False)
         holder._terminate_group(False)
         self.groups.append(holder.agent.proc.pid)
-        self.assertIn(self.holder.pid, holder.swept_child_pgids, "the default stop still ends its workers")
+        self.assertEqual(holder.swept_child_pgids, [self.unrelated.pid],
+                         "a live Host stop also spares the seats it opened")
+        for pid in (self.holder.pid, self.native, self.tool, self.orphan.pid):
+            self.assertTrue(self.alive(pid), f"seat process {pid} survived the Host stop")
 
     def test_a_live_holder_without_the_feature_refuses_the_preserve_intent(self) -> None:
         directory = Path(self.tmp.name) / "host-record"

@@ -2787,7 +2787,8 @@ class Holder:
             # Issue #132: the Host holder that dispatched this one, from the
             # inherited KAOLA_ACP_DISPATCHER the start already verified, or
             # null for a start run under no holder. Its holder_instance_id
-            # tells a live Host's own seats from a predecessor's.
+            # tells a live Host's own seats from a predecessor's. Issue #365:
+            # rebind-host rewrites it to the verified replacement Host.
             "dispatcher": getattr(self, "dispatched_by", None),
             "host_skill_entry": self.host_entry,
             "pending_permissions": list(self.pending_permissions.values()),
@@ -4602,6 +4603,25 @@ class Holder:
             live_seats=live_seats,
             all_idle_due=all_idle_due,
         )
+
+    def _deregister_host_registry(self) -> None:
+        """Issue #359: a recorded clean stop retires this host's row in the
+        project-local registry (``<repo>/.kaola/host-registry.json``). The row
+        lives outside the record root so a wiped record dir can never hide a
+        registered seat; leaving it after ``stopped`` would misreport a clean
+        exit as record loss. The CLI stop path removes it too for holders
+        that predate this call."""
+        if self.session_role != "host":
+            return
+        module = _wake_receipt_module()
+        if module is None:
+            return
+        try:
+            module.host_registry_deregister(
+                self.args.repo, self.args.platform, self.args.session,
+                holder_instance_id=self.holder_instance_id)
+        except Exception:
+            pass
 
     def _delegator_wake(self, state: str, detail: str | None = None,
                         reason: str | None = None, inline: bool = False) -> None:
@@ -8669,6 +8689,7 @@ class Holder:
             self.heartbeat_notify_lock.release()
         self.state = "stopped"
         self.write_record()
+        self._deregister_host_registry()
         # Issue #299: inline spawn — this op exits right after its reply, so the
         # detached child must already hold its payload before we answer.
         self._delegator_wake("stopped", "exact_stop", "exact_stop", inline=True)
@@ -8742,12 +8763,12 @@ class Holder:
         # could not reach because it died first, is terminated here. Only a
         # group whose recorded member identity still holds is touched.
         live = live_child_groups(self.agent_child_groups)
-        if self.session_role in SIDEAGENT_ROLES or getattr(self, "preserve_dispatched", False):
-            # Issue #255: a Sideagent's dispatched workers, and a Host's under
-            # an explicit preserve intent, are their own Runner sessions with
-            # their own exact stop; replacing the dispatcher must not end them
-            # (holder, native agent, or its tools). Only other leftovers are
-            # swept.
+        if (self.session_role in SIDEAGENT_ROLES + ("host",)
+                or getattr(self, "preserve_dispatched", False)):
+            # Issue #255/#361: workers a Sideagent dispatched, and seats a Host
+            # opened, are their own Runner sessions with their own exact stop;
+            # stopping or replacing the dispatcher must not end them (holder,
+            # native agent, or its tools). Only other leftovers are swept.
             spared = dispatched_worker_groups(self.record_dir / CHILD_RECORD_NAME, live,
                                               holder_instance_id=self.holder_instance_id)
             self.spared_child_pgids = sorted(spared)
@@ -8850,8 +8871,10 @@ class Holder:
 
         The CLI already proved the new target is the live Host holder of the
         same repo. The agent, its native session, and this holder instance
-        stay; only where events go changes, and held wakes follow on the next
-        watchdog tick. A seat started with no carrier stays without one.
+        stay; where events go and which Host this seat's record names as
+        dispatcher change together (Issue #365), so the replacement Host's
+        live-seat scan counts it. Held wakes follow on the next watchdog
+        tick. A seat started with no carrier stays without one.
         """
         expected = params.get("expected_holder_instance_id")
         if expected is not None and expected != self.holder_instance_id:
@@ -8870,17 +8893,34 @@ class Holder:
         if target["repo"] != previous["repo"]:
             return {"error": {"code": "heartbeat-host-foreign-repo",
                               "message": f"{target['repo']} is not {previous['repo']}"}}
+        host_holder = params.get("host_holder_instance_id")
+        if not isinstance(host_holder, str) or not host_holder:
+            # Issue #365: without the replacement Host's instance id the seat
+            # would keep the old Host as its recorded dispatcher and stay
+            # invisible to the new Host's live-seat scan.
+            return {"error": {"code": "missing-host-holder-instance-id",
+                              "message": "host_holder_instance_id must be the live replacement "
+                                         "Host holder instance; run rebind-host from inside "
+                                         "that Host session so the verified dispatcher "
+                                         "supplies it"}}
         new = {key: target[key] for key in ("platform", "session", "repo", "socket")}
+        dispatcher = {"platform": new["platform"], "session": new["session"],
+                      "repo": new["repo"], "holder_instance_id": host_holder}
+        previous_dispatcher = self.dispatched_by
         with self.heartbeat_notify_lock:
             self.heartbeat_host = new
+            self.dispatched_by = dispatcher
         self.events.append({"kind": "heartbeat_host_rebound",
                             "previous": {key: previous[key]
                                          for key in ("platform", "session", "repo")},
                             "target": {key: new[key] for key in ("platform", "session", "repo")},
-                            "host_holder_instance_id": params.get("host_holder_instance_id")})
+                            "host_holder_instance_id": host_holder,
+                            "previous_dispatcher": previous_dispatcher,
+                            "dispatcher": dict(dispatcher)})
         self.write_record()
         return {"rebound": True, "previous_heartbeat_host": previous,
-                "heartbeat_host": new, "holder_instance_id": self.holder_instance_id}
+                "heartbeat_host": new, "dispatcher": dispatcher,
+                "holder_instance_id": self.holder_instance_id}
 
     # -- socket server ------------------------------------------------------------
 
@@ -9045,6 +9085,7 @@ class Holder:
                 if time.monotonic() - self.last_activity > IDLE_EXIT_SECONDS:
                     self.state = "stopped"
                     self.write_record()
+                    self._deregister_host_registry()
                     os._exit(0)
 
     def start_failure_facts(self, error: dict[str, Any]) -> dict[str, Any]:

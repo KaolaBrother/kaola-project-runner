@@ -263,7 +263,9 @@ This is a release/update requirement. For the lifecycle state of
   (`schema-unsupported`) rather than read as v1. A later `state migrate` of a current file names
   each leftover it removes, including `tasks.<id>.legacy`, `recovery.legacy`, `recovery.v1_host`,
   `unverified.<id>.raw`, and `unverified.<id>-stage` when `writer` is `host` and the stage is
-  already a task stage. A write that still sees an unknown legacy key is refused with `path`,
+  already a task stage. A schema-2 record predating record revisions keeps every gate but
+  gains `rev 1`, named `<kind>.<id>.rev assigned 1`; that assignment is the repair the
+  `record-versionless` refusal names, after which `retire`/`update` apply normally. A write that still sees an unknown legacy key is refused with `path`,
   `allowed`, and `recovery` that names `state migrate`. A failed write removes `<file>.tmp`.
   The original file stays. A clean repeat stays `current`.
   An accepted-task `--cite` stores a retrievable path. A path is enough when that file exists
@@ -285,8 +287,9 @@ This is a release/update requirement. For the lifecycle state of
   Healthy workers are not restarted for migration; they get the new holder behavior at
   their next normal start.
 - Host replacement: the new Host runs `rebind-host` on each existing seat from its own session;
-  the carrier moves in place and the worker is not restarted. Only the carrier moves: the
-  seat's `dispatcher` still names the old Host, each seat (the Sideagent included) needs its own
+  the carrier moves in place and the worker is not restarted. The carrier and the seat's
+  recorded `dispatcher` move together (#365): the seat then counts as the new Host's live seat
+  and the new Host's sends prove ownership, each seat (the Sideagent included) needs its own
   call, and worker events staged in a Host holder that died stay there; the new Host adopts
   that work from the index and receipts. A holder older than that op answers `unknown-op` and
   keeps the previous recovery (`drain-restart` at idle).

@@ -221,6 +221,154 @@ def dsh_permission_mode(args: argparse.Namespace) -> tuple[str, str]:
         return os.environ[DSH_PERMISSION_ENV], "caller-env"
     return DSH_SKIP_MODE, "runner-default"
 
+
+def _dsh_safe_unit(ch: str) -> bool:
+    return ch != "~" and ch.isascii() and (ch.isalnum() or ch in "._-")
+
+
+def dsh_project_key(cwd: str) -> str:
+    """The dsh session-store project directory name for a workspace path.
+
+    Mirrors ``projectKey`` in ``@deepseek-ai/dsh-session-persistence-jsonl``:
+    runs of ``/``, ``\\`` and ``:`` collapse to one dash, safe units stay
+    literal, every other code unit becomes ``~XXXX``, leading dashes are
+    dropped and the result is wrapped in ``--…--`` (truncated to 251).
+    """
+    readable = ""
+    separator_run = False
+    for ch in cwd:
+        if ch in "/\\:":
+            if not separator_run:
+                readable += "-"
+            separator_run = True
+        elif _dsh_safe_unit(ch):
+            readable += ch
+            separator_run = False
+        else:
+            readable += f"~{ord(ch):04X}"
+            separator_run = False
+    return "--" + (readable.lstrip("-") or "root")[:251] + "--"
+
+
+def dsh_path_segment(raw: str) -> str:
+    """``encodeSegment`` from the same module: ``.``/``..`` and unsafe units
+    become ``~XXXX`` escapes; everything safe stays literal."""
+    if raw == ".":
+        return "~002E"
+    if raw == "..":
+        return "~002E~002E"
+    return "".join(ch if _dsh_safe_unit(ch) else f"~{ord(ch):04X}" for ch in raw)
+
+
+def _dsh_log_version(path: Path) -> int | None:
+    match = re.fullmatch(r"session(?:\.v(\d+))?\.jsonl(?:\.zstd)?", path.name)
+    return int(match.group(1) or 0) if match else None
+
+
+def _dsh_zstd_stdlib(data: bytes) -> str | None:
+    try:
+        from compression import zstd  # Python >= 3.14
+        return zstd.decompress(data).decode("utf-8", "replace")
+    except Exception:
+        return None
+
+
+def _dsh_zstd_module(data: bytes) -> str | None:
+    try:
+        import io
+        import zstandard
+        reader = zstandard.ZstdDecompressor().stream_reader(io.BytesIO(data))
+        try:
+            return reader.read().decode("utf-8", "replace")
+        finally:
+            reader.close()
+    except Exception:
+        return None
+
+
+def _dsh_zstd_cli(path: Path) -> str | None:
+    binary = shutil.which("zstd")
+    if binary is None:
+        return None
+    try:
+        out = subprocess.run([binary, "-dc", "--", str(path)],
+                             capture_output=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    return out.stdout.decode("utf-8", "replace")
+
+
+def _dsh_log_text(path: Path) -> str | None:
+    """The decoded text of one dsh session log, or None when unreadable.
+
+    dsh writes size-less streaming zstd frames, so each decoder that exists
+    but fails falls through to the next; none of them fabricating text is
+    what keeps an unreadable log honest.
+    """
+    if path.suffix != ".zstd":
+        try:
+            return path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return None
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return None
+    for decode in (_dsh_zstd_stdlib, _dsh_zstd_module):
+        text = decode(data)
+        if text is not None:
+            return text
+    return _dsh_zstd_cli(path)
+
+
+def dsh_session_permission(repo: str, session_id: Any) -> dict[str, Any] | None:
+    """The permission facts a resumed dsh session actually keeps (Issue #363).
+
+    dsh pins ``permission/preset``, ``sandbox/mode`` and ``approval/policy``
+    into the session log at creation, and ``pinInitialPermission`` keeps the
+    recorded values on resume, so the last occurrence of each is the
+    effective one. ``None`` when the log is absent or unreadable — an
+    unreadable log never fabricates a value.
+    """
+    if not isinstance(session_id, str) or not session_id:
+        return None
+    home = os.environ.get("DSH_HOME") or str(Path.home() / ".dsh")
+    # dsh records the resolved cwd (a /tmp birth lands under --private-tmp-…).
+    directory = Path(home) / "sessions" / dsh_project_key(os.path.realpath(repo)) / dsh_path_segment(session_id)
+    try:
+        candidates = sorted(
+            (path for path in directory.iterdir() if _dsh_log_version(path) is not None),
+            key=lambda path: _dsh_log_version(path) or 0, reverse=True)
+    except OSError:
+        return None
+    for path in candidates:
+        text = _dsh_log_text(path)
+        if text is None:
+            continue
+        found: dict[str, Any] = {"session_log": str(path)}
+        for line in text.splitlines():
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            data = event.get("data") if isinstance(event, dict) else None
+            if not isinstance(data, dict):
+                continue
+            if event.get("type") == "permission/preset" \
+                    and isinstance(data.get("preset"), str):
+                found["preset"] = data["preset"]
+            elif event.get("type") == "sandbox/mode" \
+                    and isinstance(data.get("mode"), str):
+                found["sandbox"] = data["mode"]
+            elif event.get("type") == "approval/policy" \
+                    and isinstance(data.get("policy"), str):
+                found["approval"] = data["policy"]
+        if "preset" in found or "sandbox" in found or "approval" in found:
+            return found
+    return None
+
 # A manifest ``acp_command`` may name files shipped inside the Skill with this
 # prefix (Issue #50: the vendored Claude Code bridge). It resolves to an
 # absolute path before anything is spawned: ``scripts/`` of the installed Skill
@@ -1060,9 +1208,13 @@ def parse_list_args(argv: list[str]) -> argparse.Namespace:
 def command_list(args: argparse.Namespace) -> dict[str, Any]:
     repo_filter = resolve_repo(args.repo) if args.repo else None
     rows: list[dict[str, Any]] = []
+    # Issue #359: (platform, session) pairs that still have a record.json,
+    # with the record's repo: a registry row without one is a lost record.
+    present: dict[tuple[str, str], list[Path]] = {}
     for path in acp_paths.record_paths("*/*/*/record.json", getattr(args, "record_root", None)):
         platform = path.parent.parent.parent.name
         session = path.parent.parent.name
+        present.setdefault((platform, session), []).append(path.parent)
         if platform not in PLATFORMS:
             continue
         if args.platform and platform != args.platform:
@@ -1163,7 +1315,12 @@ def command_list(args: argparse.Namespace) -> dict[str, Any]:
         # Issue #313: the same non-blocking name advisory as start. A host,
         # sideagent, or seat row has name_role and no issue_name.
         stamp_issue_name_receipt(rows[-1], str(row_platform), str(row_session), repo)
-    return {"schema": LIST_SCHEMA, "rows": rows}
+    result: dict[str, Any] = {"schema": LIST_SCHEMA, "rows": rows}
+    if repo_filter is not None:
+        lost = _record_loss_list(repo_filter, present)
+        if lost:
+            result["records_lost"] = lost
+    return result
 
 
 
@@ -1437,13 +1594,16 @@ def command_model_package(args: argparse.Namespace) -> dict[str, Any]:
     except quota.QuotaError as exc:
         die(str(exc))
     resolved = quota.resolve_model(catalog, args.model)
-    return {
+    result: dict[str, Any] = {
         "schema": MODEL_PACKAGE_SCHEMA,
         "platform": args.platform,
         "model": args.model,
         "packageId": resolved["packageId"],
         "status": resolved["status"],
     }
+    if resolved.get("pool") is not None:
+        result["pool"] = resolved["pool"]
+    return result
 
 
 def view_error(code: str, message: str) -> dict[str, Any]:
@@ -2202,6 +2362,415 @@ def holder_instance_mismatch_receipt(args: argparse.Namespace, repo: str,
     return receipt
 
 
+# Issue #359: a record dir under a temp root can vanish - an OS tmp reaper or
+# a sibling run - while its holder lives or dies unnoticed. Every dead-holder
+# wake derives identity and dedupe from record.json in that dir, so nothing
+# survived the wipe to report it. The host registry is the liveness
+# cross-check that survives: ``start`` registers the row and a recorded clean
+# ``stop`` removes it, so a row whose record is gone everywhere is an
+# unrecovered loss; the next ``delegator-webhook status`` scan emits the same
+# one ``error``/``holder_lost`` wake (``state_detail`` ``record_lost``).
+HOST_REGISTRY_SCHEMA = "kaola-host-registry/1"
+# The record-loss wake uses event_seq 0 once per holder_instance_id. A
+# holder's own event_seq starts at 1, so the claim key never collides with a
+# turn wake, and a restarted instance registers a fresh holder_instance_id.
+RECORD_LOSS_WAKE_SEQ = 0
+HOST_REGISTRY_ROW_KEYS = frozenset({
+    "platform", "session", "repo", "record_dir", "socket_path",
+    "holder_pid", "holder_instance_id", "acp_session_id",
+    "agent_pid", "agent_pgid", "registered_at", "record_lost_wake",
+})
+
+
+def host_registry_path(project_root: str) -> Path:
+    return Path(project_root) / ".kaola" / "host-registry.json"
+
+
+def _host_registry_doc(project_root: str) -> dict[str, Any]:
+    """The registry document, or ``{}`` when missing or not this schema."""
+    try:
+        doc = json.loads(host_registry_path(project_root).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if (not isinstance(doc, dict) or doc.get("schema") != HOST_REGISTRY_SCHEMA
+            or not isinstance(doc.get("hosts"), dict)):
+        return {}
+    return doc
+
+
+def _host_registry_update(project_root: str, fn: Any) -> Any:
+    """``fn(hosts) -> (changed, result)`` under the registry flock; a changed
+    hosts map is stored atomically (0600) before the lock releases."""
+    import fcntl
+    kaola_dir = Path(project_root) / ".kaola"
+    kaola_dir.mkdir(exist_ok=True)
+    lock_path = kaola_dir / "host-registry.lock"
+    with open(lock_path, "a+b") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        doc = _host_registry_doc(project_root)
+        hosts = {key: value for key, value in doc.get("hosts", {}).items()
+                 if isinstance(value, dict)}
+        changed, result = fn(hosts)
+        if changed:
+            _webhook_atomic_json(host_registry_path(project_root),
+                                 {"schema": HOST_REGISTRY_SCHEMA, "hosts": hosts})
+        return result
+
+
+def host_registry_register(project_root: str, row: dict[str, Any]) -> bool:
+    """Insert or replace the row for ``platform/session``. Best effort: a
+    registry that cannot be written returns False and the receipt notes the
+    gap; the start itself already went out."""
+    key = f"{row.get('platform')}/{row.get('session')}"
+    row = {k: v for k, v in row.items()
+           if k in HOST_REGISTRY_ROW_KEYS and v is not None}
+    row["repo"] = os.path.realpath(row.get("repo") or project_root)
+    row["registered_at"] = _utc_stamp()
+
+    def op(hosts: dict[str, Any]) -> tuple[bool, None]:
+        hosts[key] = row
+        return True, None
+
+    try:
+        _host_registry_update(project_root, op)
+    except OSError:
+        return False
+    return True
+
+
+def _registry_row_project(row: dict[str, Any], project_root: str) -> bool:
+    try:
+        return os.path.realpath(row.get("repo") or "") == os.path.realpath(project_root)
+    except (OSError, TypeError):
+        return False
+
+
+def host_registry_row(project_root: str, platform: Any,
+                      session: Any) -> dict[str, Any] | None:
+    """This session's row, or None. A row naming another project is not ours."""
+    row = _host_registry_doc(project_root).get("hosts", {}).get(
+        f"{platform}/{session}")
+    if (not isinstance(row, dict) or row.get("platform") != platform
+            or row.get("session") != session
+            or not _registry_row_project(row, project_root)):
+        return None
+    return row
+
+
+def host_registry_deregister(project_root: str, platform: Any, session: Any,
+                             holder_instance_id: Any = None) -> bool:
+    """Drop the row a recorded clean stop retires. ``holder_instance_id``
+    guards against removing a newer start's row; None removes it outright."""
+    if not isinstance(platform, str) or not isinstance(session, str):
+        return False
+    key = f"{platform}/{session}"
+
+    def op(hosts: dict[str, Any]) -> tuple[bool, bool]:
+        row = hosts.get(key)
+        if not isinstance(row, dict):
+            return False, True
+        if (holder_instance_id is not None
+                and isinstance(row.get("holder_instance_id"), str)
+                and row["holder_instance_id"] != holder_instance_id):
+            return False, False
+        del hosts[key]
+        return True, True
+
+    try:
+        return _host_registry_update(project_root, op)
+    except OSError:
+        return False
+
+
+def _record_loss_recovery(row: dict[str, Any], holder_alive: bool) -> dict[str, Any]:
+    """The executable recovery path for a lost record: an argv-verified
+    ``stop --force`` sweeps the orphan holder, then ``start --resume`` on the
+    recorded native session id starts a clean one."""
+    platform = row.get("platform")
+    session = row.get("session")
+    repo = row.get("repo")
+    acp_session_id = row.get("acp_session_id")
+    resume = f"kaola-acp.py {platform} start --repo {repo} --session {session}"
+    if isinstance(acp_session_id, str) and acp_session_id:
+        resume += f" --resume {acp_session_id}"
+    recovery: dict[str, Any] = {
+        "resume": resume,
+        "acp_session_id": acp_session_id if isinstance(acp_session_id, str) else None,
+        "record_dir": row.get("record_dir"),
+        "socket_path": row.get("socket_path"),
+        "holder_pid": row.get("holder_pid"),
+        "holder_pid_alive": holder_alive,
+        "agent_pid": row.get("agent_pid"),
+        "agent_pgid": row.get("agent_pgid"),
+        "registered_at": row.get("registered_at"),
+    }
+    if holder_alive:
+        recovery["orphan_sweep"] = (
+            f"kaola-acp.py {platform} stop --repo {repo} --session {session} --force"
+            "  (sweeps the argv-verified orphan; run it before the resume)")
+    return recovery
+
+
+def _record_loss_wake(project_root: str, row: dict[str, Any]) -> dict[str, Any]:
+    """Spawn the deliver child for this row's ``record_lost`` wake. The caller
+    already marked the row under the registry lock, and the webhook claims
+    file independently refuses a repeat POST of this (id, seq) pair."""
+    holder_instance_id = row.get("holder_instance_id")
+    if (not isinstance(holder_instance_id, str) or not holder_instance_id
+            or not isinstance(row.get("session"), str)):
+        return {"sent": False, "reason": "registry-row-incomplete"}
+    payload = {
+        "schema": DELEGATOR_WEBHOOK_PAYLOAD_SCHEMA,
+        "project": row.get("repo") or project_root,
+        "session": row["session"],
+        "holder_instance_id": holder_instance_id,
+        "event_seq": RECORD_LOSS_WAKE_SEQ,
+        "state": "error",
+        "state_detail": "record_lost",
+        "reason": "holder_lost",
+        "ts": _utc_stamp(),
+    }
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, str(Path(__file__).resolve()),
+             "delegator-webhook", "deliver"],
+            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, start_new_session=True,
+            close_fds=True, cwd=project_root)
+        assert proc.stdin is not None
+        proc.stdin.write(json.dumps(payload).encode("utf-8"))
+        proc.stdin.close()
+    except Exception as exc:
+        return {"sent": False, "reason": "spawn-failed",
+                "error": type(exc).__name__}
+    return {"sent": True, "holder_instance_id": holder_instance_id,
+            "event_seq": RECORD_LOSS_WAKE_SEQ, "state_detail": "record_lost"}
+
+
+def _record_loss_wake_marked(project_root: str, row: dict[str, Any]) -> dict[str, Any]:
+    """Emit the one record-loss wake for this row. The registry mark and the
+    webhook claims file keep it exactly once per holder_instance_id; a row
+    already marked reports ``already-recovered``."""
+    key = f"{row.get('platform')}/{row.get('session')}"
+
+    def op(hosts: dict[str, Any]) -> tuple[bool, Any]:
+        current = hosts.get(key)
+        if not isinstance(current, dict):
+            return False, {"sent": False, "reason": "registry-row-gone"}
+        prior = current.get("record_lost_wake")
+        if isinstance(prior, dict):
+            return False, {"sent": False, "reason": "already-recovered",
+                           "event_seq": prior.get("event_seq")}
+        current["record_lost_wake"] = {
+            "event_seq": RECORD_LOSS_WAKE_SEQ, "at": _utc_stamp()}
+        return True, None
+
+    try:
+        marked = _host_registry_update(project_root, op)
+    except OSError:
+        # Mirror recover_host_death_wake: an unrecorded wake is not sent; the
+        # next scan retries the mark.
+        return {"sent": False, "reason": "death-wake-unrecorded"}
+    if marked is not None:
+        return marked
+    return _record_loss_wake(project_root, row)
+
+
+def _record_loss_refresh(row: dict[str, Any], record: dict[str, Any]) -> bool:
+    """Reconcile a registry row with a live record for the same session. A
+    different holder_instance_id is a newer start: refresh the identity facts
+    and reset the wake allowance, which is per holder_instance_id."""
+    changed = False
+    holder_instance_id = record.get("holder_instance_id")
+    if (isinstance(holder_instance_id, str) and holder_instance_id
+            and holder_instance_id != row.get("holder_instance_id")):
+        row.pop("record_lost_wake", None)
+        row["holder_instance_id"] = holder_instance_id
+        changed = True
+    for key in ("holder_pid", "agent_pid", "agent_pgid", "acp_session_id",
+                "socket_path"):
+        value = record.get(key)
+        if value is not None and row.get(key) != value:
+            row[key] = value
+            changed = True
+    return changed
+
+
+def stop_record_lost(args: argparse.Namespace, repo: str,
+                     row: dict[str, Any], params: dict[str, Any]) -> dict[str, Any]:
+    """``stop`` on a session whose record dir is gone but whose registry row
+    survives (Issue #359). The holder pid is signalled only under ``--force``
+    and only when its argv still anchors to the lost record dir; a PID reuse
+    is never signalled. The owed holder_lost wake is emitted once either way.
+    """
+    receipt = base_receipt(args, repo)
+    expected = params.get("expected_holder_instance_id")
+    actual = row.get("holder_instance_id")
+    if expected is not None and actual is not None and expected != actual:
+        receipt["error"] = {
+            "code": "holder-instance-mismatch",
+            "expected_holder_instance_id": expected,
+            "holder_instance_id": actual,
+        }
+        receipt.update(mutation_status="not_started", mutation_performed=False)
+        return receipt
+    pid = row.get("holder_pid")
+    alive = pid_alive(pid)
+    receipt["record_lost"] = _record_loss_recovery(row, alive)
+    if alive and not params.get("force"):
+        receipt["error"] = {
+            "code": "record-lost",
+            "message": "the session record is gone and the registered holder "
+                       "pid is a live orphan; rerun stop with --force to sweep it",
+            "holder_pid": pid,
+            "holder_instance_id": actual,
+        }
+        receipt.update(mutation_status="not_started", mutation_performed=False)
+        return receipt
+    anchor = holder_argv_anchor(pid, Path(row["record_dir"])) \
+        if alive and isinstance(row.get("record_dir"), str) else False
+    if alive and anchor is None:
+        receipt["error"] = {
+            "code": "holder-unreachable",
+            "message": "holder pid alive but its argv is unreadable; no "
+                       "identity anchor, nothing signalled; stop it from an "
+                       "unsandboxed shell",
+            "holder_pid": pid,
+        }
+        receipt.update(mutation_status="not_started", mutation_performed=False)
+        return receipt
+    killed: list[int] = []
+    if anchor is True:
+        try:
+            os.kill(pid, signal.SIGKILL)
+            killed.append(pid)
+        except (ProcessLookupError, PermissionError):
+            pass
+        deadline = time.monotonic() + 5.0
+        while killed and pid_alive(pid) and time.monotonic() < deadline:
+            time.sleep(0.05)
+    death_wake = _record_loss_wake_marked(repo, row)
+    if death_wake is not None:
+        receipt["delegator_death_wake"] = death_wake
+    host_registry_deregister(repo, args.platform, args.session,
+                             holder_instance_id=actual)
+    stopped = not alive or anchor is False or not pid_alive(pid)
+    receipt.update(stopped=stopped, holder_lost=True, record_lost=True,
+                   holder_pid=pid,
+                   force_killed_pids=killed,
+                   residual_pids=[pid] if alive and anchor is True and not stopped else [])
+    if alive and anchor is False:
+        receipt["pid_reused"] = True
+    return receipt
+
+
+def _record_loss_present_record(row: dict[str, Any], project_root: str,
+                                dirs: list[Path] | None) -> dict[str, Any] | None:
+    """This row's surviving record among ``dirs``, or None. A record for the
+    same (platform, session) but another repo does not count (Issue #359)."""
+    if not dirs:
+        return None
+    for directory in dirs:
+        try:
+            record = read_record(directory)
+        except OSError:
+            continue
+        if isinstance(record, dict) and _webhook_same_project(record, project_root):
+            return record
+    return None
+
+
+def _record_loss_list(project_root: str,
+                      present: dict[tuple[str, str], list[Path]]) -> list[dict[str, Any]]:
+    """This repo's registry rows whose session has no record.json under any
+    record root (Issue #359). Read-only: no prune and no wake."""
+    lost = []
+    for row in _host_registry_doc(project_root).get("hosts", {}).values():
+        platform = row.get("platform")
+        session = row.get("session")
+        if (not isinstance(platform, str) or not isinstance(session, str)
+                or not _registry_row_project(row, project_root)):
+            continue
+        if _record_loss_present_record(
+                row, project_root, present.get((platform, session))) is not None:
+            continue
+        lost.append({
+            "platform": platform, "session": session,
+            "repo": row.get("repo"),
+            "record_lost": True,
+            "holder_pid": row.get("holder_pid"),
+            "holder_pid_alive": pid_alive(row.get("holder_pid")),
+            "holder_instance_id": row.get("holder_instance_id"),
+            "acp_session_id": row.get("acp_session_id"),
+            "wake_reported": isinstance(row.get("record_lost_wake"), dict),
+            "transport": "acp",
+        })
+    return sorted(lost, key=lambda r: (r["platform"], r["session"]))
+
+
+def _record_loss_scan(project_root: str,
+                      present: dict[tuple[str, str], list[Path]]) -> dict[str, Any]:
+    """Registry cross-check for ``delegator-webhook status`` (Issue #359).
+
+    A row whose (platform, session) has no record.json under any record root
+    is a host whose record was lost since registration; it gets its one
+    ``record_lost``/``holder_lost`` wake. A row with a ``stopped`` record
+    retires; a newer holder_instance_id refreshes its facts."""
+    def evaluate(hosts: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
+        changed = False
+        send: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        lost: list[dict[str, Any]] = []
+        for key in sorted(hosts):
+            row = hosts[key]
+            platform = row.get("platform")
+            session = row.get("session")
+            if (not isinstance(platform, str) or not isinstance(session, str)
+                    or not _registry_row_project(row, project_root)):
+                continue
+            record = _record_loss_present_record(
+                row, project_root, present.get((platform, session)))
+            if record is not None:
+                if record.get("state") == "stopped":
+                    del hosts[key]
+                    changed = True
+                    continue
+                if _record_loss_refresh(row, record):
+                    changed = True
+                continue
+            alive = pid_alive(row.get("holder_pid"))
+            finding = {
+                "session": session,
+                "platform": platform,
+                "holder_instance_id": row.get("holder_instance_id"),
+                "record_lost": True,
+                "holder_pid_alive": alive,
+                "registered_at": row.get("registered_at"),
+                "recovery": _record_loss_recovery(row, alive),
+            }
+            prior = row.get("record_lost_wake")
+            if isinstance(prior, dict):
+                finding["delegator_death_wake"] = {
+                    "sent": False, "reason": "already-recovered",
+                    "event_seq": prior.get("event_seq")}
+            else:
+                row["record_lost_wake"] = {
+                    "event_seq": RECORD_LOSS_WAKE_SEQ, "at": _utc_stamp()}
+                changed = True
+                send.append((row, finding))
+            lost.append(finding)
+        return changed, {"send": send, "lost": lost}
+
+    try:
+        result = _host_registry_update(project_root, evaluate)
+    except OSError:
+        return {"scan": "registry-unavailable", "lost": []}
+    for row, finding in result["send"]:
+        # The deliver child spawns outside the registry lock; the row mark is
+        # already durable, so a spawn failure stays exactly-once recorded.
+        finding["delegator_death_wake"] = _record_loss_wake(project_root, row)
+    return {"scan": "complete", "lost": result["lost"]}
+
+
 def op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
                       op: str, params: dict[str, Any],
                       timeout: float | None) -> dict[str, Any]:
@@ -2217,6 +2786,26 @@ def op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
         return holder_lost_receipt(args, repo, record)
     if not sock.exists():
         if record is None:
+            # Issue #359: a record dir can be wiped while its holder lives.
+            # A surviving registry row proves a Host ran here: report
+            # record-lost with the recovery path instead of a bare no-session;
+            # a stop is the orphan sweep.
+            row = host_registry_row(repo, args.platform, args.session)
+            if row is not None:
+                if op == "stop":
+                    return stop_record_lost(args, repo, row, params)
+                receipt = base_receipt(args, repo)
+                receipt["error"] = {
+                    "code": "record-lost",
+                    "message": "the ACP session record registered for this "
+                               "platform/session/repo is gone; the holder may "
+                               "still run as an orphan",
+                    "holder_pid": row.get("holder_pid"),
+                    "holder_instance_id": row.get("holder_instance_id"),
+                }
+                receipt["record_lost"] = _record_loss_recovery(
+                    row, pid_alive(row.get("holder_pid")))
+                return receipt
             receipt = base_receipt(args, repo)
             receipt["error"] = {"code": "no-session",
                                 "message": "no ACP session record for this platform/session/repo"}
@@ -2245,6 +2834,13 @@ def op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
             return force_stop_unreachable(args, repo, directory, record, params)
     receipt = base_receipt(args, repo)
     receipt.update(response)
+    if record is None:
+        # Issue #359: the socket answers (or is stale) while the record dir is
+        # gone. Attach the loss fact so status stays honest about bookkeeping.
+        row = host_registry_row(repo, args.platform, args.session)
+        if row is not None:
+            receipt["record_lost"] = _record_loss_recovery(
+                row, pid_alive(row.get("holder_pid")))
     return receipt
 
 
@@ -2397,13 +2993,13 @@ def recorded_groups(record: dict[str, Any], directory: Path | None = None,
         delta = spawned_at / 1000.0 - started
         if -SPAWN_RECORD_SLACK <= delta <= SPAWN_RECORD_TOLERANCE:
             groups.append(child)
-    if (record.get("session_role") in ("sideagent", "sidekick") or preserve_dispatched) and groups:
-        # Issue #255: workers a Sideagent dispatched keep running when it is
-        # replaced; each has its own exact stop. Only this script's `start`
-        # appends to the spawn record, so a verified entry is a Runner holder
-        # this agent started; a live holder whose own record names this
-        # Sideagent's holder as dispatcher is one too. Its whole process tree
-        # is kept.
+    if (record.get("session_role") in ("sideagent", "sidekick", "host") or preserve_dispatched) and groups:
+        # Issue #255/#361: workers a Sideagent dispatched and seats a Host
+        # opened keep running when it is stopped or replaced; each has its own
+        # exact stop. Only this script's `start` appends to the spawn record,
+        # so a verified entry is a Runner holder this agent started; a live
+        # holder whose own record names this agent's holder as dispatcher is
+        # one too. Its whole process tree is kept.
         kept = dispatched_worker_groups(spawned, record.get("holder_instance_id"))
         groups = [group for group in groups if group not in kept]
     return groups
@@ -5866,8 +6462,15 @@ def attach_broker_reconcile(receipt: dict[str, Any], args: argparse.Namespace,
         receipt["broker_job"] = {"reaped": True, "label": out.get("label"),
                                  "result": "reconciled"}
     elif out.get("reason") in ("job-occupied", "job-state-unknown"):
-        receipt["broker_job"] = {"reaped": False, "label": out.get("label"),
-                                 "reason": out.get("reason"), "result": "refused"}
+        # Issue #371: an unreadable manager carries the read's own facts, so a
+        # stop receipt says the caller was confined instead of implying a job.
+        fact = {"reaped": False, "label": out.get("label"),
+                "reason": out.get("reason"), "result": "refused"}
+        if out.get("os_state"):
+            fact["os_state"] = out["os_state"]
+        if out.get("caller_confined") is not None:
+            fact["caller_confined"] = bool(out["caller_confined"])
+        receipt["broker_job"] = fact
 
 
 def spawn_holder_outside(args: argparse.Namespace, repo: str, directory: Path,
@@ -5931,8 +6534,12 @@ def spawn_holder_outside(args: argparse.Namespace, repo: str, directory: Path,
                           "message": (result.stderr or result.stdout or "no broker receipt")[-300:]},
                 "holder_may_exist": True}
     if out.get("result") not in ("ready", "existing"):
-        if requested == "auto" and out.get("reason") == "launch-backend-unsupported":
-            return {"degraded": True, "detail": out.get("detail")}
+        # Issue #361: job-state-unknown under auto is the same class as
+        # launch-backend-unsupported — the outside launcher cannot operate
+        # (a sandboxed Host shell cannot read launchd state), so the seat
+        # degrades to the direct path rather than refusing outright.
+        if requested == "auto" and out.get("reason") in ("launch-backend-unsupported", "job-state-unknown"):
+            return {"degraded": True, "detail": out.get("detail"), "reason": out.get("reason")}
         error = {"code": out.get("reason") or "launch-broker-failed",
                  "message": out.get("detail") or "outside launch refused"}
         if out.get("recovery"):
@@ -6206,6 +6813,47 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
         if pid_alive(record.get("agent_pgid")) or pid_alive(record.get("agent_pid")):
             receipt.update(holder_lost_receipt(args, repo, record))
             return receipt
+    else:
+        # Issue #359: no record, but a surviving registry row proves a Host
+        # ran here. Emit the owed record-loss wake once; a live argv-verified
+        # orphan refuses this start (sweep it with `stop --force` first), a
+        # dead or pid-reused one is replaced.
+        lost_row = host_registry_row(repo, args.platform, args.session)
+        if lost_row is not None:
+            receipt["record_lost"] = _record_loss_recovery(
+                lost_row, pid_alive(lost_row.get("holder_pid")))
+            death_wake = _record_loss_wake_marked(repo, lost_row)
+            if death_wake is not None:
+                receipt["delegator_death_wake"] = death_wake
+            lost_pid = lost_row.get("holder_pid")
+            if pid_alive(lost_pid):
+                lost_directory = Path(lost_row["record_dir"]) \
+                    if isinstance(lost_row.get("record_dir"), str) else None
+                anchor = holder_argv_anchor(lost_pid, lost_directory) \
+                    if lost_directory is not None else None
+                if anchor is not False:
+                    receipt.update({
+                        "result": "refused",
+                        "reason": "record-lost-orphan",
+                        "detail": "the session's record directory is gone and "
+                                  "its registered holder pid is still alive; "
+                                  "run `stop --force` to sweep the orphan, "
+                                  "then start --resume with the recorded "
+                                  "acp_session_id",
+                        "holder_pid": lost_pid,
+                        "holder_instance_id": lost_row.get("holder_instance_id"),
+                        "mutation_status": "not_started",
+                        "mutation_performed": False,
+                    })
+                    return receipt
+                receipt["replaced_record"] = {
+                    "holder_pid": lost_pid, "pid_reused": True,
+                    "record_lost": True,
+                    "holder_instance_id": lost_row.get("holder_instance_id")}
+            else:
+                receipt["replaced_record"] = {
+                    "holder_pid": lost_pid, "record_lost": True,
+                    "holder_instance_id": lost_row.get("holder_instance_id")}
     acp_paths.prepare_record_directory(directory, directory.parent.parent.parent)
     if receipt.get("replaced_record"):
         try:
@@ -6301,6 +6949,10 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
             # auto: the outside launcher is unavailable; fall back to the
             # explicit direct path and say so in the receipt.
             receipt["launch_backend_degraded"] = True
+            if launched.get("reason"):
+                receipt["launch_backend_fallback_reason"] = launched["reason"]
+            if launched.get("detail"):
+                receipt["launch_backend_fallback_detail"] = launched["detail"]
             launched = None
         elif "error" in launched:
             receipt["error"] = launched["error"]
@@ -6326,6 +6978,11 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
         if child_record is not None:
             receipt["child_record"] = child_record
     else:
+        # Issue #361: report the actual backend the broker used so the receipt
+        # proves whether auto resolved to launchd, systemd-user, or an
+        # explained fallback.
+        if launched["launch"].get("backend"):
+            receipt["launch_backend"] = launched["launch"]["backend"]
         holder_pid_hint = launched["launch"].get("holder_pid")
         if launched["launch"].get("child_record") is not None:
             receipt["child_record"] = launched["launch"]["child_record"]
@@ -6359,6 +7016,26 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
         "baseline_exempt": state.get("baseline_exempt"),
     })
     attach_binding_fact(receipt, state)
+    # Issue #359: durable registration outside the record root. The row makes
+    # a wiped record directory detectable by the status/list scans; a clean
+    # stop removes it. A registry write failure must not fail the start.
+    if (role == "host"
+            and isinstance(state.get("holder_instance_id"), str)
+            and state["holder_instance_id"]):
+        registered = host_registry_register(repo, {
+            "platform": args.platform,
+            "session": args.session,
+            "repo": repo,
+            "record_dir": str(directory),
+            "socket_path": str(sock),
+            "holder_pid": state.get("holder_pid", holder_pid_hint),
+            "holder_instance_id": state["holder_instance_id"],
+            "acp_session_id": state.get("acp_session_id"),
+            "agent_pid": state.get("agent_pid"),
+            "agent_pgid": state.get("agent_pgid"),
+        })
+        if not registered:
+            receipt["host_registry"] = "unrecorded"
     receipt["transport"]["protocol_version"] = state.get("protocol_version")
     receipt["transport"]["agent_info"] = state.get("agent_info")
     versions = codex_version_fact(args, state.get("agent_pid"), state.get("agent_info"))
@@ -6559,9 +7236,46 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
                     receipt["fast"] = fast_report(args, policy, "none", False)
         if args.platform == "dsh":
             value, source = dsh_permission_mode(args)
-            application["mode"] = {"applied": True, "applied_via": "env",
-                                   "env": DSH_PERMISSION_ENV, "value": value,
-                                   "source": source}
+            if args.resume or args.use_continue:
+                # Issue #363: dsh pins the permission preset into the session
+                # log at creation and keeps the recorded value on resume, so
+                # the launch variable travels but never applies to a resumed
+                # session. Report the request separately from the session's
+                # own effective facts, read back from that log.
+                entry: dict[str, Any] = {"applied": False, "requested_via": "env",
+                                         "env": DSH_PERMISSION_ENV, "value": value,
+                                         "source": source, "reason": "resumed-session-permission"}
+                effective_mode = dsh_session_permission(repo, receipt.get("acp_session_id"))
+                if effective_mode is not None:
+                    entry["effective"] = effective_mode
+                    entry["effective_via"] = "session-log"
+            else:
+                # Issue #360: ``applied`` follows the environment the holder
+                # was actually launched with, not the intent. A direct spawn
+                # gets ``holder_env`` verbatim; the broker receipt names the
+                # keys its filter passed (``env_keys``). A reconciled
+                # "existing" holder was spawned by an earlier start, so this
+                # one delivered no environment — its own start record carries
+                # that evidence.
+                launch = (launched or {}).get("launch") or {}
+                env_keys = launch.get("env_keys")
+                if launched is None:
+                    delivered = holder_env.get(DSH_PERMISSION_ENV)
+                    reason = "holder-env-missing"
+                elif isinstance(env_keys, list):
+                    delivered = (value if DSH_PERMISSION_ENV in env_keys else None)
+                    reason = "dropped-by-launch-env-filter"
+                else:
+                    delivered = None
+                    reason = ("existing-holder-env-not-redelivered"
+                              if launch.get("result") == "existing"
+                              else "env-census-absent")
+                entry = {"applied": delivered is not None,
+                         "applied_via": "env", "env": DSH_PERMISSION_ENV,
+                         "value": delivered or value, "source": source}
+                if delivered is None:
+                    entry["reason"] = reason
+            application["mode"] = entry
             mode_value = None
         if mode_value and "error" not in receipt:
             # The mode/permission option id is a per-platform manifest fact
@@ -6980,8 +7694,14 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
     # Issue #181: echo the mode the new start actually applied, not a bare None.
     if selection.get("mode") is None:
         applied_mode = ((started.get("config_application") or {}).get("mode") or {})
-        if isinstance(applied_mode.get("value"), str):
-            selection["mode"] = applied_mode["value"]
+        # Issue #363: a resumed session can keep a recorded permission that
+        # differs from the requested one; its effective value is the echo.
+        effective_mode = applied_mode.get("effective")
+        effective_preset = effective_mode.get("preset") if isinstance(effective_mode, dict) else None
+        for candidate in (effective_preset, applied_mode.get("value")):
+            if isinstance(candidate, str):
+                selection["mode"] = candidate
+                break
     started["start_selection"] = selection
     if did_stop:
         _note_post_stop_result(started, old_id, stop)
@@ -8054,8 +8774,13 @@ def _webhook_scan_holder_lost(project_root: str) -> dict[str, Any]:
         return {"scan": "incomplete", "leg": leg,
                 "reason": "record-root-mismatch", "wakes": []}
     wakes: list[dict[str, Any]] = []
+    # Issue #359: (platform, session) pairs with a record.json anywhere. A
+    # registry row missing from this map is a record the wipe took.
+    present: dict[tuple[str, str], list[Path]] = {}
     for path in paths:
         directory = path.parent
+        present.setdefault((path.parent.parent.parent.name,
+                            path.parent.parent.name), []).append(directory)
         try:
             record = read_record(directory)
         except OSError:
@@ -8068,7 +8793,11 @@ def _webhook_scan_holder_lost(project_root: str) -> dict[str, Any]:
             "holder_instance_id": record.get("holder_instance_id"),
             "delegator_death_wake": wake,
         })
-    return {"scan": "complete", "leg": leg, "wakes": wakes}
+    result: dict[str, Any] = {"scan": "complete", "leg": leg, "wakes": wakes}
+    # Issue #359: the registry cross-check - rows whose records are gone get
+    # their one record-lost wake; stale rows are reconciled.
+    result["record_lost"] = _record_loss_scan(project_root, present)
+    return result
 
 
 def _webhook_attach_holder_lost(project_root: str, receipt: dict[str, Any]) -> None:
@@ -8737,9 +9466,18 @@ def main() -> int:
         else:
             if preserving(args):
                 params["preserve_dispatched_workers"] = True
+            prior = read_record(directory) if directory is not None else None
             receipt = op_or_holder_lost(
                 args, repo, directory, "stop", params, 30.0
             )
+            # Issue #359: a recorded clean stop retires this host's registry
+            # row. The holder already deregisters itself on a socket-answered
+            # stop; this also covers dead-record sweeps and older holders.
+            if (receipt.get("stopped") is True and directory is not None
+                    and isinstance((prior or {}).get("holder_instance_id"), str)):
+                host_registry_deregister(
+                    repo, args.platform, args.session,
+                    holder_instance_id=prior["holder_instance_id"])
             if directory is not None:
                 attach_broker_reconcile(receipt, args, repo, directory)
     else:

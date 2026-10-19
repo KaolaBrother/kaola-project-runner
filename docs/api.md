@@ -292,6 +292,21 @@ this finite request still has no forwarded completion on the shipped ACP route. 
 existing inquiry recovery there. Live compaction and post-compaction read/use on this new
 route remain pending; model-free adapter tests do not establish them.
 
+dsh pins the session's permission into its session log at creation: the
+`permission/preset`, `sandbox/mode`, and `approval/policy` events a `session/new`
+writes are the values `session/resume` restores, so the launch variable
+`DSH_PERMISSION_MODE` a resume still carries can never change them. A
+`start --resume`/`--continue` receipt therefore reports
+`config_application.mode` as `{"applied": false, "requested_via": "env",
+"value": <requested>, "source": <source>, "reason": "resumed-session-permission"}`
+and, when the session log under `$DSH_HOME/sessions/` is readable, the
+session's own recorded facts under `effective` (`preset`, `sandbox`,
+`approval`, `session_log`, with `effective_via: "session-log"`). An unreadable
+or absent log reports no `effective` — it is never guessed. A session born
+confined stays confined across every resume; gaining a wider preset takes a
+fresh session, which the Delegator host-restart guide states for the Host
+restart path.
+
 Droid's executable override is `DROID_BIN`. Its ACP command is the native
 `droid exec --output-format acp`; no bridge or translator is used. Droid defaults to Auto Model
 (`model=auto`) and full bypass (`autonomy_level=auto-high`). The supported
@@ -499,9 +514,9 @@ scripts/kaola-launchd-broker.py reconcile --platform ID --session NAME --repo GI
 - The job is absent. The receipt is `{result: reconciled, reaped: false}`. Nothing was unloaded.
 - The job has exited and the session record has no live holder pid, agent pid, or agent process group. The broker boots the job out (one retry) and the receipt is `{result: reconciled, reaped: true}`. `submit` does this itself, so `start --resume` continues without a hand-run `launchctl` or `systemctl`.
 - The job is still running, or the record still has a live holder or native agent. The broker does not unload it. The refusal reason is `job-occupied`. The text names the route: exact-stop the session through the Runner; when the one-shot has exited (`KeepAlive` is false; reconcile does not reap a job that is still running), run the `reconcile` command above, then retry `start --resume`. Do not run `launchctl` or `systemctl` by hand.
-- The service manager cannot be read. Reason `job-state-unknown`, same route, nothing unloaded.
+- The service manager cannot be read from this process. Reason `job-state-unknown`, nothing unloaded, and this is not evidence of a stale job: a Seatbelt caller sees `/bin/launchctl list` exit nonzero, so the receipt carries `os_state: "unknown"`, the read's `manager_rc`, a short `manager_stderr`, and `caller_confined: true` when `/bin/launchctl` exists but the read failed. The route is its own: do not retry `reconcile` or `start` from that same confined shell; run the `reconcile` command above once from an unconfined shell (`os_state: absent` with `reaped: false` means there was never a leftover), then retry `start` — `start --resume ID` only when this session's record carries an `acp_session_id`. The `job-state-unknown` row of `scripts/kaola-recovery-routes.py` carries the same four steps, including the `auto` start's degradation to direct (`launch_backend_fallback_reason: job-state-unknown`) and the full-access fresh Host start for a Host whose recorded preset is `workspace-write`.
 
-`submit` keeps `launch-in-progress` for a job that is still running and does not kill it. `cleanup` is unchanged: it still refuses a non-owned exited job with `job-not-owned` and does not unload it. That refusal also names `reconcile`.
+`submit` keeps `launch-in-progress` for a job that is still running and does not kill it. `cleanup` still refuses a non-owned exited job with `job-not-owned` and does not unload it. That refusal also names `reconcile`.
 
 `kaola-acp.py stop` runs `reconcile` after the stop, including a stop where the holder is already gone. `kaola-locate.py --intent resume` runs it when `--worker` is a known worker, `--session` is set, and `--project` resolves to a checkout top level. Both attach `broker_job` only when the job was reaped or the broker refused `job-occupied` or `job-state-unknown`. An absent job adds no field. A live job does not turn an otherwise good attestation into a refusal. A missing broker does not fail the stop.
 
@@ -832,6 +847,12 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
 - `migrate` is a read-only plan unless `--write`; see
   [state-format migration](conventions.md#state-format-updates-and-migration).
   On schema `/2`, the report includes `removed`. Each name is a locator.
+  A current record written before record revisions carries no usable `rev`, so
+  every `--expect-rev` path (`update`, `retire`, and the returned-input settle)
+  refuses it `record-versionless` and names this migration as the repair; the
+  write assigns `rev 1` (`<kind>.<id>.rev assigned 1` in `removed`), after which
+  the normal command and all its gates apply unchanged. `check` emits the
+  read-only plan as such a row's `command`.
 - `delegator view|update|migrate --file .kaola/delegator-heartbeat.json` is the Delegator file tool.
   `project.user_language` is an optional string. It is the language for Delegator replies to the user.
   A missing key stores no language. The tool does not choose one.
@@ -842,7 +863,7 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   shape check serves writes, migration, and the dispatch ceiling. `delegator update` accepts one
   grouped `elite_grants` row with `extra_seats` plus that preset once in `expert_task_grants`. A malformed
   grant with known preset ids refuses those ids; malformed pool authorization
-  refuses that class. A `worker_grants` row is exactly one of `preset_ids` or `scope` `all-worker-presets`, plus `count` (a nonnegative integer or the literal `unlimited`), optional `expires`, and `state` (`granted`, `paused`, or `revoked`; omitted means granted). A missing, null, or malformed `count` refuses that row and is not `unlimited`. A named row with a bad count refuses those ids; an unreadable all-worker row or an unreadable `worker_grants` value refuses the Worker class. Two all-worker rows, a named row mixed with an all-worker row, or the same preset twice refuses the list. A Worker preset also named on an Elite or Expert row refuses. `unlimited` does not authorize Elite or Expert and does not override an exclusion. The closed form sorts `preset_ids`. A well-formed legacy `worker_pool` is removed on migration and is not copied into `worker_grants`. The Delegator view lists `authorization.worker_grants` (coverage `named-presets` or `all-worker-presets`, count as the integer or the word `unlimited`, expiry) and `worker_grant_statement`. With no grants that statement is `No Worker grants. There are no Workers until the owner grants some.` Dispatch `worker_ids` come only from current `worker_grants`. An unauthorized Worker preset is `no-worker-grant`; an expired one is `worker-grant-expired`. A numeric count is enforced. Only an explicit `unlimited` grant that covers that preset skips the count check. Legacy aggregate limits require original owner reconciliation. Owner conditions remain literal until mapped
+  refuses that class. A `worker_grants` row names `preset_ids` (Worker preset ids) plus `count` (a nonnegative integer or the literal `unlimited`), optional `expires`, and `state` (`granted`, `paused`, or `revoked`; omitted means granted). Every Worker grant is a per-preset row; granting all presets is written as one row per preset, and there is no `scope` or other shortcut form — a `scope` field on a row is refused with the per-preset form named. A stored `all-worker-presets` row is expanded once by `delegator migrate` into one row per covered, non-excluded Worker preset, carrying the row's count, state, and expiry; after that the old form is refused. The Host `authorization.grants` mirror carries the same per-preset count: a nonnegative integer or the literal `unlimited`. A missing, null, or malformed `count` refuses that row and is not `unlimited`. A named row with a bad count refuses those ids; a row whose ids cannot be read or an unreadable `worker_grants` value refuses the Worker class. The same preset twice refuses the list. A Worker preset also named on an Elite or Expert row refuses. `unlimited` does not authorize Elite or Expert and does not override an exclusion. The closed form sorts `preset_ids`. A well-formed legacy `worker_pool` is removed on migration and is not copied into `worker_grants`. The Delegator view lists `authorization.worker_grants` (coverage `named-presets`, count as the integer or the word `unlimited`, expiry) and `worker_grant_statement`. With no grants that statement is `No Worker grants. There are no Workers until the owner grants some.` Dispatch `worker_ids` come only from current `worker_grants`. An unauthorized Worker preset is `no-worker-grant`; an expired one is `worker-grant-expired`. A numeric count is enforced. Only an explicit `unlimited` grant that covers that preset skips the count check. Legacy aggregate limits require original owner reconciliation. Owner conditions remain literal until mapped
   from original authority. An untyped old file produces an actionable
   migration observation from `execute`; legacy Host authorization continues.
   `adopted` needs a string `evidence` or `locator` that names the Host record or path. `sent` does not.
@@ -1308,6 +1329,31 @@ existing self-route: pass one private `--record-root` you own, or unset
 `leg` is always `delegator-webhook status`. The scan does not wait for the
 network.
 
+The same scan also cross-checks the host registry (#359). A `start` whose
+`session_role` is `host` writes one row per session to
+`<repo>/.kaola/host-registry.json` (`kaola-host-registry/1`, mode 0600, atomic
+replace under `host-registry.lock`): platform, session, realpath repo, record
+dir, socket path, holder pid, `holder_instance_id`, `acp_session_id`, and
+agent pids. A recorded clean stop removes the row. A row whose
+`(platform, session)` has no `record.json` under any record root is a wiped
+record directory: `status` emits the one `error`/`holder_lost` wake with
+`state_detail` `record_lost` at the fixed `event_seq` 0, and marks the row
+(`record_lost_wake`) so a later `status` reports `already-recovered` instead
+of POSTing again; the claims file backs the same (id, seq) dedupe. A row
+whose record exists and is `stopped` is pruned; a newer `holder_instance_id`
+refreshes the row's facts. The findings land on `holder_lost.record_lost`
+(`{scan, lost}`); each lost entry carries the session, `holder_instance_id`,
+`holder_pid_alive`, and a `recovery` block naming the executable path —
+`stop --repo REPO --session SESSION --force` sweeps a live argv-verified
+orphan holder (a reused pid is never signalled), then `start --resume` on the
+recorded `acp_session_id` starts a clean one. `status`, `observe`, `send`,
+and the other session ops on that session return `error.code` `record-lost`
+with the same `record_lost` facts; `list --repo` reports them under
+`records_lost`; a plain `stop` on a live orphan refuses `record-lost`; and a
+`start` while the orphan lives refuses `record-lost-orphan`. A
+`record_lost.scan` of `registry-unavailable` means the registry could not be
+read or locked; lost rows are not reported on that pass.
+
 Payload (signal only, no transcript, prompt, diff or secret). A current
 holder (v0.9.7 and later) sends `reason`, one of the tokens in the tables
 above, or `test`. A previous holder's payload may omit it; the accepted-shape
@@ -1593,7 +1639,9 @@ exit 0 on success):
   `skipped`. An incomplete record-root scan has `reason`
   `record-root-mismatch` and the self-route above. Each wake is
   `{session, holder_instance_id, delegator_death_wake}`. A `sent: false`
-  death wake on that object carries `route` or `self_route`. Exit stays 0.
+  death wake on that object carries `route` or `self_route`. `holder_lost`
+  also carries `record_lost` (`{scan, lost}`) when the scan runs: the
+  host-registry cross-check (#359) above. Exit stays 0.
   Eligibility, the skipped-scan rule, and the cron cadence bound are in the
   death-recovery paragraphs above.
 - `test --project ROOT` sends one `state: "test"` payload through the same
@@ -1637,14 +1685,16 @@ scripts/kaola-tmux.sh PLATFORM stop      --repo ABS_PATH --session NAME \
   [--if-snapshot ID] [--force] [--preserve-dispatched-workers]
 ```
 
-`--preserve-dispatched-workers` (also on `drain-restart`) is an explicit Host continuity
-intent: the stop keeps the complete process tree (holder, native agent, tools) of each worker
-this Host dispatched, proven by its spawn line or a live worker record naming this exact
-holder as `dispatcher`, on a cooperative stop and on dead-holder cleanup; other recorded
-children are still swept. A live holder that does not advertise `preserve-dispatched/1`
-returns `{"result":"refused","reason":"preserve-unsupported"}` with `mutation_status:
-not_started`. Without the flag a Host stop is unchanged. The successor Host then runs
-`rebind-host` per seat; a start still in flight is not covered and needs reconciliation.
+`--preserve-dispatched-workers` (also on `drain-restart`) asks the stop to keep the
+complete process tree (holder, native agent, tools) of each Runner session this seat
+started, proven by its spawn line or a live worker record naming this exact holder as
+`dispatcher`, on a cooperative stop and on dead-holder cleanup; other recorded
+children are still swept. A Host or Sideagent keeps them with or without the flag:
+stopping or replacing the dispatcher never ends a verified Runner session — each seat
+has its own exact stop (#361). A live holder that does not advertise
+`preserve-dispatched/1` returns `{"result":"refused","reason":"preserve-unsupported"}`
+with `mutation_status: not_started`. The successor Host then runs `rebind-host` per
+seat; a start still in flight is not covered and needs reconciliation.
 
 ACP records default to `/tmp/kaola-<uid>` and new admin sockets to
 `/tmp/kaola-<uid>-acp`; caller `TMPDIR` and `XDG_RUNTIME_DIR` do not change
@@ -1850,12 +1900,12 @@ A native model component `role` (`main` or `sidekick` inside `model_display.comp
 
 Installed platforms are a separate host-wide fact (Issue #147). `kaola-acp survey [--platform P] [--login-shell SHELL]` is read-only: it starts no agent, opens no ACP session, creates no holder, record, or record root, runs no platform binary (not even `--version`), and so spends no model turn. Its only child process is one non-interactive login shell (`SHELL -l -c`, stdin closed, bounded to 10 s and killed as a group on timeout), started from a fresh minimal environment (`HOME`, `SHELL`, `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, `TERM=dumb`, plus `USER`/`LOGNAME`/`TMPDIR`/`LANG` when set), that prints its environment; the shell is `--login-shell`, else the account's login shell, else `$SHELL`, else `/bin/zsh`. A client with a narrow PATH (a GUI app subprocess) therefore sees what a new login sees. A `.zshrc`-only PATH edit is interactive-only and is not part of the login environment. Stdout is one `kaola-acp-survey/1` object, exit 0: `{schema, login_env, platforms}`. `login_env` is `{shell, shell_source: argument|account|SHELL|default, status: ok|unavailable, detail, path}` (`path` is the login PATH, `detail` says why it is unavailable). `platforms` has one row per platform in Runner order (`claude-code`, `codex`, `cursor-cli`, `devin`, `droid`, `dsh`, `grok`, `kimi-cli`, `opencode`, `zcode`; `--platform` keeps one), every row with the same keys: `platform`, `runtime_name`, `status` (`present` | `absent` | `unknown`), `installed` (`status == present`), `path` (the resolved executable or `null`), `source`, `binary`, `binary_env`, `requires_env`, `process_path`, and `login_path` (the manifest `binary_name` resolved on the invoking PATH and on the login PATH, each an executable path or `null`). `source` follows the Runner's launch order: `binary_env` (the manifest override in the invoking environment), `process_path`, `login_binary_env` (the same override exported by the login shell), then `login_path`. `absent` means neither environment resolves it; `unknown` means the invoking environment does not and the login environment could not be read, so absence is not established. ZCode keeps its launch rule: `binary` and `binary_env` are `null`, `requires_env` is `["KAOLA_ZCODE_ENTRY", "KAOLA_ZCODE_NODE"]`, and the row is `present` (`source` `process_env` or `login_env`, `path` the entry) only when both are absolute paths to an existing entry file and an executable runtime in one environment; a `zcode` on PATH or an installed application bundle is not probed. OpenCode Go is a provider route inside the `opencode` and `dsh` CLIs, not a separate binary, so those two rows carry it. `install-local.sh --bin-links` exposes the survey as `$HOME/.local/bin/kaola-acp survey`.
 
-Quota packages are a separate read-only catalog (Issue #148). `kaola-acp packages [--platform P] [--installed-only] [--login-shell SHELL]` and `kaola-acp model-package --platform P --model ID` start no agent, open no session, create no holder or record, and spend no quota. Login environment is not required. `--installed-only` reuses the survey and keeps platforms whose `status` is `present`; only that flag runs the login shell. Stdout is one JSON object with sorted keys, exit 0. `packages` is `kaola-acp-packages/1`: `{schema, installed_only, platforms}` plus `login_env` only when `--installed-only`. Each platform row is `{platform, packages:[{id, name, windows, binds_models}]}`. `id` is `<platform>:<token>`. `windows` remains null or an array of strings: current values are `5h`, `weekly`, and `monthly`; multiple known periods can be listed together. An empty array means the package is verified to have no time-based reset window; null means the package-level period is not established. This field names confirmed reset periods only, not quota amounts or reset timestamps; an unlisted period is not proven absent unless the provider documents the complete set. Antigravity (`antigravity:account`, Issue #329) lists `5h` and `weekly`, verified live on `agy 1.3.5` via `agy -p /usage --output-format json` (`kaola-quota.py` `parse_antigravity_usage` / `probe_antigravity_usage`, which normalizes `Gemini Models` (`gemini-weekly`, `gemini-5h`) for both verified tiers `antigravity/default` (`gemini-4-argon-medium`) and `antigravity/xhigh` (`gemini-4-argon-high`) and `Claude and GPT models` (`3p-weekly`, `3p-5h`) into `used`/`limit`/`used_percent`/`remaining_percent`/`remaining_fraction`/`reset_at`/`window`). Factory's Individual Plans docs specify three rolling windows (5-hour, 7-day, and 30-day) for individual-plan Standard Usage. Droid Standard therefore lists `5h`, `weekly`, and `monthly`. Droid Core is a separate Rate Limit pool after Standard Usage is exhausted; the docs do not specify Core window periods, so the catalog keeps only the owner-confirmed weekly and monthly periods for Core and does not infer a 5h window ([Factory Individual Plans](https://docs.factory.ai/pricing/individuals)). Kimi exposes both `kimi-cli:managed` (weekly and monthly) and the additive `kimi-cli:managed_monthly` (monthly only); Kimi model identifiers expose the same `kimi-code` prefix for both plans, so the new variant does not bind models and consumers need account-plan context to select it. Droid `extra_usage` uses an empty window list because Factory describes its prepaid credits as non-expiring (same source). Current unresolved package periods remain null for `claude-code:extra_usage` (the supplied facts establish subscription periods, not this extra-usage balance), `devin:overage` (no period is established for this separate overage entry), and `opencode:zen` (no Zen-specific period is established; the OpenCode Go fact does not cover it). `model-package` is `kaola-acp-model-package/1`: `{schema, platform, model, packageId, status}` where `status` is `mapped` or `unmapped` and `packageId` is the qualified id or null. A usage error exits 2. An id with no verified rule is unmapped, never a guessed package. A static query (no live row) may still map an owner-confirmed preset id through the manifest's static preset map, and a live row's present native field value still wins over that static map. Example, mapped: `{"model": "grok-4.7", "packageId": "grok:account", "platform": "grok", "schema": "kaola-acp-model-package/1", "status": "mapped"}`. Example, unmapped: `{"model": "brand-new-model", "packageId": null, "platform": "droid", "schema": "kaola-acp-model-package/1", "status": "unmapped"}`. `observe`/`status` stamp model leaves on the emitted receipt only (`quotaPool` qualified id, or `quotaPool` null and `quotaPoolStatus` `unmapped`). `view` adds `models.availableModels` and `models.options` (the model config option only) from a copy. Stored `session_meta` and `record.json` stay the native ACP payload. The installed Project Runner reference `references/quota-packages.md` keeps the seat-failure rule only. For display, show the weekly or monthly window when the plan has one; show the 5h window only when it has neither.
+Quota packages are a separate read-only catalog (Issue #148). `kaola-acp packages [--platform P] [--installed-only] [--login-shell SHELL]` and `kaola-acp model-package --platform P --model ID` start no agent, open no session, create no holder or record, and spend no quota. Login environment is not required. `--installed-only` reuses the survey and keeps platforms whose `status` is `present`; only that flag runs the login shell. Stdout is one JSON object with sorted keys, exit 0. `packages` is `kaola-acp-packages/1`: `{schema, installed_only, platforms}` plus `login_env` only when `--installed-only`. Each platform row is `{platform, packages:[{id, name, windows, binds_models}]}` plus `pool` when the package declares a shared pool. `id` is `<platform>:<token>`; a package may carry `pool` (a bare token) naming the provider-side shared quota pool its usage counts against — Issue #368 merges Grok and Cursor usage into one shared pool `cursor-grok` that each runtime reads through its own acquisition with no cross-mapping. `cursor-cli` declares `cursor-cli:account` and `grok` declares `grok:account`, both named `Cursor+Grok account usage` with window `monthly` and `pool: "cursor-grok"`; the old `cursor-cli:cursor-models`/`cursor-cli:other-models` split and its `explicit` map are removed. A model still resolves to its own runtime's package id — grok models never resolve to `cursor-cli:account` or the reverse — while the emitted `quotaPool` names the shared pool `cursor-grok` on both platforms, so Delegator and Host views present one shared line. The Cursor runtime reads Cursor usage itself and needs no Grok install; the Grok runtime reads Grok billing itself; neither acquisition reads, mirrors, or derives from the other. A stored or stale `quotaPool` value is never read back — every emission re-derives it, and an installed copy still carrying the old catalog reports `stale` until its seat restarts. `windows` remains null or an array of strings: current values are `5h`, `weekly`, and `monthly`; multiple known periods can be listed together. An empty array means the package is verified to have no time-based reset window; null means the package-level period is not established. This field names confirmed reset periods only, not quota amounts or reset timestamps; an unlisted period is not proven absent unless the provider documents the complete set. Antigravity (`antigravity:account`, Issue #329) lists `5h` and `weekly`, verified live on `agy 1.3.5` via `agy -p /usage --output-format json` (`kaola-quota.py` `parse_antigravity_usage` / `probe_antigravity_usage`, which normalizes `Gemini Models` (`gemini-weekly`, `gemini-5h`) for both verified tiers `antigravity/default` (`gemini-4-argon-medium`) and `antigravity/xhigh` (`gemini-4-argon-high`) and `Claude and GPT models` (`3p-weekly`, `3p-5h`) into `used`/`limit`/`used_percent`/`remaining_percent`/`remaining_fraction`/`reset_at`/`window`). Factory's Individual Plans docs specify three rolling windows (5-hour, 7-day, and 30-day) for individual-plan Standard Usage. Droid Standard therefore lists `5h`, `weekly`, and `monthly`. Droid Core is a separate Rate Limit pool after Standard Usage is exhausted; the docs do not specify Core window periods, so the catalog keeps only the owner-confirmed weekly and monthly periods for Core and does not infer a 5h window ([Factory Individual Plans](https://docs.factory.ai/pricing/individuals)). Kimi exposes both `kimi-cli:managed` (weekly and monthly) and the additive `kimi-cli:managed_monthly` (monthly only); Kimi model identifiers expose the same `kimi-code` prefix for both plans, so the new variant does not bind models and consumers need account-plan context to select it. Droid `extra_usage` uses an empty window list because Factory describes its prepaid credits as non-expiring (same source). Current unresolved package periods remain null for `claude-code:extra_usage` (the supplied facts establish subscription periods, not this extra-usage balance), `devin:overage` (no period is established for this separate overage entry), and `opencode:zen` (no Zen-specific period is established; the OpenCode Go fact does not cover it). `model-package` is `kaola-acp-model-package/1`: `{schema, platform, model, packageId, status}` plus `pool` when the resolved package declares one, where `status` is `mapped` or `unmapped` and `packageId` is the qualified id or null. A usage error exits 2. An id with no verified rule is unmapped, never a guessed package. A static query (no live row) may still map an owner-confirmed preset id through the manifest's static preset map, and a live row's present native field value still wins over that static map. Example, mapped: `{"model": "grok-4.7", "packageId": "grok:account", "platform": "grok", "pool": "cursor-grok", "schema": "kaola-acp-model-package/1", "status": "mapped"}`. Example, unmapped: `{"model": "brand-new-model", "packageId": null, "platform": "droid", "schema": "kaola-acp-model-package/1", "status": "unmapped"}`. `observe`/`status` stamp model leaves on the emitted receipt only (`quotaPool` shared-pool id when the package declares `pool`, else the qualified id, or `quotaPool` null and `quotaPoolStatus` `unmapped`). `view` adds `models.availableModels` and `models.options` (the model config option only) from a copy. Stored `session_meta` and `record.json` stay the native ACP payload. The installed Project Runner reference `references/quota-packages.md` keeps the seat-failure rule only. For display, show the weekly or monthly window when the plan has one; show the 5h window only when it has neither.
 
 One platform:
 
 ```json
-{"installed_only": false, "platforms": [{"packages": [{"binds_models": true, "id": "grok:account", "name": "Account", "windows": ["weekly"]}], "platform": "grok"}], "schema": "kaola-acp-packages/1"}
+{"installed_only": false, "platforms": [{"packages": [{"binds_models": true, "id": "grok:account", "name": "Cursor+Grok account usage", "pool": "cursor-grok", "windows": ["monthly"]}], "platform": "grok"}], "schema": "kaola-acp-packages/1"}
 ```
 
 A platform with several packages:
@@ -1936,6 +1986,44 @@ Those amounts are the published Command Code usage-limits table (Go, GOAT, Pro, 
 Routes, each `GET` with `Authorization: Bearer <COMMANDCODE_API_KEY>` and one attempt: `/alpha/billing/credits` (required), `/alpha/billing/subscriptions`, `/alpha/usage/summary`. The probe does not call `/alpha/whoami`. It copies only the fields named above and drops every other key, including `email`, user id, org id, price id, and subscription id, before anything is returned. It does not print, log, cache, or write the key or the raw response.
 
 The key is read by name at probe time: process environment `COMMANDCODE_API_KEY`, then `$DSH_HOME/.env` (or `~/.dsh/.env` when `DSH_HOME` is unset), then `.credentials.yaml` `refs.COMMANDCODE_API_KEY`. A set `DSH_HOME` does not fall back to `~/.dsh`. An empty value is missing. A missing key is `key_missing`, not an exception.
+
+### Cursor+Grok shared pool live usage (`cursor-grok`)
+
+Issue #368. Each runtime reads the shared pool through its own acquisition;
+neither calls, mirrors, nor derives from the other, and each keeps its own
+`packageId` while reporting the same `pool` (`cursor-grok`):
+
+```bash
+python3 scripts/kaola-quota.py --platform cursor-cli --probe
+python3 scripts/kaola-quota.py --platform grok --probe
+```
+
+The Cursor acquisition is `GET $CURSOR_API_ENDPOINT/auth/usage` (default
+`https://api2.cursor.sh`), `Authorization: Bearer` a Cursor `API Key` read at
+probe time from `CURSOR_API_KEY`, then `~/.cursor/.env`, then the `refs` map
+of `~/.cursor/.credentials.yaml` (the installed Cursor CLI's keychain entry
+is its canonical macOS credential; the file surfaces let automation inject a
+key deterministically). `used` sums the per-model `numRequests` buckets,
+`limit` is `maxRequestUsage`, and `reset_at` is the first instant of the
+month after `startOfMonth`.
+
+The Grok acquisition is `GET $GROK_WEB_BASE_URL/billing?format=credits`
+(default `https://code.grok.com`), `Authorization: Bearer` a Grok key read at
+probe time from `GROK_API_KEY`, then `~/.grok/.env` (or `$GROK_HOME`), then
+the `key` recorded by `grok login` in `~/.grok/auth.json`, preferring an
+unexpired `expires_at` entry. `used`/`limit`/`used_percent` come from
+`includedUsed`, `monthlyLimit`, and `creditUsagePercent`, and `reset_at` is
+`currentPeriod.end` (epoch milliseconds) in UTC form.
+
+Both normalize into the same envelope (`pool`, `packageId`, `quota{window,
+used, limit, used_percent, remaining_percent, reset_at, ...}`), so with both
+available the two readings of the shared pool agree. The Cursor reading
+needs no Grok install or credential; with every Grok credential surface
+absent the Grok probe reports `key_missing` while the Cursor probe still
+returns `ok`. The failure vocabulary extends the Command Code one
+(`key_missing`, `unavailable`, `error`; `reason` names the cause) with
+`login_required` for a 401/403 rejection. Neither probe spawns a
+CLI binary, starts a session or seat, or writes a usage record.
 
 ## Tool cwd watch (#369)
 
@@ -2078,13 +2166,17 @@ so a later environment change or a repeated `start` can never look like a rebind
 session against an existing seat, it derives the target from that Host's own
 `KAOLA_ACP_DISPATCHER`, checks the record is a Host-role, live, same-instance holder with its
 socket, and sends the holder op `rebind_heartbeat_host`. The receipt carries `rebound`,
-`previous_heartbeat_host`, `heartbeat_host`, and the unchanged `holder_instance_id`; the seat
-logs `heartbeat_host_rebound`. Refusals are `{"result":"refused","reason":"rebind-host-unresolved"}`
+`previous_heartbeat_host`, `heartbeat_host`, `dispatcher`, and the unchanged
+`holder_instance_id`; the seat logs `heartbeat_host_rebound` with both dispatcher values.
+Refusals are `{"result":"refused","reason":"rebind-host-unresolved"}`
 exit 1 before the seat is touched, and holder errors `no-heartbeat-host` (seat started unbound),
-`heartbeat-host-foreign-repo`, or `holder-instance-mismatch`. A holder that predates the op
+`missing-host-holder-instance-id`, `heartbeat-host-foreign-repo`, or `holder-instance-mismatch`.
+A holder that predates the op
 answers `unknown-op`; that seat recovers through `drain-restart` as before. A Sideagent whose
 own record names no Host now dispatches through the ordinary dispatcher rows. `rebind-host`
-moves only the target seat's carrier: the seat's `dispatcher` still names the old Host, every
+moves only the target seat's carrier: the seat's `dispatcher` is rewritten to the replacement
+Host (`platform`, `session`, `repo`, `holder_instance_id`), so the new Host counts it as a live
+seat and its sends prove ownership; every
 seat (the Sideagent included) needs its own call, and worker events staged in a Host holder that
 died are not moved; the new Host adopts them from the index and receipts.
 

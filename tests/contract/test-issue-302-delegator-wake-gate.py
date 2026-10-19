@@ -925,6 +925,51 @@ class WakeGate(issue299.WebhookCase):
         time.sleep(0.6)
         self.assertEqual(len(self.posts_with_reason("all-idle")), 1)
 
+    def test_rebound_busy_worker_blocks_all_idle_until_it_stops(self) -> None:
+        # Issue #365: a seat rebound to the replacement Host is that Host's
+        # live seat. rebind-host rewrites its record dispatcher, the new
+        # Host's turn end sends no all-idle while the rebound seat is in a
+        # turn, and its stop still sends the one all-idle.
+        self.endpoint = Endpoint()
+        code, out = self.configure(self.endpoint.url)
+        self.assertEqual(code, 0, out)
+        self.write_heartbeat(host_view([]))
+        old_host = self.start_host("old")
+        worker = self.start_worker("rebound", turn_ms=120000)
+        self.begin_active_turn(worker)
+        self.session = old_host
+        self.acp("stop", "--preserve-dispatched-workers")
+        self.extra_sessions = [old_host]
+        new_host = self.start_host("new")
+        _, status = self.acp("status")
+        new_id = status.get("holder_instance_id")
+        self.assertIsInstance(new_id, str, status)
+        self.session = worker
+        self.acp("rebind-host", extra_env={"KAOLA_ACP_DISPATCHER": json.dumps({
+            "holder_instance_id": new_id, "platform": "grok",
+            "session": new_host, "repo": self.project})})
+        record = self.holder_record()
+        dispatcher = record.get("dispatcher") or {}
+        self.assertEqual(
+            (dispatcher.get("platform"), dispatcher.get("session"),
+             dispatcher.get("repo"), dispatcher.get("holder_instance_id")),
+            ("grok", new_host, self.project, new_id),
+            "rebind-host rewrites the seat's dispatcher to the replacement Host")
+        self.assertEqual((record.get("heartbeat_host") or {}).get("session"), new_host)
+        self.session = new_host
+        self.acp("send", "--text", "work", "--wait")
+        time.sleep(0.6)
+        self.assertFalse(self.posts_with_reason("all-idle"), self.endpoint.posts)
+        self.session = worker
+        self.acp("stop", "--force")
+        self.worker = None
+        self.session = new_host
+        post = wait_for(lambda: (self.posts_with_reason("all-idle") or [None])[-1],
+                        20, "all-idle after the rebound seat stopped")
+        self.assertEqual(post["body"]["reason"], "all-idle")
+        time.sleep(0.6)
+        self.assertEqual(len(self.posts_with_reason("all-idle")), 1)
+
     def test_node_stop_skips_while_a_worker_seat_is_working(self) -> None:
         # (d) in-process: a ready worker in an active turn blocks the
         # node-stop re-check. stopping still counts for preservation and

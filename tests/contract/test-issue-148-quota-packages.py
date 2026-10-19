@@ -15,7 +15,9 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 
@@ -58,7 +60,10 @@ class QuotaSchemaTest(unittest.TestCase):
                 self.assertEqual(catalog.rule["kind"], json.loads(manifest["model_package_rule"])["kind"])
                 self.assertTrue(catalog.packages)
                 ids = [row["id"] for row in catalog.public_packages()]
-                self.assertEqual(ids, [f"{platform}:{package['id']}" for package in catalog.packages])
+                self.assertEqual(
+                    ids,
+                    [catalog.qualified(package["id"]) for package in catalog.packages],
+                )
                 for row in catalog.public_packages():
                     windows = row["windows"]
                     self.assertTrue(windows is None or isinstance(windows, list))
@@ -71,7 +76,7 @@ class QuotaSchemaTest(unittest.TestCase):
             "antigravity": ["account"],
             "claude-code": ["subscription", "scoped-weekly", "extra_usage"],
             "codex": ["primary", "base_model_inference"],
-            "cursor-cli": ["cursor-models", "other-models"],
+            "cursor-cli": ["account"],
             "devin": ["max", "overage"],
             "droid": ["standard", "core", "extra_usage"],
             "dsh": ["opencode-go", "commandcode"],
@@ -106,10 +111,7 @@ class QuotaSchemaTest(unittest.TestCase):
                 "primary": ["weekly"],
                 "base_model_inference": ["weekly"],
             },
-            "cursor-cli": {
-                "cursor-models": ["monthly"],
-                "other-models": ["monthly"],
-            },
+            "cursor-cli": {"account": ["monthly"]},
             "antigravity": {"account": ["5h", "weekly"]},
             "devin": {"max": ["weekly"], "overage": None},
             "droid": {
@@ -121,7 +123,7 @@ class QuotaSchemaTest(unittest.TestCase):
                 "opencode-go": ["weekly", "monthly"],
                 "commandcode": ["5h", "weekly", "monthly"],
             },
-            "grok": {"account": ["weekly"]},
+            "grok": {"account": ["monthly"]},
             "kimi-cli": {
                 "managed": ["weekly", "monthly"],
                 "managed_monthly": ["monthly"],
@@ -158,16 +160,23 @@ class QuotaSchemaTest(unittest.TestCase):
             ("claude-code", "default", "claude-code:subscription"),
             ("claude-code", "fable", "claude-code:scoped-weekly"),
             ("claude-code", "claude-fable-5", None),
-            ("cursor-cli", "auto", "cursor-cli:cursor-models"),
-            ("cursor-cli", "default", "cursor-cli:cursor-models"),
-            ("cursor-cli", "grok-4.7", "cursor-cli:cursor-models"),
-            ("cursor-cli", "grok-4.7-high", "cursor-cli:cursor-models"),
-            ("cursor-cli", "grok-4.7-high-fast", "cursor-cli:cursor-models"),
-            ("cursor-cli", "grok-4.7-xhigh", "cursor-cli:cursor-models"),
-            ("cursor-cli", "grok-4.7-xhigh-fast", "cursor-cli:cursor-models"),
-            ("cursor-cli", "claude-opus-5-5", "cursor-cli:other-models"),
-            ("cursor-cli", "claude-opus-5-5-high", "cursor-cli:other-models"),
-            ("cursor-cli", "brand-new-model", None),
+            # Issue #368: Grok and Cursor usage draw from one shared pool
+            # (``cursor-grok``). Every cursor-cli model resolves to
+            # cursor-cli:account and every grok model to grok:account — the
+            # two runtimes' own ids for that pool; the
+            # cursor-models/other-models split is gone.
+            ("cursor-cli", "auto", "cursor-cli:account"),
+            ("cursor-cli", "default", "cursor-cli:account"),
+            ("cursor-cli", "grok-4.7", "cursor-cli:account"),
+            ("cursor-cli", "grok-4.7-high", "cursor-cli:account"),
+            ("cursor-cli", "grok-4.7-high-fast", "cursor-cli:account"),
+            ("cursor-cli", "grok-4.7-xhigh", "cursor-cli:account"),
+            ("cursor-cli", "grok-4.7-xhigh-fast", "cursor-cli:account"),
+            ("cursor-cli", "claude-opus-5-5", "cursor-cli:account"),
+            ("cursor-cli", "claude-opus-5-5-high", "cursor-cli:account"),
+            ("cursor-cli", "brand-new-model", "cursor-cli:account"),
+            ("grok", "grok-4.7", "grok:account"),
+            ("grok", "grok-4.7-brand-new", "grok:account"),
             # Issue #222: the owner-confirmed droid presets are static preset
             # knowledge; the static query has no live billingPool row.
             ("droid", "auto", "droid:standard"),
@@ -202,7 +211,7 @@ class QuotaSchemaTest(unittest.TestCase):
 
     def test_declared_total_rules_are_not_a_fallback_across_packages(self) -> None:
         grok = self.quota.resolve_model(self.catalogs["grok"], "grok-4.7-brand-new")
-        self.assertEqual(grok, {"packageId": "grok:account", "status": "mapped"})
+        self.assertEqual(grok, {"packageId": "grok:account", "pool": "cursor-grok", "status": "mapped"})
         self.assertEqual(
             self.quota.resolve_model(self.catalogs["grok"], "  "),
             {"packageId": None, "status": "unmapped"},
@@ -351,8 +360,66 @@ class QuotaSchemaTest(unittest.TestCase):
         self.assertEqual(loaded.public_packages(), catalog.public_packages())
         self.assertEqual(
             self.quota.resolve_model(loaded, "anything"),
-            {"packageId": "grok:account", "status": "mapped"},
+            {"packageId": "grok:account", "pool": "cursor-grok", "status": "mapped"},
         )
+
+    def test_issue_368_shared_pool_two_own_ids(self) -> None:
+        """Issue #368: one shared pool, each runtime keeps its own id.
+
+        Grok and Cursor usage draw from the shared pool ``cursor-grok``.
+        Each runtime describes that pool with its own package id —
+        ``cursor-cli:account`` and ``grok:account`` carry the same ``pool``
+        marker — with no cross-mapping between namespaces, and a stamped
+        ``quotaPool`` names the pool so Delegator and Host views present one
+        shared line.
+        """
+        cursor = self.catalogs["cursor-cli"]
+        grok = self.catalogs["grok"]
+        cursor_row = {"id": "cursor-cli:account", "name": "Cursor+Grok account usage",
+                      "windows": ["monthly"], "binds_models": True, "pool": "cursor-grok"}
+        grok_row = {"id": "grok:account", "name": "Cursor+Grok account usage",
+                    "windows": ["monthly"], "binds_models": True, "pool": "cursor-grok"}
+        self.assertEqual(cursor.public_packages(), [cursor_row])
+        self.assertEqual(grok.public_packages(), [grok_row])
+        for model in ("grok-4.7-high", "claude-opus-5-5-high", "auto", "unlisted"):
+            resolved = self.quota.resolve_model(cursor, model)
+            self.assertEqual(resolved["packageId"], "cursor-cli:account")
+            self.assertEqual(resolved["pool"], "cursor-grok")
+        for model in ("grok-4.7", "unlisted"):
+            resolved = self.quota.resolve_model(grok, model)
+            self.assertEqual(resolved["packageId"], "grok:account")
+            self.assertEqual(resolved["pool"], "cursor-grok")
+        # The removed cursor-cli split ids are gone from every catalog.
+        emitted = {
+            package["id"]
+            for catalog in self.catalogs.values()
+            for package in catalog.public_packages()
+        }
+        self.assertFalse(emitted & {
+            "cursor-cli:cursor-models", "cursor-cli:other-models",
+        })
+        # Stamped rows name the shared pool itself on both runtimes; a stored
+        # row naming a removed package is migrated by re-emission, not read
+        # back.
+        for catalog, config_id in ((cursor, cursor.model_config_id),
+                                   (grok, grok.model_config_id)):
+            row = {"value": "grok-4.7", "quotaPool": "cursor-cli:cursor-models",
+                   "quotaPoolStatus": "unmapped"}
+            self.quota.annotate_config_options(
+                [{"id": config_id, "options": [row]}], catalog)
+            self.assertEqual(row["quotaPool"], "cursor-grok")
+            self.assertNotIn("quotaPoolStatus", row)
+        # ``pool`` is a bare token; a qualified or malformed value refuses
+        # at load with the schema route.
+        with self.assertRaises(self.quota.QuotaError):
+            self.quota.parse_packages(
+                '[{"id":"account","name":"X","pool":"a:b"}]')
+        with self.assertRaises(self.quota.QuotaError):
+            self.quota.parse_packages(
+                '[{"id":"account","name":"X","pool":""}]')
+        with self.assertRaises(self.quota.QuotaError):
+            self.quota.parse_packages(
+                '[{"id":"account","name":"X","pool":3}]')
 
 
 def write_exec(path: Path, body: str) -> None:
@@ -469,6 +536,7 @@ class QuotaQueryCliTest(unittest.TestCase):
             "platform": "grok",
             "model": "grok-4.7",
             "packageId": "grok:account",
+            "pool": "cursor-grok",
             "status": "mapped",
         })
         unmapped = self.run_cli(
@@ -489,6 +557,167 @@ class QuotaQueryCliTest(unittest.TestCase):
         missing = self.run_cli("model-package", "--platform", "grok")
         self.assertNotEqual(missing.returncode, 0)
         self.assertFalse(self.record_root.exists())
+
+    def _usage_server(self) -> tuple[ThreadingHTTPServer, list[str]]:
+        """One fixture server exposing each runtime's own usage route.
+
+        ``/auth/usage`` answers the Cursor usage shape and ``/billing`` the
+        Grok billing shape; both carry the same shared-pool numbers so the
+        two independent acquisitions can be compared for agreement.
+        """
+        hits: list[str] = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                hits.append(self.path)
+                if self.path == "/auth/usage":
+                    body = {
+                        "grok": {"numRequests": 30, "numRequestsTotal": 30,
+                                 "numTokens": 4100, "maxRequestUsage": 300},
+                        "startOfMonth": "2026-10-01T00:00:00Z",
+                    }
+                elif self.path == "/billing?format=credits":
+                    body = {"config": {
+                        "includedUsed": 30, "monthlyLimit": 300,
+                        "creditUsagePercent": 10.0,
+                        "currentPeriod": {"end": 1793491200000},
+                        "isUnifiedBillingUser": True,
+                    }}
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                encoded = json.dumps(body).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+
+            def log_message(self, *args: object) -> None:
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        server.base = f"http://127.0.0.1:{server.server_address[1]}"  # type: ignore[attr-defined]
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        return server, hits
+
+    def test_issue_368_each_runtime_has_own_acquisition(self) -> None:
+        """Issue #368: ``--probe`` runs each runtime's own acquisition.
+
+        The Cursor runtime reads Cursor usage (``/auth/usage`` on its own
+        endpoint, ``CURSOR_API_KEY``); the Grok runtime reads Grok billing
+        (``/billing?format=credits`` on its own endpoint, ``GROK_API_KEY`` or
+        the ``grok login`` session key). Neither spawns a binary, derives
+        from the other, or needs the other's credentials.
+        """
+        server, hits = self._usage_server()
+        try:
+            env = self.env()
+            env["CURSOR_API_KEY"] = "fixture-cursor-key-368-not-secret"
+            env["GROK_API_KEY"] = "fixture-grok-key-368-not-secret"
+            env["CURSOR_API_ENDPOINT"] = server.base  # type: ignore[attr-defined]
+            env["GROK_WEB_BASE_URL"] = server.base  # type: ignore[attr-defined]
+            for platform in ("cursor-cli", "grok"):
+                result = subprocess.run(
+                    [sys.executable, str(QUOTA_PATH), "--platform", platform,
+                     "--model", "grok-4.7", "--probe"],
+                    capture_output=True, text=True, timeout=60, env=env,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                payload = json.loads(result.stdout)
+                usage = payload["usage"]
+                self.assertEqual(usage["platform"], platform)
+                self.assertEqual(usage["status"], "ok", payload)
+                self.assertEqual(usage["pool"], "cursor-grok")
+                self.assertNotIn("command", usage)
+            self.assertFalse(self.record_root.exists())
+        finally:
+            server.shutdown()
+        self.assertEqual(sorted(hits), ["/auth/usage", "/billing?format=credits"])
+
+    def test_issue_368_two_acquisitions_agree(self) -> None:
+        """Issue #368: with both available, the two readings agree.
+
+        Each acquisition is invoked against its own route on the fixture
+        server; the normalized shared-pool numbers (``pool``, ``used``,
+        ``limit``, ``used_percent``, ``reset_at``) must match — two real
+        reads of one pool, not one read echoed.
+        """
+        quota = load(QUOTA_PATH, "kaola_quota_368_agree")
+        server, _hits = self._usage_server()
+        try:
+            cursor = quota.probe_cursor_usage(
+                model="grok-4.7", timeout=5.0,
+                env={"CURSOR_API_KEY": "fixture-cursor-key-368-not-secret",
+                     "CURSOR_API_ENDPOINT": server.base,  # type: ignore[attr-defined]
+                     "HOME": str(self.record_root)},
+            )
+            grok = quota.probe_grok_usage(
+                model="grok-4.7", timeout=5.0,
+                env={"GROK_API_KEY": "fixture-grok-key-368-not-secret",
+                     "GROK_WEB_BASE_URL": server.base,  # type: ignore[attr-defined]
+                     "HOME": str(self.record_root)},
+            )
+        finally:
+            server.shutdown()
+        self.assertEqual(cursor["status"], "ok", cursor)
+        self.assertEqual(grok["status"], "ok", grok)
+        self.assertEqual(cursor["pool"], grok["pool"])
+        for field in ("used", "limit", "used_percent", "remaining_percent",
+                      "reset_at"):
+            self.assertEqual(cursor["quota"][field], grok["quota"][field], field)
+
+    def test_issue_368_cursor_needs_no_grok_install(self) -> None:
+        """Issue #368: the Cursor value needs no Grok build.
+
+        With every Grok credential surface absent (no ``GROK_API_KEY``, no
+        ``~/.grok``) the Cursor acquisition still reads its own endpoint;
+        the Grok acquisition honestly reports ``key_missing`` in that env.
+        """
+        quota = load(QUOTA_PATH, "kaola_quota_368_nogrok")
+        server, _hits = self._usage_server()
+        try:
+            env = {"CURSOR_API_KEY": "fixture-cursor-key-368-not-secret",
+                   "CURSOR_API_ENDPOINT": server.base,  # type: ignore[attr-defined]
+                   "HOME": str(self.record_root),
+                   "PATH": "/usr/bin:/bin"}
+            cursor = quota.probe_cursor_usage(model="grok-4.7", timeout=5.0, env=env)
+            grok = quota.probe_grok_usage(model="grok-4.7", timeout=5.0, env=env)
+        finally:
+            server.shutdown()
+        self.assertEqual(cursor["status"], "ok", cursor)
+        self.assertEqual(cursor["pool"], "cursor-grok")
+        self.assertEqual(cursor["quota"]["used"], 30.0)
+        self.assertNotIn("command", cursor)
+        self.assertEqual(grok["status"], "key_missing")
+        self.assertFalse(self.record_root.exists())
+
+    def test_issue_368_packages_mark_one_shared_pool(self) -> None:
+        """Issue #368: both rows name the shared pool, the split is gone.
+
+        ``packages`` presents each runtime's own id with the same ``pool``
+        marker — the view's one shared pool — and no row names the removed
+        ``cursor-models``/``other-models`` packages.
+        """
+        result = self.run_cli("packages")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertNotIn("cursor-models", result.stdout)
+        self.assertNotIn("other-models", result.stdout)
+        expected = {
+            "cursor-cli": "cursor-cli:account",
+            "grok": "grok:account",
+        }
+        for platform, package_id in expected.items():
+            row = next(r for r in payload["platforms"] if r["platform"] == platform)
+            self.assertEqual(
+                row["packages"],
+                [{"id": package_id, "name": "Cursor+Grok account usage",
+                  "windows": ["monthly"], "binds_models": True,
+                  "pool": "cursor-grok"}],
+            )
 
 
 class QuotaEmissionCliTest(unittest.TestCase):

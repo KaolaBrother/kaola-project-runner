@@ -27,6 +27,10 @@ WORKER = "zcode/default"
 OTHER = "dsh/default"
 ELITE = "codex/default"
 EXPERT = "codex/astra"
+ALL_WORKERS = [
+    "claude-code/haiku", "codex/luna", "devin/default", "dsh/commandcode",
+    "dsh/default", "opencode/default", "zcode/default",
+]
 PAST = "2020-01-01T00:00:00+00:00"
 FUTURE = "2099-01-01T00:00:00+00:00"
 NONE = "No Worker grants. There are no Workers until the owner grants some."
@@ -174,16 +178,17 @@ class WorkerGrants(unittest.TestCase):
         self.assertEqual(rows["i1"]["reason"], "count")
         self.assertNotIn("argv", rows["i1"])
 
-    def test_explicit_unlimited_named_and_all_worker_skip_the_count(self) -> None:
+    def test_explicit_unlimited_named_rows_skip_the_count(self) -> None:
         self.write_delegator({"worker_grants": [{
             "preset_ids": [WORKER], "count": "unlimited", "state": "granted",
         }]})
         named = self.execute([WORKER, WORKER, WORKER, WORKER])
         self.assertTrue(all(row["reason"] == "dry-run" for row in named.values()))
         self.write_delegator({
-            "worker_grants": [{
-                "scope": "all-worker-presets", "count": "unlimited", "state": "granted",
-            }],
+            "worker_grants": [
+                {"preset_ids": [preset], "count": "unlimited", "state": "granted"}
+                for preset in (WORKER, OTHER, "dsh/commandcode", "opencode/default")
+            ],
             "elite_grants": [],
             "expert_task_grants": [],
         })
@@ -204,9 +209,10 @@ class WorkerGrants(unittest.TestCase):
 
     def test_unlimited_does_not_override_an_exclusion_or_authorize_elite_or_expert(self) -> None:
         self.write_delegator({
-            "worker_grants": [{
-                "scope": "all-worker-presets", "count": "unlimited", "state": "granted",
-            }],
+            "worker_grants": [
+                {"preset_ids": [preset], "count": "unlimited", "state": "granted"}
+                for preset in ALL_WORKERS
+            ],
             "exclusions": [WORKER],
             "elite_grants": [],
             "expert_task_grants": [],
@@ -233,7 +239,7 @@ class WorkerGrants(unittest.TestCase):
 
     def test_expired_unlimited_is_refused(self) -> None:
         self.write_delegator({"worker_grants": [{
-            "scope": "all-worker-presets", "count": "unlimited", "state": "granted", "expires": PAST,
+            "preset_ids": [WORKER], "count": "unlimited", "state": "granted", "expires": PAST,
         }]})
         row = self.execute([WORKER])["i0"]
         self.assertEqual(row["status"], "not-run")
@@ -265,18 +271,6 @@ class WorkerGrants(unittest.TestCase):
         seats = viewed["seats"]
         self.assertEqual(seats["worker_grants"][0]["count"], "unlimited")
         self.assertIn("named presets", seats["worker_grant_statement"])
-
-        self.write_delegator({"worker_grants": [{
-            "scope": "all-worker-presets", "count": "unlimited", "state": "granted",
-        }]})
-        all_view = self.view()
-        row = all_view["authorization"]["worker_grants"][0]
-        self.assertEqual(row["scope"], "all-worker-presets")
-        self.assertEqual(row["coverage"], "all-worker-presets")
-        self.assertEqual(row["count"], "unlimited")
-        self.assertIn("all Worker presets", all_view["authorization"]["worker_grant_statement"])
-        self.assertNotIn("worker_pool", all_view["authorization"])
-        self.assertNotIn("worker_pool", all_view["seats"])
 
         self.write_delegator({"dispatch_enabled": True})
         empty = self.view()
@@ -310,6 +304,133 @@ class WorkerGrants(unittest.TestCase):
         self.assertNotIn("worker_grants", stored)
         self.assertNotIn("worker_pool", stored)
         self.assertTrue(any("worker_pool" in item for item in planned["dropped"]))
+
+    def test_scope_row_is_refused_naming_the_per_preset_form(self) -> None:
+        path = self.write_delegator({"worker_grants": [{
+            "preset_ids": [WORKER], "count": "unlimited", "state": "granted",
+        }]})
+        proc = self.dispatch([
+            "delegator", "update", "--file", str(path), "--writer", "delegator",
+            "--source", "owner 2026-10-19 worker grants", "--expect-revision", "1",
+            "--set", json.dumps({"authorization": {"worker_grants": [
+                {"scope": "all-worker-presets", "count": "unlimited", "state": "granted"},
+            ]}}),
+        ])
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["result"], "refused")
+        self.assertEqual(payload["reason"], "invalid-input")
+        self.assertIn("preset_ids", payload["detail"])
+        self.assertIn("one row per preset", payload["detail"])
+        stored = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(stored["revision"], 1)
+        self.assertNotIn("scope", json.dumps(stored["authorization"]["worker_grants"]))
+        proc = self.dispatch([
+            "delegator", "update", "--file", str(path), "--writer", "delegator",
+            "--source", "owner 2026-10-19 worker grants", "--expect-revision", "1",
+            "--set", json.dumps({"authorization": {"worker_grants": [
+                {"preset_ids": [preset], "count": "unlimited", "state": "granted"}
+                for preset in ALL_WORKERS
+                if preset not in ("codex/luna", "zcode/default", "dsh/default", "dsh/commandcode")
+            ] + [
+                {"preset_ids": ["dsh/default"], "count": 2, "state": "granted"},
+                {"preset_ids": ["dsh/commandcode"], "count": 2, "state": "granted"},
+            ], "exclusions": ["codex/luna", "zcode/default"]}}),
+        ])
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload.get("result"), "written", proc.stdout)
+
+    def test_stored_scope_row_is_migrated_once_to_per_preset_rows(self) -> None:
+        excluded = ["codex/luna", "zcode/default"]
+        path = self.write_delegator({
+            "worker_grants": [{
+                "scope": "all-worker-presets", "count": "unlimited", "state": "granted",
+            }],
+            "exclusions": excluded,
+            "elite_grants": [],
+            "expert_task_grants": [],
+        })
+        covered = sorted(set(ALL_WORKERS) - set(excluded))
+        viewed = self.view()
+        self.assertIn(
+            {"path": "authorization.worker_grants[0].scope"},
+            viewed["unknown"])
+        planned = self.dispatch(["delegator", "migrate", "--file", str(path)])
+        self.assertEqual(planned.returncode, 0, planned.stdout + planned.stderr)
+        plan = json.loads(planned.stdout)
+        self.assertEqual(plan["result"], "planned")
+        rows = plan["state"]["authorization"]["worker_grants"]
+        self.assertEqual([row["preset_ids"] for row in rows], [[preset] for preset in covered])
+        self.assertTrue(all(row["count"] == "unlimited" for row in rows))
+        self.assertTrue(all("scope" not in row for row in rows))
+        written = self.dispatch(["delegator", "migrate", "--file", str(path), "--write"])
+        self.assertEqual(json.loads(written.stdout)["result"], "migrated")
+        grants = self.view()["authorization"]["worker_grants"]
+        self.assertEqual(len(grants), len(covered))
+        self.assertEqual(sorted(row["preset_ids"][0] for row in grants), covered)
+        self.assertTrue(all(row["count"] == "unlimited" for row in grants))
+        reasons = self.reasons(["devin/default", "codex/luna"])
+        self.assertEqual(reasons["devin/default"], "dry-run")
+        self.assertEqual(reasons["codex/luna"], "excluded")
+
+    def test_per_preset_cap_next_to_unlimited_is_enforced(self) -> None:
+        self.write_delegator({"worker_grants": [
+            {"preset_ids": [OTHER], "count": 2, "state": "granted"},
+            {"preset_ids": ["devin/default"], "count": "unlimited", "state": "granted"},
+            {"preset_ids": [WORKER], "count": "unlimited", "state": "granted"},
+        ]})
+        rows = self.execute([OTHER, OTHER, OTHER, "devin/default"])
+        self.assertEqual(rows["i0"]["reason"], "dry-run")
+        self.assertEqual(rows["i1"]["reason"], "dry-run")
+        self.assertEqual(rows["i2"]["status"], "not-run")
+        self.assertEqual(rows["i2"]["reason"], "count")
+        self.assertEqual(rows["i3"]["reason"], "dry-run")
+
+    def test_host_state_mirror_carries_per_preset_unlimited(self) -> None:
+        state = self.repo / ".kaola" / "heartbeat-prompt.json"
+        state.write_text(json.dumps({
+            "schema": "kaola-heartbeat-prompt/2",
+            "revision": 3,
+            "host_revision": 1,
+            "body": "{}",
+            "state": {"authorization": {"grants": [
+                {"id": "codex/default", "count": 1, "state": "granted"},
+            ], "exclusions": []}},
+        }), encoding="utf-8")
+        proc = self.dispatch([
+            "state", "update", "--file", str(state), "--writer", "host",
+            "--source", "delegator-heartbeat revision 46 worker grants",
+            "--section", "authorization", "--expect-revision", "3",
+            "--set", json.dumps({"grants": [
+                {"id": "codex/default", "count": 1, "state": "granted"},
+                {"id": "devin/default", "count": "unlimited", "state": "granted"},
+                {"id": "dsh/default", "count": 2, "state": "granted"},
+            ], "exclusions": ["codex/luna", "zcode/default", "grok/default", "grok/xhigh"]}),
+        ])
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload.get("result"), "written", proc.stdout)
+        stored = json.loads(state.read_text(encoding="utf-8"))
+        rows = {row["id"]: row for row in stored["state"]["authorization"]["grants"]}
+        self.assertEqual(rows["devin/default"]["count"], "unlimited")
+        self.assertEqual(rows["dsh/default"]["count"], 2)
+        plan = self.root / "plan.json"
+        plan.write_text(json.dumps({"scope": "research", "repo": str(self.repo), "items": [
+            {"item_id": f"i{index}", "preset": preset, "session": f"seat{index}", "prompt": "bounded"}
+            for index, preset in enumerate(["devin/default", "devin/default", "dsh/default", "dsh/default", "dsh/default"])
+        ]}), encoding="utf-8")
+        live = self.root / "live.json"
+        live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": []}), encoding="utf-8")
+        proc = self.dispatch([
+            "execute", "--dry-run", "--plan", str(plan), "--authorization", str(state),
+            "--platforms", str(PLATFORMS), "--live", str(live),
+        ])
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        rows = {row["item_id"]: row for row in json.loads(proc.stdout)["items"]}
+        self.assertEqual(rows["i0"]["reason"], "dry-run")
+        self.assertEqual(rows["i1"]["reason"], "dry-run")
+        self.assertEqual(rows["i2"]["reason"], "dry-run")
+        self.assertEqual(rows["i3"]["reason"], "dry-run")
+        self.assertEqual(rows["i4"]["status"], "not-run")
+        self.assertEqual(rows["i4"]["reason"], "count")
 
     def test_sideagent_chain_uses_only_granted_workers_and_fails_once(self) -> None:
         holder = load_holder()

@@ -588,6 +588,130 @@ class Issue227LaunchUsesDshBin(unittest.TestCase):
                              "grok agent stdio")
 
 
+class Issue360DshAllowlistNamesLaunchVariables(unittest.TestCase):
+    """Issue #360 root cause, unit level: the broker's ``filter_env`` keeps only
+    ``PASS_*`` names plus the manifest ``acp_env_allowlist``, and the dsh
+    manifest named neither ``DSH_PERMISSION_MODE`` nor ``DSH_BIN`` — both are
+    Runner-injected launch variables, so every broker-launched dsh ran its own
+    ``workspace-write`` default while the receipt claimed the Runner default."""
+
+    def test_launch_variables_survive_the_broker_filter(self) -> None:
+        broker = load("kaola-launchd-broker")
+        manifest = load("kaola-acp").load_manifest("dsh")
+        allow = {k for k in (manifest.get("acp_env_allowlist") or "").split(",") if k}
+        kept = broker.filter_env(
+            {"HOME": "/h", "PATH": "/bin", "DSH_PERMISSION_MODE": "danger-full-access",
+             "DSH_BIN": "/opt/dsh/bin/dsh", "UNDECLARED_NAME": "x"}, allow)
+        self.assertEqual(kept.get("DSH_PERMISSION_MODE"), "danger-full-access")
+        self.assertEqual(kept.get("DSH_BIN"), "/opt/dsh/bin/dsh")
+        self.assertNotIn("UNDECLARED_NAME", kept)
+
+
+@unittest.skipUnless(sys.platform == "darwin", "the launchd broker is macOS-only")
+class Issue360DshPermissionModeThroughTheBroker(unittest.TestCase):
+    """Issue #360 end to end: a dsh ``start`` through ``--launch-backend
+    launchd`` must deliver the launch variables to the holder and its agent —
+    the same #120 assertions, but on the broker path that dropped them — and
+    the receipt's ``config_application.mode`` must follow the environment the
+    holder was actually launched with."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory(prefix="kaola-i360-")
+        self.root = Path(os.path.realpath(self._tmp.name))
+        self.addCleanup(self._tmp.cleanup)
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
+        self.seen = self.root / "seen.txt"
+        self.seen_bin = self.root / "seen-bin.txt"
+        agent = self.root / "agent.py"
+        agent.write_text(
+            "import os, runpy, sys\n"
+            f"open({str(self.seen)!r}, 'w').write(os.environ.get('DSH_PERMISSION_MODE', '<unset>'))\n"
+            f"open({str(self.seen_bin)!r}, 'w').write(os.environ.get('DSH_BIN', '<unset>'))\n"
+            f"sys.argv = [{str(MOCK)!r}]; runpy.run_path({str(MOCK)!r}, run_name='__main__')\n",
+            encoding="utf-8")
+        self.agent = f"{sys.executable} {agent}"
+        self.session = f"dsh-i360-{self._testMethodName[-20:].lower()}-{os.getpid()}"
+
+    def cli(self, command: str, *args: str, **env: str) -> dict:
+        base = {k: v for k, v in os.environ.items()
+                if not k.startswith("KAOLA_")
+                and k not in ("DSH_PERMISSION_MODE", "DSH_BIN")}
+        base.update(KAOLA_ACP_RECORD_ROOT=str(self.root / "records"), **env)
+        result = subprocess.run(
+            [sys.executable, str(CLI), "dsh", command, "--repo", str(self.repo),
+             "--session", self.session, "--command", self.agent, *args],
+            capture_output=True, text=True, env=base, timeout=150)
+        return json.loads(result.stdout.strip().splitlines()[-1])
+
+    def start(self, *args: str, **env: str) -> dict:
+        self.addCleanup(self.cli, "stop", "--force")
+        return self.cli("start", "--launch-backend", "launchd", *args, **env)
+
+    def record(self) -> dict:
+        records = list((self.root / "records" / "dsh" / self.session).glob("*/record.json"))
+        return json.loads(records[0].read_text()) if records else {}
+
+    @staticmethod
+    def _alive(pid: object) -> bool:
+        if not isinstance(pid, int) or pid <= 0:
+            return False
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
+
+    def assert_brokered_holder(self, receipt: dict) -> None:
+        """Proof this really went through the outside launcher, not a silent
+        direct fallback: the holder is re-parented to launchd."""
+        holder_pid = receipt.get("holder_pid")
+        self.assertTrue(self._alive(holder_pid), receipt)
+        ppid = subprocess.run(["ps", "-o", "ppid=", "-p", str(holder_pid)],
+                              capture_output=True, text=True).stdout.strip()
+        self.assertEqual(ppid, "1", f"holder {holder_pid} is not re-parented")
+        self.assertEqual(
+            self.record().get("start_selection", {}).get("launch_backend"), "launchd")
+
+    def test_the_default_reaches_the_agent_and_the_receipt_is_honest(self) -> None:
+        receipt = self.start()
+        self.assertEqual(receipt.get("state"), "ready", receipt)
+        self.assert_brokered_holder(receipt)
+        self.assertEqual(self.seen.read_text(), "danger-full-access")
+        self.assertNotEqual(self.seen_bin.read_text(), "<unset>")
+        self.assertEqual(receipt["config_application"]["mode"],
+                         {"applied": True, "applied_via": "env",
+                          "env": "DSH_PERMISSION_MODE", "value": "danger-full-access",
+                          "source": "runner-default"})
+
+    def test_the_callers_variable_reaches_the_agent(self) -> None:
+        receipt = self.start(DSH_PERMISSION_MODE="workspace-write")
+        self.assertEqual(receipt.get("state"), "ready", receipt)
+        self.assert_brokered_holder(receipt)
+        self.assertEqual(self.seen.read_text(), "workspace-write")
+        self.assertEqual(receipt["config_application"]["mode"]["source"], "caller-env")
+
+    def test_the_callers_mode_reaches_the_agent(self) -> None:
+        receipt = self.start("--mode", "read-only")
+        self.assertEqual(receipt.get("state"), "ready", receipt)
+        self.assert_brokered_holder(receipt)
+        self.assertEqual(self.seen.read_text(), "read-only")
+        self.assertEqual(receipt["config_application"]["mode"]["source"], "caller-mode")
+
+    def test_a_second_start_is_refused_not_reapplied(self) -> None:
+        """The client's own guard refuses a duplicate ``start`` with an attach
+        route, so no env delivery is ever claimed for a holder this start did
+        not spawn. (The broker's reconciled "existing" answer remains only a
+        race-window reply; on it the mode axis reports no delivery.)"""
+        first = self.start()
+        self.assertEqual(first.get("state"), "ready", first)
+        again = self.cli("start", "--launch-backend", "launchd")
+        self.assertEqual((again.get("error") or {}).get("code"), "session-exists", again)
+
+
 @unittest.skipUnless(sys.platform == "darwin", "libproc is macOS-only")
 class Issue120ProcessTableWithoutPs(unittest.TestCase):
     """When ``ps`` cannot exec, both scripts read the same columns from libproc."""
