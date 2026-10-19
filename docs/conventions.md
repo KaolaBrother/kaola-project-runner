@@ -285,8 +285,9 @@ This is a release/update requirement. For the lifecycle state of
   Healthy workers are not restarted for migration; they get the new holder behavior at
   their next normal start.
 - Host replacement: the new Host runs `rebind-host` on each existing seat from its own session;
-  the carrier moves in place and the worker is not restarted. Only the carrier moves: the
-  seat's `dispatcher` still names the old Host, each seat (the Sideagent included) needs its own
+  the carrier moves in place and the worker is not restarted. The carrier and the seat's
+  recorded `dispatcher` move together (#365): the seat then counts as the new Host's live seat
+  and the new Host's sends prove ownership, each seat (the Sideagent included) needs its own
   call, and worker events staged in a Host holder that died stay there; the new Host adopts
   that work from the index and receipts. A holder older than that op answers `unknown-op` and
   keeps the previous recovery (`drain-restart` at idle).

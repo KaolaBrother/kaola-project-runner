@@ -1477,6 +1477,11 @@ class HolderRelay(HolderFixture):
         self.assertEqual(self.holder.holder_instance_id, instance)
         record = json.loads((Path(self.holder.args.record_dir) / "record.json").read_text())
         self.assertEqual(record["heartbeat_host"]["session"], "zcode-KT-orchestrator-main")
+        # Issue #365: the seat's dispatcher moves with the carrier so the
+        # replacement Host counts it as a live seat.
+        self.assertEqual(record["dispatcher"], {
+            "platform": "zcode", "session": "zcode-KT-orchestrator-main",
+            "repo": str(self.repo), "holder_instance_id": "host-2"})
         self.assertEqual(record["holder_instance_id"], instance)
         events = (Path(self.holder.args.record_dir) / "events.jsonl").read_text().splitlines()
         self.assertIn("heartbeat_host_rebound", [json.loads(line)["kind"] for line in events])

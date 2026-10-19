@@ -2011,13 +2011,17 @@ so a later environment change or a repeated `start` can never look like a rebind
 session against an existing seat, it derives the target from that Host's own
 `KAOLA_ACP_DISPATCHER`, checks the record is a Host-role, live, same-instance holder with its
 socket, and sends the holder op `rebind_heartbeat_host`. The receipt carries `rebound`,
-`previous_heartbeat_host`, `heartbeat_host`, and the unchanged `holder_instance_id`; the seat
-logs `heartbeat_host_rebound`. Refusals are `{"result":"refused","reason":"rebind-host-unresolved"}`
+`previous_heartbeat_host`, `heartbeat_host`, `dispatcher`, and the unchanged
+`holder_instance_id`; the seat logs `heartbeat_host_rebound` with both dispatcher values.
+Refusals are `{"result":"refused","reason":"rebind-host-unresolved"}`
 exit 1 before the seat is touched, and holder errors `no-heartbeat-host` (seat started unbound),
-`heartbeat-host-foreign-repo`, or `holder-instance-mismatch`. A holder that predates the op
+`missing-host-holder-instance-id`, `heartbeat-host-foreign-repo`, or `holder-instance-mismatch`.
+A holder that predates the op
 answers `unknown-op`; that seat recovers through `drain-restart` as before. A Sideagent whose
 own record names no Host now dispatches through the ordinary dispatcher rows. `rebind-host`
-moves only the target seat's carrier: the seat's `dispatcher` still names the old Host, every
+moves only the target seat's carrier: the seat's `dispatcher` is rewritten to the replacement
+Host (`platform`, `session`, `repo`, `holder_instance_id`), so the new Host counts it as a live
+seat and its sends prove ownership; every
 seat (the Sideagent included) needs its own call, and worker events staged in a Host holder that
 died are not moved; the new Host adopts them from the index and receipts.
 
