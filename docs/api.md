@@ -1309,6 +1309,31 @@ existing self-route: pass one private `--record-root` you own, or unset
 `leg` is always `delegator-webhook status`. The scan does not wait for the
 network.
 
+The same scan also cross-checks the host registry (#359). A `start` whose
+`session_role` is `host` writes one row per session to
+`<repo>/.kaola/host-registry.json` (`kaola-host-registry/1`, mode 0600, atomic
+replace under `host-registry.lock`): platform, session, realpath repo, record
+dir, socket path, holder pid, `holder_instance_id`, `acp_session_id`, and
+agent pids. A recorded clean stop removes the row. A row whose
+`(platform, session)` has no `record.json` under any record root is a wiped
+record directory: `status` emits the one `error`/`holder_lost` wake with
+`state_detail` `record_lost` at the fixed `event_seq` 0, and marks the row
+(`record_lost_wake`) so a later `status` reports `already-recovered` instead
+of POSTing again; the claims file backs the same (id, seq) dedupe. A row
+whose record exists and is `stopped` is pruned; a newer `holder_instance_id`
+refreshes the row's facts. The findings land on `holder_lost.record_lost`
+(`{scan, lost}`); each lost entry carries the session, `holder_instance_id`,
+`holder_pid_alive`, and a `recovery` block naming the executable path —
+`stop --repo REPO --session SESSION --force` sweeps a live argv-verified
+orphan holder (a reused pid is never signalled), then `start --resume` on the
+recorded `acp_session_id` starts a clean one. `status`, `observe`, `send`,
+and the other session ops on that session return `error.code` `record-lost`
+with the same `record_lost` facts; `list --repo` reports them under
+`records_lost`; a plain `stop` on a live orphan refuses `record-lost`; and a
+`start` while the orphan lives refuses `record-lost-orphan`. A
+`record_lost.scan` of `registry-unavailable` means the registry could not be
+read or locked; lost rows are not reported on that pass.
+
 Payload (signal only, no transcript, prompt, diff or secret). A current
 holder (v0.9.7 and later) sends `reason`, one of the tokens in the tables
 above, or `test`. A previous holder's payload may omit it; the accepted-shape
@@ -1594,7 +1619,9 @@ exit 0 on success):
   `skipped`. An incomplete record-root scan has `reason`
   `record-root-mismatch` and the self-route above. Each wake is
   `{session, holder_instance_id, delegator_death_wake}`. A `sent: false`
-  death wake on that object carries `route` or `self_route`. Exit stays 0.
+  death wake on that object carries `route` or `self_route`. `holder_lost`
+  also carries `record_lost` (`{scan, lost}`) when the scan runs: the
+  host-registry cross-check (#359) above. Exit stays 0.
   Eligibility, the skipped-scan rule, and the cron cadence bound are in the
   death-recovery paragraphs above.
 - `test --project ROOT` sends one `state: "test"` payload through the same

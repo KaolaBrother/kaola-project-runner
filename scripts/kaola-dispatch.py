@@ -8766,6 +8766,7 @@ SWEEP_KAOLA_OWN = frozenset({
     "delegator-webhook-receipts.json", "delegator-webhook-receipts.lock",
     "delegator-webhook-claims.json", "dispatch-index.json",
     "dispatch-availability.json", "dispatch-plan.json", "dispatch-live.json",
+    "host-registry.json", "host-registry.lock",
     "run",
 })
 SWEEP_RECEIPT_SCHEMA = "kaola-sweep/1"

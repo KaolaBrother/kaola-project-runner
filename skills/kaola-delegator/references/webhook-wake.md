@@ -112,14 +112,15 @@ during a seat turn unless the Host called `wake`. Only an active turn is
 working. A Sideagent is not a seat. A confirmed node stop or the last worker
 `terminated` re-checks one `all-idle` when owed. No time throttle.
 
-A dead holder with no signal gets one `error`/`holder_lost` wake for that
-`holder_instance_id` and a new `event_seq`. `start` or a dead-holder `stop`
-sends it. Each inquiry runs `$HOOK status --project "$PROJECT"` with no new
-Host start. `test` does not scan. `status` wakes a Host of this project when
-the holder pid is dead and `state` is not `stopped`, even if the agent lives,
-via the same sender and `delegator_death_wake` dedupe. A live holder pid waits
-for `start` or `stop`. Nothing else polls. One `cadence.interval_minutes`
-(example 120). `status` does not read it or schedule itself.
+A dead holder with no signal gets one `error`/`holder_lost` wake per
+`holder_instance_id`, on a new `event_seq`. `start` or a dead-holder `stop`
+sends it; so does `status` when the record dir is wiped — `state_detail`
+`record_lost`, detected via `.kaola/host-registry.json`. The inquiry runs
+`$HOOK status --project "$PROJECT"`; no Host start. `test` does not
+scan. `status` wakes a Host whose holder pid is dead, `state` not
+`stopped`, even if the agent lives. A live holder pid waits for `start` or
+`stop`. Nothing else polls. `status` does not read `cadence.interval_minutes`
+or schedule itself.
 
 On each wake, re-read the Accepted line, locate, attest the session, and
 read `status`, `observe`, and `capture`. Then run the standard inquiry. If

@@ -3970,6 +3970,25 @@ class Holder:
             all_idle_due=all_idle_due,
         )
 
+    def _deregister_host_registry(self) -> None:
+        """Issue #359: a recorded clean stop retires this host's row in the
+        project-local registry (``<repo>/.kaola/host-registry.json``). The row
+        lives outside the record root so a wiped record dir can never hide a
+        registered seat; leaving it after ``stopped`` would misreport a clean
+        exit as record loss. The CLI stop path removes it too for holders
+        that predate this call."""
+        if self.session_role != "host":
+            return
+        module = _wake_receipt_module()
+        if module is None:
+            return
+        try:
+            module.host_registry_deregister(
+                self.args.repo, self.args.platform, self.args.session,
+                holder_instance_id=self.holder_instance_id)
+        except Exception:
+            pass
+
     def _delegator_wake(self, state: str, detail: str | None = None,
                         reason: str | None = None, inline: bool = False) -> None:
         """Issue #299 / #302: fire the Delegator webhook signal for a Host holder.
@@ -7991,6 +8010,7 @@ class Holder:
             self.heartbeat_notify_lock.release()
         self.state = "stopped"
         self.write_record()
+        self._deregister_host_registry()
         # Issue #299: inline spawn — this op exits right after its reply, so the
         # detached child must already hold its payload before we answer.
         self._delegator_wake("stopped", "exact_stop", "exact_stop", inline=True)
@@ -8376,6 +8396,7 @@ class Holder:
                 if time.monotonic() - self.last_activity > IDLE_EXIT_SECONDS:
                     self.state = "stopped"
                     self.write_record()
+                    self._deregister_host_registry()
                     os._exit(0)
 
     def start_failure_facts(self, error: dict[str, Any]) -> dict[str, Any]:
