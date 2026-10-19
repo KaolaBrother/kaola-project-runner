@@ -4,7 +4,9 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.9.21 — 2026-10-19 (backstop sweep speed and branch cleanup; state bloat diagnosis; delegator key removal; Sideagent task retirement and default bind; archive reference cleanup)
+
+Fixes #353 (backstop sweep batches forge lookups), #354 (state bloat diagnosis and settled-row removal), #355 (named removal of unknown delegator keys; view lists open watch rows), #357 (merged closed-issue branches and report-only residues), #356 (Sideagent node retires a Host-accepted task under strict conditions), #358 (default Sideagent node bind and one current project sentence) and #366 (stale archive and evidence references removed).
 
 Seats: restart required
 
