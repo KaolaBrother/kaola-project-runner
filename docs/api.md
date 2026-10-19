@@ -890,10 +890,17 @@ The candidate set is a closed rule set; everything else is never touched:
   (HEAD an ancestor of `refs/remotes/origin/HEAD`'s target, else `origin/main`, or equal to
   the merged PR's `headRefOid`; no fetch), with no live verified session for issue N in ROOT
   or in the worktree itself. Keep reasons: `outside-project`, `locked`, `uncommitted-changes`,
-  `unmerged-or-unpushed`, `live-session`. A worktree whose only live session is itself an S1
-  candidate is still a candidate (the stop goes first). Every check is re-verified
-  immediately before `git worktree remove <path>` (no `--force`); the branch is left for
-  B1.
+  `unmerged-or-unpushed`, `live-session`, `live-cwd`, `cwd-unverified`. A worktree whose only live
+  session is itself an S1 candidate is still a candidate (the stop goes first). Every check is
+  re-verified immediately before `git worktree remove <path>` (no `--force`); the branch is left
+  for B1.
+- **W1 cwd guard (#369).** Before the removal, the scan and the delete-time re-check read the cwd
+  of this sweep's own process chain (the caller's tool shell, agent CLI and holder) and of every
+  live session tree of ROOT and its worktrees, from `/proc/<pid>/cwd` or `lsof -a -d cwd`. A live
+  cwd inside the target keeps it `live-cwd` with `cwd_holders` (`pid`, `command`, `cwd`); an
+  unreadable probe keeps it `cwd-unverified` with `cwd_probe`. The `sweep-kept` alert's `next`
+  carries the recovery (`live-cwd`: return that shell to the project root, then re-scan). A
+  removal is never executed under a live cwd.
 - **W2** a `prunable` worktree entry inside ROOT: `git -C ROOT worktree prune`, once per apply.
 - **B1** (#357) a local `workflow/issue-N` branch whose issue is CLOSED, not checked out in
   any surviving worktree (a branch still held by a kept or skipped worktree lands in

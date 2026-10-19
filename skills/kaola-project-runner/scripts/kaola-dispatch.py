@@ -8715,6 +8715,8 @@ SWEEP_KEPT_NEXT = {
     "uncommitted-changes": "Host: commit, discard or keep the changes",
     "unmerged-or-unpushed": "Host: merge or push the work first",
     "live-session": "Host: stop the issue's remaining live session first",
+    "live-cwd": "Host: a live process cwd is inside this worktree; return that shell to the project root, then rerun the sweep",
+    "cwd-unverified": "Host: process cwds are unreadable here; fix lsof (or /proc on Linux), then rerun the sweep",
     "remove-failed": "Host: read the original git receipt and decide",
 }
 # Issue #357, R2: `.kaola/` entries that are Project Runner artifacts (state,
@@ -8938,11 +8940,131 @@ def _sweep_within(root: Path, candidate: Path) -> bool:
         return False
 
 
+def _sweep_ps() -> dict[int, tuple[int, str]]:
+    """One ``ps`` read: pid -> (ppid, command). Empty when ps cannot answer."""
+    try:
+        table = subprocess.run(["ps", "-axo", "pid=,ppid=,command="],
+                               capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    rows: dict[int, tuple[int, str]] = {}
+    for line in table.stdout.splitlines():
+        fields = line.strip().split(None, 2)
+        if len(fields) == 3 and fields[0].isdigit() and fields[1].lstrip("-").isdigit():
+            rows[int(fields[0])] = (int(fields[1]), fields[2].strip())
+    return rows
+
+
+def _sweep_watch_pids(all_rows: list[dict[str, Any]], repo: Path) -> list[int] | None:
+    """Every process whose cwd can matter to a worktree removal under ``repo``:
+    this sweep's own process chain (the caller's tool shell, agent CLI and
+    holder) plus each live session tree of this project or its worktrees.
+    ``None`` when the process table cannot be read: the caller then treats the
+    cwd state as unverified instead of removing on a guess."""
+    table = _sweep_ps()
+    if not table:
+        return None
+    pids: set[int] = set()
+    cursor = os.getpid()
+    while cursor > 0 and cursor not in pids:
+        pids.add(cursor)
+        cursor = table.get(cursor, (0, ""))[0]
+    children: dict[int, list[int]] = {}
+    for pid, (ppid, _command) in table.items():
+        children.setdefault(ppid, []).append(pid)
+    stack: list[int] = []
+    for row in all_rows:
+        pid = row.get("holder_pid")
+        seen = row.get("repo")
+        if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+            continue
+        if not isinstance(seen, str) or not seen:
+            continue
+        try:
+            if not _sweep_within(repo, Path(seen).resolve()):
+                continue
+        except OSError:
+            continue
+        stack.append(pid)
+    while stack:
+        pid = stack.pop()
+        if pid in pids:
+            continue
+        pids.add(pid)
+        stack.extend(children.get(pid, []))
+    return sorted(pids)
+
+
+def _sweep_cwds(pids: list[int]) -> tuple[str, list[tuple[int, str, str]], bool]:
+    """``(probe, [(pid, command, cwd)], unreadable)`` for the live pids.
+
+    Linux reads ``/proc/<pid>/cwd``; elsewhere ``lsof -a -d cwd``. A probe
+    that cannot answer reports ``unreadable`` so the caller keeps the
+    worktree instead of removing it on an unverified cwd state."""
+    table = _sweep_ps()
+    live = [pid for pid in pids if pid in table]
+    if not live:
+        return ("none", [], False)
+    found: list[tuple[int, str, str]] = []
+    proc = Path("/proc")
+    if proc.is_dir():
+        unreadable = False
+        for pid in live:
+            try:
+                cwd = os.readlink(str(proc / str(pid) / "cwd"))
+            except FileNotFoundError:
+                continue
+            except OSError:
+                unreadable = True
+                continue
+            found.append((pid, table.get(pid, (0, ""))[1], cwd))
+        return ("proc", found, unreadable)
+    try:
+        run = subprocess.run(["lsof", "-a", "-d", "cwd", "-p",
+                              ",".join(str(pid) for pid in live), "-Fn"],
+                             capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return ("lsof", [], True)
+    pid: int | None = None
+    for line in run.stdout.splitlines():
+        if line.startswith("p") and line[1:].isdigit():
+            pid = int(line[1:])
+        elif line.startswith("n") and pid is not None:
+            found.append((pid, table.get(pid, (0, ""))[1], line[1:]))
+    return ("lsof", found, not run.stdout.strip() and run.returncode != 0)
+
+
+def _sweep_cwd_keep(resolved: Path, pids: list[int] | None) -> tuple[str, dict[str, Any]] | None:
+    """``None`` when no live cwd is inside ``resolved``; else the keep reason
+    and the process facts the receipt names."""
+    if pids is None:
+        return "cwd-unverified", {"cwd_probe": "ps"}
+    probe, cwds, unreadable = _sweep_cwds(pids)
+    holders = []
+    for pid, command, cwd in cwds:
+        try:
+            inside = _sweep_within(resolved, Path(cwd).resolve())
+        except OSError:
+            inside = False
+        if inside:
+            holders.append({"pid": pid, "command": command[:200], "cwd": cwd})
+    if holders:
+        return "live-cwd", {"cwd_holders": holders}
+    if unreadable:
+        return "cwd-unverified", {"cwd_probe": probe}
+    return None
+
+
 def _sweep_worktree_keep(entry: dict[str, Any], resolved: Path, repo: Path,
                          issue: int, merged_heads: dict[int, set[str]],
                          live_issue_sessions: dict[int, list[str]],
-                         other_rows: list[dict[str, Any]] | None) -> str | None:
-    """The first closed reason this worktree must be kept, or None."""
+                         other_rows: list[dict[str, Any]] | None,
+                         cwd_risk: tuple[str, dict[str, Any]] | None = None) -> str | None:
+    """The first closed reason this worktree must be kept, or None.
+
+    ``cwd_risk`` is ``_sweep_cwd_keep``'s answer for this worktree: the last
+    check before removal, so a worktree is never removed under a live cwd
+    (Issue #369)."""
     if not _sweep_within(repo, resolved):
         return "outside-project"
     if entry.get("locked"):
@@ -8963,6 +9085,8 @@ def _sweep_worktree_keep(entry: dict[str, Any], resolved: Path, repo: Path,
         return "live-session"
     if any(isinstance(row, dict) and row.get("identity") == "verified" for row in other_rows or []):
         return "live-session"
+    if cwd_risk:
+        return cwd_risk[0]
     return None
 
 
@@ -8979,6 +9103,8 @@ def _sweep_scan(args: argparse.Namespace, repo: Path, acp: Path | None,
     bound_session = (binding or {}).get("session")
     caller_session = (caller or {}).get("session")
     exclude_session_ids = exclude_session_ids or set()
+    # Issue #369: one process table for every worktree decision this scan.
+    watch_pids = _sweep_watch_pids(all_rows, repo)
 
     workers: list[tuple[dict[str, Any], int]] = []
     issues: set[int] = set()
@@ -9138,10 +9264,14 @@ def _sweep_scan(args: argparse.Namespace, repo: Path, acp: Path | None,
             continue
         other_rows = ([row for row in all_rows if _sweep_row_repo(row, resolved)]
                       if inside else [])
+        # Issue #369: the last check before removal. A worktree is never
+        # removed while a live process cwd is inside it.
+        cwd_risk = _sweep_cwd_keep(resolved, watch_pids) if inside else None
         keep = _sweep_worktree_keep(entry, resolved, repo, issue, merged_heads,
-                                    live_by_issue, other_rows)
+                                    live_by_issue, other_rows, cwd_risk=cwd_risk)
         if keep:
-            kept.append({**base, "kept": keep})
+            kept.append({**base, "kept": keep,
+                         **(cwd_risk[1] if cwd_risk and keep == cwd_risk[0] else {})})
         else:
             candidates.append({**base, "reason": f"linked worktree of closed issue #{issue}"})
             released.add(str(resolved))
@@ -9411,8 +9541,10 @@ def _sweep_apply_candidate(item: dict[str, Any], args: argparse.Namespace,
                     continue
                 live_by_issue.setdefault(issue, []).append(ident)
         other_rows = [row for row in all_rows if _sweep_row_repo(row, resolved)]
+        # Issue #369: re-checked at delete time, never only at plan time.
+        cwd_risk = _sweep_cwd_keep(resolved, _sweep_watch_pids(all_rows, repo))
         keep = _sweep_worktree_keep(entry, resolved, repo, item["issue"], merged_heads,
-                                    live_by_issue, other_rows)
+                                    live_by_issue, other_rows, cwd_risk=cwd_risk)
         if keep:
             return "kept", keep
         rc, _ = _sweep_git(repo, "worktree", "remove", item["path"])
