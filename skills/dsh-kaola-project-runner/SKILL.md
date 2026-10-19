@@ -111,7 +111,7 @@ or editor replacement. Settle a pending permission `request_id` with
 `permit [--request-id ID] --option OPTION_ID` (an option the request offers); omitting `--option`
 answers `cancelled`, which denies. Read the resulting output before choosing another action.
 
-Permission default: `start` launches with `DSH_PERMISSION_MODE=danger-full-access` (no Seatbelt sandbox, approval never) unless the caller set that variable; `--permission-mode read-only|workspace-write|danger-full-access` wins over both (bypassPermissions maps to danger-full-access).
+Permission default: `start` launches with `DSH_PERMISSION_MODE=danger-full-access` (no Seatbelt sandbox, approval never) unless the caller set that variable; `--permission-mode read-only|workspace-write|danger-full-access` wins over both (bypassPermissions maps to danger-full-access). dsh pins the preset into the session log at creation and keeps it on resume, so `start --resume` reports the request as not applied (`config_application.mode.applied: false`, `reason: resumed-session-permission`) with the session's recorded values under `effective`; a session born confined keeps that confinement — gaining full access takes a fresh session, not a resume.
 
 When the Agent decides the exact session is finished, end only that owned session:
 

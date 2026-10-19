@@ -348,6 +348,7 @@ python_suites_all=(
   "test-issue-352-droid-session-timeout.py"
   "test-issue-316-resume-model-evidence.py"
   "test-issue-308-resume-reconcile.py"
+  "test-issue-363-dsh-resume-permission.py"
   "test-issue-309-recovery-routes.py"
   "test-issue-313-name-advisory.py"
   "test-issue-312-seat-drift.py"
@@ -491,6 +492,7 @@ python_suites_b=(
   "test-issue-352-droid-session-timeout.py"
   "test-issue-316-resume-model-evidence.py"
   "test-issue-308-resume-reconcile.py"
+  "test-issue-363-dsh-resume-permission.py"
   "test-issue-309-recovery-routes.py"
   "test-issue-289-dead-holder-stop.py"
 )

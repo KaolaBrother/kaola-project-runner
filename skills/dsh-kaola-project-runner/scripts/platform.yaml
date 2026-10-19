@@ -37,7 +37,7 @@ acp_verified_versions: "cli=0.2.1-rc.2;agent=deepseek-harness-acp/0.0.1;protocol
 acp_env_allowlist: "DSH_HOME,DEEPSEEK_API_KEY"
 acp_login_requires_pty: "false"
 login_summary: "There is no login step (authMethods is empty); a provider route still needs its credential, such as DEEPSEEK_API_KEY."
-permission_summary: "`start` launches with `DSH_PERMISSION_MODE=danger-full-access` (no Seatbelt sandbox, approval never) unless the caller set that variable; `--permission-mode read-only|workspace-write|danger-full-access` wins over both (bypassPermissions maps to danger-full-access)"
+permission_summary: "`start` launches with `DSH_PERMISSION_MODE=danger-full-access` (no Seatbelt sandbox, approval never) unless the caller set that variable; `--permission-mode read-only|workspace-write|danger-full-access` wins over both (bypassPermissions maps to danger-full-access). dsh pins the preset into the session log at creation and keeps it on resume, so `start --resume` reports the request as not applied (`config_application.mode.applied: false`, `reason: resumed-session-permission`) with the session's recorded values under `effective`; a session born confined keeps that confinement — gaining full access takes a fresh session, not a resume"
 acp_init_meta: ""
 acp_mode_config_id: ""
 acp_model_config_id: "model"

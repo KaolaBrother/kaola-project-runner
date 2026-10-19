@@ -292,6 +292,21 @@ this finite request still has no forwarded completion on the shipped ACP route. 
 existing inquiry recovery there. Live compaction and post-compaction read/use on this new
 route remain pending; model-free adapter tests do not establish them.
 
+dsh pins the session's permission into its session log at creation: the
+`permission/preset`, `sandbox/mode`, and `approval/policy` events a `session/new`
+writes are the values `session/resume` restores, so the launch variable
+`DSH_PERMISSION_MODE` a resume still carries can never change them. A
+`start --resume`/`--continue` receipt therefore reports
+`config_application.mode` as `{"applied": false, "requested_via": "env",
+"value": <requested>, "source": <source>, "reason": "resumed-session-permission"}`
+and, when the session log under `$DSH_HOME/sessions/` is readable, the
+session's own recorded facts under `effective` (`preset`, `sandbox`,
+`approval`, `session_log`, with `effective_via: "session-log"`). An unreadable
+or absent log reports no `effective` — it is never guessed. A session born
+confined stays confined across every resume; gaining a wider preset takes a
+fresh session, which the Delegator host-restart guide states for the Host
+restart path.
+
 Droid's executable override is `DROID_BIN`. Its ACP command is the native
 `droid exec --output-format acp`; no bridge or translator is used. Droid defaults to Auto Model
 (`model=auto`) and full bypass (`autonomy_level=auto-high`). The supported

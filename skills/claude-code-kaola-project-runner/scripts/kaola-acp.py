@@ -221,6 +221,154 @@ def dsh_permission_mode(args: argparse.Namespace) -> tuple[str, str]:
         return os.environ[DSH_PERMISSION_ENV], "caller-env"
     return DSH_SKIP_MODE, "runner-default"
 
+
+def _dsh_safe_unit(ch: str) -> bool:
+    return ch != "~" and ch.isascii() and (ch.isalnum() or ch in "._-")
+
+
+def dsh_project_key(cwd: str) -> str:
+    """The dsh session-store project directory name for a workspace path.
+
+    Mirrors ``projectKey`` in ``@deepseek-ai/dsh-session-persistence-jsonl``:
+    runs of ``/``, ``\\`` and ``:`` collapse to one dash, safe units stay
+    literal, every other code unit becomes ``~XXXX``, leading dashes are
+    dropped and the result is wrapped in ``--…--`` (truncated to 251).
+    """
+    readable = ""
+    separator_run = False
+    for ch in cwd:
+        if ch in "/\\:":
+            if not separator_run:
+                readable += "-"
+            separator_run = True
+        elif _dsh_safe_unit(ch):
+            readable += ch
+            separator_run = False
+        else:
+            readable += f"~{ord(ch):04X}"
+            separator_run = False
+    return "--" + (readable.lstrip("-") or "root")[:251] + "--"
+
+
+def dsh_path_segment(raw: str) -> str:
+    """``encodeSegment`` from the same module: ``.``/``..`` and unsafe units
+    become ``~XXXX`` escapes; everything safe stays literal."""
+    if raw == ".":
+        return "~002E"
+    if raw == "..":
+        return "~002E~002E"
+    return "".join(ch if _dsh_safe_unit(ch) else f"~{ord(ch):04X}" for ch in raw)
+
+
+def _dsh_log_version(path: Path) -> int | None:
+    match = re.fullmatch(r"session(?:\.v(\d+))?\.jsonl(?:\.zstd)?", path.name)
+    return int(match.group(1) or 0) if match else None
+
+
+def _dsh_zstd_stdlib(data: bytes) -> str | None:
+    try:
+        from compression import zstd  # Python >= 3.14
+        return zstd.decompress(data).decode("utf-8", "replace")
+    except Exception:
+        return None
+
+
+def _dsh_zstd_module(data: bytes) -> str | None:
+    try:
+        import io
+        import zstandard
+        reader = zstandard.ZstdDecompressor().stream_reader(io.BytesIO(data))
+        try:
+            return reader.read().decode("utf-8", "replace")
+        finally:
+            reader.close()
+    except Exception:
+        return None
+
+
+def _dsh_zstd_cli(path: Path) -> str | None:
+    binary = shutil.which("zstd")
+    if binary is None:
+        return None
+    try:
+        out = subprocess.run([binary, "-dc", "--", str(path)],
+                             capture_output=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    return out.stdout.decode("utf-8", "replace")
+
+
+def _dsh_log_text(path: Path) -> str | None:
+    """The decoded text of one dsh session log, or None when unreadable.
+
+    dsh writes size-less streaming zstd frames, so each decoder that exists
+    but fails falls through to the next; none of them fabricating text is
+    what keeps an unreadable log honest.
+    """
+    if path.suffix != ".zstd":
+        try:
+            return path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return None
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return None
+    for decode in (_dsh_zstd_stdlib, _dsh_zstd_module):
+        text = decode(data)
+        if text is not None:
+            return text
+    return _dsh_zstd_cli(path)
+
+
+def dsh_session_permission(repo: str, session_id: Any) -> dict[str, Any] | None:
+    """The permission facts a resumed dsh session actually keeps (Issue #363).
+
+    dsh pins ``permission/preset``, ``sandbox/mode`` and ``approval/policy``
+    into the session log at creation, and ``pinInitialPermission`` keeps the
+    recorded values on resume, so the last occurrence of each is the
+    effective one. ``None`` when the log is absent or unreadable — an
+    unreadable log never fabricates a value.
+    """
+    if not isinstance(session_id, str) or not session_id:
+        return None
+    home = os.environ.get("DSH_HOME") or str(Path.home() / ".dsh")
+    # dsh records the resolved cwd (a /tmp birth lands under --private-tmp-…).
+    directory = Path(home) / "sessions" / dsh_project_key(os.path.realpath(repo)) / dsh_path_segment(session_id)
+    try:
+        candidates = sorted(
+            (path for path in directory.iterdir() if _dsh_log_version(path) is not None),
+            key=lambda path: _dsh_log_version(path) or 0, reverse=True)
+    except OSError:
+        return None
+    for path in candidates:
+        text = _dsh_log_text(path)
+        if text is None:
+            continue
+        found: dict[str, Any] = {"session_log": str(path)}
+        for line in text.splitlines():
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            data = event.get("data") if isinstance(event, dict) else None
+            if not isinstance(data, dict):
+                continue
+            if event.get("type") == "permission/preset" \
+                    and isinstance(data.get("preset"), str):
+                found["preset"] = data["preset"]
+            elif event.get("type") == "sandbox/mode" \
+                    and isinstance(data.get("mode"), str):
+                found["sandbox"] = data["mode"]
+            elif event.get("type") == "approval/policy" \
+                    and isinstance(data.get("policy"), str):
+                found["approval"] = data["policy"]
+        if "preset" in found or "sandbox" in found or "approval" in found:
+            return found
+    return None
+
 # A manifest ``acp_command`` may name files shipped inside the Skill with this
 # prefix (Issue #50: the vendored Claude Code bridge). It resolves to an
 # absolute path before anything is spawned: ``scripts/`` of the installed Skill
@@ -6544,9 +6692,23 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
                     receipt["fast"] = fast_report(args, policy, "none", False)
         if args.platform == "dsh":
             value, source = dsh_permission_mode(args)
-            application["mode"] = {"applied": True, "applied_via": "env",
-                                   "env": DSH_PERMISSION_ENV, "value": value,
-                                   "source": source}
+            entry: dict[str, Any] = {"applied": True, "applied_via": "env",
+                                     "env": DSH_PERMISSION_ENV, "value": value,
+                                     "source": source}
+            if args.resume or args.use_continue:
+                # Issue #363: dsh pins the permission preset into the session
+                # log at creation and keeps the recorded value on resume, so
+                # the launch variable travels but never applies to a resumed
+                # session. Report the request separately from the session's
+                # own effective facts, read back from that log.
+                entry = {"applied": False, "requested_via": "env",
+                         "env": DSH_PERMISSION_ENV, "value": value,
+                         "source": source, "reason": "resumed-session-permission"}
+                effective_mode = dsh_session_permission(repo, receipt.get("acp_session_id"))
+                if effective_mode is not None:
+                    entry["effective"] = effective_mode
+                    entry["effective_via"] = "session-log"
+            application["mode"] = entry
             mode_value = None
         if mode_value and "error" not in receipt:
             # The mode/permission option id is a per-platform manifest fact
@@ -6965,8 +7127,14 @@ def command_drain_restart(args: argparse.Namespace, repo: str) -> dict[str, Any]
     # Issue #181: echo the mode the new start actually applied, not a bare None.
     if selection.get("mode") is None:
         applied_mode = ((started.get("config_application") or {}).get("mode") or {})
-        if isinstance(applied_mode.get("value"), str):
-            selection["mode"] = applied_mode["value"]
+        # Issue #363: a resumed session can keep a recorded permission that
+        # differs from the requested one; its effective value is the echo.
+        effective_mode = applied_mode.get("effective")
+        effective_preset = effective_mode.get("preset") if isinstance(effective_mode, dict) else None
+        for candidate in (effective_preset, applied_mode.get("value")):
+            if isinstance(candidate, str):
+                selection["mode"] = candidate
+                break
     started["start_selection"] = selection
     if did_stop:
         _note_post_stop_result(started, old_id, stop)
