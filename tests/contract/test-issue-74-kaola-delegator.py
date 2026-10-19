@@ -47,6 +47,7 @@ ORIGINAL_TASK = (
 )
 
 CHECKS: list[str] = []
+DISPATCH = ROOT / "scripts" / "kaola-dispatch.py"
 
 
 def check(condition: bool, label: str) -> None:
@@ -969,8 +970,217 @@ def test_one_host_per_repo_refuses_host_exists() -> None:
         sandbox.cleanup()
 
 
+def run_dispatch(args: list[str]) -> tuple[int, dict]:
+    proc = subprocess.run([PYTHON, str(DISPATCH), *args], capture_output=True, text=True)
+    try:
+        payload = json.loads(proc.stdout)
+    except ValueError as exc:
+        raise AssertionError(
+            f"dispatch not JSON rc={proc.returncode} "
+            f"stdout={(proc.stdout or '')[-400:]} stderr={(proc.stderr or '')[-400:]} ({exc})"
+        ) from exc
+    return proc.returncode, payload
+
+
+def test_issue_355_unknown_key_removal_and_watch_diagnosis() -> None:
+    """Unknown top-level keys have a named null removal; view counts open watch rows."""
+    doc = {
+        "schema": "kaola-delegator-heartbeat/1",
+        "revision": 3,
+        "project": {"user_language": "zh", "goal": "keep-goal"},
+        "authorization": {
+            "elite_grants": [],
+            "expert_task_grants": [],
+            "worker_grants": [],
+            "exclusions": [],
+        },
+        "watch": {
+            "early": {
+                "kind": "recovery", "status": "open", "summary": "early",
+                "at": "2026-10-01T00:00:00Z", "source": "owner",
+            },
+            "later": {
+                "kind": "relay", "status": "sent", "summary": "later",
+                "at": "2026-10-02T00:00:00Z", "source": "owner",
+            },
+            "done": {
+                "kind": "observation", "status": "adopted", "summary": "done",
+                "at": "2026-09-01T00:00:00Z", "evidence": "git:abc", "source": "owner",
+            },
+        },
+        "handled_wakes": [
+            {"id": "wake-1", "summary": "still open", "status": "open"},
+            {"id": "wake-2", "summary": "finished", "status": "settled"},
+        ],
+    }
+    with tempfile.TemporaryDirectory(prefix="kaola-issue-355-") as tmp:
+        path = Path(tmp) / "delegator-heartbeat.json"
+        path.write_text(json.dumps(doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        before = path.read_bytes()
+
+        code, view = run_dispatch(["delegator", "view", "--file", str(path)])
+        check(code == 0 and view.get("view") == "delegator-file", f"view reads the file ({code})")
+        check(path.read_bytes() == before, "view writes nothing")
+        accumulation = view.get("watch_accumulation") or {}
+        check(accumulation.get("nonterminal_count") == 2,
+              f"non-terminal watch count excludes adopted ({accumulation})")
+        check(accumulation.get("earliest_at") == "2026-10-01T00:00:00Z",
+              f"earliest non-terminal at ({accumulation.get('earliest_at')})")
+        check(accumulation.get("clear_set") == {"watch": {"ID": None}},
+              f"clear form is a watch-id null ({accumulation.get('clear_set')})")
+        row_ids = {row.get("id") for row in accumulation.get("rows") or []}
+        check(row_ids == {"early", "later"}, f"open rows are early and later ({row_ids})")
+        early = next(row for row in accumulation["rows"] if row["id"] == "early")
+        check("early" in early.get("clear_command", "") and "null" in early.get("clear_command", "")
+              and "--expect-revision" in early.get("clear_command", "") and " 3 " in f" {early.get('clear_command', '')} ",
+              f"early row names its null command ({early.get('clear_command')})")
+        unknown = {item.get("path"): item for item in view.get("unknown") or []}
+        handled = unknown.get("handled_wakes") or {}
+        check(handled.get("collection") == "handled_wakes" and handled.get("id") == "handled_wakes"
+              and handled.get("revision") == 3,
+              f"unknown key names collection, id, and revision ({handled})")
+        command = handled.get("removal_command") or ""
+        check("delegator" in command and "update" in command and "--expect-revision" in command
+              and "handled_wakes" in command and "null" in command and "--writer" in command
+              and "delegator" in command.split("--writer", 1)[-1],
+              f"removal command is executable ({command})")
+        check("same update" in (handled.get("rehome") or ""),
+              f"view prompts to rehome before removal ({handled.get('rehome')})")
+
+        code, refused = run_dispatch([
+            "delegator", "update", "--file", str(path), "--writer", "delegator",
+            "--source", "owner note", "--expect-revision", "3",
+            "--set", json.dumps({"project": {"goal": "changed"}}, separators=(",", ":")),
+        ])
+        check(code == 2 and refused.get("result") == "refused", f"a normal update is refused ({refused})")
+        check(path.read_bytes() == before, "the refusal writes nothing")
+        recovery = " ".join(item.get("recovery", "") for item in refused.get("blockers") or [])
+        check("collection handled_wakes" in recovery and "id handled_wakes" in recovery
+              and "revision 3" in recovery and "same update" in recovery
+              and "--expect-revision" in recovery and "handled_wakes" in recovery and "null" in recovery,
+              f"refusal names collection, id, revision, and the command ({recovery})")
+        check(refused.get("detail", "").find("handled_wakes") >= 0
+              and "--expect-revision" in refused.get("detail", ""),
+              f"refusal detail carries the command ({refused.get('detail')})")
+
+        code, blocked = run_dispatch(["delegator", "migrate", "--file", str(path)])
+        migrate_recovery = " ".join(item.get("recovery", "") for item in blocked.get("blockers") or [])
+        check(code == 2 and blocked.get("result") == "blocked"
+              and "revision 3" in migrate_recovery and "--expect-revision" in migrate_recovery,
+              f"migrate names the same removal ({blocked})")
+        check(path.read_bytes() == before, "migrate without --write does not write")
+
+        code, side = run_dispatch([
+            "delegator", "update", "--file", str(path), "--writer", "sideagent",
+            "--source", "not allowed", "--expect-revision", "3",
+            "--set", json.dumps({"handled_wakes": None}, separators=(",", ":")),
+        ])
+        check(code == 2 and side.get("reason") == "writer-refused",
+              f"a sideagent writer is refused ({side})")
+        check(path.read_bytes() == before, "the sideagent refusal writes nothing")
+
+        code, empty_set = run_dispatch([
+            "delegator", "update", "--file", str(path), "--writer", "delegator",
+            "--source", "owner note", "--expect-revision", "3",
+            "--set", json.dumps({"handled_wakes": []}, separators=(",", ":")),
+        ])
+        empty_recovery = " ".join(item.get("recovery", "") for item in empty_set.get("blockers") or [])
+        empty_recovery = empty_recovery or empty_set.get("recovery") or ""
+        check(code == 2 and "revision 3" in (empty_set.get("detail") or "")
+              and "--expect-revision" in (empty_set.get("detail") or empty_recovery),
+              f"a non-null unknown patch names the null command ({empty_set})")
+        check(path.read_bytes() == before, "the non-null patch writes nothing")
+
+        code, written = run_dispatch([
+            "delegator", "update", "--file", str(path), "--writer", "delegator",
+            "--source", "owner decision: wake-1 still open", "--expect-revision", "3",
+            "--set", json.dumps({
+                "watch": {"wake-1": {
+                    "kind": "recovery", "status": "open", "summary": "still open",
+                    "source": "handled_wakes", "at": "2026-10-18T01:00:00Z",
+                }},
+                "handled_wakes": None,
+            }, separators=(",", ":")),
+        ])
+        check(code == 0 and written.get("result") == "written" and written.get("revision") == 4,
+              f"same update rehomes and removes ({written})")
+        check("handled_wakes" in (written.get("removed") or []),
+              f"the receipt names the removed key ({written.get('removed')})")
+        check("watch" in (written.get("rehome_notice") or "") and "Delegator" in (written.get("rehome_notice") or ""),
+              f"the receipt states the rehome rule ({written.get('rehome_notice')})")
+        stored = json.loads(path.read_text(encoding="utf-8"))
+        check("handled_wakes" not in stored and not any(str(key).startswith("handled_") for key in stored),
+              f"the file keeps no handled ledger ({sorted(stored)})")
+        check(stored["project"]["goal"] == "keep-goal" and stored["project"]["user_language"] == "zh",
+              f"other project fields stay ({stored['project']})")
+        check(stored["authorization"]["worker_grants"] == [],
+              "authorization is not dropped")
+        check(stored["watch"]["wake-1"]["summary"] == "still open"
+              and stored["watch"]["wake-1"]["status"] == "open",
+              f"the still-valid duty is a watch row ({stored['watch'].get('wake-1')})")
+        check("early" in stored["watch"] and "later" in stored["watch"] and "done" not in stored["watch"],
+              f"terminal adopted row leaves; open rows stay ({sorted(stored['watch'])})")
+        check("rehome_notice" not in stored, "the notice is not stored in the file")
+
+        code, planned = run_dispatch(["delegator", "migrate", "--file", str(path)])
+        check(code == 0 and planned.get("result") == "planned" and not planned.get("blockers"),
+              f"delegator validation passes after removal ({planned})")
+
+        code, again = run_dispatch(["delegator", "view", "--file", str(path)])
+        again_acc = again.get("watch_accumulation") or {}
+        check(code == 0 and again_acc.get("nonterminal_count") == 3,
+              f"rehomed row is counted ({again_acc})")
+        held = path.read_bytes()
+        code, repeat = run_dispatch([
+            "delegator", "update", "--file", str(path), "--writer", "delegator",
+            "--source", "owner decision: wake-1 still open", "--expect-revision", "4",
+            "--set", json.dumps({"handled_wakes": None}, separators=(",", ":")),
+        ])
+        check(code == 0 and repeat.get("result") == "unchanged" and repeat.get("writes") is False
+              and repeat.get("revision") == 4,
+              f"a repeat removal does not write ({repeat})")
+        check(path.read_bytes() == held, "the repeat leaves the file byte-identical")
+
+        code, conflict = run_dispatch([
+            "delegator", "update", "--file", str(path), "--writer", "delegator",
+            "--source", "stale", "--expect-revision", "3",
+            "--set", json.dumps({"handled_wakes": None}, separators=(",", ":")),
+        ])
+        check(code == 3 and conflict.get("reason") == "conflict"
+              and conflict.get("current_revision") == 4
+              and "Re-read" in conflict.get("detail", "")
+              and "--expect-revision 4" in conflict.get("detail", ""),
+              f"a stale revision tells the caller to re-read ({conflict})")
+        check(path.read_bytes() == held, "the conflict writes nothing")
+
+        code, cleared = run_dispatch([
+            "delegator", "update", "--file", str(path), "--writer", "delegator",
+            "--source", "early handled", "--expect-revision", "4",
+            "--set", json.dumps({"watch": {"early": None}}, separators=(",", ":")),
+        ])
+        check(code == 0 and cleared.get("result") == "written", f"clearing one watch row writes ({cleared})")
+        code, after = run_dispatch(["delegator", "view", "--file", str(path)])
+        after_acc = after.get("watch_accumulation") or {}
+        check(code == 0 and after_acc.get("nonterminal_count") == 2,
+              f"handle-and-null lowers the count ({after_acc})")
+        check(after_acc.get("earliest_at") == "2026-10-02T00:00:00Z",
+              f"earliest at moves to the next open row ({after_acc.get('earliest_at')})")
+        final = json.loads(path.read_text(encoding="utf-8"))
+        check("early" not in final["watch"] and "wake-1" in final["watch"] and "later" in final["watch"],
+              f"only the handled row left ({sorted(final['watch'])})")
+
+    report = (ROOT / "templates" / "kaola-delegator" / "references" / "inquiry-report.md").read_text(
+        encoding="utf-8")
+    check("same update that sets it to null" in report, "the template states handle-and-null")
+    check("`handled_*`" in report, "the template forbids handled bookkeeping in other fields")
+    check("non-terminal count" in report and "earliest `at`" in report,
+          "the template points at the view diagnosis")
+    check(len(report.encode()) <= 8192, f"inquiry-report stays within reference_bytes ({len(report.encode())})")
+
+
 def main() -> int:
     tests = (
+        test_issue_355_unknown_key_removal_and_watch_diagnosis,
         test_generated_entry_matrix_and_no_engine_leak,
         test_fake_acp_host_worker_event_and_live_status,
         test_adopt_nonstandard_live_host_without_second_start,

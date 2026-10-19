@@ -9416,6 +9416,7 @@ def command_delegator_view(args: argparse.Namespace) -> int:
     except (OSError, ValueError) as exc:
         return fail("invalid-input", str(exc))
     view = RECORD.delegator_file_view(doc)
+    delegator_view_diagnosis(args, doc, view)
     path = Path(args.file)
     repo = Path(args.repo).resolve() if getattr(args, "repo", None) else repo_of_state_file(path)
     try:
@@ -9428,13 +9429,108 @@ def command_delegator_view(args: argparse.Namespace) -> int:
     return emit(view)
 
 
+_DELEGATOR_REHOME = (
+    "Still-valid duties in this value must become normal watch rows in the same update "
+    "that sets this key to null. The Delegator judges which duties are still valid. "
+    "Do not copy this value into another field."
+)
+
+
+def _delegator_update_command(file_arg: str, revision: int, patch_obj: dict[str, Any], source: str) -> str:
+    return shlex.join([
+        sys.executable, str(Path(__file__).resolve()), "delegator", "update",
+        "--file", file_arg, "--writer", "delegator", "--source", source,
+        "--expect-revision", str(revision),
+        "--set", json.dumps(patch_obj, separators=(",", ":")),
+    ])
+
+
+def _unknown_top_key(path: str) -> bool:
+    return bool(path) and "." not in path and path not in RECORD.DELEGATOR_TOP_KEYS
+
+
+def _attach_unknown_top_removal(problem: dict[str, Any], file_arg: str, revision: int, key: str) -> None:
+    command = _delegator_update_command(file_arg, revision, {key: None}, "ORIGINAL_OWNER_DECISION")
+    recovery = (
+        f"collection {key}, id {key}, revision {revision}. {_DELEGATOR_REHOME} "
+        f"Remove it with: {command}. Source must name the original evidence. "
+        "The file was not written."
+    )
+    problem["recovery"] = recovery
+    allowed = problem.get("allowed") or ", ".join(sorted(RECORD.DELEGATOR_TOP_KEYS))
+    problem["detail"] = f"{key} is not allowed. Allowed: {allowed}. {recovery}"
+    problem["collection"] = key
+    problem["id"] = key
+    problem["revision"] = revision
+    problem["removal_command"] = command
+
+
+def _delegator_absent_unknown_nulls(patch: dict[str, Any], doc: dict[str, Any]) -> bool:
+    """A pure repeat of unknown-key removal: every patch value is null and already absent."""
+    if not patch or any(value is not None for value in patch.values()):
+        return False
+    if any(not _unknown_top_key(key) for key in patch):
+        return False
+    return all(key not in doc for key in patch)
+
+
+def delegator_view_diagnosis(args: argparse.Namespace, doc: dict[str, Any], view: dict[str, Any]) -> None:
+    """Non-terminal watch count and unknown-key removal commands. This writes nothing."""
+    revision = int(doc.get("revision") or 0)
+    file_arg = str(args.file)
+    for entry in view.get("unknown") or []:
+        if not isinstance(entry, dict):
+            continue
+        path = entry.get("path")
+        if not isinstance(path, str) or not _unknown_top_key(path):
+            continue
+        entry["collection"] = path
+        entry["id"] = path
+        entry["revision"] = revision
+        entry["removal_set"] = {path: None}
+        entry["removal_command"] = _delegator_update_command(
+            file_arg, revision, {path: None}, "ORIGINAL_OWNER_DECISION")
+        entry["rehome"] = _DELEGATOR_REHOME
+    watch = doc.get("watch") if isinstance(doc.get("watch"), dict) else {}
+    rows = []
+    for ident, item in watch.items():
+        status = None
+        at = None
+        if isinstance(item, dict):
+            status, _bad = RECORD._watch_status(item)
+            if isinstance(item.get("at"), str) and item["at"]:
+                at = item["at"]
+        if status in ("adopted", "settled"):
+            continue
+        clear_set = {"watch": {ident: None}}
+        rows.append({
+            "id": ident,
+            "status": status,
+            "at": at,
+            "clear_set": clear_set,
+            "clear_command": _delegator_update_command(
+                file_arg, revision, clear_set, "ORIGINAL_HANDLED_EVIDENCE"),
+        })
+    rows.sort(key=lambda row: str(row["id"]))
+    ats = [row["at"] for row in rows if isinstance(row.get("at"), str)]
+    view["watch_accumulation"] = {
+        "nonterminal_count": len(rows),
+        "earliest_at": min(ats) if ats else None,
+        "clear_set": {"watch": {"ID": None}},
+        "rows": rows,
+    }
+
+
 def delegator_recovery(args: argparse.Namespace, doc: dict[str, Any], blockers: list[dict[str, str]]) -> None:
     """Attach a scoped clear operation to watch refusals, without judging currentness."""
     watch = doc.get("watch") or {}
     revision = int(doc.get("revision") or 0)
+    file_arg = str(args.file)
     for problem in blockers:
         path = problem["path"]
         if not path.startswith("watch."):
+            if _unknown_top_key(path):
+                _attach_unknown_top_removal(problem, file_arg, revision, path)
             continue
         ident = next((ident for ident in sorted(watch, key=len, reverse=True)
                       if path == f"watch.{ident}" or path.startswith(f"watch.{ident}.")), None)
@@ -9489,20 +9585,39 @@ def command_delegator_update(args: argparse.Namespace) -> int:
             limits = RECORD.aggregate_limit_blockers({key: value for key, value in auth_patch.items() if value is not None}, delegator=True)
             if limits:
                 return emit({"result": "refused", "reason": "invalid-input", **limits[0], "blockers": limits}, 2)
-        for key, value in patch.items():
-            if value is None:
-                continue
-            if key not in RECORD.DELEGATOR_TOP_KEYS - {"schema", "revision", "updated_at"}:
-                refused = RECORD.refusal(
-                    key, ", ".join(sorted(RECORD.DELEGATOR_TOP_KEYS)),
-                    "remove this key and retry; the file was not changed")
-                return emit({"result": "refused", "reason": "invalid-input", **refused}, 2)
+        receipt: dict[str, Any] | None = None
         with StateLock(path):
             doc = _delegator_read(path)
             actual = int(doc.get("revision") or 0)
             if args.expect_revision != actual:
-                return emit({"result": "refused", "reason": "conflict",
-                             "detail": f"file is at revision {actual}", "current_revision": actual}, 3)
+                return emit({
+                    "result": "refused",
+                    "reason": "conflict",
+                    "detail": (
+                        f"file is at revision {actual}. Re-read {path} and retry with "
+                        f"--expect-revision {actual}. Do not retry revision {args.expect_revision}."
+                    ),
+                    "current_revision": actual,
+                }, 3)
+            for key, value in patch.items():
+                if value is None:
+                    continue
+                if key not in RECORD.DELEGATOR_TOP_KEYS - {"schema", "revision", "updated_at"}:
+                    refused = RECORD.refusal(
+                        key, ", ".join(sorted(RECORD.DELEGATOR_TOP_KEYS)),
+                        "remove this key and retry; the file was not changed")
+                    _attach_unknown_top_removal(refused, str(path), actual, key)
+                    return emit({"result": "refused", "reason": "invalid-input", **refused}, 2)
+            if _delegator_absent_unknown_nulls(patch, doc):
+                return emit({
+                    "result": "unchanged",
+                    "writes": False,
+                    "revision": actual,
+                    "detail": (
+                        f"those keys are already absent at revision {actual}. "
+                        "Re-read the file only if its revision differs."
+                    ),
+                })
             merged = merge_patch(doc, patch)
             merged.pop("retired", None)
             if isinstance(merged.get("authorization"), dict):
@@ -9526,12 +9641,29 @@ def command_delegator_update(args: argparse.Namespace) -> int:
                 delegator_recovery(args, doc, blockers)
                 return emit({"result": "refused", "reason": "invalid-input", "blockers": blockers,
                              "detail": blockers[0]["detail"]}, 2)
+            unknown_removed = [key for key, value in patch.items()
+                               if value is None and key in doc and _unknown_top_key(key)]
+            removed = list(_dropped)
+            for key in unknown_removed:
+                if key not in removed:
+                    removed.append(key)
+            nonempty = [key for key in unknown_removed if doc.get(key) not in (None, "", [], {})]
+            receipt = {"result": "written", "revision": merged["revision"], "removed": removed}
+            if nonempty:
+                receipt["rehome_notice"] = (
+                    "Removed non-empty unknown top-level keys "
+                    + ", ".join(nonempty)
+                    + ". Still-valid duties had to be written as watch rows in this same update. "
+                    "The Delegator judged which were still valid. This file keeps no copy of the removed values."
+                )
             atomic_write(path, json.dumps(normalized, ensure_ascii=False, sort_keys=True, indent=1) + "\n")
     except StateRefusal as refusal:
         return emit(refusal.payload, 2)
     except (OSError, ValueError) as exc:
         return fail("invalid-input", str(exc))
-    return emit({"result": "written", "revision": merged["revision"], "removed": _dropped})
+    if receipt is None:
+        return fail("invalid-input", "delegator update produced no receipt")
+    return emit(receipt)
 
 
 def main(argv: list[str] | None = None) -> int:

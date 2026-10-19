@@ -28,22 +28,21 @@ python3 "$TOOL" delegator update --file "$FILE" --writer delegator --source '<so
   --expect-revision <current revision> --set '<typed current change>'
 ```
 
-For an old untyped file, plan the upgrade before `--write`. Keep applicable unresolved
-owner duties in typed `watch` rows with original source references. A handled
-row leaves stored `watch`: `update --expect-revision REV --source ORIGINAL
---set '{"watch":{"ID":null}}'`. `adopted` or `settled` with original effect
-evidence also removes it; `sent` remains pending. Do not move settled text to
-another field. An absent row is not created. An unresolved unclassified matter
-keeps original evidence on the current decision/reconciliation route.
-Use exact preset ids and count or unlimited; no standalone aggregate or Worker pool cap.
-Migration removes only null or provably redundant legacy limits. Conflicting or
-total-only intent needs original owner reconciliation and a sourced, revision-bound
-null removal through the existing update; never expand authority silently. Do not infer counts or switch
-permission from a condition. The plan gives each blocked path, its allowed
-form, and recovery. A refusal leaves the file unchanged. Normal updates write
-the same closed `kaola-delegator-heartbeat/1` form. `execute` reports an old
-schema as a migration observation. Existing Host work and legacy transport
-continue. Installation and live migration need their own authorization.
+For an old untyped file, plan the upgrade before `--write`. Keep unresolved
+owner duties in typed `watch` rows with original sources. Handle a watch row in the
+same update that sets it to null (`{"watch":{"ID":null}}`). Do not store
+`handled_*` bookkeeping in another field. `adopted` or `settled` with effect
+evidence also removes it; `sent` stays pending. An absent row is not created.
+An unknown top-level key is removed by the same update that writes its
+still-valid duties as `watch` rows and sets the key to null. You judge which
+duties are still valid. `delegator view` shows the non-terminal count, the
+earliest `at`, and that command. A repeat removal of an absent key does not
+write. Use exact preset ids and count or unlimited; no aggregate cap.
+Migration drops only null or redundant legacy limits. Conflicting intent needs
+the original owner source and a revision-bound null; never expand authority.
+A refusal leaves the file unchanged. Updates write `kaola-delegator-heartbeat/1`.
+An old schema is a migration observation. Installation and live migration need
+their own authorization.
 
 ## User-facing writing
 
