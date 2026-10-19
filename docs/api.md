@@ -1946,9 +1946,11 @@ placeholder: [PATH, ...], notice: none|pending|delivered, repairs}`. `placeholde
 several removed worktrees keep their own claims (N-1). `status`/`observe` carry it (`tool_cwd`)
 and the current repair duty (`tool_cwd_error`); `list` rows carry `tool_cwd_path` and
 `tool_cwd_exists`, plus `agent_pid`, `agent_pgid` and `agent_child_pgids` for the cwd guard's
-process trees. A resume restores `tool_cwd` from the previous record and reconciles each claim
-against the filesystem and `git worktree list` (exists + empty + unregistered stays; otherwise
-it is dropped).
+process trees. A resume restores `tool_cwd` from the previous record; a fresh start inherits
+only the placeholder claims, never a stale `last_known` (R2-1). Either boot reconciles each
+claim against the filesystem and `git worktree list`: exists + empty + unregistered stays, a
+registered or non-empty claim is dropped, and an unreadable list keeps the claim and records
+`cwd-unverifiable` (R2-2).
 
 Recording tiers: **A** a runner-owned shell-entry trace is not implemented (D1 open); **B** the
 manifest `tool_cwd_note_regex` applied to `tool_call`/`tool_call_update` `content` text only
@@ -1968,8 +1970,8 @@ instead of a silent no-op.
 Repair: one placeholder per occurrence, coalesced on the path, and only inside the repo, never
 the repo root, never a registered worktree (`os.makedirs`), and never for a path that still
 exists. A worktree list that cannot answer is recorded as `tool_cwd_error`
-`cwd-unverifiable` (probe `git`) and creates nothing. Repeated status ticks of the same missing
-path record one vanish event (N-2). The notice is fixed text naming the path and the repo root;
+`cwd-unverifiable` (probe `git`), creates nothing and keeps an existing claim. Repeated status
+ticks of the same missing path record one vanish event (N-2). The notice is fixed text naming the path and the repo root;
 one notice is staged per repaired path, so a second removed worktree still gets its own. It
 steers when the turn is active and the manifest declares `native_steering: supported`,
 otherwise it is staged as a `host_owned` worker event `kind: cwd_repaired` and delivered as one

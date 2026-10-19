@@ -613,6 +613,86 @@ class HolderCwdRepair(unittest.TestCase):
         self.assertEqual(state.get("placeholder"), [], state)
         self.assertTrue((path / "stray.txt").is_file())
 
+    # -- R2-1: a fresh start inherits only the placeholder claim ------------
+
+    def test_a_fresh_start_inherits_only_the_placeholder_claim(self) -> None:
+        path = self.add_worktree()
+        vanish = self.vanish(path, "note")
+        self.start("cwd_vanish", steering="none", vanish=vanish)
+        self.send("go", "cwd_vanish", steering="none", vanish=vanish)
+        self.wait_for(lambda: self.tool_cwd().get("last_known") == str(path),
+                      "tier B to record the noted path")
+        self.remove_out_of_band(path)
+        self.wait_for(lambda: path.is_dir(), "the placeholder")
+        status = self.status()
+
+        os.kill(status["holder_pid"], signal.SIGKILL)
+        self.wait_pid_gone(status["holder_pid"])
+        if status.get("agent_pid"):
+            self.wait_pid_gone(status["agent_pid"])
+        self._started = False
+        # A fresh session (no --resume) starts on the same record.
+        self.start("slow", steering="none", turn_ms=1000)
+        state = self.tool_cwd()
+        self.assertIsNone(state.get("last_known"), state)
+        self.assertIsNone(state.get("source"), state)
+        self.assertEqual([os.path.realpath(item) for item in state.get("placeholder") or []],
+                         [os.path.realpath(str(path))], state)
+        self.assertTrue(path.is_dir())
+        created = [e for e in self.events()
+                   if e.get("kind") == "tool_cwd_placeholder_created"]
+        self.assertEqual(len(created), 1, created)
+
+    # -- R2-2: an unknown worktree probe keeps the claim --------------------
+
+    def test_unknown_worktree_probe_keeps_the_placeholder_claim(self) -> None:
+        path = self.add_worktree()
+        vanish = self.vanish(path, "note_then_repo")
+        stub, marker = self.git_stub()
+        self.start("cwd_vanish", steering="none", vanish=vanish, path_prefix=stub)
+        self.send("go", "cwd_vanish", steering="none", vanish=vanish)
+        self.wait_for(lambda: self.tool_cwd().get("last_known") == str(path),
+                      "tier B to record the noted path")
+        self.remove_out_of_band(path)
+        self.wait_for(lambda: path.is_dir(), "the placeholder")
+        marker.write_text("fail\n", encoding="utf-8")
+        try:
+            # The second prompt notes the repo root: cleanup now runs with an
+            # unreadable worktree list and must keep the claim.
+            self.send("again", "cwd_vanish", steering="none", vanish=vanish)
+            self.wait_for(
+                lambda: (self.status().get("tool_cwd_error") or {}).get("code")
+                == "cwd-unverifiable",
+                "the unknown probe duty")
+            state = self.tool_cwd()
+            self.assertEqual(
+                [os.path.realpath(item) for item in state.get("placeholder") or []],
+                [os.path.realpath(str(path))], state)
+            self.assertTrue(path.is_dir())
+            left = [e for e in self.events() if e.get("kind") == "tool_cwd_placeholder_left"]
+            self.assertFalse(any(e.get("reason") == "registered worktree again"
+                                 for e in left), left)
+            # The same unknown answer on resume keeps it too.
+            status = self.status()
+            os.kill(status["holder_pid"], signal.SIGKILL)
+            self.wait_pid_gone(status["holder_pid"])
+            if status.get("agent_pid"):
+                self.wait_pid_gone(status["agent_pid"])
+            self._started = False
+            self.cli("start", "--resume", status.get("acp_session_id"),
+                     scenario="cwd_vanish", vanish=vanish, caps="resume,load",
+                     resume_any=True, path_prefix=stub)
+            self._started = True
+            state = self.tool_cwd()
+            self.assertEqual(
+                [os.path.realpath(item) for item in state.get("placeholder") or []],
+                [os.path.realpath(str(path))], state)
+            left = [e for e in self.events() if e.get("kind") == "tool_cwd_placeholder_left"]
+            self.assertFalse(any(e.get("reason") == "registered worktree again"
+                                 for e in left), left)
+        finally:
+            marker.unlink(missing_ok=True)
+
     # -- case 7: tier A, pending D1 -----------------------------------------
 
     @unittest.skip("tier A (runner-owned ZDOTDIR/BASH_ENV shell entry) is not implemented: "

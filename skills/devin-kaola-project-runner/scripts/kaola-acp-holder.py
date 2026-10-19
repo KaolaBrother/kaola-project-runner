@@ -2633,14 +2633,20 @@ class Holder:
         # Issue #369: the agent's recorded tool cwd and its repairs. The
         # holder never changes a foreign process's cwd; it recreates a vanished
         # directory as an empty placeholder and tells its own agent to move.
-        # A resume restores the fact from the previous record so the
-        # placeholder claim and the recorded path survive a holder restart.
+        # A resume restores the whole fact so the placeholder claim and the
+        # recorded path survive a holder restart. R2-1: a fresh start inherits
+        # only the placeholder claim (to reconcile); a stale last_known must
+        # not steer V1/V2 for a session that no longer has that shell.
         self.tool_cwd: dict[str, Any] = {
             "last_known": None, "source": None, "observed_at": None, "exists": None,
             "placeholder": [], "notice": "none", "repairs": 0}
         restored = previous_record.get("tool_cwd")
         if isinstance(restored, dict):
-            self.tool_cwd.update(self._restore_tool_cwd(restored))
+            restored_fact = self._restore_tool_cwd(restored)
+            if self.args.resume or self.args.use_continue:
+                self.tool_cwd.update(restored_fact)
+            else:
+                self.tool_cwd["placeholder"] = restored_fact.get("placeholder", [])
         self.tool_cwd_lock = threading.Lock()
         self.tool_cwd_sampled_at = 0.0
         self.tool_cwd_worktrees: set[str] | None = None
@@ -3371,19 +3377,19 @@ class Holder:
         return {line[len("worktree "):] for line in run.stdout.splitlines()
                 if line.startswith("worktree ")}
 
-    def _cwd_registered_worktree(self, path: str) -> bool:
-        """A path that is a registered worktree is never ours to touch.
+    def _cwd_registered_worktree(self, path: str) -> bool | None:
+        """``True`` registered, ``False`` not registered, ``None`` unknown.
 
-        An unreadable worktree list answers True: the holder does not create a
-        placeholder it cannot prove is unregistered. The refusal is recorded
-        rather than silent (N-3), so status names the probe that failed."""
+        An unreadable worktree list is unknown, never "registered": a caller
+        that would create or remove a placeholder leaves the claim alone and
+        records the duty (N-3), so status names the probe that failed."""
         guard = self._cwd_guard()
         if guard is None:
-            return True
+            return None
         paths = self._cwd_worktree_paths()
         if paths is None:
             self._cwd_unverifiable(path)
-            return True
+            return None
         return any(guard.same_path(item, path) for item in paths)
 
     def _cwd_unverifiable(self, path: str) -> None:
@@ -3519,7 +3525,8 @@ class Holder:
                 return
         if not guard.within(repo, path) or guard.same_path(path, repo):
             return
-        if self._cwd_registered_worktree(path):
+        if self._cwd_registered_worktree(path) is not False:
+            # True: never ours. None: cannot prove it is unregistered.
             return
         try:
             os.makedirs(path, exist_ok=True)
@@ -3570,7 +3577,12 @@ class Holder:
             if not stopping and guard is not None and isinstance(last, str) and last \
                     and guard.within(placeholder, last):
                 continue
-            if self._cwd_registered_worktree(placeholder):
+            registered = self._cwd_registered_worktree(placeholder)
+            if registered is None:
+                # R2-2: the probe could not answer; keep the claim and the
+                # recorded duty instead of inventing a "registered again".
+                continue
+            if registered:
                 self._cwd_placeholder_drop(placeholder)
                 self._cwd_forget_placeholder_path(placeholder, last)
                 self.events.append({"kind": "tool_cwd_placeholder_left", "path": placeholder,
@@ -3597,24 +3609,33 @@ class Holder:
             self.write_record()
 
     def _cwd_resume_reconcile(self) -> None:
-        """Resume: keep tracking only a placeholder that still fits.
+        """Boot (fresh or resume): keep tracking only a claim that still fits.
 
-        The fact came from the previous record; a placeholder that no longer
-        exists, is registered, or holds content is dropped, and a notice that
-        lost its text is rebuilt from the surviving claim so it can still be
-        delivered."""
+        A resume has the whole fact from the previous record; a fresh start
+        has only the placeholder claim (R2-1). A claim that no longer exists,
+        is registered, or holds content is dropped. An unknown worktree
+        answer keeps the claim and its recorded duty (R2-2). On resume a
+        notice that lost its text is rebuilt from the surviving claim so it
+        can still be delivered."""
         guard = self._cwd_guard()
         with self.tool_cwd_lock:
             placeholders = list(self.tool_cwd.get("placeholder") or [])
         for placeholder in placeholders:
-            usable = (guard is not None and os.path.isdir(placeholder)
-                      and not self._cwd_registered_worktree(placeholder))
-            if usable:
-                try:
-                    usable = not os.listdir(placeholder)
-                except OSError:
-                    usable = False
-            if not usable:
+            if guard is None or not os.path.isdir(placeholder):
+                self._cwd_placeholder_drop(placeholder)
+                continue
+            registered = self._cwd_registered_worktree(placeholder)
+            if registered is None:
+                # R2-2: unknown keeps the claim; the duty is recorded.
+                continue
+            if registered:
+                self._cwd_placeholder_drop(placeholder)
+                continue
+            try:
+                empty = not os.listdir(placeholder)
+            except OSError:
+                empty = False
+            if not empty:
                 self._cwd_placeholder_drop(placeholder)
         with self.tool_cwd_lock:
             remaining = list(self.tool_cwd.get("placeholder") or [])
@@ -9098,9 +9119,11 @@ class Holder:
             # session/load resume: redeliver events the previous holder never
             # saw confirmed (Issue #62 phase 2).
             self._restore_worker_events()
-            # Issue #369: a resumed holder reconciles its placeholder claim.
-            self._cwd_resume_reconcile()
         if already_ready or "error" not in result:
+            # Issue #369: every boot reconciles the inherited placeholder
+            # claim: a resume restores the whole fact, a fresh start only the
+            # claim (R2-1). This is a no-op when there is no claim.
+            self._cwd_resume_reconcile()
             # Issue #369: the V2 baseline is taken at boot, outside the prompt
             # path's worker_events_lock; every later refresh (turn end,
             # execute events, status tick) diffs against it.
