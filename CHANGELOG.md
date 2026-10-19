@@ -4,7 +4,9 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.9.22 — 2026-10-20 (worktree removal guarded against a live shell cwd; dsh permission delivery and resume receipt; per-preset Worker grants; shared Cursor+Grok quota pool; Host-record durability and rebind fixes)
+
+Fixes #359 (a wiped holder record directory wakes the Delegator), #360 (the declared dsh permission mode reaches a broker-launched holder), #361 (auto launch backend degrades to direct; a Host stop spares its seats), #362 (pre-revision state records migrate to a first revision), #363 (a resumed dsh session reports the permission it keeps), #364 (recovery routes for the remaining audited codes), #365 (rebind-host moves the recorded dispatcher), #367 (every Worker grant is a per-preset row), #368 (Grok and Cursor share one quota pool, each read by its own acquisition), #369 (a worktree is never removed under a live shell cwd) and #371 (an unreadable service manager is reported as unknown, not as an exited job).
 
 Seats: restart required
 
