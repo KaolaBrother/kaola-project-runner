@@ -1038,13 +1038,13 @@ class WakeGate(issue299.WebhookCase):
             self.assertFalse(self.posts_for(host.holder_instance_id), self.endpoint.posts)
 
     def test_delegator_sends_to_an_idle_host_do_not_wake_again(self) -> None:
-        # Issue #307, KPM receipts 4382-4418. The fresh holder's latch is
+        # Issue #307, receipts 4382-4418. The fresh holder's latch is
         # clear, so the first idle turn is the one transition wake (4369).
         # Each later Delegator send, with no live seat, ends with no wake.
         self.endpoint = Endpoint()
         code, out = self.configure(self.endpoint.url)
         self.assertEqual(code, 0, out)
-        self.start_host("kpm-repeat")
+        self.start_host("repeat-host")
         self.acp("send", "--text", "restart-context", "--wait")
         wait_for(lambda: len(self.posts_with_reason("all-idle")) == 1,
                  15, "one transition all-idle")

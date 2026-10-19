@@ -14,8 +14,8 @@ pin: P may differ from 3de9f61afbfa only by templates/grok-bot/accepted-revision
 pin: P may differ from 3de9f61afbfa only by templates/grok-bot/accepted-revision.json and the three generated hosts/grok-bot/ products; found docs/designs/ddd-component-2026-10-07/design.md
 pin: P may differ from 3de9f61afbfa only by templates/grok-bot/accepted-revision.json and the three generated hosts/grok-bot/ products; found docs/grok-bot-host.md
 pin: P may differ from 3de9f61afbfa only by templates/grok-bot/accepted-revision.json and the three generated hosts/grok-bot/ products; found docs/issue-278-validation.md
-pin: P may differ from 3de9f61afbfa only by templates/grok-bot/accepted-revision.json and the three generated hosts/grok-bot/ products; found docs/kpm-transfer/HANDOFF.md
-pin: P may differ from 3de9f61afbfa only by templates/grok-bot/accepted-revision.json and the three generated hosts/grok-bot/ products; found docs/kpm-transfer/RETIREMENT-RECEIPT-2026-10-07.md
+pin: P may differ from 3de9f61afbfa only by templates/grok-bot/accepted-revision.json and the three generated hosts/grok-bot/ products
+pin: P may differ from 3de9f61afbfa only by templates/grok-bot/accepted-revision.json and the three generated hosts/grok-bot/ products
 pin: P may differ from 3de9f61afbfa only by templates/grok-bot/accepted-revision.json and the three generated hosts/grok-bot/ products; found docs/operations/kpr-host-on-demand-2026-10-07.md
 pin: P may differ from 3de9f61afbfa only by templates/grok-bot/accepted-revision.json and the three generated hosts/grok-bot/ products; found docs/poc-acp-transport-2026-09-11.md
 pin: P may differ from 3de9f61afbfa only by templates/grok-bot/accepted-revision.json and the three generated hosts/grok-bot/ products; found docs/research/i270-tool-entry-audit-complete.md

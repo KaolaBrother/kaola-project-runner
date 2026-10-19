@@ -24,7 +24,7 @@ seats, closing the remaining gap from #295.
   shows unavailable; Worker grant above an empty ceiling pool is omitted;
   counted Delegator Worker row is a seat; cross-check that the sum of
   counted `project --seats` grant groups equals the delegator
-  `authorized_total`, covering the KPM shape (grok 2, cursor-cli 2,
+  `authorized_total`, covering the kaola-project-manager shape (grok 2, cursor-cli 2,
   droid 1, devin 1, claude-shared 1).
 - `docs/dispatch-collect.md`: the "Worker-pool presets are not seats"
   paragraph now states the rule — a counted Worker grant is a seat; the

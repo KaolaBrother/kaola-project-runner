@@ -45,7 +45,7 @@ Recorder-bound hash: `c9bcaca4d9292c47…`.
   original record is already gone. Recorded here; no new issue filed (no new KPR issues without
   owner direction).
 - No live `.kaola` state file was modified by this run (worker verified; the real heartbeat was
-  untouched). Live retirement of the KPM Host's 28 inputs happens by its own operator after this
+  untouched). Live retirement of the kaola-project-manager Host's 28 inputs happens by its own operator after this
   fix ships and restarts.
 
 ## Validation

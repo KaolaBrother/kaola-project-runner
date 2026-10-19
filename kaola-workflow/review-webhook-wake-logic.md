@@ -406,4 +406,3 @@ optionally a `missed_event_seq` fact on the next successful wake. No holder-side
   nothing was skipped, including the #311 comment of 2026-10-13T15:48:14Z.
 - I did not run `./scripts/validate.sh` or any test (read-only task); test coverage statements
   come from reading the test files at this commit.
-- KPM mirror issues (#123, #180, #181 on kaola-project-manager) were not read.

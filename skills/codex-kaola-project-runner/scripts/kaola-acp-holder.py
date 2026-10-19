@@ -4762,6 +4762,59 @@ class Holder:
                 item.pop("relayed", None)
                 item["host_owned"] = True
 
+    def _default_bind_sideagent(self) -> None:
+        """Issue #358: bind node mode once when this carrier declares it.
+
+        Not a business write and not a new timer. A missing preset or a failed
+        bind is one event; the next relay boundary retries. An existing binding
+        is left as it is.
+        """
+        if self.session_role != "host" or self.stop_requested:
+            return
+        if "sideagent-node/1" not in HOLDER_FEATURES:
+            return
+        doc = self._lifecycle_state()
+        state = doc.get("state") if isinstance(doc, dict) else None
+        binding = state.get("sideagent") if isinstance(state, dict) else None
+        if isinstance(binding, dict) and isinstance(binding.get("session"), str) and binding.get("session"):
+            return
+        state_file = Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"
+        if not state_file.is_file():
+            return
+        tool = self._state_tool()
+        if tool is None:
+            self._note_default_bind({"result": "unbound", "problem": {"detail": "state tool unavailable"}})
+            return
+        env = dict(os.environ)
+        env[DISPATCHER_ENV] = json.dumps(self.dispatcher_identity(), sort_keys=True)
+        env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_dir.parent.parent.parent)
+        try:
+            run = subprocess.run(
+                [sys.executable, tool, "state", "ensure-sideagent", "--file", str(state_file),
+                 "--repo", self.args.repo],
+                cwd=self.args.repo, env=env, stdin=subprocess.DEVNULL,
+                capture_output=True, text=True, timeout=30)
+            receipt = json.loads(run.stdout) if run.stdout else {
+                "result": "unbound", "problem": {"detail": "no receipt"}}
+        except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+            receipt = {"result": "unbound", "problem": {"detail": str(exc)}}
+        result = receipt.get("result") if isinstance(receipt, dict) else None
+        if result in ("kept", "not-applicable"):
+            return
+        if result == "bound":
+            side = receipt.get("sideagent") if isinstance(receipt.get("sideagent"), dict) else {}
+            self.events.append({"kind": "sideagent_default_bound", "preset": side.get("preset"),
+                                "session": side.get("session")})
+            return
+        self._note_default_bind(receipt if isinstance(receipt, dict) else {"result": "unbound"})
+
+    def _note_default_bind(self, receipt: dict[str, Any]) -> None:
+        key = json.dumps(receipt, sort_keys=True)[:200]
+        if self.node.get("default_bind_reported") == key:
+            return
+        self.node["default_bind_reported"] = key
+        self.events.append({"kind": "sideagent_default_bind_unbound", "receipt": receipt})
+
     def _relay_pass(self) -> dict[str, Any]:
         """Route routine worker events to the bound Sideagent, at least once.
 
@@ -4779,6 +4832,8 @@ class Holder:
             # Every holder reaches here at its turn ends; a session known not
             # to be the Host never relays to a Sideagent or starts nodes.
             return {}
+        if self.session_role == "host" and not self.stop_requested:
+            self._default_bind_sideagent()
         binding = self._node_binding()
         if binding is not None:
             return self._node_relay_pass(binding)
@@ -8375,6 +8430,8 @@ class Holder:
             # session/load resume: redeliver events the previous holder never
             # saw confirmed (Issue #62 phase 2).
             self._restore_worker_events()
+        if already_ready or "error" not in result:
+            self._default_bind_sideagent()
         threading.Thread(target=self.idle_watcher, daemon=True).start()
         threading.Thread(target=self.follow_heartbeat_loop, daemon=True).start()
         while not self.stop_requested or self.listener:

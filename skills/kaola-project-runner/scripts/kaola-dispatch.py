@@ -100,6 +100,7 @@ SIDEAGENT_ROLES = ("sideagent", "sidekick")
 STATE_SCHEMA = "kaola-heartbeat-prompt/2"
 LEGACY_STATE_SCHEMA = "kaola-heartbeat-prompt/1"
 STATE_CAPABILITY = "heartbeat-state/2"
+NODE_FEATURE = "sideagent-node/1"
 LEGACY_READER_MAX_BYTES = 65536
 STATE_FILE_MAX_BYTES = 1048576
 HOST_VIEW_MAX_BYTES = 65536
@@ -5658,7 +5659,7 @@ def record_recovery(args: argparse.Namespace, doc: dict[str, Any], current: dict
 STOP_DUTIES = RECORD.MAINTENANCE_STOP_DUTIES
 RETURNED_SUMMARY = re.compile(r"\d+ maintenance input\(s\) not applied by a node")
 # Pre-v0.9.12 maintenance failures named the unsent range `batch:<rev>` when
-# no batch id existed (through 1261, 1444, 1669 on the KPM Host). A later
+# no batch id existed (through 1261, 1444, 1669). A later
 # named batch id is `batch:b-…` and stays on the checkpoint path.
 _OBSOLETE_BATCH = re.compile(r"batch:([1-9][0-9]*)$")
 _OBSOLETE_HOST_TASK = re.compile(r"host:tasks/([A-Za-z0-9#][A-Za-z0-9_.:#/-]{0,79})@([1-9][0-9]*)$")
@@ -7366,6 +7367,272 @@ def mirror_task(args: argparse.Namespace, task: dict[str, Any], path: Path, inde
     return {"index": index_path, "changed": changed}
 
 
+def computer_use_only_row(row: dict[str, Any]) -> bool:
+    """A catalog role, not a preset name. Issue #350: not an automatic Worker choice."""
+    roles = row.get("roles") if isinstance(row, dict) else None
+    return isinstance(roles, list) and "computer-use-only" in roles
+
+
+def sideagent_kept(state: dict[str, Any]) -> bool:
+    """Any binding that already names a session, including relay, failed, and ended."""
+    binding = state.get("sideagent") if isinstance(state, dict) else None
+    return isinstance(binding, dict) and isinstance(binding.get("session"), str) and bool(binding.get("session"))
+
+
+def host_record_of(caller: dict[str, str] | None) -> dict[str, Any] | None:
+    if not caller:
+        return None
+    try:
+        record = json.loads((record_directory(caller["platform"], caller["session"], caller["repo"])
+                             / "record.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError, RECORD.acp_paths.RecordRootMismatch):
+        return None
+    if not isinstance(record, dict) or record.get("holder_instance_id") != caller["holder_instance_id"]:
+        return None
+    return record
+
+
+def carrier_declares_node(caller: dict[str, str] | None) -> bool:
+    """The carrier is a host whose record advertises node mode.
+
+    This build publishes that capability on the holder record. A carrier that
+    does not list it is not bound.
+    """
+    record = host_record_of(caller)
+    if not record or record.get("session_role") != "host":
+        return False
+    features = record.get("holder_features")
+    return isinstance(features, list) and NODE_FEATURE in features
+
+
+def live_declares_node(rows: list[dict[str, Any]] | None, repo: Path) -> bool:
+    if not rows:
+        return False
+    for row in live_host_rows(rows, repo):
+        features = row.get("holder_features")
+        if isinstance(features, list) and NODE_FEATURE in features:
+            return True
+    return False
+
+
+def recorded_carrier_declares_node(doc: dict[str, Any], repo: Path) -> bool:
+    carrier = doc.get("carrier") if isinstance(doc.get("carrier"), dict) else None
+    if not carrier:
+        return False
+    platform, session, holder = carrier.get("platform"), carrier.get("session"), carrier.get("holder_instance_id")
+    if not all(isinstance(item, str) and item for item in (platform, session, holder)):
+        return False
+    return carrier_declares_node({
+        "platform": platform, "session": session, "holder_instance_id": holder, "repo": str(repo),
+    })
+
+
+def node_capability_declared(doc: dict[str, Any], rows: list[dict[str, Any]] | None,
+                             repo: Path, caller: dict[str, str] | None) -> bool:
+    return (carrier_declares_node(caller) or live_declares_node(rows, repo)
+            or recorded_carrier_declares_node(doc, repo))
+
+
+def configured_sideagent_preset(repo: Path) -> str | None:
+    """The Delegator file's sideagent preset, when it names one. Not a grant."""
+    path = repo / ".kaola" / "delegator-heartbeat.json"
+    if not path.is_file():
+        return None
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    auth = doc.get("authorization") if isinstance(doc, dict) else None
+    side = auth.get("sideagent") if isinstance(auth, dict) else None
+    preset = side.get("preset") if isinstance(side, dict) else None
+    return preset if isinstance(preset, str) and preset else None
+
+
+def sideagent_runner(platform: str) -> tuple[str, list[str]] | None:
+    """Checkout `kaola-tmux.sh` takes the platform first. An installed Skill
+    entry is `runtime-tmux.sh` and already names the platform."""
+    here = Path(__file__).resolve().parent
+    checkout = here / "kaola-tmux.sh"
+    if (here.parent / "platforms").is_dir() and checkout.is_file():
+        return str(checkout), [platform, "start"]
+    for root in (here.parent.parent, here.parent.parent.parent):
+        scripts = root / f"{platform}-kaola-project-runner" / "scripts"
+        runtime = scripts / "runtime-tmux.sh"
+        if runtime.is_file():
+            return str(runtime), ["start"]
+        tmux = scripts / "kaola-tmux.sh"
+        if tmux.is_file():
+            return str(tmux), [platform, "start"]
+    return None
+
+
+_PROJECT_CODE = re.compile(r"^[A-Za-z][A-Za-z0-9]*$")
+
+
+def sideagent_session_name(platform: str, code: Any, host_session: str) -> str:
+    token = code if isinstance(code, str) and _PROJECT_CODE.fullmatch(code) else "proj"
+    name = f"{platform}-{token}-sideagent"
+    if name == host_session:
+        name = f"{name}-node"
+    if not SESSION_OK.fullmatch(name):
+        name = f"{platform}-sideagent"
+        if name == host_session:
+            name = f"{name}-node"
+    return name
+
+
+def default_worker_rows(doc: dict[str, Any], repo: Path) -> tuple[list[dict[str, Any]], str | None]:
+    """Eligible Worker presets. A configured preset wins when it is one of them."""
+    state = doc.get("state") if isinstance(doc.get("state"), dict) else {}
+    auth = state.get("authorization") if isinstance(state.get("authorization"), dict) else {}
+    try:
+        catalog = catalog_from_files(platform_paths(Path(__file__), None))
+        grants = normalize_grants(auth)
+    except ValueError as exc:
+        return [], str(exc)
+    available: dict[str, str] = {}
+    availability = repo / ".kaola" / "dispatch-availability.json"
+    if availability.is_file():
+        try:
+            available = availability_map(load_object(availability))
+        except (OSError, ValueError) as exc:
+            return [], str(exc)
+    try:
+        candidates, _withheld = current_candidates(catalog, auth, grants, available, doc, str(repo))
+    except ValueError as exc:
+        return [], str(exc)
+    rows = [row for row in candidates if row.get("class") == "Worker" and row.get("availability") != "absent"
+            and not computer_use_only_row(row) and isinstance(row.get("id"), str)
+            and isinstance(row.get("platform"), str) and isinstance(row.get("tier"), str)]
+    rows.sort(key=lambda row: row["id"])
+    configured = configured_sideagent_preset(repo)
+    if configured:
+        chosen = [row for row in rows if row["id"] == configured]
+        if chosen:
+            return chosen, None
+    return rows, None
+
+
+def choose_default_binding(doc: dict[str, Any], repo: Path, repo_text: str,
+                           caller: dict[str, str] | None) -> tuple[dict[str, Any] | None, str | None]:
+    rows, error = default_worker_rows(doc, repo)
+    if error:
+        return None, f"preset selection failed: {error}"
+    if not rows:
+        return None, ("no eligible Worker preset is configured or granted; "
+                      "grant a Worker preset that is not excluded, on hold, or computer-use-only")
+    row = rows[0]
+    runner = sideagent_runner(row["platform"])
+    if runner is None:
+        return None, f"no Sideagent runner for {row['platform']} is on this machine"
+    runner_path, head = runner
+    state = doc.get("state") if isinstance(doc.get("state"), dict) else {}
+    project = state.get("project") if isinstance(state.get("project"), dict) else {}
+    host_session = caller.get("session") if caller and isinstance(caller.get("session"), str) else ""
+    if not host_session and isinstance(doc.get("carrier"), dict) and isinstance(doc["carrier"].get("session"), str):
+        host_session = doc["carrier"]["session"]
+    session = sideagent_session_name(row["platform"], project.get("code"), host_session)
+    configured = configured_sideagent_preset(repo)
+    binding = {
+        "platform": row["platform"],
+        "session": session,
+        "preset": row["id"],
+        "state": "active",
+        "mode": "node",
+        "source": "default-bind",
+        "since": observed_at(),
+        "authorization_source": "configured" if configured == row["id"] else "granted",
+        "recipe": {
+            "runner": runner_path,
+            "argv": [*head, "--repo", repo_text, "--session", session, "--role", "sideagent", "--tier", row["tier"]],
+            "state_tool": str(Path(__file__).resolve()),
+        },
+    }
+    shaped = RECORD.section_shape_problems("sideagent", binding)
+    if shaped:
+        return None, shaped[0]["detail"]
+    return binding, None
+
+
+def ensure_sideagent_command(path: Path, repo: Path) -> str:
+    return shlex.join([sys.executable, str(Path(__file__).resolve()), "state", "ensure-sideagent",
+                       "--file", str(path), "--repo", str(repo)])
+
+
+def default_bind_problem(doc: dict[str, Any], path: Path, rows: list[dict[str, Any]] | None,
+                         repo: Path) -> dict[str, Any] | None:
+    """Visible while a declaring carrier has no binding. Check does not write."""
+    state = doc.get("state") if isinstance(doc.get("state"), dict) else {}
+    if sideagent_kept(state):
+        return None
+    caller = caller_dispatcher()
+    if not node_capability_declared(doc, rows, repo, caller):
+        return None
+    _binding, why = choose_default_binding(doc, repo, str(repo), caller)
+    if _binding is not None:
+        why = "node mode is not bound yet"
+    command = ensure_sideagent_command(path, repo)
+    return {"code": "sideagent-default-unbound", "level": "warn", "kind": "sideagent",
+            "detail": f"{why}. Next Host boundary retries. {command}", "command": command}
+
+
+def apply_default_sideagent(doc: dict[str, Any], repo: Path, repo_text: str) -> None:
+    """Set the binding in place. Does not move host_revision or section_sources."""
+    state = doc.get("state")
+    if not isinstance(state, dict) or sideagent_kept(state):
+        return
+    caller = caller_dispatcher()
+    if not node_capability_declared(doc, None, repo, caller):
+        return
+    binding, _why = choose_default_binding(doc, repo, repo_text, caller)
+    if binding is not None:
+        state["sideagent"] = binding
+
+
+def command_state_ensure_sideagent(args: argparse.Namespace) -> int:
+    path = Path(args.file)
+    repo_text = args.repo if isinstance(getattr(args, "repo", None), str) and args.repo else str(repo_of_state_file(path))
+    repo = Path(repo_text)
+    caller = caller_dispatcher()
+    role = caller_role(caller) if caller else None
+    if caller and role not in (None, "host"):
+        return emit({"result": "refused", "reason": "host-only",
+                     "detail": "only the Host carrier binds the default Sideagent"}, 2)
+    binding: dict[str, Any] | None = None
+    try:
+        with StateLock(path):
+            doc, _raw = read_state_file(path)
+            if doc is None:
+                return emit({"result": "not-applicable", "detail": "no lifecycle state file"})
+            doc = require_current(doc, path)
+            state = doc["state"]
+            if sideagent_kept(state):
+                current = state["sideagent"]
+                return emit({"result": "kept", "sideagent": {
+                    "session": current.get("session"), "preset": current.get("preset"),
+                    "mode": current.get("mode"), "since": current.get("since")}})
+            if not node_capability_declared(doc, None, repo, caller):
+                return emit({"result": "not-applicable",
+                             "detail": "platform and carrier do not both declare sideagent node mode"})
+            binding, why = choose_default_binding(doc, repo, repo_text, caller)
+            if binding is None:
+                problem = default_bind_problem(doc, path, None, repo) or {"detail": why}
+                return emit({"result": "unbound", "problem": problem})
+            state["sideagent"] = binding
+            before = doc.get("revision")
+            sizes = write_state(path, doc)
+    except StateRefusal as refusal:
+        return emit(refusal.payload, 2)
+    except (OSError, ValueError) as exc:
+        return fail("invalid-input", str(exc))
+    return emit({"result": "bound", "revision": doc["revision"], "previous_revision": before,
+                 "host_revision": doc.get("host_revision"),
+                 "sideagent": {"session": binding["session"], "preset": binding["preset"],
+                               "mode": binding["mode"], "since": binding["since"],
+                               "platform": binding["platform"]},
+                 **sizes})
+
+
 def command_state_init(args: argparse.Namespace) -> int:
     path = Path(args.file)
     try:
@@ -7395,6 +7662,8 @@ def command_state_init(args: argparse.Namespace) -> int:
                    "created_from": args.source}
             for section in ("project", "authorization"):
                 state["section_sources"][section]["host_revision"] = 1
+            repo = repo_of_state_file(path)
+            apply_default_sideagent(doc, repo, str(repo))
             sizes = write_state(path, doc)
     except StateRefusal as refusal:
         return emit(refusal.payload, 2)
@@ -8070,6 +8339,9 @@ def state_problems(doc: dict[str, Any], path: Path, index: dict[str, Any] | None
     else:
         if sizes["body_bytes"] > HOST_VIEW_MAX_BYTES * 3 // 4:
             note("host-view-near-limit", "watch", f"Host view is {sizes['body_bytes']} bytes")
+    gap = default_bind_problem(doc, path, rows, repo)
+    if gap is not None:
+        problems.append(gap)
     extra, diagnosis = diagnose_state_bloat(doc, args)
     problems.extend(extra)
     return problems, diagnosis
@@ -9563,6 +9835,13 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--project")
     init.add_argument("--authorization", dest="authorization_json")
     init.set_defaults(func=command_state_init)
+
+    ensure = actions.add_parser(
+        "ensure-sideagent",
+        help="bind node mode when this carrier declares it and no binding exists")
+    ensure.add_argument("--file", required=True)
+    ensure.add_argument("--repo")
+    ensure.set_defaults(func=command_state_ensure_sideagent)
 
     update = actions.add_parser("update")
     writer_args(update)

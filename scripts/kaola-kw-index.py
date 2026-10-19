@@ -2,9 +2,7 @@
 """Kaola-Workflow read-only original-record index (issue #277, migration P4).
 
 Implements the P4 contract, originally ``docs/designs/modular-core-2026-10-07/p4-kw-readonly-index.md``
-(KPR Git history; duplicate source copy retired to the KPM mirror
-``docs/history/kpr/docs/designs/modular-core-2026-10-07/p4-kw-readonly-index.md`` at commit
-a13c6d6f264cf965ca45a07670dbf46cd1eb1e5f — see docs/kpm-transfer/HANDOFF.md):
+(KPR Git history):
 given the root of a project that uses Kaola-Workflow, list the original KW records the
 reader can see as ``{kind, path, sha256, schema_or_unknown}`` — a pointer table, by
 reference only. Content, ownership, semantics and lifecycle stay with KW; nothing here

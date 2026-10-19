@@ -43,7 +43,7 @@ Validation record: `kaola-workflow/issue-334/.cache/final-validation.md` (verdic
 - Worker-declared: the full inventory was not run by the worker (the Host ran it on the
   candidate); long-horizon Opus-tier behavior on agy beyond the acceptance turn is future
   observation, covered by the tier's profile scoping.
-- No tag/release/install (the Delegator releases); no KPM mirror.
+- No tag/release/install (the Delegator releases); no kaola-project-manager mirror.
 
 ## Validation
 

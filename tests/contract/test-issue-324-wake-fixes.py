@@ -47,7 +47,7 @@ spec255.loader.exec_module(issue255)
 holder = issue302.holder
 wait_for = issue302.wait_for
 
-# The rows the KPM Host's heartbeat view carried at the filing (read-only copy
+# The rows a Host heartbeat view carried at the filing (read-only copy
 # of its current `.kaola/heartbeat-prompt.json` host view): a standing
 # Host-owned hold and the Host's non-severe `maintenance-returned` alert.
 STANDING_ROWS = [
@@ -107,7 +107,7 @@ class Wakes(issue315.DecisionWake):
         """Real lifecycle state; the record contract projects the Host view.
 
         Standing state: a Host-owned hold and the Host's non-severe
-        ``maintenance-returned`` alert, the two attention rows the KPM Host
+        ``maintenance-returned`` alert, the two attention rows a Host
         carried at the filing. ``extra_state`` adds Host maintenance duties.
         """
         path = self.write_state(decisions or {}, checkpoint=True)

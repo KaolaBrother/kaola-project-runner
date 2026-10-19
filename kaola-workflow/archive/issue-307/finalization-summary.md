@@ -8,7 +8,7 @@ Delegator-admitted turn neither opens an idle episode nor wakes by itself.
 - `scripts/kaola-acp-holder.py`:
   - The every-turn `_note_delegator_working_again()` call (which cleared
     the once-per-episode latch for every new turn, including
-    Delegator-sent ones — the KPM wake storm, event_seq 4382-4418) is
+    Delegator-sent ones — the kaola-project-manager wake storm, event_seq 4382-4418) is
     removed from turn admission.
   - The latch now clears only on real "working again" facts: a dispatched
     non-exempt holder becomes working, a non-exempt worker terminates, or
@@ -22,7 +22,7 @@ Delegator-admitted turn neither opens an idle episode nor wakes by itself.
     suppress the wake are corrected; `webhook-wake.md` states the
     once-per-transition semantics.
 - Tests: `test-issue-302-delegator-wake-gate.py` extended with 4 cases —
-  the KPM sequence (repeated Delegator sends to an idle Host with no
+  the kaola-project-manager sequence (repeated Delegator sends to an idle Host with no
   live seat → no wake), a Delegator turn that stops the last working
   seat → exactly one `all-idle`, latched Delegator turn + quiet self
   turn → no wake, and a worker-event self turn re-opening the episode.

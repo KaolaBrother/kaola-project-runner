@@ -21,6 +21,7 @@ import textwrap
 import threading
 import time
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -4747,6 +4748,324 @@ class SideagentTaskRetire(StateProject):
         self.assertEqual(out["value"]["returned_to_host"][ident], "host must judge this",
                          "a returned verb on a standing Host-owned input is not settled over")
         self.assertIn("t1", self.doc()["state"]["tasks"])
+
+
+NODE_FEATURES = ["heartbeat-state/2", "sideagent-node/1"]
+WORKER_GRANT = {"id": "zcode/default", "state": "granted", "count": 1}
+
+
+class DefaultSideagentBind(StateProject):
+    """Issue #358: entry binds node mode; an existing binding stays; a miss is visible."""
+
+    def host_env(self, features: list[str] | None = None, role: str = "host",
+                 session: str = "zcode-KT-orchestrator-main") -> dict[str, str]:
+        repo = str(self.repo)
+        digest = hashlib.sha256(repo.encode()).hexdigest()[:16]
+        root = Path(self.tmp.name) / "records"
+        directory = root / "zcode" / session / digest
+        directory.mkdir(parents=True)
+        holder = "host-358"
+        (directory / "record.json").write_text(json.dumps({
+            "session_role": role, "holder_instance_id": holder, "holder_pid": os.getpid(),
+            "holder_features": NODE_FEATURES if features is None else features,
+            "platform": "zcode", "session": session, "repo": repo,
+        }), encoding="utf-8")
+        env = self.caller_env(session, holder)
+        env["KAOLA_ACP_RECORD_ROOT"] = str(root)
+        return env
+
+    def init_with(self, env: dict[str, str] | None, authorization: dict | None = None,
+                  project: dict | None = None) -> tuple[int, dict]:
+        return self.state(
+            "init", "--file", str(self.file), "--writer", "host", "--source", "turn-1",
+            "--project", json.dumps(project or {"code": "KT", "goal": "ship"}),
+            "--authorization", json.dumps(authorization if authorization is not None else {"grants": [WORKER_GRANT]}),
+            env=env)
+
+    def ensure(self, env: dict[str, str] | None = None, repo: str | None = None) -> tuple[int, dict]:
+        args = ["ensure-sideagent", "--file", str(self.file), "--repo", repo or str(self.repo)]
+        return self.state(*args, env=env)
+
+    def live(self, features: list[str] | None = None) -> Path:
+        path = self.repo / "live.json"
+        path.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": [{
+            "session": "zcode-KT-orchestrator-main", "host_class": True, "session_role": "host",
+            "repo": str(self.repo), "state": "ready", "holder_instance_id": "host-358",
+            "platform": "zcode", "holder_features": NODE_FEATURES if features is None else features,
+        }]}), encoding="utf-8")
+        return path
+
+    def problem(self, live: Path | None = None, env: dict[str, str] | None = None) -> dict:
+        args = ["check", "--file", str(self.file), "--repo", str(self.repo)]
+        if live is not None:
+            args += ["--live", str(live)]
+        code, out = self.state(*args, env=env)
+        self.assertEqual(code, 0, out)
+        found = [row for row in out["problems"] if row["code"] == "sideagent-default-unbound"]
+        self.assertEqual(len(found), 1, out["problems"])
+        self.assertIn("ensure-sideagent", found[0]["command"])
+        self.assertIn(found[0]["command"], found[0]["detail"])
+        return found[0]
+
+    def test_a_capable_host_init_binds_node_mode_without_a_business_revision(self) -> None:
+        env = self.host_env()
+        code, out = self.init_with(env)
+        self.assertEqual(code, 0, out)
+        doc = self.doc()
+        binding = doc["state"]["sideagent"]
+        self.assertEqual(binding["mode"], "node")
+        self.assertEqual(binding["state"], "active")
+        self.assertEqual(binding["preset"], "zcode/default")
+        self.assertEqual(binding["session"], "zcode-KT-sideagent")
+        self.assertEqual(binding["authorization_source"], "granted")
+        self.assertEqual(doc["host_revision"], 1)
+        self.assertNotIn("sideagent", doc["state"]["section_sources"])
+        self.assertEqual(binding["recipe"]["argv"][:2], ["zcode", "start"])
+        for flag in ("--session", "--repo", "--role", "--tier"):
+            self.assertIn(flag, binding["recipe"]["argv"])
+        self.assertNotIn("--continue", binding["recipe"]["argv"])
+        self.assertNotIn("--resume", binding["recipe"]["argv"])
+        since = binding["since"]
+        code, again = self.ensure(env)
+        self.assertEqual((code, again["result"]), (0, "kept"), again)
+        kept = self.doc()["state"]["sideagent"]
+        self.assertEqual((kept["since"], kept["session"], kept["preset"]),
+                         (since, "zcode-KT-sideagent", "zcode/default"))
+        self.assertEqual(self.doc()["host_revision"], 1)
+        code, check = self.state("check", "--file", str(self.file), "--repo", str(self.repo), env=env)
+        self.assertEqual(code, 0, check)
+        self.assertNotIn("sideagent-default-unbound", [row["code"] for row in check["problems"]])
+
+    def test_init_without_a_declaring_carrier_stays_unbound(self) -> None:
+        code, out = self.init_with(None)
+        self.assertEqual(code, 0, out)
+        self.assertIsNone(self.doc()["state"]["sideagent"])
+        code, out = self.ensure()
+        self.assertEqual((code, out["result"]), (0, "not-applicable"), out)
+        self.assertIsNone(self.doc()["state"]["sideagent"])
+        bare = self.host_env(features=["heartbeat-state/2"])
+        code, out = self.ensure(bare)
+        self.assertEqual((code, out["result"]), (0, "not-applicable"), out)
+        code, check = self.state("check", "--file", str(self.file), "--live", str(self.live(features=["heartbeat-state/2"])))
+        self.assertEqual(code, 0, check)
+        self.assertNotIn("sideagent-default-unbound", [row["code"] for row in check["problems"]])
+
+    def test_an_existing_binding_is_not_replaced(self) -> None:
+        env = self.host_env()
+        self.init_with(None)
+        relay = {"platform": "zcode", "session": "zcode-KT-sideagent", "state": "active", "preset": "devin/default"}
+        doc = self.doc()
+        doc["state"]["sideagent"] = relay
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        code, out = self.ensure(env)
+        self.assertEqual((code, out["result"]), (0, "kept"), out)
+        self.assertEqual(self.doc()["state"]["sideagent"], relay)
+        failed = dict(relay, state="failed", mode="node", since="2026-10-01T00:00:00+00:00")
+        doc = self.doc()
+        doc["state"]["sideagent"] = failed
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        code, out = self.ensure(env)
+        self.assertEqual((code, out["result"]), (0, "kept"), out)
+        self.assertEqual(self.doc()["state"]["sideagent"], failed)
+
+    def test_no_eligible_preset_is_visible_and_not_silent(self) -> None:
+        env = self.host_env()
+        cases = (
+            {"grants": []},
+            {"grants": [{"id": "codex/luna", "state": "granted", "count": 1}]},
+            {"grants": [WORKER_GRANT], "exclusions": ["zcode/default"]},
+        )
+        for authorization in cases:
+            self.file.unlink(missing_ok=True)
+            code, out = self.init_with(env, authorization)
+            self.assertEqual(code, 0, out)
+            self.assertIsNone(self.doc()["state"]["sideagent"], authorization)
+            code, out = self.ensure(env)
+            self.assertEqual((code, out["result"]), (0, "unbound"), out)
+            self.assertIsNone(self.doc()["state"]["sideagent"])
+            row = self.problem(self.live(), env)
+            self.assertEqual(row["level"], "warn")
+            self.assertIn("Worker", row["detail"])
+
+    def test_a_hold_on_the_only_worker_is_visible(self) -> None:
+        env = self.host_env()
+        code, out = self.init_with(env)
+        self.assertEqual(code, 0, out)
+        doc = self.doc()
+        doc["state"]["sideagent"] = None
+        doc["state"]["holds"] = {"h1": {"preset": "zcode/default", "scope": "zcode/default", "reason": "owner"}}
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        code, out = self.ensure(env)
+        self.assertEqual((code, out["result"]), (0, "unbound"), out)
+        self.assertIsNone(self.doc()["state"]["sideagent"])
+        self.problem(env=env)
+
+    def test_configured_preset_wins_and_an_ineligible_one_falls_through(self) -> None:
+        env = self.host_env()
+        both = {"grants": [WORKER_GRANT, {"id": "devin/default", "state": "granted", "count": 1}]}
+        code, out = self.init_with(env, both)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.doc()["state"]["sideagent"]["preset"], "devin/default")
+        self.file.unlink()
+        (self.repo / ".kaola" / "delegator-heartbeat.json").write_text(json.dumps(
+            {"authorization": {"sideagent": {"preset": "zcode/default"}}}), encoding="utf-8")
+        code, out = self.init_with(env, both)
+        self.assertEqual(code, 0, out)
+        binding = self.doc()["state"]["sideagent"]
+        self.assertEqual(binding["preset"], "zcode/default")
+        self.assertEqual(binding["authorization_source"], "configured")
+        self.file.unlink()
+        (self.repo / ".kaola" / "delegator-heartbeat.json").write_text(json.dumps(
+            {"authorization": {"sideagent": {"preset": "codex/luna"}}}), encoding="utf-8")
+        code, out = self.init_with(env, both)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.doc()["state"]["sideagent"]["preset"], "devin/default")
+        self.assertEqual(self.doc()["state"]["sideagent"]["authorization_source"], "granted")
+
+    def test_a_non_host_caller_cannot_bind_and_a_runner_repo_still_can(self) -> None:
+        worker = self.host_env(role="worker", session="zcode-KT-worker")
+        code, out = self.init_with(None)
+        self.assertEqual(code, 0, out)
+        code, out = self.ensure(worker)
+        self.assertEqual(code, 2, out)
+        self.assertEqual(out["reason"], "host-only")
+        self.assertIsNone(self.doc()["state"]["sideagent"])
+        other = Path(self.tmp.name) / "kaola-project-runner"
+        (other / ".kaola").mkdir(parents=True)
+        saved, self.repo, self.file = self.repo, other, other / ".kaola" / "heartbeat-prompt.json"
+        env = self.host_env()
+        code, out = self.init_with(env)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.doc()["state"]["sideagent"]["mode"], "node")
+        self.repo, self.file = saved, saved / ".kaola" / "heartbeat-prompt.json"
+
+    def test_check_names_the_gap_from_a_live_declaring_host(self) -> None:
+        self.init_with(None, {"grants": []})
+        row = self.problem(self.live())
+        self.assertIn("ensure-sideagent", row["command"])
+        self.assertIn(str(self.file), row["command"])
+
+    def test_a_missing_runner_names_the_platform_and_the_recovery_command(self) -> None:
+        self.init_with(None)
+        original_runner = dispatch_module.sideagent_runner
+        original_cap = dispatch_module.node_capability_declared
+        dispatch_module.sideagent_runner = lambda _platform: None
+        dispatch_module.node_capability_declared = lambda *_args, **_kwargs: True
+        try:
+            row = dispatch_module.default_bind_problem(self.doc(), self.file, None, self.repo)
+        finally:
+            dispatch_module.sideagent_runner = original_runner
+            dispatch_module.node_capability_declared = original_cap
+        self.assertIsNotNone(row)
+        self.assertEqual(row["code"], "sideagent-default-unbound")
+        self.assertEqual(row["level"], "warn")
+        self.assertIn("zcode", row["detail"])
+        self.assertIn("runner", row["detail"])
+        self.assertIn("ensure-sideagent", row["command"])
+        self.assertIn(row["command"], row["detail"])
+
+
+class DefaultSideagentNode(HolderFixture):
+    """The carrier binds at startup, and the first later business write starts one node."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        root = Path(self.tmp.name)
+        self.runner = root / "runtime-tmux.sh"
+        self.runner.write_text(FAKE_NODE_RUNNER, encoding="utf-8")
+        self.runner.chmod(0o755)
+        self.saved_env = {key: os.environ.get(key) for key in
+                          ("FAKE_NODE_COUNTER", "FAKE_NODE_ARGV", "FAKE_NODE_RECORD", "FAKE_NODE_REPO",
+                           "FAKE_NODE_PID", "FAKE_NODE_DELAY")}
+        os.environ.update(FAKE_NODE_COUNTER=str(root / "count"), FAKE_NODE_ARGV=str(root / "argv"),
+                          FAKE_NODE_RECORD=str(self.side_dir / "record.json"),
+                          FAKE_NODE_REPO=str(self.repo), FAKE_NODE_PID=str(os.getpid()))
+        self.fake = FakeNode(self.side_sock, self.side_dir / "record.json")
+        self.saved_confirm = holder_module.NODE_STOP_CONFIRM_SECONDS
+        holder_module.NODE_STOP_CONFIRM_SECONDS = 1.5
+
+    def tearDown(self) -> None:
+        holder_module.NODE_STOP_CONFIRM_SECONDS = self.saved_confirm
+        for key, value in self.saved_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        super().tearDown()
+
+    def boundary(self) -> None:
+        with self.holder.worker_events_lock:
+            self.holder._relay_pass()
+
+    def wait_for(self, check, what: str, timeout: float = 10.0) -> None:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if check():
+                return
+            time.sleep(0.05)
+        self.fail(f"timed out waiting for {what}")
+
+    def node_count(self) -> int:
+        counter = Path(self.tmp.name) / "count"
+        return int(counter.read_text()) if counter.exists() else 0
+
+    def log_kinds(self) -> list[str]:
+        log = Path(self.holder.args.record_dir) / "events.jsonl"
+        return [json.loads(line)["kind"] for line in log.read_text().splitlines()] if log.exists() else []
+
+    def quiet_state(self) -> Path:
+        accepted = self.holder.runner_identity.get("accepted_revision") or None
+        state = {
+            "project": {"code": "KT", "goal": "ship"},
+            "authorization": {"grants": [WORKER_GRANT]},
+            "sideagent": None,
+            "tasks": {}, "holds": {}, "alerts": {}, "decisions": {},
+            "maintenance": {
+                "handled_host_revision": 1,
+                "last_sweep": {
+                    "at": datetime.now(timezone.utc).isoformat(), "key": "quiet", "batch": None,
+                    "holder": "host-358", "accepted_revision": accepted, "head": None, "removed": [],
+                },
+            },
+            "section_sources": {"project": {"writer": "host", "source": "init", "host_revision": 1}},
+        }
+        path = self.repo / ".kaola" / "heartbeat-prompt.json"
+        path.write_text(json.dumps({
+            "schema": "kaola-heartbeat-prompt/2", "revision": 1, "host_revision": 1,
+            "body": "{}", "state": state,
+        }), encoding="utf-8")
+        return path
+
+    def test_startup_binds_and_the_first_business_write_starts_one_batch(self) -> None:
+        self.holder.session_role = "host"
+        self.holder.write_record()
+        path = self.quiet_state()
+        self.holder._default_bind_sideagent()
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        binding = doc["state"]["sideagent"]
+        self.assertEqual((binding["mode"], binding["preset"], binding["session"]),
+                         ("node", "zcode/default", "zcode-KT-sideagent"))
+        self.assertEqual(doc["host_revision"], 1)
+        self.assertNotIn("sideagent", doc["state"]["section_sources"])
+        checkout = REPO / "scripts" / "kaola-tmux.sh"
+        self.assertEqual(binding["recipe"]["runner"], str(checkout))
+        since = binding["since"]
+        self.holder._default_bind_sideagent()
+        again = json.loads(path.read_text(encoding="utf-8"))["state"]["sideagent"]
+        self.assertEqual(again["since"], since)
+        self.assertEqual(self.log_kinds().count("sideagent_default_bound"), 1)
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        doc["state"]["sideagent"]["recipe"]["runner"] = str(self.runner)
+        path.write_text(json.dumps(doc), encoding="utf-8")
+        self.boundary()
+        self.assertEqual(self.node_count(), 0, "the bind itself is not a node batch")
+        code, out = run(["state", "update", "--file", str(path), "--writer", "host", "--source", "turn",
+                         "--kind", "tasks", "--id", "t1", "--set", json.dumps({"stage": "todo", "goal": "g"})])
+        self.assertEqual(code, 0, out)
+        self.assertGreater(json.loads(path.read_text(encoding="utf-8"))["host_revision"], 1)
+        self.boundary()
+        self.wait_for(lambda: len(self.fake.prompts) == 1, "the first business write's node batch")
+        self.assertEqual(self.node_count(), 1)
 
 
 if __name__ == "__main__":

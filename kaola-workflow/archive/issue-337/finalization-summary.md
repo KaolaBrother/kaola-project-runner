@@ -17,7 +17,7 @@ Devin-as-Host run is recorded with its true provenance. All work by the Host
   (`render-skills.py --check` PASS).
 - **`docs/host-compact-capabilities.md`**: a `Production 2026-10-16 (REPORTED,
   not measured by KPR)` paragraph records Muse's production observation
-  (Host `devin-KPM-orchestrator-main` on the Studio, KPM project, runner
+  (Host `devin-orchestrator-main` on the Studio, kaola-project-manager project, runner
   v0.9.14 pin `899f3c3c`, 3000.11.92, `--tier default` swe-2-max, started
   16:10; by 17:18 fourteen turns all ended normally, nine compactions all
   reported recovered, ~6 tasks merged; by 20:27 4+ hours with more merges;
@@ -62,7 +62,7 @@ Validation record: `kaola-workflow/issue-337/.cache/final-validation.md`
 - The production figures are reported (Muse via the Delegator), not measured
   by KPR; KPR could not reach the Studio. No capability cell was flipped.
 - No tag/release/install; CHANGELOG untouched (release notes are prepared at
-  release time per `docs/conventions.md`); no KPM mirror (issue asked none).
+  release time per `docs/conventions.md`); no kaola-project-manager mirror (issue asked none).
 
 ## Validation
 

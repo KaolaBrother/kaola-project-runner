@@ -90,7 +90,7 @@ Files this branch changed outside the kaola-workflow/ run-state band:
 
 ## Follow-Up Items
 
-- KPM mirror comment on KaolaBrother/kaola-project-manager#173 after
+- kaola-project-manager mirror comment on KaolaBrother/kaola-project-manager#173 after
   merge (owner instruction: comment only).
 
 ## Final readiness

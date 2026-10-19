@@ -403,33 +403,33 @@ class SharedTierSeats(unittest.TestCase):
         # Grants-only authorization, the production shape: no state.sideagent
         # on the file execute treats as authorization. The node is recognized
         # by session_role, the field _start_node persists. There is no node flag.
-        node = self.live_row(SONNET, "claude-code-KPM-sideagent-node6", "node-holder")
+        node = self.live_row(SONNET, "claude-code-PROJ-sideagent-node6", "node-holder")
         node["session_role"] = "sideagent"
         node["dispatcher"] = {"holder_instance_id": "host-1"}
         node["holder_features"] = ["sideagent-node/1"]
         admitted = self.execute([policy_grant()], None, [self.item("i1", DEFAULT)], [node])
         self.assertEqual(admitted["i1"]["reason"], "dry-run", admitted["i1"])
 
-        legacy = self.live_row(SONNET, "claude-code-KPM-sideagent-node6", "node-holder")
+        legacy = self.live_row(SONNET, "claude-code-PROJ-sideagent-node6", "node-holder")
         legacy["session_role"] = "sidekick"
         admitted = self.execute([policy_grant()], None, [self.item("i1", DEFAULT)], [legacy])
         self.assertEqual(admitted["i1"]["reason"], "dry-run", admitted["i1"])
 
     def test_a_live_worker_still_occupies_the_shared_group_and_is_named(self) -> None:
-        worker = self.live_row(SONNET, "claude-code-KPM-i114-analysis", "worker-holder")
+        worker = self.live_row(SONNET, "claude-code-PROJ-i114-analysis", "worker-holder")
         worker["session_role"] = "expert"
         worker["dispatcher"] = {"holder_instance_id": "host-1"}
         worker["holder_features"] = ["sideagent-node/1"]
         refused = self.execute([policy_grant()], None, [self.item("i1", DEFAULT)], [worker])
-        self.assert_occupied(refused["i1"], "claude-code-KPM-i114-analysis", "worker-holder", SONNET)
+        self.assert_occupied(refused["i1"], "claude-code-PROJ-i114-analysis", "worker-holder", SONNET)
 
-        node = self.live_row(SONNET, "claude-code-KPM-sideagent-node6", "node-holder")
+        node = self.live_row(SONNET, "claude-code-PROJ-sideagent-node6", "node-holder")
         node["session_role"] = "sideagent"
         both = self.execute(
             [policy_grant()], None, [self.item("i1", DEFAULT)], [node, worker])
-        self.assert_occupied(both["i1"], "claude-code-KPM-i114-analysis", "worker-holder", SONNET)
+        self.assert_occupied(both["i1"], "claude-code-PROJ-i114-analysis", "worker-holder", SONNET)
         named = [row["session"] for row in both["i1"]["evidence"]["occupants"]]
-        self.assertNotIn("claude-code-KPM-sideagent-node6", named)
+        self.assertNotIn("claude-code-PROJ-sideagent-node6", named)
 
     def test_past_elite_window_blocks_default_not_the_expert_choice(self) -> None:
         rows = self.execute(

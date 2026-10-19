@@ -738,6 +738,14 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   `missing_sources` map. The holder's `sideagent_node_settled` event copies the map, and
   the Host wake names each `input why`. An older checkpoint with only `returned_to_host`
   still names its sources from those reasons.
+- At `state init` and at holder startup, a carrier whose holder record advertises
+  `sideagent-node/1` binds node mode from an eligible Worker: the Delegator file's
+  `authorization.sideagent.preset` when that id is eligible, otherwise the first granted
+  Worker by id. A `computer-use-only` role and exclusions are skipped. An existing binding
+  is not replaced, and resume keeps it. The bind does not raise `host_revision` and is not
+  itself a node input. When no eligible preset exists or the runner cannot be built,
+  `sideagent` stays unset and `state check` reports `sideagent-default-unbound` with the
+  `state ensure-sideagent` command. The next Host boundary retries.
 - With node mode, worker events are not node inputs: they reach the Host at its next idle
   boundary as without a binding. A Host holder advertising `sideagent-node/1` starts one fresh
   node per batch of Host business changes past `handled_host_revision`, selected only while the

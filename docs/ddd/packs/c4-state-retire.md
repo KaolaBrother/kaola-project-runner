@@ -236,7 +236,6 @@ never refused.
 - Source read: `scripts/kaola-dispatch.py` (lines cited above); `scripts/kaola-record-contract.py:156,
   203-259`; `scripts/kaola-acp.py:838-968, 2194-2203, 2268-2285`;
   `docs/designs/lifecycle-state-2026-10-04/design.md:28-37, 50, 62-73, 168-176`;
-  `kpm/docs/history/kpr/docs/designs/modular-core-2026-10-07/design.md:26-33, 44-52`;
   `templates/orchestrator/references/lifecycle-state.md:36-46`;
   `templates/orchestrator/references/dispatch-collect.md:58-61`.
 - Suites read for seam coverage (all in `./scripts/validate.sh --list`):
@@ -267,5 +266,3 @@ never refused.
   - `ConsolidatedDispatch.test_retire_reads_the_index_execute_and_collect_wrote`: expected acceptance `pending` instead of `accepted`. FAIL: `AssertionError: 'accepted' != 'pending'`. Reverted.
   - `RecordContract.test_index_mirror_error_is_reported_after_retire_writes`: expected `index_mirror` to lack `error`. FAIL: `AssertionError: 'error' unexpectedly found in {'changed': {}, 'error': '<index>: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)', 'index': '<index>'}`. Reverted. The live line named the temporary index file; the error text is the unreadable JSON.
 - `./scripts/validate.sh --suite` for `test-issue-255-lifecycle-state.py` and `test-issue-259-record-contract.py` still stops at the inherited stale pin `3de9f61afbfa` (`render-check` exits 1 before the suite body). Suite results are direct `python3 tests/contract/<suite>` runs.
-
-Mirror citations: `kpm/…` paths = github.com/KaolaBrother/kaola-project-manager at fixed commit a13c6d6f264cf965ca45a07670dbf46cd1eb1e5f, subpath history/kpr/ — duplicate KPR source copies retired 2026-10-07; full mapping in `docs/kpm-transfer/HANDOFF.md`.
