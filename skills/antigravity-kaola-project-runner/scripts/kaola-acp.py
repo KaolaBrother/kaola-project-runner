@@ -1576,13 +1576,16 @@ def command_model_package(args: argparse.Namespace) -> dict[str, Any]:
     except quota.QuotaError as exc:
         die(str(exc))
     resolved = quota.resolve_model(catalog, args.model)
-    return {
+    result: dict[str, Any] = {
         "schema": MODEL_PACKAGE_SCHEMA,
         "platform": args.platform,
         "model": args.model,
         "packageId": resolved["packageId"],
         "status": resolved["status"],
     }
+    if resolved.get("pool") is not None:
+        result["pool"] = resolved["pool"]
+    return result
 
 
 def view_error(code: str, message: str) -> dict[str, Any]:
