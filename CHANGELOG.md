@@ -4,6 +4,12 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+Seats: restart not required
+
+- **Recovery routes for the seven audited codes that still had no row (#364).** `scripts/kaola-recovery-routes.py` adds one `route` row each for `checked-out`, `done-not-retired`, `entry-needs-one-verb`, `live-session`, `returned-unreadable`, `state-bloat`, and `unmerged-or-unpushed`, so `test-issue-309-recovery-routes.py` again maps every audited source code to an executable next step. `checked-out` waits on the worktree item's own release before a re-scan; `live-session` means exact-stop the issue's remaining verified session first; `unmerged-or-unpushed` means merge or push the work first; `done-not-retired` runs the `state retire` command the detail names once close-out is verified; `state-bloat` runs the retire or update command its detail carries and rewrites the same id in place; `entry-needs-one-verb` and `returned-unreadable` rewrite the checkpoint input with exactly one verb — `returned` (a non-empty reason), `applied`, or `retained`. `kaola-recovery-routes.py` is a per-call table outside the operator restart set (`docs/conventions.md`), so a running seat does not restart; a symlink install picks it up on the next call and a copy install after that copy is replaced. This change does not install. This content change leaves the Grok Bot bridge at the unpinned content stage (`saveable: false`) so renderer checks stay green; the bridge is pinned in a later release commit.
+
 ## 0.9.21 — 2026-10-19 (backstop sweep speed and branch cleanup; state bloat diagnosis; delegator key removal; Sideagent task retirement and default bind; archive reference cleanup)
 
 Fixes #353 (backstop sweep batches forge lookups), #354 (state bloat diagnosis and settled-row removal), #355 (named removal of unknown delegator keys; view lists open watch rows), #357 (merged closed-issue branches and report-only residues), #356 (Sideagent node retires a Host-accepted task under strict conditions), #358 (default Sideagent node bind and one current project sentence) and #366 (stale archive and evidence references removed).
