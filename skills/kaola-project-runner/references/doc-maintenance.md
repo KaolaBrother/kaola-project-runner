@@ -44,8 +44,12 @@ consumer project instructions.
 
 The node-mode backstop sweep (Issue #348, `docs/api.md` → "Backstop sweep")
 removes only closed-issue worker sessions, linked worktrees, prunable
-worktree metadata and stale `.kaola/*.tmp` leftovers. It never reads or edits
-document content, so "no scheduled full-doc scan" stays true. A kept item is
+worktree metadata, merged local `workflow/issue-N` branches and stale
+`.kaola/*.tmp` leftovers. Report-only items (closed-issue Kaola-Workflow
+folders, non-Project-Runner `.kaola/` entries, heartbeat backups) land in
+the receipt's `report` for the Owner/Host, never in state. It never reads or
+edits document content, so "no scheduled full-doc scan" stays true. A kept
+item is
 a Host decision in the `sweep-kept` alert; decide it from the original
 evidence, not from a document review.
 

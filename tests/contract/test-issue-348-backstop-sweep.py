@@ -23,6 +23,12 @@ session, holder, or forge is ever touched.
 6-10. The carrier: not-due spends nothing; due-empty records without a node;
    due-with-candidates sends exactly one sweep batch and settles it quiet;
    reconcile wins over a queued sweep; a HEAD move is due exactly once.
+
+Issue #357 adds B1 (a merged local `workflow/issue-N` branch of a closed
+issue, deleted only when no surviving worktree or live session holds it) and
+the report-only rules R1-R3 (closed-issue Kaola-Workflow folders, foreign
+`.kaola/` entries, heartbeat backups), which land in the receipt's `report`
+and never in candidates, kept, state, alerts or maintenance.
 """
 
 from __future__ import annotations
@@ -258,6 +264,25 @@ class SweepTool(unittest.TestCase):
     def worktree_head(self, path: Path) -> str:
         return git(path, "rev-parse", "HEAD").strip()
 
+    def make_branch(self, issue: int, kind: str) -> str:
+        """A local ``workflow/issue-N`` branch not held by any worktree.
+        ``merge-commit`` lands its tip on pushed main (an ancestor);
+        ``squash`` makes it the merged-PR head; ``unmerged`` neither."""
+        sha = git(self.repo, "commit-tree", "HEAD^{tree}", "-p", "HEAD",
+                  "-m", f"wip-{issue}").strip()
+        git(self.repo, "branch", f"workflow/issue-{issue}", sha)
+        if kind == "merge-commit":
+            git(self.repo, "merge", "--no-ff", "-m", f"merge-{issue}",
+                f"workflow/issue-{issue}")
+            git(self.repo, "push", "origin", "main")
+            # setUp stores origin/HEAD as a plain sha; restore the symref
+            # target so _sweep_remote_head still resolves it after a push.
+            git(self.repo, "update-ref", "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/main")
+        elif kind == "squash":
+            self.prs[str(issue)] = sha
+        return sha
+
     def session_row(self, session: str, issue_holder: str, **kw) -> dict:
         return {"platform": "opencode", "session": session, "repo": str(self.repo),
                 "identity": "verified", "name_role": "worker", "session_role": "worker",
@@ -357,7 +382,7 @@ class SweepTool(unittest.TestCase):
         calls = self.acp_calls.read_text() if self.acp_calls.exists() else ""
         self.assertNotIn('"stop"', calls, "dry-run never stops a session")
         kinds = {item["kind"] for item in out["candidates"]}
-        self.assertEqual(kinds, {"session", "worktree", "stale-file"})
+        self.assertEqual(kinds, {"session", "worktree", "branch", "stale-file"})
 
     def test_second_apply_is_a_no_op(self) -> None:
         self.init_state()
@@ -551,9 +576,12 @@ class SweepTool(unittest.TestCase):
         code, out = self.sweep("--apply", env=self.logged_env())
         self.assertEqual((code, out["result"]), (0, "swept"), out)
         self.assertEqual(len(self.gh_calls()), 1, self.gh_calls())
-        self.assertLessEqual(len(self.acp_calls_of("list")), 1 + 50)
-        self.assertEqual(len(out["removed"]), 50)
+        self.assertLessEqual(len(self.acp_calls_of("list")), 1 + 50 + 1)
+        self.assertEqual(len(out["removed"]), 100)
         self.assertFalse(any(path.exists() for path in paths))
+        refs = git(self.repo, "for-each-ref", "--format=%(refname)",
+                   "refs/heads/workflow/")
+        self.assertEqual(refs.strip(), "", "the 50 merged branches are gone")
 
     def test_node_apply_verifies_only_planned_ids(self) -> None:  # T3
         self.init_state()
@@ -693,6 +721,285 @@ class SweepTool(unittest.TestCase):
                      (json.loads(line) for line in self.acp_calls.read_text().splitlines())
                      if row[1:2] == ["stop"]]
         self.assertEqual(stops, [])
+
+    # -- Issue #357: B1 merged local branches, R1-R3 report-only ----------
+
+    def branch_id(self, issue: int, sha: str) -> str:
+        return f"branch:workflow/issue-{issue}@{sha}"
+
+    def ref_exists(self, issue: int) -> bool:
+        proc = subprocess.run(["git", "-C", str(self.repo), "rev-parse", "--verify",
+                               "--quiet", f"refs/heads/workflow/issue-{issue}"],
+                              capture_output=True)
+        return proc.returncode == 0
+
+    def write_workflow_folder(self, issue: int, status: str = "active",
+                              parent: Path | None = None) -> Path:
+        folder = (parent or self.repo / "kaola-workflow" / f"issue-{issue}")
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "workflow-state.md").write_text(
+            f"issue_number: {issue}\nstatus: {status}\n", encoding="utf-8")
+        return folder
+
+    def test_b1_six_cases(self) -> None:
+        sha21 = self.make_branch(21, "merge-commit")
+        sha22 = self.make_branch(22, "squash")
+        sha23 = self.make_branch(23, "unmerged")
+        wt24 = self.add_worktree(24)  # merged, CLOSED, then made dirty
+        sha24 = self.worktree_head(wt24)
+        sha25 = self.make_branch(25, "squash")
+        sha26 = self.make_branch(26, "merge-commit")  # OPEN: never listed
+        for number in (21, 22, 23, 24, 25):
+            self.issues[str(number)] = "CLOSED"
+        self.issues["26"] = "OPEN"
+        self.prs["23"] = "0" * 40  # a merged PR head that is not the tip
+        self.prs["24"] = sha24
+        self.write_gh()
+        (wt24 / "scratch.txt").write_text("dirty\n", encoding="utf-8")
+        self.init_state()
+
+        code, out = self.sweep("--dry-run")
+        self.assertEqual(code, 0, out)
+        candidates = {item["id"]: item for item in out["candidates"]
+                      if item["kind"] == "branch"}
+        self.assertEqual(candidates[self.branch_id(21, sha21)]["merge"], "ancestor")
+        self.assertEqual(candidates[self.branch_id(22, sha22)]["merge"], "merged-pr-head")
+        self.assertEqual(candidates[self.branch_id(25, sha25)]["merge"], "merged-pr-head")
+        kept = {item["id"]: item["kept"] for item in out["kept"]}
+        self.assertEqual(kept[self.branch_id(23, sha23)], "unmerged-or-unpushed")
+        self.assertEqual(out["skipped"][self.branch_id(24, sha24)], "checked-out")
+        self.assertNotIn(self.branch_id(26, sha26),
+                         {item["id"] for item in out["candidates"] + out["kept"]}
+                         | set(out["skipped"]))
+        refs_before = git(self.repo, "for-each-ref", "--format=%(refname)",
+                          "refs/heads/workflow/")
+        remote_before = git(self.repo, "ls-remote", "origin")
+        state_before = self.file.read_bytes()
+        code, again = self.sweep("--dry-run")
+        self.assertEqual(again, out, "a second dry-run is byte-identical")
+        self.assertEqual(git(self.repo, "for-each-ref", "--format=%(refname)",
+                             "refs/heads/workflow/"), refs_before)
+        self.assertEqual(git(self.repo, "ls-remote", "origin"), remote_before)
+        self.assertEqual(self.file.read_bytes(), state_before)
+
+        self.issues["25"] = "OPEN"  # reopened between plan and apply
+        self.write_gh()
+        trace = Path(self.tmp.name) / "git-trace.log"
+        env = self.logged_env()
+        env["GIT_TRACE"] = str(trace)
+        code, out = self.sweep("--apply", env=env)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(set(out["removed"]),
+                         {self.branch_id(21, sha21), self.branch_id(22, sha22)})
+        for issue in (23, 24, 25, 26):
+            self.assertTrue(self.ref_exists(issue), f"issue-{issue} ref survives")
+        self.assertFalse(self.ref_exists(21) or self.ref_exists(22))
+        log = trace.read_text(encoding="utf-8")
+        self.assertIn("branch -d workflow/issue-21", log)
+        self.assertIn("branch -D workflow/issue-22", log)
+        self.assertNotIn("push", log)
+        self.assertEqual(git(self.repo, "ls-remote", "origin"), remote_before,
+                         "remote branches are never touched")
+        last = self.doc()["state"]["maintenance"]["last_sweep"]
+        self.assertIn(self.branch_id(21, sha21), last["removed"])
+        self.assertIn(self.branch_id(22, sha22), last["removed"])
+        git(self.repo, "branch", "workflow/issue-22", sha22)
+        self.assertEqual(git(self.repo, "rev-parse", "workflow/issue-22").strip(),
+                         sha22, "the restore hint on the receipt works")
+        git(self.repo, "branch", "-D", "workflow/issue-22")
+        code, out = self.sweep("--apply")
+        self.assertFalse(any(r.startswith("branch:") for r in out["removed"]), out)
+
+    def test_b1_node_batch_skips_a_reopened_issue(self) -> None:
+        self.init_state()
+        sha25 = self.make_branch(25, "squash")
+        sha27 = self.make_branch(27, "squash")
+        self.issues["25"] = "CLOSED"
+        self.issues["27"] = "CLOSED"
+        self.write_gh()
+        node_dir = self._record_dir("zcode", "zcode-KT-sideagent")
+        self._write_record(node_dir, {"holder_instance_id": "node-1",
+                                      "session_role": "sideagent",
+                                      "holder_pid": os.getpid(),
+                                      "repo": str(self.repo),
+                                      "dispatcher": {"holder_instance_id": "host-1",
+                                                     "platform": "zcode",
+                                                     "repo": str(self.repo),
+                                                     "session": "zcode-KT-orchestrator-main"}})
+        code, plan = self.sweep("--dry-run")
+        ids = [item["id"] for item in plan["candidates"]]
+        self.assertIn(self.branch_id(25, sha25), ids)
+        self.assertIn(self.branch_id(27, sha27), ids)
+        batch = "s-" + hashlib.sha256(json.dumps(["node-1", plan["key"]])
+                                      .encode()).hexdigest()[:12]
+        (self.host_dir / "events.jsonl").write_text(
+            json.dumps({"kind": "sideagent_node_batch", "batch": batch,
+                        "target_holder": "node-1", "host_holder": "host-1",
+                        "host_revision_through": 0,
+                        "sweep": {"key": plan["key"], "candidates": ids,
+                                  "reason": "interval"}}) + "\n",
+            encoding="utf-8")
+        self.issues["25"] = "OPEN"  # reopened between plan and apply
+        self.write_gh()
+        node_env = self.env(holder="node-1", session="zcode-KT-sideagent")
+        code, out = self.sweep("--apply", "--batch", batch, env=node_env)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["skipped"][self.branch_id(25, sha25)],
+                         "no-longer-candidate")
+        self.assertTrue(self.ref_exists(25))
+        self.assertFalse(self.ref_exists(27))
+        self.assertIn(self.branch_id(27, sha27), out["removed"])
+
+    def test_b1_forge_unreachable_skips_issue_linked_items(self) -> None:
+        self.init_state()
+        sha21 = self.make_branch(21, "merge-commit")
+        sha22 = self.make_branch(22, "squash")
+        self.issues["21"] = "CLOSED"
+        self.issues["22"] = "CLOSED"
+        self.write_gh()
+        folder = self.write_workflow_folder(21)
+        bak = self.repo / ".kaola" / "x.bak"
+        bak.write_text("12345", encoding="utf-8")
+        clean = Path(self.tmp.name) / "nogh-bin"
+        clean.mkdir()
+        for tool in ("git",):
+            target = shutil.which(tool)
+            self.assertIsNotNone(target)
+            (clean / tool).symlink_to(target)
+        env = self.logged_env()
+        env["PATH"] = str(clean)
+        expected_skipped = {self.branch_id(21, sha21), self.branch_id(22, sha22),
+                            f"workflow-folder:{folder.resolve()}"}
+        for mode in ("--dry-run", "--apply"):
+            code, out = self.sweep(mode, env=env)
+            self.assertEqual(code, 0, out)
+            for ident in expected_skipped:
+                self.assertEqual(out["skipped"].get(ident), "forge-unknown", mode)
+            self.assertTrue(self.ref_exists(21) and self.ref_exists(22))
+            report = {item["id"]: item for item in out["report"]}
+            self.assertNotIn(f"workflow-folder:{folder.resolve()}", report)
+            self.assertIn(f"kaola-foreign:{bak.resolve()}", report)
+
+    def test_b1_live_session_keeps_branch(self) -> None:
+        self.init_state()
+        sha28 = self.make_branch(28, "merge-commit")
+        self.issues["28"] = "CLOSED"
+        self.write_gh()
+        self.set_rows([self.session_row("opencode-KT-i28-a", "h-i28")],
+                      status={"opencode-KT-i28-a": {"turn_active": True,
+                                                    "pending_permissions": [],
+                                                    "holder_instance_id": "h-i28"}})
+        code, out = self.sweep("--apply")
+        self.assertEqual(code, 0, out)
+        kept = {item["id"]: item["kept"] for item in out["kept"]}
+        self.assertEqual(kept[self.branch_id(28, sha28)], "live-session")
+        self.assertTrue(self.ref_exists(28))
+        self.assertNotIn(self.branch_id(28, sha28), out["removed"])
+
+    def test_b1_worktree_and_its_branch_go_in_one_apply(self) -> None:
+        self.init_state()
+        wt11 = self.add_worktree(11)
+        head = self.worktree_head(wt11)
+        self.issues["11"] = "CLOSED"
+        self.prs["11"] = head
+        self.write_gh()
+        code, out = self.sweep("--apply")
+        self.assertEqual((code, out["result"]), (0, "swept"), out)
+        self.assertTrue(any(r.startswith("worktree:") for r in out["removed"]))
+        self.assertIn(self.branch_id(11, head), out["removed"])
+        self.assertFalse(wt11.exists() or self.ref_exists(11))
+        code, out = self.sweep("--apply")
+        self.assertEqual(out["result"], "nothing")
+
+    def test_report_only_items_never_reach_state(self) -> None:
+        self.init_state()
+        kwf = self.repo / "kaola-workflow"
+        folder31 = self.write_workflow_folder(31)
+        self.write_workflow_folder(32)
+        self.write_workflow_folder(33, parent=kwf / "archive" / "issue-33")
+        (kwf / "release").mkdir(parents=True)  # no workflow-state.md
+        self.issues["31"] = "CLOSED"
+        self.issues["32"] = "OPEN"
+        self.issues["33"] = "CLOSED"
+        self.write_gh()
+        ka = self.repo / ".kaola"
+        (ka / "x.bak").write_text("12345", encoding="utf-8")
+        for name, sizes in (("host-evidence", (3, 4)), ("codex-handoff", (6,)),
+                            ("delegator-evidence", (7,))):
+            folder = ka / name
+            folder.mkdir()
+            for index, size in enumerate(sizes):
+                (folder / chr(ord("a") + index)).write_text("x" * size,
+                                                           encoding="utf-8")
+        (ka / "target").mkdir()
+        (ka / "target" / "t").write_text("x", encoding="utf-8")
+        (ka / "build").mkdir()
+        (ka / "build" / "b").write_text("x", encoding="utf-8")
+        (ka / "dispatch-index.json").write_text("{}", encoding="utf-8")
+        (ka / "delegator-heartbeat.json").write_text("{}", encoding="utf-8")
+        (ka / "run").mkdir()
+        (ka / "run" / "note.md").write_text("x", encoding="utf-8")
+        (ka / "y.tmp").write_text("fresh", encoding="utf-8")
+        (ka / "heartbeat-prompt.v1-aaaaaaaaaaaa.json").write_text(
+            "x" * 10, encoding="utf-8")
+        (ka / "heartbeat-prompt.v2-bbbbbbbbbbbb.json").write_text(
+            "x" * 20, encoding="utf-8")
+
+        code, out = self.sweep("--dry-run")
+        self.assertEqual(code, 0, out)
+        report = {item["id"]: item for item in out["report"]}
+        r1 = report[f"workflow-folder:{folder31.resolve()}"]
+        self.assertEqual((r1["rule"], r1["kind"], r1["issue"], r1["status"]),
+                         ("R1", "workflow-folder", 31, "active"))
+        self.assertNotIn(f"workflow-folder:{(kwf / 'issue-32').resolve()}", report)
+        self.assertFalse(any("issue-33" in i or "release" in i for i in report))
+        paths = {item["path"] for item in out["report"] if item["rule"] == "R2"}
+        self.assertEqual(paths, {str((ka / name).resolve()) for name in
+                                 ("x.bak", "host-evidence", "codex-handoff",
+                                  "delegator-evidence")})
+        sizes = {item["path"]: item["bytes"]
+                 for item in out["report"] if item["rule"] == "R2"}
+        self.assertEqual(sizes[str((ka / "x.bak").resolve())], 5)
+        self.assertEqual(sizes[str((ka / "host-evidence").resolve())], 7)
+        self.assertEqual(sizes[str((ka / "codex-handoff").resolve())], 6)
+        self.assertEqual(sizes[str((ka / "delegator-evidence").resolve())], 7)
+        r3 = report["heartbeat-backups"]
+        self.assertEqual((r3["rule"], r3["count"], r3["bytes"]), ("R3", 2, 30))
+
+        kwf_bytes = {str(p): p.read_bytes() for p in sorted(kwf.rglob("*"))
+                     if p.is_file()}
+        commits_before = git(self.repo, "rev-list", "--count", "HEAD")
+        maintenance_before = set((self.doc()["state"].get("maintenance") or {}))
+        code, out = self.sweep("--apply")
+        self.assertEqual(code, 0, out)
+        code, out = self.sweep("--record-empty")
+        self.assertEqual((code, out["result"]), (0, "recorded-empty"), out)
+        for path in [folder31, ka / "x.bak", ka / "host-evidence",
+                     ka / "codex-handoff", ka / "delegator-evidence",
+                     ka / "heartbeat-prompt.v1-aaaaaaaaaaaa.json",
+                     ka / "heartbeat-prompt.v2-bbbbbbbbbbbb.json"]:
+            self.assertTrue(path.exists(), path)
+        self.assertEqual({str(p): p.read_bytes() for p in sorted(kwf.rglob("*"))
+                          if p.is_file()}, kwf_bytes)
+        self.assertEqual(git(self.repo, "rev-list", "--count", "HEAD"),
+                         commits_before)
+        state = self.doc()["state"]
+        self.assertNotIn("sweep-kept", state.get("alerts") or {})
+        self.assertEqual(set((state.get("maintenance") or {})),
+                         maintenance_before | {"last_sweep"})
+        self.assertEqual(set(state["maintenance"]["last_sweep"]),
+                         {"at", "key", "batch", "holder", "accepted_revision",
+                          "head", "removed"})
+        text = self.file.read_text(encoding="utf-8")
+        for word in ("host-evidence", "issue-31", "heartbeat-backups",
+                     "kaola-foreign", "workflow-folder", "report"):
+            self.assertNotIn(word, text)
+        keys_before = set(state)
+        alerts_before = len(state.get("alerts") or {})
+        code, out = self.sweep("--apply")
+        state = self.doc()["state"]
+        self.assertEqual(set(state), keys_before)
+        self.assertEqual(len(state.get("alerts") or {}), alerts_before)
 
 
 class SweepCarrier(issue255.HolderFixture):

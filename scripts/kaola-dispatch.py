@@ -8348,8 +8348,18 @@ def command_state_migrate(args: argparse.Namespace) -> int:
 #       session for that issue
 #   W2  worktree metadata `git worktree list --porcelain` marks `prunable`
 #       inside the project
+#   B1  a merged local `workflow/issue-N` branch of a closed issue, not
+#       checked out in any remaining worktree and without a live session
+#       for that issue (Issue #357)
 #   F1  a regular `*.tmp` file directly in `.kaola/` older than
 #       SWEEP_STALE_SECONDS (atomic-write leftovers)
+#
+# Report-only rules (Issue #357) land in the receipt's ``report`` list -
+# never in candidates, kept, state, alerts or maintenance:
+#
+#   R1  an active Kaola-Workflow folder of a closed issue
+#   R2  a `.kaola/` entry that is not a Project Runner artifact
+#   R3  heartbeat-prompt backup copies in `.kaola/`
 #
 # Completion is a forge fact only: the issue is CLOSED. When `gh` cannot
 # answer, every issue-linked item is skipped as forge-unknown - never kept
@@ -8378,6 +8388,16 @@ SWEEP_KEPT_NEXT = {
     "live-session": "Host: stop the issue's remaining live session first",
     "remove-failed": "Host: read the original git receipt and decide",
 }
+# Issue #357, R2: `.kaola/` entries that are Project Runner artifacts (state,
+# locks, webhook files, dispatch indices, the run dir) are never reported;
+# everything else there is a foreign leftover the Owner decides on.
+SWEEP_KAOLA_OWN = frozenset({
+    "heartbeat-prompt.json", "delegator-heartbeat.json",
+    "delegator-webhook-receipts.json", "delegator-webhook-receipts.lock",
+    "delegator-webhook-claims.json", "dispatch-index.json",
+    "dispatch-availability.json", "dispatch-plan.json", "dispatch-live.json",
+    "run",
+})
 SWEEP_RECEIPT_SCHEMA = "kaola-sweep/1"
 
 
@@ -8653,6 +8673,49 @@ def _sweep_scan(args: argparse.Namespace, repo: Path, acp: Path | None,
             worktree_issue[index] = issue
             issues.add(issue)
 
+    # B1/R1 collect their issue numbers now so the one forge batch answers
+    # for branches and workflow folders too; both decisions run below, after
+    # W1/W2 have marked which worktree paths this scan released.
+    branches: list[dict[str, Any]] = []
+    rc, out = _sweep_git(repo, "for-each-ref",
+                         "--format=%(refname)%09%(objectname)",
+                         "refs/heads/workflow/")
+    for line in out.splitlines() if rc == 0 else []:
+        refname, sep, sha = line.partition("\t")
+        match = re.fullmatch(r"refs/heads/workflow/issue-(\d+)", refname)
+        if sep and match is not None and re.fullmatch(r"[0-9a-f]+", sha.strip()):
+            issue = int(match.group(1))
+            branches.append({"ref": refname, "sha": sha.strip(), "issue": issue})
+            issues.add(issue)
+
+    workflow_folders: list[dict[str, Any]] = []
+    kf_root = repo / "kaola-workflow"
+    if not kf_root.is_symlink() and kf_root.is_dir():
+        try:
+            kf_children = sorted(kf_root.iterdir())
+        except OSError:
+            kf_children = []
+        for child in kf_children:
+            if (child.name.startswith(".") or child.name == "archive"
+                    or child.is_symlink() or not child.is_dir()):
+                continue
+            state_file = child / "workflow-state.md"
+            if state_file.is_symlink() or not state_file.is_file():
+                continue
+            try:
+                text = state_file.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            number = re.search(r"(?m)^issue_number:\s*(\d+)\s*$", text)
+            if number is None:
+                continue
+            status = re.search(r"(?m)^status:\s*(\S+)", text)
+            issue = int(number.group(1))
+            workflow_folders.append({"path": str(_sweep_resolve(str(child))),
+                                     "issue": issue,
+                                     "status": status.group(1) if status else None})
+            issues.add(issue)
+
     forge = _sweep_forge(repo, issues)
     states, merged_heads = forge if forge is not None else ({}, {})
     forge_state = "known" if forge is not None else "unavailable"
@@ -8715,7 +8778,9 @@ def _sweep_scan(args: argparse.Namespace, repo: Path, acp: Path | None,
         live_by_issue[issue] = [ident for ident in idents
                                 if ident not in candidate_sessions and ident not in exclude_session_ids]
 
-    # W1/W2: linked worktrees of closed issues, and prunable metadata.
+    # W1/W2: linked worktrees of closed issues, and prunable metadata. A
+    # worktree released this scan frees the branch it holds for B1.
+    released: set[str] = set()
     for index, entry in enumerate(entries):
         resolved = _sweep_resolve(entry.get("path"))
         if resolved is None or resolved == repo:
@@ -8725,6 +8790,7 @@ def _sweep_scan(args: argparse.Namespace, repo: Path, acp: Path | None,
             if inside:
                 candidates.append({"id": f"worktree-prune:{resolved}", "kind": "worktree-prune",
                                    "reason": "prunable worktree metadata", "path": str(resolved)})
+                released.add(str(resolved))
             continue
         issue = worktree_issue.get(index)
         if issue is None:
@@ -8749,6 +8815,55 @@ def _sweep_scan(args: argparse.Namespace, repo: Path, acp: Path | None,
             kept.append({**base, "kept": keep})
         else:
             candidates.append({**base, "reason": f"linked worktree of closed issue #{issue}"})
+            released.add(str(resolved))
+
+    # B1: merged local workflow/issue-N branches of closed issues. A branch
+    # checked out anywhere is skipped (the worktree item owns that call), so
+    # a branch is planned only once every worktree holding it was released
+    # above. Ancestor tips delete with -d; an exact merged-PR head needs -D.
+    holders: dict[str, list[str]] = {}
+    for entry in entries:
+        branch_ref = entry.get("branch")
+        resolved = _sweep_resolve(entry.get("path"))
+        if isinstance(branch_ref, str) and branch_ref and resolved is not None:
+            holders.setdefault(branch_ref, []).append(str(resolved))
+    merged_tips: set[str] = set()
+    remote = _sweep_remote_head(repo)
+    if remote is not None:
+        rc, out = _sweep_git(repo, "for-each-ref", f"--merged={remote}",
+                             "--format=%(objectname)", "refs/heads/workflow/")
+        if rc == 0:
+            merged_tips = {line.strip() for line in out.splitlines() if line.strip()}
+    for branch in branches:
+        name = branch["ref"][len("refs/heads/"):]
+        ident = f"branch:{name}@{branch['sha']}"
+        issue = branch["issue"]
+        base = {"id": ident, "kind": "branch", "issue": issue,
+                "branch": name, "sha": branch["sha"]}
+        if forge is None:
+            skipped[ident] = "forge-unknown"
+            continue
+        if states.get(issue) != "CLOSED":
+            continue
+        if any(path not in released for path in holders.get(branch["ref"], [])):
+            skipped[ident] = "checked-out"
+            continue
+        if not rows_known:
+            skipped[ident] = "acp-unknown"
+            continue
+        if live_by_issue.get(issue):
+            kept.append({**base, "kept": "live-session"})
+            continue
+        if branch["sha"] in merged_tips:
+            merge = "ancestor"
+        elif branch["sha"] in merged_heads.get(issue, set()):
+            merge = "merged-pr-head"
+        else:
+            kept.append({**base, "kept": "unmerged-or-unpushed"})
+            continue
+        candidates.append({**base, "merge": merge,
+                           "reason": f"merged local branch of closed issue #{issue}",
+                           "restore": f"git branch {name} {branch['sha']}"})
 
     # F1: stale atomic-write leftovers directly in .kaola/. Nothing else
     # there - state, backups, indices, locks, webhook files - is touched. A
@@ -8774,10 +8889,83 @@ def _sweep_scan(args: argparse.Namespace, repo: Path, acp: Path | None,
             candidates.append({"id": f"stale-file:{child}@{mtime}", "kind": "stale-file",
                                "reason": "stale atomic-write leftover", "path": str(child)})
 
+    # R1-R3: report-only items. They never become candidates, never enter
+    # kept/alerts/state and are only listed on the receipt's ``report``.
+    report: list[dict[str, Any]] = []
+    # R1: an active Kaola-Workflow folder of a closed issue.
+    for folder in sorted(workflow_folders, key=lambda f: f["path"]):
+        ident = f"workflow-folder:{folder['path']}"
+        if forge is None:
+            skipped[ident] = "forge-unknown"
+            continue
+        if states.get(folder["issue"]) != "CLOSED":
+            continue
+        report.append({"id": ident, "rule": "R1", "kind": "workflow-folder",
+                       "issue": folder["issue"], "path": folder["path"],
+                       "status": folder["status"],
+                       "next": f"Host: run Kaola-Workflow finalize for issue "
+                               f"#{folder['issue']}; the sweep never commits or "
+                               "edits Kaola-Workflow"})
+    # R2: a `.kaola/` entry that is not a Project Runner artifact. `target`
+    # and `build` are never scanned and never reported; own artifacts,
+    # `*.tmp` (F1's domain) and the R3 backups are excluded.
+    for child in children:
+        if (child.name in SWEEP_KAOLA_OWN or child.name.endswith(".tmp")
+                or child.name in ("target", "build")):
+            continue
+        backup = RECORD.BACKUP_RE.match(child.name)
+        if backup is not None and backup.group("stem") == "heartbeat-prompt":
+            continue
+        incomplete = False
+        size = 0
+        try:
+            stat = child.lstat()
+        except OSError:
+            stat = None
+            incomplete = True
+        if stat is None:
+            kind = "other"
+        elif child.is_symlink():
+            kind, size = "symlink", stat.st_size
+        elif child.is_dir():
+            kind = "dir"
+            for root, dirnames, filenames in os.walk(child, followlinks=False):
+                for member in (*dirnames, *filenames):
+                    entry_path = Path(root) / member
+                    try:
+                        if entry_path.is_symlink() or not entry_path.is_dir():
+                            size += entry_path.lstat().st_size
+                    except OSError:
+                        incomplete = True
+        elif child.is_file():
+            kind, size = "file", stat.st_size
+        else:
+            kind = "other"
+        item = {"id": f"kaola-foreign:{child}", "rule": "R2",
+                "kind": "kaola-foreign", "path": str(child), "type": kind,
+                "bytes": size,
+                "next": "Owner: decide; not a Project Runner artifact, "
+                        "the sweep never removes it"}
+        if incomplete:
+            item["incomplete"] = True
+        report.append(item)
+    # R3: heartbeat-prompt backup copies; retention is an Owner call.
+    backups = [child for child in children
+               if (match := RECORD.BACKUP_RE.match(child.name)) is not None
+               and match.group("stem") == "heartbeat-prompt"
+               and not child.is_symlink() and child.is_file()]
+    if backups:
+        report.append({"id": "heartbeat-backups", "rule": "R3",
+                       "kind": "heartbeat-backups", "count": len(backups),
+                       "bytes": sum(child.lstat().st_size for child in backups),
+                       "next": "Owner: decide a retention policy; the tools "
+                               "never delete these backups"})
+
     _, head = _sweep_git(repo, "rev-parse", "HEAD")
     ids = sorted(candidate["id"] for candidate in candidates)
     key = hashlib.sha256(json.dumps(ids).encode("utf-8")).hexdigest()[:16] if ids else ""
     return {"candidates": candidates, "kept": kept, "skipped": skipped,
+            "report": report,
             "key": key, "head": head.strip() or None, "forge": forge_state,
             "acp": acp, "acp_state": "known" if rows_known else "unavailable",
             "rows": rows, "all_rows": all_rows, "rows_known": rows_known,
@@ -8835,7 +9023,9 @@ def _sweep_record(args: argparse.Namespace, path: Path, caller: dict[str, str] |
 def _sweep_apply_candidate(item: dict[str, Any], args: argparse.Namespace,
                            repo: Path, acp: Path | None,
                            merged_heads: dict[int, set[str]],
-                           removed_ids: set[str]) -> tuple[str, str | None]:
+                           removed_ids: set[str],
+                           branch_rows: tuple[list[dict[str, Any]], bool] | None = None
+                           ) -> tuple[str, str | None]:
     """Re-verify and remove one still-current candidate. Returns
     (outcome, kept-reason): outcome ``removed``, ``kept`` or ``skipped``.
     ``removed_ids`` holds session ids this apply already removed."""
@@ -8898,6 +9088,39 @@ def _sweep_apply_candidate(item: dict[str, Any], args: argparse.Namespace,
             return "kept", keep
         rc, _ = _sweep_git(repo, "worktree", "remove", item["path"])
         return ("removed", None) if rc == 0 else ("kept", "remove-failed")
+    if kind == "branch":
+        branch = item.get("branch")
+        sha = item.get("sha")
+        rc, out = _sweep_git(repo, "rev-parse", "--verify", "--quiet",
+                             f"refs/heads/{branch}")
+        if rc != 0 or out.strip() != sha:
+            return "skipped", "no-longer-candidate"
+        if any(entry.get("branch") == f"refs/heads/{branch}"
+               for entry in _sweep_worktrees(repo)):
+            return "skipped", "checked-out"
+        if branch_rows is None or not branch_rows[1]:
+            return "skipped", "acp-unknown"
+        for row in branch_rows[0]:
+            if (not _sweep_row_repo(row, repo) or row.get("name_role") != "worker"
+                    or row.get("identity") != "verified"):
+                continue
+            if _sweep_issue_of(row.get("session"), row.get("platform")) != item.get("issue"):
+                continue
+            ident = (f"session:{row.get('platform')}/{row.get('session')}"
+                     f"@{row.get('holder_instance_id') or ''}")
+            if ident not in removed_ids:
+                return "kept", "live-session"
+        remote = _sweep_remote_head(repo)
+        if remote is not None and \
+                _sweep_git(repo, "merge-base", "--is-ancestor", sha, remote)[0] == 0:
+            rc, _ = _sweep_git(repo, "branch", "-d", branch)
+        elif sha in merged_heads.get(item.get("issue"), set()):
+            # Only on exact SHA equality: a merged PR head survives at
+            # refs/pull/<PR>/head, the local tip does not.
+            rc, _ = _sweep_git(repo, "branch", "-D", branch)
+        else:
+            return "kept", "unmerged-or-unpushed"
+        return ("removed", None) if rc == 0 else ("kept", "remove-failed")
     if kind == "stale-file":
         path = Path(item["path"])
         try:
@@ -8958,6 +9181,13 @@ def _sweep_item_from_id(ident: str) -> dict[str, Any] | None:
         if not sep or not path:
             return None
         return {"id": ident, "kind": "stale-file", "path": path}
+    if ident.startswith("branch:"):
+        name, sep, sha = ident[len("branch:"):].rpartition("@")
+        match = re.fullmatch(r"workflow/issue-(\d+)", name)
+        if not sep or match is None or re.fullmatch(r"[0-9a-f]{40,64}", sha) is None:
+            return None
+        return {"id": ident, "kind": "branch", "branch": name, "sha": sha,
+                "issue": int(match.group(1))}
     return None
 
 
@@ -9004,6 +9234,7 @@ def command_sweep(args: argparse.Namespace) -> int:
                 "mode": ("dry-run" if args.dry_run else "apply" if args.apply else "record-empty"),
                 "key": scan["key"], "candidates": scan["candidates"], "kept": scan["kept"],
                 "removed": extra.pop("removed", []), "skipped": scan["skipped"],
+                "report": scan.get("report", []),
                 "head": scan["head"], "accepted_revision": None,
                 "forge": scan["forge"], "acp": scan["acp_state"],
                 "timed_out": sorted(_SWEEP_TIMED_OUT), **extra}
@@ -9132,11 +9363,18 @@ def command_sweep(args: argparse.Namespace) -> int:
         current_kept = {item["id"] for item in event_kept}
         kept_now = list(event_kept)
         scan = {"candidates": list(current.values()), "kept": event_kept,
-                "skipped": skipped, "key": sweep_key,
+                "skipped": skipped, "key": sweep_key, "report": [],
                 "head": head.strip() or None,
                 "forge": "known" if forge_known else "unavailable",
                 "acp_state": "known"}
-    for kind in ("session", "worktree", "worktree-prune", "stale-file"):
+    branch_rows: tuple[list[dict[str, Any]], bool] | None = None
+    for kind in ("session", "worktree", "worktree-prune", "branch", "stale-file"):
+        if kind == "branch" and branch_rows is None and any(
+                (current.get(ident) or {}).get("kind") == "branch"
+                for ident in plan_ids):
+            # One extra list for the whole branch phase; computed lazily so a
+            # plan without branches pays nothing.
+            branch_rows = _sweep_list(args, acp)
         if kind == "worktree-prune":
             if not any(ident in current and current[ident]["kind"] == "worktree-prune"
                        for ident in plan_ids):
@@ -9162,7 +9400,7 @@ def command_sweep(args: argparse.Namespace) -> int:
                 continue
             if item["kind"] != kind:
                 continue
-            if batch is not None and kind in ("session", "worktree"):
+            if batch is not None and kind in ("session", "worktree", "branch"):
                 if not forge_known:
                     scan["skipped"][ident] = "forge-unknown"
                     continue
@@ -9170,7 +9408,8 @@ def command_sweep(args: argparse.Namespace) -> int:
                     scan["skipped"][ident] = "no-longer-candidate"
                     continue
             outcome, why = _sweep_apply_candidate(item, args, repo, acp,
-                                                  merged_heads, removed_ids)
+                                                  merged_heads, removed_ids,
+                                                  branch_rows=branch_rows)
             if outcome == "removed":
                 removed.append(ident)
                 if kind == "session":

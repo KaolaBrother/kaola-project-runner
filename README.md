@@ -710,8 +710,9 @@ the task, interprets the output, and decides what to do next.
   The Host still adopts the plan, accepts the result, and exact-stops seats.
   In node mode its carrier also runs a bounded backstop sweep (Issue #348):
   `kaola-dispatch.py sweep` re-verifies and removes only closed-issue worker
-  sessions, linked worktrees, prunable worktree metadata and stale `.kaola`
-  temporaries - details in `docs/api.md`.
+  sessions, linked worktrees, prunable worktree metadata, merged local
+  `workflow/issue-N` branches and stale `.kaola` temporaries, and reports
+  (never removes) other known residues - details in `docs/api.md`.
 - **Skill names**: `<platform>-kaola-project-runner` for each of the eleven runtimes,
   `kaola-project-runner` (display name Project Runner) as the control plane, and
   `kaola-delegator` (display name Kaola-Delegator) for external delegation.

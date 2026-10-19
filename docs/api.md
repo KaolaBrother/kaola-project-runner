@@ -853,15 +853,18 @@ holder does not advertise `heartbeat-state/2`. The tool refuses rather than trun
 [--skills-root DIR] [--live FILE]` removes residues the main flow missed. `--file` defaults to
 `<repo>/.kaola/heartbeat-prompt.json`. Exactly one mode is required. Output is one
 `kaola-sweep/1` receipt: `{result: planned|nothing|swept|recorded-empty|candidates|refused,
-mode, key, candidates, kept, removed, skipped, head, accepted_revision, forge, acp,
-timed_out, recovery?}`. `acp` is `"known"` or `"unavailable"` (#353: an unanswered list is
+mode, key, candidates, kept, removed, skipped, report, head, accepted_revision, forge, acp,
+timed_out, recovery?}`. `report` is the R1-R3 report-only list (always present, `[]` when
+none; `[]` on a node `--batch` receipt, which re-verifies only planned ids). `acp` is `"known"`
+or `"unavailable"` (#353: an unanswered list is
 `acp-unknown` skips, never removal); `timed_out` names the child tools whose calls timed out
 (`git`, `gh`, `acp`; always present, `[]` when none).
 `accepted_revision` is the verified caller record's value on apply/record-empty, null
 otherwise. `key` is the
 first 16 hex of the sha256 of the sorted candidate ids (`""` when none). Candidate ids are
 stable: `session:<platform>/<session>@<holder>`, `worktree:<resolved path>@<HEAD sha>`,
-`worktree-prune:<resolved path>`, `stale-file:<resolved path>@<int mtime>`.
+`worktree-prune:<resolved path>`, `branch:workflow/issue-N@<sha>`,
+`stale-file:<resolved path>@<int mtime>`.
 
 The candidate set is a closed rule set; everything else is never touched:
 
@@ -881,11 +884,41 @@ The candidate set is a closed rule set; everything else is never touched:
   or in the worktree itself. Keep reasons: `outside-project`, `locked`, `uncommitted-changes`,
   `unmerged-or-unpushed`, `live-session`. A worktree whose only live session is itself an S1
   candidate is still a candidate (the stop goes first). Every check is re-verified
-  immediately before `git worktree remove <path>` (no `--force`); the branch is kept.
+  immediately before `git worktree remove <path>` (no `--force`); the branch is left for
+  B1.
 - **W2** a `prunable` worktree entry inside ROOT: `git -C ROOT worktree prune`, once per apply.
+- **B1** (#357) a local `workflow/issue-N` branch whose issue is CLOSED, not checked out in
+  any surviving worktree (a branch still held by a kept or skipped worktree lands in
+  `skipped` as `checked-out` - the worktree item owns that decision, so a branch is planned
+  only when every worktree holding it is itself a W1/W2 candidate this scan), with no live
+  verified session for issue N, and merged: its tip an ancestor of the remote head
+  (`merge: "ancestor"`, deleted with `git branch -d`) or equal to the merged PR's `headRefOid`
+  (`merge: "merged-pr-head"`, deleted with `git branch -D` on exact SHA equality only -
+  on GitHub a merged PR head stays fetchable at `refs/pull/<PR>/head` after the remote
+  branch is gone; verified 2026-10-19 on this repo: PR #134 `workflow/issue-133`,
+  `refs/pull/134/head` = `394caf77`). Otherwise kept `unmerged-or-unpushed`. Remote branches
+  are never deleted (no push). Restore with `git branch workflow/issue-N <sha>` (the
+  candidate's `restore` field). Apply re-verifies the tip SHA, the worktree list, one extra
+  `list --include-dead` (one per branch phase, only when a branch item is planned) and the
+  merge state.
 - **F1** a regular `*.tmp` file directly in `.kaola/` older than 24 h
   (`SWEEP_STALE_SECONDS`). Nothing else in `.kaola/` - state, backups, dispatch indices,
   locks, webhook files, session records - is touched.
+
+Three report-only rules (#357) list residues in the receipt's `report` for the Owner or
+Host - never in `candidates`, `kept`, `alerts`, `last_sweep` or `maintenance`, and the
+sweep never removes them:
+
+- **R1** a direct child of `kaola-workflow/` that is a real directory (not `archive`, not
+  dot-prefixed) holding `workflow-state.md` whose `issue_number:` names a CLOSED issue:
+  `{id: workflow-folder:<resolved>, rule: R1, kind, issue, path, status, next}` points at
+  the Kaola-Workflow finalize the Host still owes.
+- **R2** a top-level `.kaola/` child that is no Project Runner artifact
+  (`SWEEP_KAOLA_OWN`), no `*.tmp`, no R3 backup and not `target` or `build` (those two are
+  never scanned and never reported): `{id: kaola-foreign:<path>, rule: R2, kind, path,
+  type: file|dir|symlink|other, bytes, incomplete?, next}`.
+- **R3** regular heartbeat-prompt backup copies in `.kaola/` (`heartbeat-prompt.v*-*.json`):
+  one `{id: heartbeat-backups, rule: R3, kind, count, bytes, next}` item.
 
 Completion is a forge fact only: the issue is CLOSED. Issue #353 batches the lookup: one
 `gh api graphql` call per chunk of 50 issues (issue state plus merged PR heads for
@@ -896,7 +929,8 @@ issues; a timeout or OSError answers `forge: "unavailable"` directly with no fal
 stuck `gh` would hang the fallback too. `gh` failing is `forge: "unavailable"`: every
 issue-linked item goes to `skipped` as `forge-unknown`, never to kept, and nothing is
 removed. An open issue is silently not a candidate. Only issue numbers appearing in
-sessions or worktrees are queried. Merged-PR heads are a set per issue - any merged head
+sessions, worktrees, local `workflow/issue-N` branches or active Kaola-Workflow folders
+are queried. Merged-PR heads are a set per issue - any merged head
 matches.
 `--dry-run` writes nothing at all (no state write, no prune, no stop, no fetch); it still runs
 the read-only list/status/gh/git calls.
@@ -907,14 +941,16 @@ dispatcher is this repo's Host carrier and that carrier's events hold `sideagent
 with `batch` B, `target_holder` the caller, and a `sweep` object; the plan is then that event's
 `sweep.candidates`. Since #353 apply re-verifies only planned candidates, never a rescan: a
 Host apply reuses its own scan's forge facts; a node apply rebuilds items from the stable
-plan ids, spends one batched forge call and one `git worktree list`, and gates sessions and
-worktrees on issue CLOSED (`forge: "unavailable"` → `forge-unknown`). Per candidate the
+plan ids, spends one batched forge call and one `git worktree list`, and gates sessions,
+worktrees and branches on issue CLOSED (`forge: "unavailable"` → `forge-unknown`; a
+reopened issue is `no-longer-candidate`). Per candidate the
 checks are re-verified right before removal; each worktree removal spends one global
 `list --include-dead` and an unanswered list is `skipped` as `acp-unknown`, never removed.
 The event's `sweep.kept` (the dry-run receipt's kept list) seeds `sweep-kept`; planned items
 that re-verify kept join it. Only planned ids still candidates are applied (others land in
 `skipped` as `no-longer-candidate`; new candidates wait for the next sweep). Apply order:
-sessions, worktrees, prune, files. Then, under the state lock, `maintenance.last_sweep` is
+sessions, worktrees, prune, branches, files (the branch phase spends one extra
+`list --include-dead`, only when a branch item is planned). Then, under the state lock, `maintenance.last_sweep` is
 written and the kept alert synced. Since #353, `--apply` and `--record-empty` validate the
 state file BEFORE any scan or action (`require_current`); a refusal exits 2 carrying the
 existing reason (`state-missing`, `legacy-format`, `schema-unsupported`,
