@@ -6453,8 +6453,15 @@ def attach_broker_reconcile(receipt: dict[str, Any], args: argparse.Namespace,
         receipt["broker_job"] = {"reaped": True, "label": out.get("label"),
                                  "result": "reconciled"}
     elif out.get("reason") in ("job-occupied", "job-state-unknown"):
-        receipt["broker_job"] = {"reaped": False, "label": out.get("label"),
-                                 "reason": out.get("reason"), "result": "refused"}
+        # Issue #371: an unreadable manager carries the read's own facts, so a
+        # stop receipt says the caller was confined instead of implying a job.
+        fact = {"reaped": False, "label": out.get("label"),
+                "reason": out.get("reason"), "result": "refused"}
+        if out.get("os_state"):
+            fact["os_state"] = out["os_state"]
+        if out.get("caller_confined") is not None:
+            fact["caller_confined"] = bool(out["caller_confined"])
+        receipt["broker_job"] = fact
 
 
 def spawn_holder_outside(args: argparse.Namespace, repo: str, directory: Path,

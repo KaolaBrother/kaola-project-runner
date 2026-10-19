@@ -404,28 +404,80 @@ def systemctl(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["systemctl", "--user", *args], capture_output=True, text=True, timeout=30)
 
 
-def os_job_state(backend: str, label: str) -> str:
-    """running | exited | absent for the owned job/unit, per the active backend."""
+MANAGER_STDERR_LIMIT = 160
+_MANAGER_READ: dict[str, object] = {}
+
+
+def short_text(value: object, limit: int = MANAGER_STDERR_LIMIT) -> str:
+    """One whitespace-collapsed line for a receipt. Never a log dump."""
+    text = " ".join(str(value or "").split())
+    return text if len(text) <= limit else text[: limit - 3] + "..."
+
+
+def manager_read(backend: str, label: str) -> tuple[str, dict]:
+    """Read the owned job's state and keep the read's own evidence.
+
+    Issue #371: a process that cannot read the manager at all (a Seatbelt
+    caller sees ``launchctl list`` exit nonzero) has not seen an exited job.
+    The facts carry the manager exit code, a short stderr, and whether this
+    process is confined: the manager binary exists but the read failed.
+    """
     if backend == "launchd":
-        result = launchctl("list")
+        try:
+            result = launchctl("list")
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return "unknown", {"manager_rc": None,
+                               "manager_stderr": short_text(f"{type(exc).__name__}: {exc}"),
+                               "caller_confined": False}
+        facts = {"manager_rc": result.returncode,
+                 "manager_stderr": short_text(result.stderr)}
         if result.returncode != 0:
-            return "unknown"
-        out = result.stdout
-        for line in out.splitlines():
+            facts["caller_confined"] = Path("/bin/launchctl").exists()
+            return "unknown", facts
+        facts["caller_confined"] = False
+        for line in result.stdout.splitlines():
             parts = line.split()
             if len(parts) == 3 and parts[2] == label:
-                return "running" if parts[0].isdigit() else "exited"
-        return "absent"
+                return ("running" if parts[0].isdigit() else "exited"), facts
+        return "absent", facts
     if backend == "systemd-user":
-        result = systemctl("is-active", unit_for(label))
+        try:
+            result = systemctl("is-active", unit_for(label))
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return "unknown", {"manager_rc": None,
+                               "manager_stderr": short_text(f"{type(exc).__name__}: {exc}"),
+                               "caller_confined": False}
+        facts = {"manager_rc": result.returncode,
+                 "manager_stderr": short_text(result.stderr)}
         state = result.stdout.strip()
         if state in ("active", "activating", "reloading"):
-            return "running"
+            facts["caller_confined"] = False
+            return "running", facts
         if state in ("inactive", "failed", "deactivating"):
-            return "exited"
+            facts["caller_confined"] = False
+            return "exited", facts
         # A manager error or unknown phrase is never a verified absence.
-        return "unknown"
-    return "absent"
+        facts["caller_confined"] = shutil.which("systemctl") is not None
+        return "unknown", facts
+    return "absent", {}
+
+
+def os_job_state(backend: str, label: str) -> str:
+    """running | exited | absent for the owned job/unit, per the active backend.
+
+    Issue #371: the read's own facts stay on ``manager_read_facts`` so an
+    unreadable manager is refused with its exit code and stderr, never as an
+    exited job.
+    """
+    state, facts = manager_read(backend, label)
+    _MANAGER_READ.clear()
+    _MANAGER_READ.update(facts)
+    return state
+
+
+def manager_read_facts() -> dict:
+    """Facts from the most recent ``os_job_state`` read in this process."""
+    return dict(_MANAGER_READ)
 
 
 def os_job_owns(backend: str, label: str, spec_path: Path) -> bool:
@@ -525,6 +577,74 @@ def recovery_route(label: str, command: str, *, running: bool) -> str:
         f"{command}, then retry start --resume. Do not run launchctl or systemctl "
         "by hand."
     )
+
+
+def session_retry_command(record_dir: Path | None, platform: str, session: str,
+                          repo: str) -> str:
+    """Issue #371: ``start --resume ID`` only when this session's record has one.
+
+    No record, a record for another session/repo, or a record that never
+    adopted an ACP session id leaves nothing to resume; the route names a
+    plain ``start``.
+    """
+    if record_dir is None:
+        return "start"
+    record = read_json(record_dir / RECORD_NAME)
+    if (record.get("platform") != platform or record.get("session") != session
+            or record.get("repo") != repo):
+        return "start"
+    acp_id = record.get("acp_session_id")
+    if isinstance(acp_id, str) and acp_id:
+        return f"start --resume {acp_id}"
+    return "start"
+
+
+def manager_reader_name(backend: str, label: str) -> str:
+    if backend == "launchd":
+        return "/bin/launchctl list"
+    return f"systemctl --user is-active {unit_for(label)}"
+
+
+def unknown_diagnosis(backend: str, label: str) -> str:
+    """What an unreadable manager actually established. Nothing about a job."""
+    facts = manager_read_facts()
+    return (
+        "The service manager could not be read from this process "
+        f"({manager_reader_name(backend, label)} rc={facts.get('manager_rc')}, "
+        f"stderr={short_text(facts.get('manager_stderr'))!r}); no job for {label} "
+        "is known to be loaded or exited, and this is not evidence of a stale job."
+    )
+
+
+def unknown_route(label: str, command: str, retry: str, backend: str) -> str:
+    """Issue #371: an unreadable manager is not an exited job.
+
+    The route never sends the same confined caller back into the same refusal:
+    it states what was not learned, names the one-shot unconfined reconcile,
+    and names the retry command that actually applies to this session.
+    """
+    return (
+        unknown_diagnosis(backend, label)
+        + " Do not retry reconcile or start from this same shell; it cannot read "
+        "the manager and will refuse the same way. Run "
+        f"{command} once from an unconfined shell (an independent terminal): "
+        "os_state absent with reaped false means there was never a leftover. "
+        f"Then {retry}. Do not run launchctl or systemctl by hand."
+    )
+
+
+def unknown_refusal(backend: str, label: str, command: str, record_dir: Path | None,
+                    platform: str, session: str, repo: str) -> BrokerError:
+    """The one refusal for an unreadable service manager (Issue #371)."""
+    facts = manager_read_facts()
+    retry = session_retry_command(record_dir, platform, session, repo)
+    return BrokerError(
+        "job-state-unknown", unknown_diagnosis(backend, label),
+        label=label, os_state="unknown",
+        manager_rc=facts.get("manager_rc"),
+        manager_stderr=short_text(facts.get("manager_stderr")),
+        caller_confined=bool(facts.get("caller_confined")),
+        recovery=unknown_route(label, command, retry, backend))
 
 
 def os_wait_stopped(backend: str, label: str, timeout: float) -> None:
@@ -715,11 +835,7 @@ def do_submit(args: argparse.Namespace) -> dict:
         _reap_exited_job(backend, label, record_dir, platform, session, repo, run_dir, command)
         stale_reaped = True
     elif state == "unknown":
-        route = recovery_route(label, command, running=False)
-        raise BrokerError(
-            "job-state-unknown",
-            "the service-manager state is unreadable; the job stays loaded. " + route,
-            label=label, os_state=state, recovery=route)
+        raise unknown_refusal(backend, label, command, record_dir, platform, session, repo)
 
     argv = list(args.argv or [])
     socket = Path(args.socket) if args.socket else sock_path_for(record_dir)
@@ -761,11 +877,7 @@ def do_submit(args: argparse.Namespace) -> dict:
             raise BrokerError("launch-in-progress", route, spawned=True, label=label,
                               recovery=route)
         elif state == "unknown":
-            route = recovery_route(label, command, running=False)
-            raise BrokerError(
-                "job-state-unknown",
-                "the service-manager state is unreadable; the job stays loaded. " + route,
-                label=label, os_state=state, recovery=route)
+            raise unknown_refusal(backend, label, command, record_dir, platform, session, repo)
         write_private_exclusive(spec_path, json.dumps(spec, sort_keys=True).encode())
         write_private_exclusive(armed_path, json.dumps({"schema": SCHEMA, "nonce": nonce}).encode())
         if backend == "launchd":
@@ -948,7 +1060,7 @@ def _reap_exited_job(backend: str, label: str, record_dir: Path | None, platform
         raise BrokerError("job-occupied", running_route, spawned=True, label=label,
                           os_state=state, recovery=running_route)
     if state == "unknown":
-        raise BrokerError("job-state-unknown", route, label=label, os_state=state, recovery=route)
+        raise unknown_refusal(backend, label, command, record_dir, platform, session, repo)
     raise BrokerError("job-occupied", route, label=label, os_state=state, recovery=route)
 
 
@@ -977,11 +1089,7 @@ def do_reconcile(args: argparse.Namespace) -> dict:
         return {"schema": SCHEMA, "result": "reconciled", "reaped": False,
                 "label": label, "os_state": state}
     if state == "unknown":
-        route = recovery_route(label, command, running=False)
-        raise BrokerError(
-            "job-state-unknown",
-            "the service-manager state is unreadable; the job stays loaded. " + route,
-            label=label, os_state=state, recovery=route)
+        raise unknown_refusal(backend, label, command, record_dir, platform, session, repo)
     if state == "running":
         route = recovery_route(label, command, running=True)
         raise BrokerError("job-occupied", route, spawned=True, label=label,
@@ -1001,7 +1109,8 @@ def do_cleanup(args: argparse.Namespace) -> dict:
     """
     backend, _ = backend_for(args.backend)
     label = label_for(args.platform, args.session, args.repo)
-    run_dir = run_dir_for(Path(args.run_base) if args.run_base else default_run_base(), label)
+    run_base = Path(args.run_base) if args.run_base else default_run_base()
+    run_dir = run_dir_for(run_base, label)
     record_dir = Path(args.record_dir) if getattr(args, "record_dir", None) else None
     state = os_job_state(backend, label) if backend != "unsupported" else "absent"
     if state == "running":
@@ -1009,10 +1118,11 @@ def do_cleanup(args: argparse.Namespace) -> dict:
                           "the one-shot job for this session is still running; stop the holder "
                           "through the Runner first", label=label)
     if state == "unknown":
-        raise BrokerError("job-state-unknown",
-                          "the service-manager state is unreadable. Do not unload the job. "
-                          "Read the label with the service manager, then retry cleanup only "
-                          "after that state is readable", label=label)
+        command = recovery_command(args.platform, args.session, args.repo,
+                                   str(record_dir) if record_dir else None,
+                                   str(run_base), args.backend)
+        raise unknown_refusal(backend, label, command, record_dir,
+                              args.platform, args.session, args.repo)
     attempts = sorted(run_dir.glob("attempt-*")) if run_dir.exists() else []
     if attempts:
         # A leftover attempt means submit did not complete it. Keep it while this

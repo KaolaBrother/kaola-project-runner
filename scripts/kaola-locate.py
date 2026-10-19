@@ -438,8 +438,14 @@ def reconcile_broker_job(worker: str, session: str, toplevel: str) -> dict | Non
     if out.get("result") == "reconciled" and out.get("reaped") is True:
         return {"reaped": True, "label": out.get("label"), "result": "reconciled"}
     if out.get("reason") in ("job-occupied", "job-state-unknown"):
-        return {"reaped": False, "label": out.get("label"),
+        # Issue #371: keep the unreadable-manager facts short but present.
+        fact = {"reaped": False, "label": out.get("label"),
                 "reason": out.get("reason"), "result": "refused"}
+        if out.get("os_state"):
+            fact["os_state"] = out["os_state"]
+        if out.get("caller_confined") is not None:
+            fact["caller_confined"] = bool(out["caller_confined"])
+        return fact
     return None
 
 
