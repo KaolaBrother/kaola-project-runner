@@ -1,8 +1,8 @@
 {
-  "build": "d31dfe338be2",
+  "build": "c05d8cbe1993",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
-    "SKILL.md": "6c508525bfd5daad232cededdf05678a7605a8d4aeec3e548e759706bde131e1",
+    "SKILL.md": "1150dabff7cf77f6fe8ed1a70925b22263e2f80a3f67760f04a89590b4b64b2e",
     "agents/openai.yaml": "2dfebef929b3ec43b4cedc260d8e1440cfd958c565c760532a57df27d4bd6f78",
     "references/dispatch-collect.md": "8e807cfb23dcfc25f1009d757f7e9679ee6b1d5a917b50c28ce664059a62c576",
     "references/doc-maintenance.md": "11bbe20631ea279b528377c31579d4eed42270c09c4ed0b27ace435ab1b7888e",
@@ -19,14 +19,15 @@
     "references/sideagent-node.md": "bbe326a17813ea4e20283fb1db75ffe3e794a720899143c7ebb467165bba5c1e",
     "references/task-failure.md": "f60fe47ce2ce0ddd7d17594c4b57d8455342aa44d0cc3a9f4256129861307668",
     "references/worker-profiles.md": "90eeb1f417dabad9c881a0bbc620202acc5d829f3e650d2a064621db0e7e352c",
-    "references/workflow-worktree.md": "83a3b9867500ebcb543df2b17afc0d4716c5897956a618ba16cb0c5f2f768789",
+    "references/workflow-worktree.md": "1db101d4d09d314fd6c2cdec49474cf53e097bbe87060d76ff3aee64504d1074",
     "references/zcode-host-dispatch.md": "2ce02ee8c79e193bca566d0b644bb470ec013877c0e89c8cec23dc62f863e04b",
     "references/zcode-native-skill-entry.md": "22f5e4ce50d92a0e264c71252616a9c2db8473817be1c5eb99d0a415f814918f",
     "scripts/kaola-acp-paths.py": "e435b3aeab7979fb1bff8d18b25087021ca1daf9a0015831fde46126d24261ac",
     "scripts/kaola-compact-recovery.py": "c45662a4297047bd860a46157e950b4aac460b3e9df1a889abe99ca687e90f27",
-    "scripts/kaola-dispatch.py": "6c9241ac929575a073a34212e65b9a4d64a5783890ad427601cb098802067326",
+    "scripts/kaola-cwd-guard.py": "a04697595305a6833a1c8f2a1f3ed6488bbca8619544825b2f9346c056fb305f",
+    "scripts/kaola-dispatch.py": "c66ff48d842b2b7488e89833304f742bae246d6effd484ebd408d681fbe7bd89",
     "scripts/kaola-record-contract.py": "24117330072750b5630cbbfee7a50597ff811c805e2637d9b5ff9f9dab932d7e",
-    "scripts/kaola-recovery-routes.py": "21ea7c85b8b36215273ee840b73f1f8cdc069ef8c859eb2d4d792e6b501c87ba",
+    "scripts/kaola-recovery-routes.py": "ee6f0b5ea66bebd63191ee52d732c6865a728fb06f3ae13c3fe6884d545701f6",
     "scripts/kaola-session-names.py": "772f2d729e61763851b78ab9d440c664df225bc4f08dc71f8ba0102ead411316"
   },
   "skill": "kaola-project-runner"

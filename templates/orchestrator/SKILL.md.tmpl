@@ -31,8 +31,8 @@ worker just for them; honor owner allocation and project lifecycle.
 the native `/kaola-project-runner` Skill invocation (ZCode) or your platform's
 measured entry, and supervise workers on event-driven beats. Outer Agents
 start or continue the Host through Kaola-Delegator (`kaola-delegator`).
-Use existing project plans for role, authorization and lifecycle; this Skill
-creates none. Startup and one Host per root (`host-exists`), plus a
+Use existing project plans for role, authorization and lifecycle. Startup and
+one Host per root (`host-exists`), plus a
 Delegator-inquiry sweep (one owned permission event needs no full sweep):
 [host-startup.md](references/host-startup.md) ·
 [zcode-native-skill-entry.md](references/zcode-native-skill-entry.md) ·
@@ -40,16 +40,17 @@ Delegator-inquiry sweep (one owned permission event needs no full sweep):
 A Host (any platform with a `host_skill_entry`) is event-driven: no
 Routine, cron, or sleep loop. Its first prompt names its
 `platform`/`session`/`repo`; `KAOLA_ACP_DISPATCHER` carries them to its shell.
-Every Host assignment uses `--no-wait`, then ends the turn, including direct
-Runner/Workflow, continuation, repair and finalize. Beat mechanics - ending the turn as the wait: [references/zcode-host-dispatch.md](references/zcode-host-dispatch.md).
+Every Host assignment uses `--no-wait` and ends the turn: direct Runner/Workflow,
+continuation, repair and finalize. Beat mechanics - end the turn as the wait: [references/zcode-host-dispatch.md](references/zcode-host-dispatch.md).
 Each inner worker is its own session and process group: an inner stop never
 reaches the Host; the Host's stop sweeps only recorded inner sessions.
 Grok Bot is not an entry for this Skill: it loads generated `kaola-delegator`,
-which starts one Host of any platform that loads this Skill. `--platform grok` is the
+which starts one Host that loads this Skill. `--platform grok` is the
 Grok CLI worker; `--platform grok-bot` is invalid. Do not create a Grok Bot
 Routine to run this Skill. Keep the Host shell cwd at the canonical root: never
 `cd` into a worktree finalize/sink may remove; use absolute paths, `git -C`, or
-`(cd ... && ...)`.
+`(cd ... && ...)`. A failed shell spawn: read `status` -> `tool_cwd` and follow
+its route.
 
 ## Consumer-project boundary
 
@@ -175,8 +176,8 @@ sink, and write ownership.
    (zcode-host-dispatch.md).
    Examine authorized remaining work. {{IDLE_BEFORE_STOP}}.
    Before planning, assigning, accepting or judging QA, read
-   [qa-evidence.md](references/qa-evidence.md) unless its current version is in context: it
-   holds the improvement and slow-feedback method. Planned dispatch (research, QA, report or
+   [qa-evidence.md](references/qa-evidence.md) unless it is in context: it holds the
+   improvement and slow-feedback method. Planned dispatch (research, QA, report or
    implementation) uses `execute`
     (with `project --seats` and `collect`;
    ([dispatch-collect.md](references/dispatch-collect.md)): it starts absent

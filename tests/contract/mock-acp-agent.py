@@ -90,8 +90,12 @@ def thought_chunk(session_id: str, text: str, message_id: str | None = None) -> 
 class MockAgent:
     def __init__(self, scenario: str, caps: set[str], turn_ms: int, flood_bytes: int,
                  steering: str = "none", ignore_cancel: bool = False,
-                 caps_objects: bool = False):
+                 caps_objects: bool = False, cwd_vanish: dict[str, str] | None = None):
         self.scenario = scenario
+        # Issue #369: the cwd_vanish script's inputs. The launch environment
+        # allowlist drops MOCK_* names, so they arrive as argv.
+        self.cwd_vanish = cwd_vanish or {}
+        self.cwd_vanish_runs = 0
         # Issue #65: native mid-turn steering. "none" leaves `_session/steering`
         # unimplemented (JSON-RPC -32601), exactly like a platform without the
         # entry; every other value advertises `_meta.steering` and answers.
@@ -683,6 +687,79 @@ class MockAgent:
 
     # -- prompt turn scenarios -----------------------------------------------
 
+    def run_cwd_vanish(self, session_id: str, request_id: Any) -> None:
+        """Issue #369: the ZCode Read note carries the tool cwd.
+
+        ``MOCK_CWD_VANISH_MODE`` selects the script: ``full`` (note, wait for
+        the removal marker, one execute event, wait for the placeholder, note
+        the repo root), ``note``, ``note_repo``, ``v3`` (three error texts) and
+        ``triple`` (three execute events). ``MOCK_CWD_VANISH_PATH`` names the
+        worktree, ``MOCK_CWD_VANISH_REPO`` the project root, and
+        ``MOCK_CWD_VANISH_MARKER`` the file the test creates after removal.
+        """
+        target = self.cwd_vanish.get("path") or os.environ.get("MOCK_CWD_VANISH_PATH", "")
+        repo = self.cwd_vanish.get("repo") or os.environ.get("MOCK_CWD_VANISH_REPO", "")
+        marker = self.cwd_vanish.get("marker") or os.environ.get("MOCK_CWD_VANISH_MARKER", "")
+        mode = self.cwd_vanish.get("mode") or os.environ.get("MOCK_CWD_VANISH_MODE", "full")
+        release = self.cwd_vanish.get("release") or os.environ.get("MOCK_CWD_VANISH_RELEASE", "")
+        deadline = time.time() + 60
+
+        def note(tool_id: str, path: str) -> None:
+            session_update(session_id, {
+                "sessionUpdate": "tool_call", "toolCallId": tool_id, "kind": "read",
+                "title": "Read file", "status": "completed",
+                "content": {"type": "text",
+                            "text": f"File does not exist. Note: your current working "
+                                    f"directory is {path}."}})
+
+        def execute(tool_id: str, text: str, status: str) -> None:
+            session_update(session_id, {
+                "sessionUpdate": "tool_call_update", "toolCallId": tool_id,
+                "kind": "execute", "title": "Bash", "status": status,
+                "content": {"type": "text", "text": text}})
+
+        def wait_marker() -> None:
+            while marker and not os.path.exists(marker) and time.time() < deadline:
+                time.sleep(0.05)
+
+        def wait_placeholder() -> None:
+            while target and not os.path.isdir(target) and time.time() < deadline:
+                time.sleep(0.05)
+
+        if mode in ("note_repo",) or (mode == "note_then_repo" and self.cwd_vanish_runs > 1):
+            note("read-2", repo)
+            log_event({"event": "cwd_vanish_repo_note_sent", "path": repo})
+            message_chunk(session_id, "MOCK-REPLY cwd-vanish")
+            self.finish_turn(request_id)
+            return
+        note("read-1", target)
+        log_event({"event": "cwd_vanish_note_sent", "path": target, "mode": mode})
+        if mode in ("note", "note_then_repo"):
+            message_chunk(session_id, "MOCK-REPLY cwd-note")
+            self.finish_turn(request_id)
+            return
+        wait_marker()
+        if mode == "v3":
+            for index in range(3):
+                execute(f"exec-v3-{index}", "spawn /bin/zsh ENOENT", "failed")
+            log_event({"event": "cwd_vanish_v3_sent", "path": target})
+            message_chunk(session_id, "MOCK-REPLY cwd-v3")
+            self.finish_turn(request_id)
+            return
+        for index in range(3 if mode == "triple" else 1):
+            execute(f"exec-{index}", "echo shell-ok", "in_progress")
+        log_event({"event": "cwd_vanish_execute_sent", "path": target, "mode": mode})
+        wait_placeholder()
+        log_event({"event": "cwd_vanish_placeholder_seen", "path": target,
+                   "exists": os.path.isdir(target)})
+        # Hold the placeholder window open for the test's own assertions.
+        while release and not os.path.exists(release) and time.time() < deadline:
+            time.sleep(0.05)
+        note("read-2", repo)
+        log_event({"event": "cwd_vanish_repo_note_sent", "path": repo})
+        message_chunk(session_id, "MOCK-REPLY cwd-vanish")
+        self.finish_turn(request_id)
+
     def emit_prelude(self, session_id: str) -> None:
         if self.scenario == "garbage_lines":
             send_raw(b'{"jsonrpc":"2.0","method":"session/up')
@@ -765,6 +842,15 @@ class MockAgent:
                 log_event({"event": "yolo_skip_permission", "configured": dict(self.configured)})
             else:
                 self.ask_permission(session_id, "mock gated op", ["allow", "deny"])
+                return
+        if scenario == "cwd_vanish":
+            mode = self.cwd_vanish.get("mode") or os.environ.get("MOCK_CWD_VANISH_MODE", "full")
+            # ``note_then_repo`` scripts both prompts; every other mode scripts
+            # the first prompt only, and a later prompt (the holder's own
+            # notice) gets an ordinary reply.
+            if mode == "note_then_repo" or not self.cwd_vanish_runs:
+                self.cwd_vanish_runs += 1
+                self.run_cwd_vanish(session_id, request_id)
                 return
         if scenario == "watch_projection":
             thought_chunk(
@@ -1129,6 +1215,12 @@ def main() -> int:
     parser.add_argument("--log", default="",
                         help="JSONL log path; overrides MOCK_ACP_LOG, which the "
                              "launch broker's env allowlist deliberately drops")
+    # Issue #369: the cwd_vanish script's inputs, as argv for the same reason.
+    parser.add_argument("--cwd-vanish-path", default="")
+    parser.add_argument("--cwd-vanish-repo", default="")
+    parser.add_argument("--cwd-vanish-mode", default="full")
+    parser.add_argument("--cwd-vanish-marker", default="")
+    parser.add_argument("--cwd-vanish-release", default="")
     args, _unknown = parser.parse_known_args()
     global LOG_PATH
     if args.log:
@@ -1136,7 +1228,11 @@ def main() -> int:
     caps = {item for item in args.caps.split(",") if item}
     agent = MockAgent(args.scenario, caps, args.turn_ms, args.flood_bytes,
                       steering=args.steering, ignore_cancel=args.ignore_cancel,
-                      caps_objects=args.caps_objects)
+                      caps_objects=args.caps_objects,
+                      cwd_vanish={"path": args.cwd_vanish_path, "repo": args.cwd_vanish_repo,
+                                  "mode": args.cwd_vanish_mode,
+                                  "marker": args.cwd_vanish_marker,
+                                  "release": args.cwd_vanish_release})
     return agent.serve()
 
 

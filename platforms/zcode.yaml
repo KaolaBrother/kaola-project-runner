@@ -46,3 +46,5 @@ steering_summary: "ZCode 3.12+ (app-server 0.16+) steers through `v4/command sen
 host_skill_entry: "/kaola-project-runner"
 quota_packages: "[{\"id\":\"bigmodel-coding-plan\",\"name\":\"GLM Coding Plan\",\"windows\":[\"5h\"]}]"
 model_package_rule: "{\"kind\":\"provider_prefix\",\"providers\":{\"builtin:bigmodel-coding-plan\":\"bigmodel-coding-plan\",\"account:bigmodel-individual-coding-plan\":\"bigmodel-coding-plan\"},\"models\":{\"GLM-5.3\":\"bigmodel-coding-plan\"}}"
+tool_cwd_note_regex: "Note: your current working directory is (?P<path>.+?)\\.?$"
+shell_cwd_persistence: "persistent"

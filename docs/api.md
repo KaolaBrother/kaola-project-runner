@@ -890,17 +890,30 @@ The candidate set is a closed rule set; everything else is never touched:
   (HEAD an ancestor of `refs/remotes/origin/HEAD`'s target, else `origin/main`, or equal to
   the merged PR's `headRefOid`; no fetch), with no live verified session for issue N in ROOT
   or in the worktree itself. Keep reasons: `outside-project`, `locked`, `uncommitted-changes`,
-  `unmerged-or-unpushed`, `live-session`, `live-cwd`, `cwd-unverified`. A worktree whose only live
-  session is itself an S1 candidate is still a candidate (the stop goes first). Every check is
+  `unmerged-or-unpushed`, `live-session`, `cwd-occupied`, `cwd-unverifiable`. A worktree whose only
+  live session is itself an S1 candidate is still a candidate (the stop goes first). Every check is
   re-verified immediately before `git worktree remove <path>` (no `--force`); the branch is left
   for B1.
-- **W1 cwd guard (#369).** Before the removal, the scan and the delete-time re-check read the cwd
-  of this sweep's own process chain (the caller's tool shell, agent CLI and holder) and of every
-  live session tree of ROOT and its worktrees, from `/proc/<pid>/cwd` or `lsof -a -d cwd`. A live
-  cwd inside the target keeps it `live-cwd` with `cwd_holders` (`pid`, `command`, `cwd`); an
-  unreadable probe keeps it `cwd-unverified` with `cwd_probe`. The `sweep-kept` alert's `next`
-  carries the recovery (`live-cwd`: return that shell to the project root, then re-scan). A
-  removal is never executed under a live cwd.
+- **W1 cwd guard (#369).** The removal goes through the same guarded wrapper as
+  `worktree-remove` (below). It reads the cwd of the wrapper's own process chain (the caller's
+  tool shell, agent CLI and holder) and of every live session tree of ROOT and its worktrees,
+  from `/proc/<pid>/cwd` or `lsof -a -d cwd` (one call per pid list; a `(deleted)` suffix is
+  `cwd_deleted`). A live cwd inside the target keeps it `cwd-occupied`; a recorded
+  `tool_cwd.last_known` inside it is an occupant with `source: recorded` even with no process.
+  An unreadable probe keeps it `cwd-unverifiable`. The kept item carries `occupants` (`pid`,
+  `ppid`, `exe_basename`, `cwd`, `cwd_deleted`, `source`, `session`), `action: deferred` and its
+  `route`; the `sweep-kept` alert's `next` carries the recovery. A removal is never executed
+  under a live cwd.
+- **`worktree-remove` / `worktree-guard` (#369).** `python3 kaola-dispatch.py worktree-remove
+  --repo R --path P [--force] [--assume-clear] [--live ROWS] [--skills-root S]` relocates its own
+  cwd out of P first (`actions: [{action: relocated, occupant: self}]`), then defers on
+  `occupied` or `unverifiable` with exit 3 and a `route`, and otherwise runs
+  `git -C R worktree remove [--force] -- P`. A post-check repeats the occupancy probe: a cwd that
+  appeared between check and remove, or a process whose cwd was just deleted, is repaired by
+  recreating P as an empty directory (`result: removed`, `action: placeholder-restored`,
+  `post_check`). `--assume-clear` covers only the unreadable probe; a proven occupant still
+  defers. `worktree-guard` is the read-only form: the same occupancy receipt, exit 0 clear / 3
+  occupied or unverifiable. `--all-user-processes` widens the probe to this uid.
 - **W2** a `prunable` worktree entry inside ROOT: `git -C ROOT worktree prune`, once per apply.
 - **B1** (#357) a local `workflow/issue-N` branch whose issue is CLOSED, not checked out in
   any surviving worktree (a branch still held by a kept or skipped worktree lands in
@@ -1923,6 +1936,38 @@ Those amounts are the published Command Code usage-limits table (Go, GOAT, Pro, 
 Routes, each `GET` with `Authorization: Bearer <COMMANDCODE_API_KEY>` and one attempt: `/alpha/billing/credits` (required), `/alpha/billing/subscriptions`, `/alpha/usage/summary`. The probe does not call `/alpha/whoami`. It copies only the fields named above and drops every other key, including `email`, user id, org id, price id, and subscription id, before anything is returned. It does not print, log, cache, or write the key or the raw response.
 
 The key is read by name at probe time: process environment `COMMANDCODE_API_KEY`, then `$DSH_HOME/.env` (or `~/.dsh/.env` when `DSH_HOME` is unset), then `.credentials.yaml` `refs.COMMANDCODE_API_KEY`. A set `DSH_HOME` does not fall back to `~/.dsh`. An empty value is missing. A missing key is `key_missing`, not an exception.
+
+## Tool cwd watch (#369)
+
+The holder records its own agent's tool-shell working directory before a removal can take it,
+repairs a vanished one, notices the agent, and cleans up. The fact is `record.json`'s
+`tool_cwd`: `{last_known, source: trace|note|process|null, observed_at, exists, placeholder,
+notice: none|pending|delivered, repairs}`. `status`/`observe` carry it (`tool_cwd`) and the
+current repair duty (`tool_cwd_error`); `list` rows carry `tool_cwd_path` and `tool_cwd_exists`,
+plus `agent_pid`, `agent_pgid` and `agent_child_pgids` for the cwd guard's process trees.
+
+Recording tiers: **A** a runner-owned shell-entry trace is not implemented (D1 open); **B** the
+manifest `tool_cwd_note_regex` applied to `tool_call`/`tool_call_update` `content` text only
+(zcode's measured Read note); **C** one rate-limited (`2 s`) cwd sample over the agent's own
+child processes on an execute-kind `tool_call`. Signals: **V1** a recorded path that no longer
+exists; **V2** a registered worktree path that disappeared from
+`git -C REPO worktree list --porcelain`, refreshed at turn start/end, on execute-kind events and
+on the status tick (with `shell_cwd_persistence` not `per-call`, an unknown `last_known` gets a
+pre-emptive placeholder); **V3** `spawn <shell> ENOENT` while that shell exists, or
+`chdir|getcwd|shell-init ... No such file`, in `content`.
+
+Repair: one placeholder per occurrence, coalesced on the path, and only inside the repo, never
+the repo root, never a registered worktree (`os.makedirs`). The notice is fixed text naming the
+path and the repo root; it steers when the turn is active and the manifest declares
+`native_steering: supported`, otherwise it is staged as a `host_owned` worker event
+`kind: cwd_repaired` and delivered as one self prompt at the next idle boundary. An undelivered
+notice stays `pending`, is visible in `status`, and is retried at every later boundary. The
+placeholder is removed (`os.rmdir`, empty only) once the reported cwd is outside it or at
+`op_stop`; a path that became a registered worktree again is dropped and left alone; a non-empty
+one is left and reported as `tool_cwd_error` `cwd-placeholder-not-empty`. Events:
+`tool_cwd_observed`, `tool_cwd_vanished`, `tool_cwd_placeholder_created`,
+`tool_cwd_notice_staged|delivered`, `tool_cwd_placeholder_removed|left`,
+`tool_cwd_repair_failed`.
 
 ## Post-compaction Skill reread
 

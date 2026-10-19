@@ -12,7 +12,7 @@ Recovery belongs to the outer Agent:
 that shell binary exists, the Host's remembered cwd was removed under it, and
 the Host recovers in place with no replacement: from outside that shell run
 `mkdir -p <gone-dir>`; tell the Host to `cd <canonical-root>`; then
-`rmdir <gone-dir>`. Route `cwd-vanished` in the Runner's recovery table. Use
+`rmdir <gone-dir>`. Route `tool-cwd-vanished` in the Runner's recovery table. Use
 the replacement below only for a brick that survives that recovery.
 
 1. Exact-stop that Host with `--expected-holder-instance-id` from its receipt

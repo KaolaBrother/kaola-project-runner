@@ -101,7 +101,12 @@ OPTIONAL = {"acp_command_default",
             "default_model_components",
             # Issue #350: closed role vocabulary for the default preset.
             # Absent means none. Keep this set equal to kaola-dispatch.MODEL_ROLES.
-            "default_model_roles"}
+            "default_model_roles",
+            # Issue #369: the tool-cwd facts. `shell_cwd_persistence` is
+            # persistent|per-call|unknown (absent = unknown, every detector
+            # stays on); `tool_cwd_note_regex` is the in-band note pattern with
+            # one named `path` group. Absent means no in-band carrier.
+            "shell_cwd_persistence", "tool_cwd_note_regex"}
 
 
 TIER_FIELDS = ("name", "id", "parameters", "effort", "profile", "class")
@@ -220,6 +225,17 @@ def parse_manifest(path: Path) -> dict[str, str]:
         raise ValueError(f"{path}: empty steering_summary")
     if result.get("steering_delivery", "native") not in {"native", "after-turn"}:
         raise ValueError(f"{path}: invalid steering_delivery")
+    # Issue #369: the tool-cwd facts. Absent persistence means unknown.
+    if result.get("shell_cwd_persistence", "unknown") not in {"persistent", "per-call", "unknown"}:
+        raise ValueError(f"{path}: invalid shell_cwd_persistence")
+    note = result.get("tool_cwd_note_regex")
+    if note is not None and note != "":
+        try:
+            compiled = re.compile(note)
+        except re.error as exc:
+            raise ValueError(f"{path}: invalid tool_cwd_note_regex: {exc}")
+        if "path" not in compiled.groupindex:
+            raise ValueError(f"{path}: tool_cwd_note_regex needs a named path group")
     if not result["acp_command"]:
         raise ValueError(f"{path}: empty acp_command")
     commands = {key for key in declared if key.startswith("acp_command_")}
@@ -632,6 +648,11 @@ def expected_orchestrator_files(manifests: list[dict[str, str]]) -> dict[str, by
     if not names_script.is_file():
         raise ValueError(f"missing session-name helper: {names_script}")
     result["scripts/kaola-session-names.py"] = names_script.read_bytes()
+    # Issue #369: the sweep and the removal wrapper load the sibling cwd guard.
+    guard_script = ROOT / "scripts" / "kaola-cwd-guard.py"
+    if not guard_script.is_file():
+        raise ValueError(f"missing cwd guard: {guard_script}")
+    result["scripts/kaola-cwd-guard.py"] = guard_script.read_bytes()
     return result
 
 
@@ -747,6 +768,8 @@ def expected_files(manifest: dict[str, str], main_build: bytes) -> dict[str, byt
         (shared_root / "kaola-acp-holder.py", "scripts/kaola-acp-holder.py"),
         (shared_root / "kaola-launchd-broker.py", "scripts/kaola-launchd-broker.py"),
         (shared_root / "kaola-compact-recovery.py", "scripts/kaola-compact-recovery.py"),
+        # Issue #369: the holder, the sweep and the removal wrapper load this.
+        (shared_root / "kaola-cwd-guard.py", "scripts/kaola-cwd-guard.py"),
         (shared_root / "kaola-project-compact-notice.py", "scripts/kaola-project-compact-notice.py"),
         (PLATFORMS / f"{manifest['id']}.yaml", "scripts/platform.yaml"),
         (shared_root / "kaola-model-policy.py", "scripts/kaola-model-policy.py"),

@@ -262,8 +262,23 @@ IDLE_WAKE_KEY = "idle"
 # bytes without a newline cannot extend it.
 RELAY_SEND_TIMEOUT = 1.0
 HEARTBEAT_NOTIFY_GRACE = 6.0
+# Issue #369: the agent's tool cwd. The holder records the path before a
+# removal can take it, repairs a vanished one into an empty placeholder, and
+# notices the agent. One fact, one placeholder, one notice per occurrence.
+TOOL_CWD_SAMPLE_SECONDS = 2.0
+TOOL_CWD_CONTENT_MAX = 4096
+TOOL_CWD_NOTE = (
+    "[runner cwd-repair] Your shell working directory {path} was removed at {ts} "
+    "(the linked worktree is gone). The runner recreated it as an empty placeholder "
+    "so shell calls spawn again. Run: cd {repo} - then keep using absolute paths or "
+    "(cd <dir> && ...). The placeholder is removed once your shell reports a directory "
+    "outside it. Nothing else was changed.")
+CWD_REPAIR_FAILED_FALLBACK = (
+    "The holder could not create the placeholder (detail names the OS error). Create "
+    "the parent and `mkdir -p PATH` yourself, then send `cd REPO`; the holder removes "
+    "the placeholder on its own once the shell leaves.")
 WORKER_EVENT_SCHEMA = "kaola-worker-event/1"
-WORKER_EVENT_KINDS = ("terminated", "idle", "permission_required")
+WORKER_EVENT_KINDS = ("terminated", "idle", "permission_required", "cwd_repaired")
 HEARTBEAT_DEFECT_CHARS = 200
 # Injection bound for the Host-maintained prompt file. Not a second Skill
 # budget: one read of at most this many bytes plus one, so an oversized file
@@ -1918,6 +1933,25 @@ def _as_text(value: Any) -> str:
     return ""
 
 
+def _content_text(value: Any, depth: int = 0) -> str:
+    """Issue #369 tier B: every text a tool_call ``content`` carries.
+
+    Only ``text`` and ``content`` fields are read; a title, a raw input or a
+    command line is never a carrier of the tool cwd.
+    """
+    if depth > 6:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        parts = [_content_text(value.get(key), depth + 1) for key in ("text", "content")]
+        return " ".join(part for part in parts if part)
+    if isinstance(value, list):
+        return " ".join(part for part in (_content_text(item, depth + 1) for item in value)
+                        if part)
+    return ""
+
+
 def _normalize_content_items(raw: Any) -> list[dict[str, Any]]:
     items = raw if isinstance(raw, list) else []
     out: list[dict[str, Any]] = []
@@ -2591,6 +2625,19 @@ class Holder:
         # dropped only by an exact stop. `terminated` stays one-shot.
         self.undelivered_wakes: dict[str, dict[str, Any]] = {}
         self.undelivered_wakes_lock = threading.Lock()
+        # Issue #369: the agent's recorded tool cwd and its one repair. The
+        # holder never changes a foreign process's cwd; it recreates a vanished
+        # directory as an empty placeholder and tells its own agent to move.
+        self.tool_cwd: dict[str, Any] = {
+            "last_known": None, "source": None, "observed_at": None, "exists": None,
+            "placeholder": None, "notice": "none", "repairs": 0}
+        self.tool_cwd_lock = threading.Lock()
+        self.tool_cwd_sampled_at = 0.0
+        self.tool_cwd_worktrees: set[str] | None = None
+        self.tool_cwd_repair_error: dict[str, Any] | None = None
+        self.cwd_notice_text: str | None = None
+        self.tool_cwd_probe_inflight = False
+        self.tool_cwd_notice_inflight = False
         # Issue #255: the one maintenance node this carrier runs, in memory.
         self.node: dict[str, Any] = {}
         self.node_start: threading.Thread | None = None
@@ -2731,6 +2778,8 @@ class Holder:
             "agent_message_errors": self.agent.handler_errors,
             "fatal_error": self.fatal_error,
             "turn_error": self.turn_error,
+            # Issue #369: the recorded tool cwd and its one repair state.
+            "tool_cwd": dict(self.tool_cwd),
             "resume_pending": self.resume_pending_id is not None,
             "created_at": getattr(self, "created_at", None),
             "updated_at": round(time.time(), 3),
@@ -3112,6 +3161,403 @@ class Holder:
         )
         self.events.append({"kind": "unsupported_agent_request", "method": method})
 
+    # -- Issue #369: the agent's tool cwd ---------------------------------------
+
+    def _cwd_guard(self) -> Any:
+        """The sibling cwd guard module, or None when this copy lacks it."""
+        cached = getattr(self, "_cwd_guard_module", None)
+        if cached is not None:
+            return cached or None
+        path = Path(__file__).resolve().with_name("kaola-cwd-guard.py")
+        if not path.is_file():
+            self._cwd_guard_module = False
+            return None
+        spec = importlib.util.spec_from_file_location("kaola_cwd_guard_holder", path)
+        if spec is None or spec.loader is None:
+            self._cwd_guard_module = False
+            return None
+        module = importlib.util.module_from_spec(spec)
+        previous = sys.dont_write_bytecode
+        sys.dont_write_bytecode = True
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.dont_write_bytecode = previous
+        self._cwd_guard_module = module
+        return module
+
+    def _cwd_route(self, code: str, path: str | None = None) -> str:
+        """The route text for one cwd code, single-sourced from the table."""
+        sentence = CWD_REPAIR_FAILED_FALLBACK
+        module = _wake_receipt_module()
+        if module is not None:
+            routes = module._load_recovery_routes()
+            if routes is not None:
+                _kind, text = routes.lookup(code)
+                if isinstance(text, str) and text.strip():
+                    sentence = text
+        if path:
+            sentence = sentence.replace("PATH", path).replace("REPO", self.args.repo)
+        return sentence
+
+    def _cwd_note_path(self, content: Any) -> str | None:
+        """Tier B: the one in-band carrier of the tool cwd."""
+        pattern = getattr(self.args, "tool_cwd_note_regex", None)
+        if not isinstance(pattern, str) or not pattern:
+            return None
+        text = _content_text(content)[:TOOL_CWD_CONTENT_MAX]
+        if not text:
+            return None
+        try:
+            match = re.search(pattern, text, re.MULTILINE)
+        except re.error:
+            return None
+        if match is None:
+            return None
+        path = (match.groupdict().get("path") or "").strip()
+        return path or None
+
+    def _cwd_v3_path(self, content: Any) -> str | None:
+        """V3: a spawn/chdir failure text, only where a tool forwards stderr.
+
+        The repair target is the recorded tool cwd; the shell named by the
+        error is only the proof that the binary itself is present."""
+        text = _content_text(content)[:TOOL_CWD_CONTENT_MAX]
+        if not text:
+            return None
+        known = self.tool_cwd.get("last_known")
+        if not isinstance(known, str) or not known:
+            return None
+        match = re.search(r"spawn (?P<shell>\S+) ENOENT", text)
+        if match is not None:
+            return known if os.path.exists(match.group("shell")) else None
+        if re.search(r"(chdir|getcwd|shell-init).*No such file", text):
+            return known
+        return None
+
+    def _cwd_sample(self) -> str | None:
+        """Tier C: one rate-limited cwd sample over this agent's own tree."""
+        now = time.monotonic()
+        if now - self.tool_cwd_sampled_at < TOOL_CWD_SAMPLE_SECONDS:
+            return None
+        self.tool_cwd_sampled_at = now
+        guard = self._cwd_guard()
+        if guard is None or self.agent.proc is None:
+            return None
+        table = guard.process_table()
+        if not table:
+            return None
+        pids = [pid for pid in guard.expand(table, [self.agent.proc.pid])
+                if pid != self.agent.proc.pid]
+        _probe, cwds, _unreadable = guard.read_cwds(pids)
+        candidates = [fact["cwd"] for fact in cwds.values()
+                      if isinstance(fact.get("cwd"), str) and fact["cwd"]]
+        if not candidates:
+            return None
+        # The deepest sampled cwd is a tool shell's, not the agent's own root.
+        return max(candidates, key=lambda item: len(Path(item).parts))
+
+    def _cwd_note(self, path: Any, source: str) -> None:
+        """Record one observation of the agent's tool cwd, then check it."""
+        if not isinstance(path, str) or not path:
+            return
+        now = round(time.time(), 3)
+        exists = os.path.isdir(path)
+        with self.tool_cwd_lock:
+            changed = (self.tool_cwd.get("last_known") != path
+                       or self.tool_cwd.get("source") != source)
+            self.tool_cwd.update(last_known=path, source=source, observed_at=now,
+                                 exists=exists)
+        if changed:
+            self.events.append({"kind": "tool_cwd_observed", "path": path,
+                                "source": source, "exists": exists})
+            self.write_record()
+        self._cwd_check(path)
+        # R4: a cwd outside the placeholder releases it.
+        self._cwd_cleanup()
+
+    def _cwd_check(self, path: Any) -> None:
+        """V1: a recorded path that no longer exists is the signal."""
+        if not isinstance(path, str) or not path or os.path.isdir(path):
+            return
+        with self.tool_cwd_lock:
+            self.tool_cwd["exists"] = False
+            self.tool_cwd["observed_at"] = round(time.time(), 3)
+        self.events.append({"kind": "tool_cwd_vanished", "path": path, "trigger": "V1"})
+        self._cwd_repair(path, "V1")
+
+    def _cwd_worktree_paths(self) -> set[str] | None:
+        """The registered worktree paths, or None when git cannot answer."""
+        try:
+            run = subprocess.run(["git", "-C", self.args.repo, "worktree", "list",
+                                  "--porcelain"],
+                                 capture_output=True, text=True, timeout=15)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if run.returncode != 0:
+            return None
+        return {line[len("worktree "):] for line in run.stdout.splitlines()
+                if line.startswith("worktree ")}
+
+    def _cwd_registered_worktree(self, path: str) -> bool:
+        """A path that is a registered worktree is never ours to touch.
+
+        An unreadable worktree list answers True: the holder does not create a
+        placeholder it cannot prove is unregistered."""
+        guard = self._cwd_guard()
+        paths = self._cwd_worktree_paths()
+        if paths is None or guard is None:
+            return True
+        return any(guard.same_path(item, path) for item in paths)
+
+    def _cwd_worktree_refresh(self, *, signal: bool = True) -> None:
+        """V2: a worktree path that disappeared is a signal of its own."""
+        paths = self._cwd_worktree_paths()
+        if paths is None:
+            return
+        guard = self._cwd_guard()
+        with self.tool_cwd_lock:
+            previous = self.tool_cwd_worktrees
+            self.tool_cwd_worktrees = paths
+            last = self.tool_cwd.get("last_known")
+        if previous is None or not signal or guard is None:
+            return
+        for path in sorted(previous - paths):
+            if isinstance(last, str) and last and guard.within(path, last):
+                self._cwd_check(last)
+                continue
+            if isinstance(last, str) and last:
+                continue
+            persistence = (getattr(self.args, "shell_cwd_persistence", "") or "").lower()
+            if persistence != "per-call":
+                self._cwd_repair(path, "V2")
+
+    def _cwd_notice_text(self, path: str) -> str:
+        return TOOL_CWD_NOTE.format(path=path, repo=self.args.repo,
+                                    ts=time.strftime("%Y-%m-%dT%H:%M:%S%z"))
+
+    def _cwd_stage_notice(self, path: str) -> None:
+        """R3: keep one notice pending until a boundary delivers it."""
+        text = self._cwd_notice_text(path)
+        staged = False
+        with self.worker_events_lock:
+            if any(item.get("kind") == "cwd_repaired" for item in self.pending_worker_events):
+                return
+            self.cwd_notice_text = text
+            self.tool_cwd["notice"] = "pending"
+            cursor = self.events.append({"kind": "tool_cwd_notice_staged", "path": path})
+            self.pending_worker_events.append({
+                "schema": WORKER_EVENT_SCHEMA,
+                "event_id": f"{self.args.platform}/{self.args.session}/cwd_repaired/{cursor}",
+                "kind": "cwd_repaired", "platform": self.args.platform,
+                "session": self.args.session, "repo": self.args.repo,
+                "reason": text, "event_cursor": cursor,
+                "staged_at": round(time.time(), 3), "host_owned": True})
+            staged = True
+        if staged:
+            self.write_record()
+
+    def _cwd_notice_delivered(self, via: str) -> None:
+        with self.tool_cwd_lock:
+            if self.tool_cwd.get("notice") != "pending":
+                return
+            self.tool_cwd["notice"] = "delivered"
+            self.cwd_notice_text = None
+        self.events.append({"kind": "tool_cwd_notice_delivered", "via": via})
+        self.write_record()
+
+    def _cwd_deliver_notice(self) -> dict[str, Any]:
+        """R3 delivery order: steer while a turn runs, else one self prompt.
+
+        An undelivered notice stays pending and is retried at every later
+        boundary; the repair never waits for it."""
+        with self.tool_cwd_lock:
+            if self.tool_cwd.get("notice") != "pending":
+                return {"delivered": False, "reason": "no pending notice"}
+            text = self.cwd_notice_text
+        if not isinstance(text, str) or not text:
+            return {"delivered": False, "reason": "no notice text"}
+        if self.turn["active"]:
+            if ((getattr(self.args, "native_steering", "") or "") == "supported"
+                    and getattr(self.args, "steer_method", "")):
+                receipt = self.op_steer({"method": self.args.steer_method, "text": text,
+                                         "timeout": STEER_TIMEOUT,
+                                         "_steer_source": "self"})
+                if receipt.get("steer_outcome") == "injected":
+                    self._cwd_notice_delivered("steer")
+                    return {"delivered": True, "via": "steer"}
+                return {"delivered": False, "reason": "steer not injected"}
+            return {"delivered": False, "reason": "turn-active"}
+        if self.agent.proc is None or self.agent.exited.is_set():
+            return {"delivered": False, "reason": "agent-not-running"}
+        # The staged cwd_repaired event rides the next self prompt; a Host
+        # carrier adds its heartbeat body, every other role a compact line.
+        return self._deliver_worker_events()
+
+    def _cwd_placeholder_drop(self, reason: str) -> None:
+        with self.tool_cwd_lock:
+            self.tool_cwd["placeholder"] = None
+        if self.tool_cwd_repair_error and \
+                self.tool_cwd_repair_error.get("code") == "cwd-placeholder-not-empty":
+            self.tool_cwd_repair_error = None
+
+    def _cwd_repair(self, path: str, trigger: str) -> None:
+        """R1: recreate a vanished path under the repo as an empty placeholder."""
+        guard = self._cwd_guard()
+        if guard is None or self.stop_requested:
+            return
+        repo = Path(self.args.repo)
+        with self.tool_cwd_lock:
+            if self.tool_cwd.get("placeholder") == path:
+                return
+        if not guard.within(repo, path) or guard.same_path(path, repo):
+            return
+        if self._cwd_registered_worktree(path):
+            return
+        try:
+            os.makedirs(path, exist_ok=True)
+        except OSError as exc:
+            self.tool_cwd_repair_error = {
+                "code": "cwd-repair-failed", "path": path, "message": str(exc),
+                "route": self._cwd_route("cwd-repair-failed", path)}
+            self.events.append({"kind": "tool_cwd_repair_failed", "path": path,
+                                "error": str(exc)})
+            self.write_record()
+            return
+        with self.tool_cwd_lock:
+            self.tool_cwd["placeholder"] = path
+            self.tool_cwd["repairs"] = int(self.tool_cwd.get("repairs") or 0) + 1
+            self.tool_cwd_repair_error = None
+        self.events.append({"kind": "tool_cwd_placeholder_created", "path": path,
+                            "trigger": trigger})
+        self.write_record()
+        self._cwd_stage_notice(path)
+
+    def _cwd_forget_placeholder_path(self, placeholder: str, last: Any) -> None:
+        """A dropped placeholder is not a path to watch: a removed directory
+        would otherwise read as a fresh vanish and be repaired again."""
+        guard = self._cwd_guard()
+        if guard is None or not isinstance(last, str) or not last:
+            return
+        if guard.within(placeholder, last):
+            with self.tool_cwd_lock:
+                self.tool_cwd["last_known"] = None
+                self.tool_cwd["exists"] = None
+                self.tool_cwd["source"] = None
+
+    def _cwd_cleanup(self, *, stopping: bool = False) -> None:
+        """R4: remove the empty placeholder once the shell reports elsewhere."""
+        guard = self._cwd_guard()
+        with self.tool_cwd_lock:
+            placeholder = self.tool_cwd.get("placeholder")
+            last = self.tool_cwd.get("last_known")
+        if not isinstance(placeholder, str) or not placeholder:
+            return
+        if not stopping and guard is not None and isinstance(last, str) and last \
+                and guard.within(placeholder, last):
+            return
+        if self._cwd_registered_worktree(placeholder):
+            self._cwd_placeholder_drop("registered worktree again")
+            self._cwd_forget_placeholder_path(placeholder, last)
+            self.events.append({"kind": "tool_cwd_placeholder_left", "path": placeholder,
+                                "reason": "registered worktree again"})
+            self.write_record()
+            return
+        try:
+            os.rmdir(placeholder)
+        except OSError as exc:
+            reason = "not-empty" if os.path.isdir(placeholder) else str(exc)
+            self.tool_cwd_repair_error = {
+                "code": "cwd-placeholder-not-empty", "path": placeholder,
+                "message": reason, "route": self._cwd_route("cwd-placeholder-not-empty",
+                                                             placeholder)}
+            self.events.append({"kind": "tool_cwd_placeholder_left", "path": placeholder,
+                                "reason": reason})
+            self.write_record()
+            return
+        self._cwd_placeholder_drop("removed")
+        self._cwd_forget_placeholder_path(placeholder, last)
+        self.events.append({"kind": "tool_cwd_placeholder_removed", "path": placeholder})
+        self.write_record()
+
+    def _cwd_resume_reconcile(self) -> None:
+        """Resume: keep tracking only a placeholder that still fits."""
+        with self.tool_cwd_lock:
+            placeholder = self.tool_cwd.get("placeholder")
+        if not isinstance(placeholder, str) or not placeholder:
+            return
+        guard = self._cwd_guard()
+        usable = (guard is not None and os.path.isdir(placeholder)
+                  and not self._cwd_registered_worktree(placeholder))
+        if usable:
+            try:
+                usable = not os.listdir(placeholder)
+            except OSError:
+                usable = False
+        if not usable:
+            self._cwd_placeholder_drop("resume")
+
+    def _cwd_tick(self, *, deliver: bool = False) -> None:
+        """The existing boundaries' one cwd check: V1, V2, R4, and R3 delivery.
+
+        Delivery never runs on the caller's thread: a status read and a turn
+        boundary must not wait on a steer or a prompt. A stopping holder
+        repairs nothing: its placeholder is already settled."""
+        if self.stop_requested:
+            return
+        self._cwd_worktree_refresh()
+        with self.tool_cwd_lock:
+            last = self.tool_cwd.get("last_known")
+            pending = self.tool_cwd.get("notice") == "pending"
+        if isinstance(last, str) and last:
+            self._cwd_check(last)
+            self._cwd_cleanup()
+        if deliver and pending and not self.tool_cwd_notice_inflight:
+            threading.Thread(target=self._cwd_notice_deliver_guarded, daemon=True).start()
+
+    def _cwd_notice_deliver_guarded(self) -> None:
+        self.tool_cwd_notice_inflight = True
+        try:
+            self._cwd_deliver_notice()
+        except Exception:
+            pass
+        finally:
+            self.tool_cwd_notice_inflight = False
+
+    def _cwd_tool_event(self, update: dict[str, Any]) -> None:
+        """Tier B, V3 and the tier C probe for one tool_call update.
+
+        The in-band text checks are cheap and stay inline. The process probe
+        and the worktree refresh run on a short-lived thread hung on this
+        existing event, so a slow ``lsof`` never stalls the ACP loop."""
+        content = update.get("content")
+        note = self._cwd_note_path(content)
+        if note:
+            self._cwd_note(note, "note")
+        else:
+            signal = self._cwd_v3_path(content)
+            if signal:
+                self.events.append({"kind": "tool_cwd_vanished", "path": signal,
+                                    "trigger": "V3"})
+                self._cwd_repair(signal, "V3")
+        if update.get("kind") == "execute" and update.get("status") == "in_progress":
+            threading.Thread(target=self._cwd_probe, daemon=True).start()
+
+    def _cwd_probe(self) -> None:
+        """Tier C plus the V2 refresh, at most one probe in flight."""
+        if self.tool_cwd_probe_inflight:
+            return
+        self.tool_cwd_probe_inflight = True
+        try:
+            self._cwd_worktree_refresh()
+            sample = self._cwd_sample()
+            if sample:
+                self._cwd_note(sample, "process")
+        except Exception:
+            pass
+        finally:
+            self.tool_cwd_probe_inflight = False
+
     def on_session_update(self, params: dict[str, Any]) -> None:
         update = params.get("update") or {}
         variant = update.get("sessionUpdate", "unknown")
@@ -3201,6 +3647,8 @@ class Holder:
                 record["error_head"] = str(update.get("content"))[:200]
             if not known:
                 turn["tool_order"].append(tool_id)
+            # Issue #369: the tool cwd rides on this same event.
+            self._cwd_tool_event(update)
         elif variant == "usage_update":
             if same_session:
                 turn["context_usage"] = {"used": update.get("used"), "size": update.get("size")}
@@ -3467,6 +3915,12 @@ class Holder:
     # -- ops ---------------------------------------------------------------------
 
     def op_state(self) -> dict[str, Any]:
+        # Issue #369: a status read is the existing scan tick for the agent's
+        # tool cwd; it never raises into the receipt.
+        try:
+            self._cwd_tick()
+        except Exception:
+            pass
         turn = self.turn
         if turn["active"]:
             activity = "waiting" if self.pending_permissions else "busy"
@@ -3520,6 +3974,10 @@ class Holder:
             "fatal_error": self.fatal_error,
             "turn_error": self.turn_error,
             "resume_pending": self.resume_pending_id is not None,
+            # Issue #369: the recorded tool cwd, and the one repair failure
+            # that still owes the operator a route.
+            "tool_cwd": dict(self.tool_cwd),
+            "tool_cwd_error": self.tool_cwd_repair_error,
         }
 
     def turn_receipt(self, wait_timeout: float | None = None,
@@ -3610,6 +4068,8 @@ class Holder:
         refusal = self._no_acp_session()
         if refusal is not None:
             return refusal
+        # Issue #369: a turn boundary refreshes the worktree set (V2).
+        self._cwd_worktree_refresh()
         with self.lock:
             expected = params.get("expected_holder_instance_id")
             if expected is not None and expected != self.holder_instance_id:
@@ -4607,6 +5067,29 @@ class Holder:
         if overflow_full_check:
             meta["overflow_full_check"] = True
         return "\n".join(lines), meta
+
+    def _worker_notice_payload(self, events: list[dict[str, Any]],
+                               overflow_full_check: bool = False
+                               ) -> tuple[str, dict[str, Any]]:
+        """Issue #369: the compact carrier for a non-Host holder's own events.
+
+        A worker seat never receives the Host's heartbeat body; the staged
+        event lines are the whole prompt."""
+        lines = [f"kaola-worker-notify/1: {self.args.platform} session {self.args.session}",
+                 "worker events (structured, one JSON object per line):"]
+        for event in events:
+            lines.append(json.dumps(
+                {key: event[key] for key in
+                 ("event_id", "kind", "platform", "session", "repo", "reason",
+                  "event_cursor", "request_id")
+                 if event.get(key) is not None},
+                ensure_ascii=False, sort_keys=True))
+        if overflow_full_check:
+            lines.append(OVERFLOW_FULL_CHECK_MARK)
+            lines.append(f"detailed worker-event queue is at capacity "
+                         f"{HEARTBEAT_EVENT_CAP}; at least one later worker event was not "
+                         "staged as a detailed line.")
+        return "\n".join(lines), {}
 
     def _established_non_host(self) -> bool:
         """A recorded role other than Host. An unknown role keeps the Host
@@ -6526,6 +7009,12 @@ class Holder:
         except Exception as exc:  # a node boundary must not take the holder down
             self.events.append({"kind": "sideagent_node_kick_failed", "error": str(exc)})
         self._deliver_compact_reload()
+        # Issue #369: the same boundary checks the agent's tool cwd and
+        # retries an undelivered notice.
+        try:
+            self._cwd_tick(deliver=True)
+        except Exception:
+            pass
 
     def _deliver_worker_events(self) -> dict[str, Any]:
         """Deliver every staged event as one ordinary prompt through the
@@ -6562,7 +7051,8 @@ class Holder:
                 return {"delivered": False, "reason": "agent-not-running"}
             if self.turn["active"]:
                 return {"delivered": False, "reason": "prompt-in-progress"}
-            text, meta = self._heartbeat_payload(staged, overflow_ready)
+            text, meta = (self._heartbeat_payload(staged, overflow_ready) if self.host_entry
+                          else self._worker_notice_payload(staged, overflow_ready))
             prompt = self.op_prompt({"text": text, "wait": False, "_prompt_source": "self"})
             error = prompt.get("error")
             if error or prompt.get("outcome") != "in_progress":
@@ -6579,6 +7069,9 @@ class Holder:
             self.host_attention_seen = meta.get("attention_fingerprint")
             for item in staged:
                 item["prompt_fingerprint"] = fingerprint
+            # Issue #369: this prompt carried the cwd-repair notice.
+            if any(item.get("kind") == "cwd_repaired" for item in staged):
+                self._cwd_notice_delivered("worker-event")
             if overflow_ready:
                 self.overflow_inflight_generation = overflow_generation
                 self.overflow_inflight_fingerprint = fingerprint
@@ -7023,6 +7516,9 @@ class Holder:
         """
         method = (params.get("method") or "").strip()
         text = params.get("text") or ""
+        # Issue #369: a holder-internal steer (the cwd notice) keeps its own
+        # attribution, so a queued follow-up is not counted as the Delegator's.
+        self_source = params.get("_steer_source") == "self"
         standard_prompt = method == "session/prompt" and self.args.platform in ("devin", "droid")
         base: dict[str, Any] = {
             "steer_method": method or None,
@@ -7084,10 +7580,14 @@ class Holder:
                         # owns the slot or the holder is stopping. Preserve that
                         # receipt; never cancel that prompt or retry the write.
                         # No _prompt_source: this follow-up is the Delegator's.
-                        sent = self.op_prompt({"text": text, "wait": False,
+                        # Issue #369: a holder-internal steer keeps "self".
+                        follow = {"text": text, "wait": False,
                             "expected_holder_instance_id": self.holder_instance_id,
                             "expected_prior_turn_request_id": turn_req_id,
-                            "expected_acp_session_id": session_id})
+                            "expected_acp_session_id": session_id}
+                        if self_source:
+                            follow["_prompt_source"] = "self"
+                        sent = self.op_prompt(follow)
                     self.events.append({"kind": "steer_followup", "queue_cursor": queue_cursor,
                         "turn_request_id": turn_req_id,
                         "original_turn": original_result,
@@ -7957,6 +8457,11 @@ class Holder:
         force = bool(params.get("force"))
         self.preserve_dispatched = bool(params.get("preserve_dispatched_workers"))
         self.state = "stopping"
+        # Issue #369: an exact stop takes its own empty placeholder with it.
+        try:
+            self._cwd_cleanup(stopping=True)
+        except Exception:
+            pass
         self.write_record()
         self._cancel_pending_permissions()
         self._reclaim_node()
@@ -8220,6 +8725,10 @@ class Holder:
                 params.pop("_prompt_source", None)
             return self.op_prompt(params)
         if op == "steer":
+            # Issue #369: a socket client must not claim a holder-internal steer.
+            if isinstance(params, dict):
+                params = dict(params)
+                params.pop("_steer_source", None)
             return self.op_steer(params)
         if op == "steer_interrupt":
             return self.op_steer_interrupt(params)
@@ -8342,6 +8851,12 @@ class Holder:
                 # The watchdog outlives any single retry; a broken flush must
                 # not take the idle-exit timer down with it.
                 pass
+            # Issue #369: the same tick is the tool-cwd status scan, and the
+            # one boundary that retries an undelivered notice.
+            try:
+                self._cwd_tick(deliver=True)
+            except Exception:
+                pass
             if self.session_role == "host":
                 try:
                     # Issue #255: the same tick offers new maintenance inputs
@@ -8430,6 +8945,8 @@ class Holder:
             # session/load resume: redeliver events the previous holder never
             # saw confirmed (Issue #62 phase 2).
             self._restore_worker_events()
+            # Issue #369: a resumed holder reconciles its placeholder claim.
+            self._cwd_resume_reconcile()
         if already_ready or "error" not in result:
             self._default_bind_sideagent()
         threading.Thread(target=self.idle_watcher, daemon=True).start()
@@ -8632,6 +9149,12 @@ def main() -> int:
     parser.add_argument("--resume-timeout", type=float, default=None)
     parser.add_argument("--init-meta", default="")
     parser.add_argument("--session-new-timeout", type=float, default=SESSION_NEW_TIMEOUT)
+    # Issue #369: the platform's tool-cwd facts (manifest fields), and the
+    # native steering entry the holder's own cwd notice may use.
+    parser.add_argument("--tool-cwd-note-regex", default=None)
+    parser.add_argument("--shell-cwd-persistence", default="")
+    parser.add_argument("--steer-method", default="")
+    parser.add_argument("--native-steering", default="")
     parser.add_argument("--host-entry", default=None)
     parser.add_argument("--host-name", default=None)
     parser.add_argument("--cli-version", default="")

@@ -86,8 +86,9 @@ When a call still fails this way - the shell binary exists and the tool answers
 `spawn <shell> ENOENT`, or a tool reports a cwd that is gone - the cwd was
 removed under the live shell. Recover in place, no Host restart: from outside
 that shell run `mkdir -p <gone-dir>`; in the shell `cd <canonical-root>`; then
-`rmdir <gone-dir>`; rerun the failed call. Route: `cwd-vanished`; the backstop
-sweep defers removal while a live cwd is inside a worktree (`live-cwd`).
+`rmdir <gone-dir>`; rerun the failed call. Route: `tool-cwd-vanished`; the
+backstop sweep defers removal while a live cwd is inside a worktree
+(`cwd-occupied`).
 
 ## Foreign files and finalize safeguards
 

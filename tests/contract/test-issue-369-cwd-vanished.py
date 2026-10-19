@@ -1,22 +1,17 @@
 #!/usr/bin/env python3
-"""Issue #369: a shell cwd removed under a live shell, and the removal guard.
+"""Issue #369: a removed tool-shell cwd, and the documented recovery.
 
-Tool level: the real ``kaola-dispatch.py sweep`` runs against a temp repo, a
-fake ``gh`` and a fake skills root, with a live process cwd inside a closed
-issue's linked worktree. The plan and the delete-time re-check both defer the
-removal (``live-cwd``), the receipt names the process and its cwd, the state
-alert carries the recovery, and the worktree survives. With that cwd gone the
-same worktree is planned again.
-
-Contract level: a shell tool that keeps its working directory between calls
-loses it to ``git worktree remove``. Every later call fails with ENOENT while
-the shell binary exists, and the documented route recovers the shell in place
-with no Host restart.
+A shell tool that keeps its working directory between calls loses it to
+``git worktree remove``. Every later call fails with ENOENT while the shell
+binary exists, and the ``tool-cwd-vanished`` route recovers the shell in place
+with no Host restart. The sweep-side guard and the holder-side repair have
+their own suites (``test-issue-369-worktree-guard.py`` and
+``test-issue-369-holder-cwd-repair.py``); this one pins the failure itself, the
+route text, and the Host guidance that ships.
 """
 
 from __future__ import annotations
 
-import argparse
 import importlib.util
 import json
 import os
@@ -28,35 +23,9 @@ import unittest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-DISPATCH = REPO / "scripts" / "kaola-dispatch.py"
 ROUTES_PATH = REPO / "scripts" / "kaola-recovery-routes.py"
-ISSUE348 = REPO / "tests" / "contract" / "test-issue-348-backstop-sweep.py"
 SHELL_BIN = next((path for path in ("/bin/zsh", "/bin/bash", "/bin/sh")
                   if os.path.exists(path)), None)
-
-
-def load_module(name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None, path
-    module = importlib.util.module_from_spec(spec)
-    previous = sys.dont_write_bytecode
-    sys.dont_write_bytecode = True
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        sys.dont_write_bytecode = previous
-    return module
-
-
-dispatch = load_module("kaola_dispatch_i369", DISPATCH)
-routes = load_module("kaola_recovery_routes_i369", ROUTES_PATH)
-issue348 = load_module("issue348_i369", ISSUE348)
-
-# Issue #348's tool harness (temp repo, fake gh, fake skills root) as a plain
-# mixin: its own tests stay in its own suite and are not replayed here.
-SweepHarness = type("SweepHarness", (), {
-    name: value for name, value in vars(issue348.SweepTool).items()
-    if not name.startswith("test_") and not name.startswith("__")})
 
 # The platform shell tool model: a recorded cwd, one shell per call, and the
 # cwd advancing only when the call itself succeeds.
@@ -101,6 +70,22 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
   console.log(JSON.stringify(answer));
 });
 """
+
+
+def load_module(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None, path
+    module = importlib.util.module_from_spec(spec)
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous
+    return module
+
+
+routes = load_module("kaola_recovery_routes_i369", ROUTES_PATH)
 
 
 class ToolShell:
@@ -202,107 +187,34 @@ class RemovedCwd(unittest.TestCase):
         self.assertFalse(self.worktree.exists())
 
     def test_the_route_names_the_symptom_and_the_recovery(self) -> None:
-        kind, text = routes.ROUTES["cwd-vanished"]
+        kind, text = routes.ROUTES["tool-cwd-vanished"]
         self.assertEqual(kind, "route")
-        for needle in ("ENOENT", "shell binary exists", "mkdir -p", "cd <repo-root>",
-                       "rmdir", "restarting the Host"):
+        for needle in ("removed", "mkdir -p", "cd REPO", "rmdir PATH",
+                       "Do not stop or restart the session"):
             self.assertIn(needle, text, needle)
-        self.assertEqual(routes.lookup("cwd-vanished")[0], "route")
+        self.assertEqual(routes.lookup("tool-cwd-vanished")[0], "route")
 
-    def test_an_unreadable_process_table_keeps_the_worktree(self) -> None:
-        """No process table means an unverified cwd state, never a removal."""
-        saved = dispatch._sweep_ps
-        dispatch._sweep_ps = lambda: {}
-        try:
-            self.assertIsNone(dispatch._sweep_watch_pids([], self.repo))
-        finally:
-            dispatch._sweep_ps = saved
-        self.assertEqual(dispatch._sweep_cwd_keep(self.repo, None),
-                         ("cwd-unverified", {"cwd_probe": "ps"}))
-        self.assertIn("cwd-unverified", routes.ROUTES)
+    def test_the_holder_codes_have_their_designed_kinds(self) -> None:
+        for code, kind in (("tool-cwd-vanished", "route"),
+                           ("tool-cwd-unknown", "self-route"),
+                           ("cwd-occupied", "route"),
+                           ("cwd-unverifiable", "self-route"),
+                           ("cwd-repair-failed", "route"),
+                           ("cwd-placeholder-not-empty", "self-route")):
+            self.assertIn(code, routes.ROUTES)
+            self.assertEqual(routes.ROUTES[code][0], kind, code)
 
     def test_the_host_guidance_carries_the_rule_and_the_route(self) -> None:
         for path in (REPO / "templates" / "orchestrator" / "references" / "workflow-worktree.md",
                      REPO / "skills" / "kaola-project-runner" / "references" / "workflow-worktree.md"):
             text = path.read_text(encoding="utf-8")
             for needle in ("Acceptance and every re-run", "spawn <shell> ENOENT",
-                           "cwd-vanished", "live-cwd"):
+                           "tool-cwd-vanished", "cwd-occupied"):
                 self.assertIn(needle, text, f"{needle} in {path}")
         brick = (REPO / "templates" / "kaola-delegator" / "references" / "host-brick.md"
                  ).read_text(encoding="utf-8")
-        self.assertIn("cwd-vanished", brick)
+        self.assertIn("tool-cwd-vanished", brick)
         self.assertIn("no replacement", brick)
-
-
-class SweepLiveCwd(SweepHarness, unittest.TestCase):
-    """The real sweep against a linked worktree a live process sits in."""
-
-    def test_apply_defers_removal_under_a_live_cwd(self) -> None:
-        if SHELL_BIN is None:
-            self.skipTest("no shell binary on this host")
-        self.init_state()
-        worktree = self.add_worktree(21)
-        self.issues["21"] = "CLOSED"
-        self.prs["21"] = self.worktree_head(worktree)
-        self.write_gh()
-        live = subprocess.Popen([SHELL_BIN, "-c", "while :; do sleep 5; done"],
-                                cwd=str(worktree))
-        try:
-            self.set_rows([{"platform": "zcode", "session": "zcode-KT-orchestrator-main",
-                            "repo": str(self.repo), "identity": "verified",
-                            "name_role": "host", "session_role": "host",
-                            "holder_instance_id": "host-1", "state": "ready",
-                            "holder_pid": live.pid}])
-            code, out = self.sweep("--apply")
-            self.assertEqual(code, 0, out)
-            self.assertEqual(out["result"], "nothing", out)
-            self.assertEqual(out["removed"], [], out)
-            kept = [item for item in out["kept"] if item.get("kept") == "live-cwd"]
-            self.assertEqual(len(kept), 1, out["kept"])
-            item = kept[0]
-            self.assertEqual(Path(item["path"]).resolve(), worktree.resolve())
-            holders = item["cwd_holders"]
-            self.assertIn(live.pid, [holder["pid"] for holder in holders])
-            self.assertTrue(any(str(worktree) in holder["cwd"] for holder in holders), holders)
-            self.assertTrue(worktree.exists())
-            self.assertIn("live-cwd", routes.ROUTES)
-
-            alert = self.doc()["state"]["alerts"]["sweep-kept"]
-            self.assertIn("live process cwd", alert["inputs"][item["id"]]["next"])
-            self.assertIn("project root", alert["inputs"][item["id"]]["next"])
-
-            # The delete-time re-check defers on its own, not only the plan.
-            outcome, why = dispatch._sweep_apply_candidate(
-                {"id": item["id"], "kind": "worktree", "path": str(worktree.resolve()),
-                 "issue": 21},
-                argparse.Namespace(live=str(self.acp_rows)), self.repo.resolve(), None,
-                {}, set())
-            self.assertEqual((outcome, why), ("kept", "live-cwd"))
-            self.assertTrue(worktree.exists())
-        finally:
-            live.terminate()
-            live.wait(timeout=30)
-
-        # The deferral was that cwd: with it gone the worktree is planned again.
-        code, out = self.sweep("--dry-run")
-        self.assertEqual(code, 0, out)
-        planned = [ident for ident in (item["id"] for item in out["candidates"])
-                   if ident.startswith("worktree:") and "issue-21" in ident]
-        self.assertEqual(len(planned), 1, out["candidates"])
-
-    def test_the_guard_does_not_keep_an_idle_worktree(self) -> None:
-        """No live cwd: the ordinary removal path is unchanged."""
-        self.init_state()
-        worktree = self.add_worktree(22)
-        self.issues["22"] = "CLOSED"
-        self.prs["22"] = self.worktree_head(worktree)
-        self.write_gh()
-        self.set_rows([])
-        code, out = self.sweep("--apply")
-        self.assertEqual((code, out["result"]), (0, "swept"), out)
-        self.assertFalse(worktree.exists())
-        self.assertTrue(any(ident.startswith("worktree:") and "issue-22" in ident
-                            for ident in out["removed"]), out)
 
 
 if __name__ == "__main__":

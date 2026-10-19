@@ -1122,6 +1122,15 @@ def command_list(args: argparse.Namespace) -> dict[str, Any]:
             "holder_pid": pid,
             "holder_instance_id": record.get("holder_instance_id"),
             "agent_alive": agent_alive,
+            # Issue #369: the cwd guard's tree roots and the recorded tool cwd.
+            # Additive row fields; an older record leaves them null.
+            "agent_pid": record.get("agent_pid"),
+            "agent_pgid": record.get("agent_pgid"),
+            "agent_child_pgids": record.get("agent_child_pgids") or [],
+            "tool_cwd_path": ((record.get("tool_cwd") or {}).get("last_known")
+                              if isinstance(record.get("tool_cwd"), dict) else None),
+            "tool_cwd_exists": ((record.get("tool_cwd") or {}).get("exists")
+                                if isinstance(record.get("tool_cwd"), dict) else None),
             "event_cursor": cursor,
             "mutation_status": mutation,
             "pending_count": len(pending) if isinstance(pending, list) else 0,
@@ -6229,6 +6238,12 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
     holder_argv += ["--host-entry", args.manifest.get("host_skill_entry") or "",
                     "--host-name", args.manifest.get("runtime_name") or args.platform]
     holder_argv += ["--session-new-timeout", repr(session_new_timeout(args))]
+    # Issue #369: the platform's measured tool-cwd facts, and the native
+    # steering entry the holder's own cwd notice may use.
+    holder_argv += ["--tool-cwd-note-regex", str(args.manifest.get("tool_cwd_note_regex") or ""),
+                    "--shell-cwd-persistence", str(args.manifest.get("shell_cwd_persistence") or ""),
+                    "--steer-method", (args.manifest.get("acp_steer_method") or "").strip(),
+                    "--native-steering", (args.manifest.get("native_steering") or "").strip()]
     init_meta = parse_manifest_meta(args.manifest.get("acp_init_meta") or "")
     if init_meta:
         holder_argv += ["--init-meta", json.dumps(init_meta)]
