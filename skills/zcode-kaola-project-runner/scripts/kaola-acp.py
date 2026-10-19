@@ -6692,22 +6692,45 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
                     receipt["fast"] = fast_report(args, policy, "none", False)
         if args.platform == "dsh":
             value, source = dsh_permission_mode(args)
-            entry: dict[str, Any] = {"applied": True, "applied_via": "env",
-                                     "env": DSH_PERMISSION_ENV, "value": value,
-                                     "source": source}
             if args.resume or args.use_continue:
                 # Issue #363: dsh pins the permission preset into the session
                 # log at creation and keeps the recorded value on resume, so
                 # the launch variable travels but never applies to a resumed
                 # session. Report the request separately from the session's
                 # own effective facts, read back from that log.
-                entry = {"applied": False, "requested_via": "env",
-                         "env": DSH_PERMISSION_ENV, "value": value,
-                         "source": source, "reason": "resumed-session-permission"}
+                entry: dict[str, Any] = {"applied": False, "requested_via": "env",
+                                         "env": DSH_PERMISSION_ENV, "value": value,
+                                         "source": source, "reason": "resumed-session-permission"}
                 effective_mode = dsh_session_permission(repo, receipt.get("acp_session_id"))
                 if effective_mode is not None:
                     entry["effective"] = effective_mode
                     entry["effective_via"] = "session-log"
+            else:
+                # Issue #360: ``applied`` follows the environment the holder
+                # was actually launched with, not the intent. A direct spawn
+                # gets ``holder_env`` verbatim; the broker receipt names the
+                # keys its filter passed (``env_keys``). A reconciled
+                # "existing" holder was spawned by an earlier start, so this
+                # one delivered no environment — its own start record carries
+                # that evidence.
+                launch = (launched or {}).get("launch") or {}
+                env_keys = launch.get("env_keys")
+                if launched is None:
+                    delivered = holder_env.get(DSH_PERMISSION_ENV)
+                    reason = "holder-env-missing"
+                elif isinstance(env_keys, list):
+                    delivered = (value if DSH_PERMISSION_ENV in env_keys else None)
+                    reason = "dropped-by-launch-env-filter"
+                else:
+                    delivered = None
+                    reason = ("existing-holder-env-not-redelivered"
+                              if launch.get("result") == "existing"
+                              else "env-census-absent")
+                entry = {"applied": delivered is not None,
+                         "applied_via": "env", "env": DSH_PERMISSION_ENV,
+                         "value": delivered or value, "source": source}
+                if delivered is None:
+                    entry["reason"] = reason
             application["mode"] = entry
             mode_value = None
         if mode_value and "error" not in receipt:

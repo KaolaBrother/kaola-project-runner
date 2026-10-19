@@ -802,8 +802,14 @@ def do_submit(args: argparse.Namespace) -> dict:
         if os_job_owns(backend, label, spec_path):
             os_wait_stopped(backend, label, 5.0)
             os_unload(backend, label)
+        # ``env_keys`` names, never values: the caller compares the keys it
+        # intended for the holder against what the filter actually passed, so
+        # its receipt states the delivered environment, not the requested one.
+        # A reconciled "existing" answer carries no env_keys because this
+        # submit spawned nothing.
         out = {"schema": SCHEMA, "result": "ready", "reconciled": False,
-               "label": label, "backend": backend, **ready_facts(verified)}
+               "label": label, "backend": backend, "env_keys": sorted(env),
+               **ready_facts(verified)}
         if stale_reaped:
             out["stale_job_reaped"] = True
         if receipt.get("child_record") is not None:

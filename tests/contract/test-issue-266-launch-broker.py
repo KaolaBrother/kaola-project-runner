@@ -280,6 +280,8 @@ def test_reconcile_and_running_job(sb: Sandbox) -> None:
           "a repeated submit reconciles the verified holder")
     check(second.get("holder_pid") == first.get("holder_pid"),
           "the reconciled holder is the same instance")
+    check("env_keys" not in second,
+          "a reconciled submit reports no env census — it spawned nothing")
     sb.client("stop", "--force")
     wait_until(lambda: not pid_alive(first.get("holder_pid")), 10, "first holder gone")
 
@@ -307,6 +309,13 @@ def test_survival_control_and_child_record(sb: Sandbox) -> None:
     receipt = sb.submit(sb.mock_command("--scenario", "slow", "--turn-ms", "6000",
                                         "--steering", "injected"), child_record=True)
     check(receipt.get("result") == "ready", "broker reports ready from the verified holder")
+    # Issue #360: the ready receipt names the env keys the filter passed so the
+    # caller's receipt can state what was delivered, never the intent.
+    check("MOCK_ACP_LOG" in (receipt.get("env_keys") or []),
+          "the ready receipt's env census includes an allowlisted key",
+          env_keys=receipt.get("env_keys"))
+    check("GROKBOT_APP_SESSION" not in (receipt.get("env_keys") or []),
+          "the env census excludes names the filter dropped")
     holder_pid = receipt.get("holder_pid")
     sb.track(holder_pid)
     ppid = subprocess.run(["ps", "-o", "ppid=", "-p", str(holder_pid)],
