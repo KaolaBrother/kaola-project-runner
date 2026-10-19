@@ -8734,7 +8734,7 @@ SWEEP_RECEIPT_SCHEMA = "kaola-sweep/1"
 WORKTREE_REMOVE_SCHEMA = "kaola-worktree-remove/1"
 
 
-def _sweep_git(repo: Path, *argv: str) -> tuple[int, str]:
+def _sweep_git(repo: Path, *argv: str, detail_stderr: bool = False) -> tuple[int, str]:
     try:
         run = subprocess.run(["git", "-C", str(repo), *argv],
                              capture_output=True, text=True, timeout=30)
@@ -8743,6 +8743,10 @@ def _sweep_git(repo: Path, *argv: str) -> tuple[int, str]:
         return 1, ""
     except (OSError, subprocess.SubprocessError):
         return 1, ""
+    if detail_stderr:
+        # Deviation b: git reports a failed removal on stderr; stdout would
+        # leave the wrapper's `detail` empty.
+        return run.returncode, (run.stderr or run.stdout)
     return run.returncode, run.stdout
 
 
@@ -9049,7 +9053,7 @@ def _worktree_remove(args: argparse.Namespace, repo: Path, target: Path,
     argv = ["worktree", "remove"]
     if force:
         argv.append("--force")
-    rc, out = _sweep_git(repo, *argv, "--", str(target))
+    rc, out = _sweep_git(repo, *argv, "--", str(target), detail_stderr=True)
     if rc != 0:
         receipt.update(result="deferred", reason="remove-failed",
                        detail=out.strip()[:400])

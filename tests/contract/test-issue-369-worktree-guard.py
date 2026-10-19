@@ -169,8 +169,59 @@ class WorktreeGuard(SweepHarness, unittest.TestCase):
         self.assertTrue(path.is_dir())
         self.assertEqual(list(path.iterdir()), [])
 
+    def test_remove_failed_detail_carries_git_stderr(self) -> None:
+        """Deviation b: git reports a failed removal on stderr, so `detail`
+        must not be empty."""
+        path = self.add_worktree(46)
+        locked = subprocess.run(["git", "-C", str(self.repo), "worktree", "lock",
+                                 str(path)], capture_output=True, text=True)
+        self.assertEqual(locked.returncode, 0, locked.stderr)
+        try:
+            args = argparse.Namespace(live=None, skills_root=None, assume_clear=False,
+                                      all_user_processes=False)
+            receipt = dispatch._worktree_remove(args, self.repo.resolve(), path.resolve(),
+                                                rows=[], known=True)
+            self.assertEqual(receipt["result"], "deferred", receipt)
+            self.assertEqual(receipt["reason"], "remove-failed", receipt)
+            self.assertTrue(receipt.get("detail"), receipt)
+            self.assertIn("locked", receipt["detail"], receipt)
+            self.assertTrue(path.exists())
+        finally:
+            subprocess.run(["git", "-C", str(self.repo), "worktree", "unlock", str(path)],
+                           capture_output=True)
+
+    def _unavailable_probe_linux(self, path: Path) -> None:
+        """Linux always has /proc, so an absent lsof is not an unavailable
+        probe; simulate the unreadable /proc answer ``read_cwds`` reports."""
+        guard = dispatch._load_cwd_guard()
+        saved = guard.read_cwds
+        guard.read_cwds = lambda pids: ("proc", {}, True)
+        try:
+            repo = self.repo.resolve()
+            args = argparse.Namespace(live=None, skills_root=None, assume_clear=False,
+                                      all_user_processes=False)
+            occupancy = dispatch._worktree_occupancy(args, repo, path.resolve(),
+                                                     rows=[], known=True)
+            self.assertEqual(occupancy["result"], "unverifiable", occupancy)
+            receipt = dispatch._worktree_remove(args, repo, path.resolve(),
+                                                rows=[], known=True)
+            self.assertEqual(receipt["result"], "deferred", receipt)
+            self.assertEqual(receipt["reason"], "cwd-unverifiable", receipt)
+            self.assertTrue(path.exists())
+            args.assume_clear = True
+            receipt = dispatch._worktree_remove(args, repo, path.resolve(),
+                                                rows=[], known=True)
+            self.assertEqual(receipt["result"], "removed", receipt)
+            self.assertFalse(path.exists())
+        finally:
+            guard.read_cwds = saved
+
     def test_unavailable_probe_defers_and_assume_clear_overrides(self) -> None:
         path = self.add_worktree(45)
+        if sys.platform.startswith("linux"):
+            # Deviation e: the /proc probe always answers on Linux.
+            self._unavailable_probe_linux(path)
+            return
         # A PATH with the tools the wrapper needs and no cwd probe.
         stub = Path(self.tmp.name) / "no-probe-bin"
         stub.mkdir(exist_ok=True)

@@ -90,12 +90,18 @@ def thought_chunk(session_id: str, text: str, message_id: str | None = None) -> 
 class MockAgent:
     def __init__(self, scenario: str, caps: set[str], turn_ms: int, flood_bytes: int,
                  steering: str = "none", ignore_cancel: bool = False,
-                 caps_objects: bool = False, cwd_vanish: dict[str, str] | None = None):
+                 caps_objects: bool = False, cwd_vanish: dict[str, str] | None = None,
+                 resume_any: bool = False):
         self.scenario = scenario
         # Issue #369: the cwd_vanish script's inputs. The launch environment
         # allowlist drops MOCK_* names, so they arrive as argv.
         self.cwd_vanish = cwd_vanish or {}
         self.cwd_vanish_runs = 0
+        # Issue #369 tier C: one descendant process with a cwd of its own.
+        self.cwd_child: subprocess.Popen | None = None
+        # The launch broker drops MOCK_* from the agent env, so a contract
+        # that resumes an id minted by a killed process says so on argv.
+        self.resume_any = resume_any
         # Issue #65: native mid-turn steering. "none" leaves `_session/steering`
         # unimplemented (JSON-RPC -32601), exactly like a platform without the
         # entry; every other value advertises `_meta.steering` and answers.
@@ -429,7 +435,8 @@ class MockAgent:
         if session_id not in self.sessions:
             # Opt-in for contract tests: a new process can resume an id the
             # previous process minted. Production agents persist that id themselves.
-            if os.environ.get("MOCK_ACP_RESUME_ANY") == "1" and session_id:
+            if (self.resume_any or os.environ.get("MOCK_ACP_RESUME_ANY") == "1") \
+                    and session_id:
                 self.sessions[session_id] = {"cwd": params.get("cwd", "")}
             else:
                 respond(request_id, error={"code": -32002, "message": "unknown sessionId"})
@@ -687,6 +694,24 @@ class MockAgent:
 
     # -- prompt turn scenarios -----------------------------------------------
 
+    def spawn_cwd_child(self, kind: str, cwd: str) -> None:
+        """Issue #369 tier C: a descendant whose exe is a shell, or is not."""
+        if not cwd or not os.path.isdir(cwd):
+            return
+        if kind == "shell":
+            shell = next((path for path in ("/bin/zsh", "/bin/bash", "/bin/sh")
+                          if os.path.exists(path)), None)
+            if shell is None:
+                return
+            argv = [shell, "-c", "while :; do sleep 5; done"]
+        else:
+            argv = [sys.executable, "-c", "import time; time.sleep(60)"]
+        try:
+            self.cwd_child = subprocess.Popen(
+                argv, cwd=cwd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except OSError:
+            self.cwd_child = None
+
     def run_cwd_vanish(self, session_id: str, request_id: Any) -> None:
         """Issue #369: the ZCode Read note carries the tool cwd.
 
@@ -726,6 +751,24 @@ class MockAgent:
             while target and not os.path.isdir(target) and time.time() < deadline:
                 time.sleep(0.05)
 
+        if mode == "v3_unknown":
+            for index in range(2):
+                execute(f"exec-v3u-{index}", "spawn /bin/zsh ENOENT", "failed")
+            log_event({"event": "cwd_vanish_v3_unknown_sent"})
+            message_chunk(session_id, "MOCK-REPLY cwd-v3-unknown")
+            self.finish_turn(request_id)
+            return
+        if mode in ("tier_c_nonshell", "tier_c_shell"):
+            self.spawn_cwd_child("shell" if mode == "tier_c_shell" else "python", target)
+            execute("exec-tier-c", "echo shell-ok", "in_progress")
+            log_event({"event": "cwd_vanish_execute_sent", "path": target, "mode": mode})
+            end = time.time() + 5
+            while marker and not os.path.exists(marker) and time.time() < end:
+                time.sleep(0.05)
+            time.sleep(2)
+            message_chunk(session_id, "MOCK-REPLY cwd-tier-c")
+            self.finish_turn(request_id)
+            return
         if mode in ("note_repo",) or (mode == "note_then_repo" and self.cwd_vanish_runs > 1):
             note("read-2", repo)
             log_event({"event": "cwd_vanish_repo_note_sent", "path": repo})
@@ -1209,6 +1252,8 @@ def main() -> int:
     parser.add_argument("--turn-ms", type=int, default=0)
     parser.add_argument("--flood-bytes", type=int, default=1024 * 1024)
     parser.add_argument("--ignore-cancel", action="store_true")
+    parser.add_argument("--resume-any", action="store_true",
+                        help="resume an id this process did not mint")
     parser.add_argument("--steering", default="none",
                         choices=("none", "injected", "promptRequired", "startedNewTurn",
                                  "error", "silent", "weird"))
@@ -1229,6 +1274,7 @@ def main() -> int:
     agent = MockAgent(args.scenario, caps, args.turn_ms, args.flood_bytes,
                       steering=args.steering, ignore_cancel=args.ignore_cancel,
                       caps_objects=args.caps_objects,
+                      resume_any=args.resume_any,
                       cwd_vanish={"path": args.cwd_vanish_path, "repo": args.cwd_vanish_repo,
                                   "mode": args.cwd_vanish_mode,
                                   "marker": args.cwd_vanish_marker,
