@@ -853,7 +853,10 @@ holder does not advertise `heartbeat-state/2`. The tool refuses rather than trun
 [--skills-root DIR] [--live FILE]` removes residues the main flow missed. `--file` defaults to
 `<repo>/.kaola/heartbeat-prompt.json`. Exactly one mode is required. Output is one
 `kaola-sweep/1` receipt: `{result: planned|nothing|swept|recorded-empty|candidates|refused,
-mode, key, candidates, kept, removed, skipped, head, accepted_revision, forge}`.
+mode, key, candidates, kept, removed, skipped, head, accepted_revision, forge, acp,
+timed_out, recovery?}`. `acp` is `"known"` or `"unavailable"` (#353: an unanswered list is
+`acp-unknown` skips, never removal); `timed_out` names the child tools whose calls timed out
+(`git`, `gh`, `acp`; always present, `[]` when none).
 `accepted_revision` is the verified caller record's value on apply/record-empty, null
 otherwise. `key` is the
 first 16 hex of the sha256 of the sorted candidate ids (`""` when none). Candidate ids are
@@ -862,7 +865,8 @@ stable: `session:<platform>/<session>@<holder>`, `worktree:<resolved path>@<HEAD
 
 The candidate set is a closed rule set; everything else is never touched:
 
-- **S1** a `list --repo ROOT --include-dead` row whose repo is ROOT, `name_role` `worker`,
+- **S1** a `list --include-dead` row (one global list per scan since #353, partitioned by
+  repo) whose repo is ROOT, `name_role` `worker`,
   issue parsed from the session name, issue CLOSED, `identity` `verified` - never a
   `session_role` host/sideagent row, the bound Sideagent session, or the caller's own session;
   a dead row is not a candidate. `status` is then read: `turn-active`, `permission-pending`
@@ -883,10 +887,17 @@ The candidate set is a closed rule set; everything else is never touched:
   (`SWEEP_STALE_SECONDS`). Nothing else in `.kaola/` - state, backups, dispatch indices,
   locks, webhook files, session records - is touched.
 
-Completion is a forge fact only: `gh issue view N --json state` (cwd ROOT, ~20 s) reports the
-issue CLOSED. `gh` missing or failing is `forge: "unavailable"`: every issue-linked item goes
-to `skipped` as `forge-unknown`, never to kept, and nothing is removed. An open issue is
-silently not a candidate. Only issue numbers appearing in sessions or worktrees are queried.
+Completion is a forge fact only: the issue is CLOSED. Issue #353 batches the lookup: one
+`gh api graphql` call per chunk of 50 issues (issue state plus merged PR heads for
+`workflow/issue-N` in one query, `KAOLA_SWEEP_FORGE_TIMEOUT` seconds, default 20). An
+answered but unusable call (nonzero exit, unparseable JSON, a missing issue or non-string
+state) falls back to the serial per-issue `gh issue view` + `gh pr list` path for ALL
+issues; a timeout or OSError answers `forge: "unavailable"` directly with no fallback - a
+stuck `gh` would hang the fallback too. `gh` failing is `forge: "unavailable"`: every
+issue-linked item goes to `skipped` as `forge-unknown`, never to kept, and nothing is
+removed. An open issue is silently not a candidate. Only issue numbers appearing in
+sessions or worktrees are queried. Merged-PR heads are a set per issue - any merged head
+matches.
 `--dry-run` writes nothing at all (no state write, no prune, no stop, no fetch); it still runs
 the read-only list/status/gh/git calls.
 
@@ -894,11 +905,22 @@ the read-only list/status/gh/git calls.
 or the bound node with `--batch B`, verified like `recovery-input` batches - the node record's
 dispatcher is this repo's Host carrier and that carrier's events hold `sideagent_node_batch`
 with `batch` B, `target_holder` the caller, and a `sweep` object; the plan is then that event's
-`sweep.candidates`. Only planned ids still candidates on re-scan are applied (others land in
+`sweep.candidates`. Since #353 apply re-verifies only planned candidates, never a rescan: a
+Host apply reuses its own scan's forge facts; a node apply rebuilds items from the stable
+plan ids, spends one batched forge call and one `git worktree list`, and gates sessions and
+worktrees on issue CLOSED (`forge: "unavailable"` → `forge-unknown`). Per candidate the
+checks are re-verified right before removal; each worktree removal spends one global
+`list --include-dead` and an unanswered list is `skipped` as `acp-unknown`, never removed.
+The event's `sweep.kept` (the dry-run receipt's kept list) seeds `sweep-kept`; planned items
+that re-verify kept join it. Only planned ids still candidates are applied (others land in
 `skipped` as `no-longer-candidate`; new candidates wait for the next sweep). Apply order:
 sessions, worktrees, prune, files. Then, under the state lock, `maintenance.last_sweep` is
-written and the kept alert synced; without a state file the actions stand and nothing is
-written. Any other caller is refused (nonzero exit). `--record-empty` is Host-only: a re-scan
+written and the kept alert synced. Since #353, `--apply` and `--record-empty` validate the
+state file BEFORE any scan or action (`require_current`); a refusal exits 2 carrying the
+existing reason (`state-missing`, `legacy-format`, `schema-unsupported`,
+`state-unreadable`) plus a `recovery` hint with the exact `state` command(s); nothing is
+stopped, removed, pruned or written. `--dry-run` keeps its tolerant read. Any other caller
+is refused (nonzero exit). `--record-empty` is Host-only: a re-scan
 with candidates answers `result: candidates` and writes nothing; otherwise it writes
 `last_sweep` (`batch` null) and syncs the alert - `recorded-empty`.
 
@@ -923,15 +945,23 @@ moved (`merge`), or `at` is older than the interval (`interval`; `KAOLA_SWEEP_IN
 positive float hours, default 24, invalid falls back to 24). An event only makes it due
 earlier; once a sweep records the new head/revision it is handled. Not due spends nothing but
 the cheap `rev-parse` - no scan subprocess, no event, no node, no wake. Due runs
-`sweep --dry-run` in a daemon thread. A scan error is one `sideagent_sweep_scan_failed` event,
-not retried inside the interval. No candidates runs `sweep --record-empty`, moves the due mark
+`sweep --dry-run` in a daemon thread. Since #353 the tool child is bounded by
+`SWEEP_SCAN_TIMEOUT_SECONDS` (600 s): it runs in its own process group and a timeout kills
+the group. A scan error - or since #353 any receipt with a non-empty `timed_out` - is one
+`sideagent_sweep_scan_failed` event, cools down for the interval, and never runs
+record-empty or queues a batch; a plain `forge`/`acp` `"unavailable"` without a timeout
+keeps the existing planned/record-empty behaviour. Anti-starvation (#353): a due sweep that
+keeps losing to pending reconcile input becomes overdue (immediately when the `interval`
+reason is twice the interval old, otherwise once deferred for one interval) and then runs at
+the idle boundary even with input pending; still never during a Host turn. No candidates runs `sweep --record-empty`, moves the due mark
 and appends `sideagent_sweep_empty` - no node, no staged Host event, no wake, `host_revision`
 unchanged. Candidates queue exactly one batch keyed by `key`. The send reuses the reconcile
 start/send path (a fresh node from the recipe when no live node target): batch id
 `s-<sha256([target holder, key])[:12]>`, one prompt carrying the exact
 `sweep --apply --batch B` command, and a `sideagent_node_batch` event with `batch`,
 `target_holder`, `host_holder`, the unchanged handled `host_revision_through`,
-`prompt_fingerprint` and `sweep: {key, candidates, reason}`. A sweep batch never touches
+`prompt_fingerprint` and `sweep: {key, candidates, reason, kept}` (kept = the dry-run
+receipt's kept list, replayed by the node apply). A sweep batch never touches
 `sent_through`, `recovery_sent`, `sent_prior` or the handled/acked revisions, never writes a
 `maintenance-returned` row and never calls the maintenance-failure path; a lost or unadmitted
 sweep node is staged to the Host with `record=False` or kept queued when the runtime moved.
@@ -943,7 +973,11 @@ Host attention changed`); verified otherwise is quiet (`node_quiet`); unverified
 Host once (`checkpoint missing`) and is not re-queued inside the interval; a runtime-refused
 turn moves the runtime like a reconcile batch and keeps the sweep queued. The node is then
 exact-stopped as today. Without an active node binding there is no periodic sweep - the Host
-can run the tool itself. Holders advertise `sideagent-sweep/1`.
+can run the tool itself; at final close-out the Host runs one `sweep --apply` itself before
+cancelling the heartbeat
+(`templates/orchestrator/references/doc-maintenance.md`); `--dry-run` needs no caller
+identity and writes nothing, so a Delegator may run it read-only to report residue.
+Holders advertise `sideagent-sweep/1`.
 
 ## Delegator webhook wake (#299)
 

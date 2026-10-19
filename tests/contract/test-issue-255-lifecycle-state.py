@@ -1334,6 +1334,8 @@ class FakeSideagent:
                     if not chunk:
                         break
                     data += chunk
+                if not data:
+                    continue  # a liveness probe connects without sending
                 message = json.loads(data.decode())
                 self.prompts.append(message)
                 if self.trickle:
@@ -3170,7 +3172,15 @@ class FakeNode(FakeSideagent):
                     if not chunk:
                         break
                     data += chunk
+                if not data:
+                    continue  # a liveness probe connects without sending
                 message = json.loads(data.decode())
+                if message.get("op") == "state":
+                    record = json.loads(self.record.read_text())
+                    connection.sendall(json.dumps(
+                        {"holder_instance_id": record.get("holder_instance_id"),
+                         "state": record.get("state")}).encode() + b"\n")
+                    continue
                 if message.get("op") == "stop":
                     self.stops.append(message)
                     if not self.ignore_stop:

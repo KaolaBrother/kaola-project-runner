@@ -8069,7 +8069,15 @@ def command_state_migrate(args: argparse.Namespace) -> int:
 # and never swept. Open issues are silently not candidates.
 
 SWEEP_STALE_SECONDS = 24 * 3600
-SWEEP_FORGE_TIMEOUT = 20.0
+try:
+    SWEEP_FORGE_TIMEOUT = float(os.environ.get("KAOLA_SWEEP_FORGE_TIMEOUT") or 20)
+    if not SWEEP_FORGE_TIMEOUT > 0:
+        raise ValueError
+except ValueError:
+    SWEEP_FORGE_TIMEOUT = 20.0
+# Issue #353: tools whose child calls timed out during this sweep run, reset by
+# command_sweep and reported as the receipt's ``timed_out``.
+_SWEEP_TIMED_OUT: set[str] = set()
 SWEEP_KEPT_NEXT = {
     "turn-active": "Host: decide whether to stop it once its turn ends",
     "permission-pending": "Host: answer or cancel the pending permission",
@@ -8090,6 +8098,9 @@ def _sweep_git(repo: Path, *argv: str) -> tuple[int, str]:
     try:
         run = subprocess.run(["git", "-C", str(repo), *argv],
                              capture_output=True, text=True, timeout=30)
+    except subprocess.TimeoutExpired:
+        _SWEEP_TIMED_OUT.add("git")
+        return 1, ""
     except (OSError, subprocess.SubprocessError):
         return 1, ""
     return run.returncode, run.stdout
@@ -8104,6 +8115,8 @@ def _sweep_acp(acp: Path | None, argv: list[str]) -> dict[str, Any] | None:
     if acp is None:
         return None
     code, receipt, note = run_runner(Path(sys.executable), [str(acp), *argv])
+    if note == "timeout":
+        _SWEEP_TIMED_OUT.add("acp")
     if receipt_unreadable(code, receipt, note):
         return None
     return receipt
@@ -8119,10 +8132,11 @@ def _sweep_row_repo(row: dict[str, Any], repo: Path) -> bool:
         return os.path.normpath(seen) == os.path.normpath(str(repo))
 
 
-def _sweep_list(args: argparse.Namespace, repo: Path,
+def _sweep_list(args: argparse.Namespace,
                 acp: Path | None) -> tuple[list[dict[str, Any]], bool]:
-    """`kaola-acp.py list --repo --include-dead` rows for this repo, or the
-    ``--live`` rows file filtered to it. ``False`` when neither answered."""
+    """One ``kaola-acp.py list --include-dead`` (all repos) or the ``--live``
+    rows file, unfiltered. ``False`` when neither answered: callers partition
+    rows per repo with ``_sweep_row_repo`` and skip rather than remove."""
     if getattr(args, "live", None):
         try:
             document = load_object(Path(args.live))
@@ -8131,11 +8145,11 @@ def _sweep_list(args: argparse.Namespace, repo: Path,
         rows = document.get("rows")
         if not isinstance(rows, list):
             return [], False
-        return [row for row in rows if isinstance(row, dict) and _sweep_row_repo(row, repo)], True
-    receipt = _sweep_acp(acp, ["list", "--repo", str(repo), "--include-dead"])
+        return [row for row in rows if isinstance(row, dict)], True
+    receipt = _sweep_acp(acp, ["list", "--include-dead"])
     rows = (receipt or {}).get("rows")
     if not isinstance(rows, list):
-        return [], receipt is not None
+        return [], False
     return [row for row in rows if isinstance(row, dict)], True
 
 
@@ -8152,17 +8166,21 @@ def _sweep_issue_of(name: Any, platform: Any) -> int | None:
     return normalize_issue((parsed or {}).get("issue"))
 
 
-def _sweep_forge(repo: Path, issues: set[int]) -> tuple[dict[int, str], dict[int, str]] | None:
-    """(issue states, merged-PR head oid per issue), or None when gh cannot
-    answer. A merged PR is merge proof for a worktree only."""
+def _sweep_forge_serial(repo: Path,
+                        issues: set[int]) -> tuple[dict[int, str], dict[int, set[str]]] | None:
+    """The per-issue fallback when the batched GraphQL answer is unusable:
+    ``gh issue view`` + ``gh pr list`` per issue."""
     states: dict[int, str] = {}
-    heads: dict[int, str] = {}
+    heads: dict[int, set[str]] = {}
     for number in sorted(issues):
         try:
             proc = subprocess.run(["gh", "issue", "view", str(number), "--json", "state"],
                                   cwd=repo, capture_output=True, text=True,
                                   timeout=SWEEP_FORGE_TIMEOUT)
             doc = json.loads(proc.stdout) if proc.returncode == 0 else None
+        except subprocess.TimeoutExpired:
+            _SWEEP_TIMED_OUT.add("gh")
+            return None
         except (OSError, subprocess.SubprocessError, ValueError):
             return None
         if not isinstance(doc, dict) or not isinstance(doc.get("state"), str):
@@ -8179,7 +8197,62 @@ def _sweep_forge(repo: Path, issues: set[int]) -> tuple[dict[int, str], dict[int
             pulls = []
         for pull in pulls if isinstance(pulls, list) else []:
             if isinstance(pull, dict) and isinstance(pull.get("headRefOid"), str):
-                heads[number] = pull["headRefOid"]
+                heads.setdefault(number, set()).add(pull["headRefOid"])
+    return states, heads
+
+
+def _sweep_forge(repo: Path,
+                 issues: set[int]) -> tuple[dict[int, str], dict[int, set[str]]] | None:
+    """(issue states, merged-PR head oids per issue), or None when gh cannot
+    answer. One ``gh api graphql`` per chunk of 50 issues; an answered but
+    unusable call falls back to the serial per-issue path for ALL issues,
+    while a timeout or OSError answers None directly - a stuck gh would hang
+    the fallback too. A merged PR is merge proof for a worktree only."""
+    states: dict[int, str] = {}
+    heads: dict[int, set[str]] = {}
+    pending = sorted(issues)
+    for start in range(0, len(pending), 50):
+        chunk = pending[start:start + 50]
+        fields = "".join(
+            f"i{number}: issue(number: {number}) {{ state }} "
+            f"p{number}: pullRequests(headRefName: \"workflow/issue-{number}\", "
+            "states: MERGED, first: 20) { nodes { number headRefOid } } "
+            for number in chunk)
+        query = ("query($owner: String!, $name: String!) { "
+                 f"repository(owner: $owner, name: $name) {{ {fields}}} }}")
+        try:
+            proc = subprocess.run(["gh", "api", "graphql", "-F", "owner={owner}",
+                                   "-F", "name={repo}", "-f", "query=" + query],
+                                  cwd=repo, capture_output=True, text=True,
+                                  timeout=SWEEP_FORGE_TIMEOUT)
+            document = json.loads(proc.stdout) if proc.returncode == 0 else None
+        except subprocess.TimeoutExpired:
+            _SWEEP_TIMED_OUT.add("gh")
+            return None
+        except OSError:
+            # gh missing or unspawnable is not a stuck child: forge stays
+            # merely unavailable, never a failed-scan timeout.
+            return None
+        except ValueError:
+            document = None
+        repository = (document or {}).get("data") if isinstance(document, dict) else None
+        repository = repository.get("repository") if isinstance(repository, dict) else None
+        if not isinstance(repository, dict):
+            return _sweep_forge_serial(repo, issues)
+        usable = True
+        for number in chunk:
+            issue = repository.get(f"i{number}")
+            if not isinstance(issue, dict) or not isinstance(issue.get("state"), str):
+                usable = False
+                break
+            states[number] = issue["state"]
+            pulls = repository.get(f"p{number}")
+            nodes = pulls.get("nodes") if isinstance(pulls, dict) else None
+            for node in nodes if isinstance(nodes, list) else []:
+                if isinstance(node, dict) and isinstance(node.get("headRefOid"), str):
+                    heads.setdefault(number, set()).add(node["headRefOid"])
+        if not usable:
+            return _sweep_forge_serial(repo, issues)
     return states, heads
 
 
@@ -8230,7 +8303,7 @@ def _sweep_within(root: Path, candidate: Path) -> bool:
 
 
 def _sweep_worktree_keep(entry: dict[str, Any], resolved: Path, repo: Path,
-                         issue: int, merged_heads: dict[int, str],
+                         issue: int, merged_heads: dict[int, set[str]],
                          live_issue_sessions: dict[int, list[str]],
                          other_rows: list[dict[str, Any]] | None) -> str | None:
     """The first closed reason this worktree must be kept, or None."""
@@ -8247,7 +8320,7 @@ def _sweep_worktree_keep(entry: dict[str, Any], resolved: Path, repo: Path,
     if isinstance(head, str) and head and remote:
         merged = _sweep_git(resolved, "merge-base", "--is-ancestor", head, remote)[0] == 0
     if not merged and isinstance(head, str) and head:
-        merged = head == merged_heads.get(issue)
+        merged = head in merged_heads.get(issue, set())
     if not merged:
         return "unmerged-or-unpushed"
     if live_issue_sessions.get(issue):
@@ -8261,8 +8334,10 @@ def _sweep_scan(args: argparse.Namespace, repo: Path, acp: Path | None,
                 caller: dict[str, str] | None, doc: dict[str, Any] | None,
                 exclude_session_ids: set[str] | None = None) -> dict[str, Any]:
     """The current candidate/kept/skipped sets. Read-only: no state write,
-    no stop, no remove, no prune, no fetch."""
-    rows, rows_known = _sweep_list(args, repo, acp)
+    no stop, no remove, no prune, no fetch. One global ``list --include-dead``
+    answers for the root and every linked worktree."""
+    all_rows, rows_known = _sweep_list(args, acp)
+    rows = [row for row in all_rows if _sweep_row_repo(row, repo)]
     entries = _sweep_worktrees(repo)
     binding = bound_sideagent(doc)
     bound_session = (binding or {}).get("session")
@@ -8312,6 +8387,9 @@ def _sweep_scan(args: argparse.Namespace, repo: Path, acp: Path | None,
             continue
         if forge is None:
             skipped[ident] = "forge-unknown"
+            continue
+        if not rows_known:
+            skipped[ident] = "acp-unknown"
             continue
         if states.get(issue) != "CLOSED":
             continue
@@ -8371,7 +8449,13 @@ def _sweep_scan(args: argparse.Namespace, repo: Path, acp: Path | None,
             continue
         if states.get(issue) != "CLOSED":
             continue
-        other_rows, _ = _sweep_list(args, resolved, acp) if inside else ([], True)
+        if not rows_known:
+            # An unanswered list is not "no live sessions": the worktree is
+            # skipped, never kept and never removed.
+            skipped[ident] = "acp-unknown"
+            continue
+        other_rows = ([row for row in all_rows if _sweep_row_repo(row, resolved)]
+                      if inside else [])
         keep = _sweep_worktree_keep(entry, resolved, repo, issue, merged_heads,
                                     live_by_issue, other_rows)
         if keep:
@@ -8408,7 +8492,9 @@ def _sweep_scan(args: argparse.Namespace, repo: Path, acp: Path | None,
     key = hashlib.sha256(json.dumps(ids).encode("utf-8")).hexdigest()[:16] if ids else ""
     return {"candidates": candidates, "kept": kept, "skipped": skipped,
             "key": key, "head": head.strip() or None, "forge": forge_state,
-            "acp": acp, "rows": rows, "rows_known": rows_known}
+            "acp": acp, "acp_state": "known" if rows_known else "unavailable",
+            "rows": rows, "all_rows": all_rows, "rows_known": rows_known,
+            "states": states, "merged_heads": merged_heads}
 
 
 def _sweep_resolve(path: Any) -> Path | None:
@@ -8461,9 +8547,17 @@ def _sweep_record(args: argparse.Namespace, path: Path, caller: dict[str, str] |
 
 def _sweep_apply_candidate(item: dict[str, Any], args: argparse.Namespace,
                            repo: Path, acp: Path | None,
-                           merged_heads: dict[int, str]) -> tuple[str, str | None]:
+                           merged_heads: dict[int, set[str]],
+                           removed_ids: set[str]) -> tuple[str, str | None]:
     """Re-verify and remove one still-current candidate. Returns
-    (outcome, kept-reason): outcome ``removed``, ``kept`` or ``skipped``."""
+    (outcome, kept-reason): outcome ``removed``, ``kept`` or ``skipped``.
+    ``removed_ids`` holds session ids this apply already removed."""
+    def session_rows() -> tuple[list[dict[str, Any]], bool]:
+        all_rows, known = _sweep_list(args, acp)
+        if not known:
+            return [], False
+        return [row for row in all_rows if _sweep_row_repo(row, repo)], True
+
     kind = item.get("kind")
     if kind == "session":
         status = _sweep_status(acp, repo, item.get("platform"), item.get("session"))
@@ -8479,8 +8573,10 @@ def _sweep_apply_candidate(item: dict[str, Any], args: argparse.Namespace,
         _sweep_acp(acp, [item["platform"], "stop", "--repo", str(repo),
                          "--session", item["session"],
                          "--expected-holder-instance-id", item["holder_instance_id"]])
-        rows, _ = _sweep_list(args, repo, acp)
-        live = any(_sweep_row_repo(row, repo) and row.get("session") == item["session"]
+        rows, known = session_rows()
+        if not known:
+            return "kept", "unreachable"
+        live = any(row.get("session") == item["session"]
                    and row.get("platform") == item["platform"]
                    and row.get("identity") == "verified"
                    and row.get("holder_instance_id") == item["holder_instance_id"]
@@ -8493,17 +8589,22 @@ def _sweep_apply_candidate(item: dict[str, Any], args: argparse.Namespace,
         entry = entries.get(item["path"])
         if entry is None:
             return "skipped", "no-longer-candidate"
-        rows, _ = _sweep_list(args, repo, acp)
+        all_rows, rows_known = _sweep_list(args, acp)
+        if not rows_known:
+            return "skipped", "acp-unknown"
         live_by_issue: dict[int, list[str]] = {}
-        for row in rows:
+        for row in all_rows:
             if (not _sweep_row_repo(row, repo) or row.get("name_role") != "worker"
                     or row.get("identity") != "verified"):
                 continue
             issue = _sweep_issue_of(row.get("session"), row.get("platform"))
             if issue is not None:
-                live_by_issue.setdefault(issue, []).append(
-                    f"session:{row.get('platform')}/{row.get('session')}@{row.get('holder_instance_id') or ''}")
-        other_rows, _ = _sweep_list(args, resolved, acp)
+                ident = (f"session:{row.get('platform')}/{row.get('session')}"
+                         f"@{row.get('holder_instance_id') or ''}")
+                if ident in removed_ids:
+                    continue
+                live_by_issue.setdefault(issue, []).append(ident)
+        other_rows = [row for row in all_rows if _sweep_row_repo(row, resolved)]
         keep = _sweep_worktree_keep(entry, resolved, repo, item["issue"], merged_heads,
                                     live_by_issue, other_rows)
         if keep:
@@ -8524,23 +8625,92 @@ def _sweep_apply_candidate(item: dict[str, Any], args: argparse.Namespace,
     return "skipped", "no-longer-candidate"
 
 
+def _sweep_recovery(reason: str, path: Path, repo: Path) -> str:
+    """The recovery hint a refused ``--apply``/``--record-empty`` receipt
+    carries: the exact read-only/restore commands, then rerun the sweep."""
+    tool = shlex.quote(str(Path(__file__).resolve()))
+    file_arg = shlex.quote(str(path))
+    if reason == "legacy-format":
+        plan = f"python3 {tool} state migrate --file {file_arg} --repo {shlex.quote(str(repo))}"
+        return f"{plan} (read-only plan), then the same with --write; then rerun the sweep"
+    if reason == "state-missing":
+        return (f"python3 {tool} state init --file {file_arg} --writer host "
+                "--source <turn> --project '<json>' (Host), then rerun the sweep")
+    if reason == "schema-unsupported":
+        return ("update the Runner to a version that knows that schema, "
+                "then rerun the sweep")
+    if reason == "state-unreadable":
+        return (f"python3 {tool} state backups --file {file_arg}, restore the last "
+                "good copy, then rerun the sweep")
+    return "rerun the sweep"
+
+
+def _sweep_item_from_id(ident: str) -> dict[str, Any] | None:
+    """Rebuild one planned item from its stable id for a node ``--apply
+    --batch``; None when the id is unparseable. Worktree issue resolution
+    happens against the fresh ``git worktree list`` in the caller."""
+    if ident.startswith("session:"):
+        rest = ident[len("session:"):]
+        base, sep, holder = rest.rpartition("@")
+        if not sep or "/" not in base:
+            return None
+        platform, session = base.split("/", 1)
+        return {"id": ident, "kind": "session", "platform": platform,
+                "session": session, "holder_instance_id": holder,
+                "issue": _sweep_issue_of(session, platform)}
+    if ident.startswith("worktree:"):
+        path, sep, head = ident[len("worktree:"):].rpartition("@")
+        if not sep or not path:
+            return None
+        return {"id": ident, "kind": "worktree", "path": path, "plan_head": head}
+    if ident.startswith("worktree-prune:"):
+        path = ident[len("worktree-prune:"):]
+        return {"id": ident, "kind": "worktree-prune", "path": path} if path else None
+    if ident.startswith("stale-file:"):
+        path, sep, _mtime = ident[len("stale-file:"):].rpartition("@")
+        if not sep or not path:
+            return None
+        return {"id": ident, "kind": "stale-file", "path": path}
+    return None
+
+
 def command_sweep(args: argparse.Namespace) -> int:
+    _SWEEP_TIMED_OUT.clear()
     repo = Path(args.repo).resolve()
     if not repo.is_dir():
         return emit({"schema": SWEEP_RECEIPT_SCHEMA, "result": "refused",
-                     "reason": "repo-missing", "detail": f"{repo} is not a directory"}, 2)
+                     "reason": "repo-missing", "detail": f"{repo} is not a directory",
+                     "timed_out": []}, 2)
     state_path = Path(args.file) if getattr(args, "file", None) else repo / ".kaola" / "heartbeat-prompt.json"
     caller = caller_dispatcher()
     acp = _sweep_runner(args)
-    try:
-        doc, _ = read_state_file(state_path)
-    except (OSError, ValueError):
-        doc = None
-    try:
-        doc = require_current(doc, state_path) if doc is not None else None
-    except StateRefusal:
-        doc = None
-    scan = _sweep_scan(args, repo, acp, caller, doc)
+    doc: dict[str, Any] | None = None
+    if args.apply or args.record_empty:
+        # A mutating sweep validates the state file before any scan or action:
+        # nothing is stopped, removed, pruned or written on a refusal.
+        try:
+            doc, _ = read_state_file(state_path)
+        except (OSError, ValueError) as exc:
+            return emit({"schema": SWEEP_RECEIPT_SCHEMA, "result": "refused",
+                         "reason": "state-unreadable", "detail": str(exc),
+                         "timed_out": [],
+                         "recovery": _sweep_recovery("state-unreadable", state_path, repo)}, 2)
+        try:
+            doc = require_current(doc, state_path)
+        except StateRefusal as refusal:
+            return emit({"schema": SWEEP_RECEIPT_SCHEMA, **refusal.payload,
+                         "timed_out": [],
+                         "recovery": _sweep_recovery(refusal.payload["reason"],
+                                                     state_path, repo)}, 2)
+    else:
+        try:
+            doc, _ = read_state_file(state_path)
+        except (OSError, ValueError):
+            doc = None
+        try:
+            doc = require_current(doc, state_path) if doc is not None else None
+        except StateRefusal:
+            doc = None
 
     def receipt(result: str, **extra: Any) -> dict[str, Any]:
         return {"schema": SWEEP_RECEIPT_SCHEMA, "result": result,
@@ -8548,16 +8718,20 @@ def command_sweep(args: argparse.Namespace) -> int:
                 "key": scan["key"], "candidates": scan["candidates"], "kept": scan["kept"],
                 "removed": extra.pop("removed", []), "skipped": scan["skipped"],
                 "head": scan["head"], "accepted_revision": None,
-                "forge": scan["forge"], **extra}
+                "forge": scan["forge"], "acp": scan["acp_state"],
+                "timed_out": sorted(_SWEEP_TIMED_OUT), **extra}
 
     if args.dry_run:
         # Zero writes of any kind; read-only list/status/gh/git still ran.
+        scan = _sweep_scan(args, repo, acp, caller, doc)
         return emit(receipt("planned"))
 
     # -- identity ------------------------------------------------------------
     batch = getattr(args, "batch", None)
     plan_ids: list[str] | None = None
     accepted_revision: str | None = None
+    event_kept: list[dict[str, Any]] = []
+    sweep_key = ""
     host_caller = (caller is not None and caller_role(caller) == "host"
                    and same_repo(caller["repo"], str(repo)))
     try:
@@ -8568,6 +8742,7 @@ def command_sweep(args: argparse.Namespace) -> int:
                                    "node with --batch")
             _, record = caller_record(caller)
             accepted_revision = record.get("accepted_revision")
+            scan = _sweep_scan(args, repo, acp, caller, doc)
             plan_ids = [item["id"] for item in scan["candidates"]]
         elif args.apply or args.record_empty:
             if args.record_empty:
@@ -8576,6 +8751,7 @@ def command_sweep(args: argparse.Namespace) -> int:
                                        "only the Host carrier records an empty sweep")
                 _, record = caller_record(caller)
                 accepted_revision = record.get("accepted_revision")
+                scan = _sweep_scan(args, repo, acp, caller, doc)
             else:
                 if caller is None or caller_role(caller) not in SIDEAGENT_ROLES:
                     raise StateRefusal("node-identity-required",
@@ -8598,6 +8774,10 @@ def command_sweep(args: argparse.Namespace) -> int:
                 accepted_revision = carrier_record.get("accepted_revision")
                 plan_ids = [ident for ident in (event["sweep"].get("candidates") or [])
                             if isinstance(ident, str)]
+                sweep_key = event["sweep"].get("key") or ""
+                event_kept = [item for item in (event["sweep"].get("kept") or [])
+                              if isinstance(item, dict) and isinstance(item.get("id"), str)
+                              and isinstance(item.get("kept"), str)]
         else:
             raise StateRefusal("invalid-input", "exactly one mode is required")
     except StateRefusal as refusal:
@@ -8623,14 +8803,52 @@ def command_sweep(args: argparse.Namespace) -> int:
                             **(written or {})))
 
     # -- apply ---------------------------------------------------------------
-    states = {}
-    forge = _sweep_forge(repo, {item["issue"] for item in scan["candidates"]
-                                + scan["kept"] if isinstance(item.get("issue"), int)})
-    merged_heads = forge[1] if forge is not None else {}
-    current = {item["id"]: item for item in scan["candidates"]}
-    current_kept = {item["id"] for item in scan["kept"]}
+    # Host apply reuses its scan's forge facts; a node batch re-verifies only
+    # the planned ids from the verified event - never a rescan.
     removed: list[str] = []
-    kept_now: list[dict[str, Any]] = list(scan["kept"])
+    removed_ids: set[str] = set()
+    if batch is None:
+        current = {item["id"]: item for item in scan["candidates"]}
+        states, merged_heads = scan["states"], scan["merged_heads"]
+        forge_known = scan["forge"] == "known"
+        current_kept = {item["id"] for item in scan["kept"]}
+        kept_now: list[dict[str, Any]] = list(scan["kept"])
+    else:
+        skipped: dict[str, str] = {}
+        entries = {str(_sweep_resolve(entry.get("path"))): entry
+                   for entry in _sweep_worktrees(repo)}
+        current = {}
+        issues_needed: set[int] = set()
+        for ident in plan_ids:
+            item = _sweep_item_from_id(ident)
+            if item is None:
+                skipped[ident] = "no-longer-candidate"
+                continue
+            if item["kind"] == "worktree":
+                entry = entries.get(str(_sweep_resolve(item["path"])))
+                issue = _sweep_worktree_issue(entry) if entry is not None else None
+                if (entry is None or entry.get("prunable") or issue is None
+                        or entry.get("head") != item["plan_head"]):
+                    skipped[ident] = "no-longer-candidate"
+                    continue
+                item["issue"] = issue
+            elif item["kind"] == "session" and not isinstance(item.get("issue"), int):
+                skipped[ident] = "no-longer-candidate"
+                continue
+            if isinstance(item.get("issue"), int):
+                issues_needed.add(item["issue"])
+            current[ident] = item
+        forge = _sweep_forge(repo, issues_needed)
+        forge_known = forge is not None
+        states, merged_heads = forge if forge is not None else ({}, {})
+        _, head = _sweep_git(repo, "rev-parse", "HEAD")
+        current_kept = {item["id"] for item in event_kept}
+        kept_now = list(event_kept)
+        scan = {"candidates": list(current.values()), "kept": event_kept,
+                "skipped": skipped, "key": sweep_key,
+                "head": head.strip() or None,
+                "forge": "known" if forge_known else "unavailable",
+                "acp_state": "known"}
     for kind in ("session", "worktree", "worktree-prune", "stale-file"):
         if kind == "worktree-prune":
             if not any(ident in current and current[ident]["kind"] == "worktree-prune"
@@ -8652,17 +8870,29 @@ def command_sweep(args: argparse.Namespace) -> int:
             if item is None:
                 # A planned candidate the re-scan now keeps is reported kept;
                 # one it no longer sees at all waits for the next sweep.
-                if ident not in current_kept:
+                if ident not in current_kept and ident not in scan["skipped"]:
                     scan["skipped"][ident] = "no-longer-candidate"
                 continue
             if item["kind"] != kind:
                 continue
-            outcome, why = _sweep_apply_candidate(item, args, repo, acp, merged_heads)
+            if batch is not None and kind in ("session", "worktree"):
+                if not forge_known:
+                    scan["skipped"][ident] = "forge-unknown"
+                    continue
+                if states.get(item.get("issue")) != "CLOSED":
+                    scan["skipped"][ident] = "no-longer-candidate"
+                    continue
+            outcome, why = _sweep_apply_candidate(item, args, repo, acp,
+                                                  merged_heads, removed_ids)
             if outcome == "removed":
                 removed.append(ident)
+                if kind == "session":
+                    removed_ids.add(ident)
             elif outcome == "kept":
                 kept_now.append({**item, "kept": why})
             else:
+                if why == "acp-unknown":
+                    scan["acp_state"] = "unavailable"
                 scan["skipped"][ident] = why or "no-longer-candidate"
     for ident in plan_ids:
         if ident not in current and ident not in scan["skipped"] and ident not in current_kept:

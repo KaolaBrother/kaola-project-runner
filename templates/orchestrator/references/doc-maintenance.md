@@ -49,6 +49,8 @@ document content, so "no scheduled full-doc scan" stays true. A kept item is
 a Host decision in the `sweep-kept` alert; decide it from the original
 evidence, not from a document review.
 
+At final close-out, after workers are reclaimed and before you stop or cancel the heartbeat, run `python3 "$SKILL_DIR/scripts/kaola-dispatch.py" sweep --apply --repo <canonical root>` once in your own session; your Host holder is the caller, with or without a node-mode Sideagent. Its receipt is `maintenance.last_sweep`, overwritten, never appended; name `sweep-kept` items in the close-out report. A refusal changed nothing and names its recovery command.
+
 ## After finalize
 
 If project instructions

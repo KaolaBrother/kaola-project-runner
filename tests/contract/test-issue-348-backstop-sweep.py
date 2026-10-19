@@ -32,6 +32,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -52,15 +53,26 @@ spec.loader.exec_module(issue255)
 holder_module = issue255.holder_module
 
 CALLER_ENV = ("KAOLA_ACP_DISPATCHER", "KAOLA_ACP_RECORD_ROOT", "FAKE_GH_FILE",
-              "FAKE_ACP_ROWS", "FAKE_ACP_CALLS", "KAOLA_SWEEP_INTERVAL_HOURS")
+              "FAKE_GH_CALLS", "FAKE_GH_PID", "FAKE_ACP_ROWS", "FAKE_ACP_CALLS",
+              "KAOLA_SWEEP_INTERVAL_HOURS", "KAOLA_SWEEP_FORGE_TIMEOUT",
+              "KAOLA_DISPATCH_RUNNER_TIMEOUT")
 for name in CALLER_ENV:
     os.environ.pop(name, None)
 
 FAKE_GH = textwrap.dedent("""\
     #!/usr/bin/env python3
-    import json, os, sys
+    import json, os, re, sys, time
     data = json.loads(open(os.environ["FAKE_GH_FILE"]).read())
+    pid_file = os.environ.get("FAKE_GH_PID")
+    if pid_file:
+        open(pid_file, "w").write(str(os.getpid()))
+    if data.get("sleep"):
+        time.sleep(float(data["sleep"]))
+    calls = os.environ.get("FAKE_GH_CALLS")
     argv = sys.argv[1:]
+    if calls:
+        with open(calls, "a") as stream:
+            stream.write(json.dumps(argv) + "\\n")
     if argv[:2] == ["issue", "view"]:
         print(json.dumps({"state": data["issues"].get(argv[2], "OPEN")}))
     elif argv[:2] == ["pr", "list"]:
@@ -68,19 +80,33 @@ FAKE_GH = textwrap.dedent("""\
         number = head.rsplit("-", 1)[1]
         oid = data.get("prs", {}).get(number)
         print(json.dumps([{"number": int(number), "headRefOid": oid}] if oid else []))
+    elif argv[:2] == ["api", "graphql"]:
+        if data.get("graphql") == "fail":
+            sys.exit(1)
+        query = next((a[len("query="):] for a in argv if a.startswith("query=")), "")
+        repo = {}
+        for key, number in re.findall(r"i(\\d+): issue\\(number: (\\d+)\\)", query):
+            repo[f"i{key}"] = {"state": data["issues"].get(number, "OPEN")}
+        for key in re.findall(r"p(\\d+): pullRequests", query):
+            oid = data.get("prs", {}).get(key)
+            repo[f"p{key}"] = {"nodes": ([{"number": int(key), "headRefOid": oid}]
+                                          if oid else [])}
+        print(json.dumps({"data": {"repository": repo}}))
     else:
         sys.exit(2)
     """)
 
 FAKE_ACP = textwrap.dedent("""\
     #!/usr/bin/env python3
-    import json, os, sys
+    import json, os, sys, time
     calls = os.environ.get("FAKE_ACP_CALLS")
     if calls:
         with open(calls, "a") as stream:
             stream.write(json.dumps(sys.argv[1:]) + "\\n")
     data = json.loads(open(os.environ["FAKE_ACP_ROWS"]).read())
     argv = sys.argv[1:]
+    if argv[0] == "list" and data.get("list_sleep"):
+        time.sleep(float(data["list_sleep"]))
     if argv[0] == "list":
         repo = None
         if "--repo" in argv:
@@ -154,6 +180,7 @@ class SweepTool(unittest.TestCase):
         acp.write_text(FAKE_ACP, encoding="utf-8")
         self.acp_rows = root / "rows.json"
         self.acp_calls = root / "calls.jsonl"
+        self.gh_calls_file = root / "gh-calls.jsonl"
         self.set_rows([])
         self.issues: dict[str, str] = {}
         self.prs: dict[str, str] = {}
@@ -475,6 +502,198 @@ class SweepTool(unittest.TestCase):
         self.assertEqual(fp(before["body"]), fp(after["body"]))
         self.assertIsNotNone(after["state"]["maintenance"]["last_sweep"]["at"])
 
+    # -- Issue #353: batched forge, one list, timeouts, state gate -----------
+
+    def closed_merged_worktrees(self, count: int, base: int = 100) -> list[Path]:
+        paths = [self.add_worktree(base + i) for i in range(count)]
+        for i, path in enumerate(paths):
+            number = str(base + i)
+            self.issues[number] = "CLOSED"
+            self.prs[number] = self.worktree_head(path)
+        self.write_gh()
+        return paths
+
+    def logged_env(self, **extra: str) -> dict:
+        env = self.env()
+        env["FAKE_GH_CALLS"] = str(self.gh_calls_file)
+        env.update(extra)
+        return env
+
+    def gh_calls(self) -> list[list[str]]:
+        if not self.gh_calls_file.exists():
+            return []
+        return [json.loads(line) for line in self.gh_calls_file.read_text().splitlines()]
+
+    def acp_calls_of(self, command: str) -> list[list[str]]:
+        if not self.acp_calls.exists():
+            return []
+        return [row for row in
+                (json.loads(line) for line in self.acp_calls.read_text().splitlines())
+                if row and row[0] == command]
+
+    def test_dry_run_batches_forge_and_one_list(self) -> None:  # T1
+        self.init_state()
+        self.closed_merged_worktrees(50)
+        code, out = self.sweep("--dry-run", env=self.logged_env())
+        self.assertEqual(code, 0, out)
+        gh = self.gh_calls()
+        self.assertEqual(len(gh), 1, gh)
+        self.assertEqual(gh[0][:2], ["api", "graphql"])
+        self.assertEqual(len(self.acp_calls_of("list")), 1)
+        worktrees = [item for item in out["candidates"] if item["kind"] == "worktree"]
+        self.assertEqual(len(worktrees), 50)
+        self.assertEqual(out["timed_out"], [])
+        self.assertEqual(out["acp"], "known")
+
+    def test_apply_reuses_the_scan_forge_facts(self) -> None:  # T2
+        self.init_state()
+        paths = self.closed_merged_worktrees(50)
+        code, out = self.sweep("--apply", env=self.logged_env())
+        self.assertEqual((code, out["result"]), (0, "swept"), out)
+        self.assertEqual(len(self.gh_calls()), 1, self.gh_calls())
+        self.assertLessEqual(len(self.acp_calls_of("list")), 1 + 50)
+        self.assertEqual(len(out["removed"]), 50)
+        self.assertFalse(any(path.exists() for path in paths))
+
+    def test_node_apply_verifies_only_planned_ids(self) -> None:  # T3
+        self.init_state()
+        paths = self.closed_merged_worktrees(50)
+        kept = {"id": "session:opencode/opencode-KT-i99-a@h-99", "kind": "session",
+                "issue": 99, "platform": "opencode", "session": "opencode-KT-i99-a",
+                "holder_instance_id": "h-99", "kept": "unreachable"}
+        ids = [f"worktree:{path.resolve()}@{self.worktree_head(path)}"
+               for path in paths[:2]]
+        node_dir = self._record_dir("zcode", "zcode-KT-sideagent")
+        self._write_record(node_dir, {"holder_instance_id": "node-1",
+                                      "session_role": "sideagent",
+                                      "holder_pid": os.getpid(),
+                                      "repo": str(self.repo),
+                                      "dispatcher": {"holder_instance_id": "host-1",
+                                                     "platform": "zcode",
+                                                     "repo": str(self.repo),
+                                                     "session": "zcode-KT-orchestrator-main"}})
+        batch = "s-planned353"
+        (self.host_dir / "events.jsonl").write_text(
+            json.dumps({"kind": "sideagent_node_batch", "batch": batch,
+                        "target_holder": "node-1", "host_holder": "host-1",
+                        "host_revision_through": 0,
+                        "sweep": {"key": "k353", "candidates": ids, "reason": "interval",
+                                  "kept": [kept]}}) + "\n",
+            encoding="utf-8")
+        env = self.logged_env()
+        env["KAOLA_ACP_DISPATCHER"] = json.dumps({"holder_instance_id": "node-1",
+                                                  "platform": "zcode", "repo": str(self.repo),
+                                                  "session": "zcode-KT-sideagent"})
+        code, out = self.sweep("--apply", "--batch", batch, env=env)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(len(self.gh_calls()), 1, self.gh_calls())
+        self.assertLessEqual(len(self.acp_calls_of("list")), 3)
+        self.assertFalse(paths[0].exists() or paths[1].exists())
+        self.assertTrue(all(path.exists() for path in paths[2:]),
+                        "unplanned worktrees are never scanned")
+        alert = (self.doc()["state"].get("alerts") or {}).get("sweep-kept") or {}
+        self.assertIn(kept["id"], alert.get("inputs") or {})
+
+    def test_graphql_failure_falls_back_to_serial(self) -> None:  # T4
+        self.init_state()
+        paths = self.closed_merged_worktrees(2)
+        self.gh_data.write_text(json.dumps({"issues": self.issues, "prs": self.prs,
+                                            "graphql": "fail"}), encoding="utf-8")
+        code, out = self.sweep("--dry-run", env=self.logged_env())
+        self.assertEqual(code, 0, out)
+        worktrees = [item for item in out["candidates"] if item["kind"] == "worktree"]
+        self.assertEqual(len(worktrees), 2, out)
+        calls = self.gh_calls()
+        self.assertEqual(calls[0][:2], ["api", "graphql"])
+        self.assertTrue(all(argv[:1] in (["issue"], ["pr"]) for argv in calls[1:]), calls)
+        for path in paths:
+            self.assertTrue(path.exists())
+
+    def test_forge_timeout_is_recorded_not_rescanned(self) -> None:  # T5
+        self.init_state()
+        path = self.add_worktree(100)
+        self.gh_data.write_text(json.dumps({"issues": {"100": "CLOSED"},
+                                            "prs": {"100": self.worktree_head(path)},
+                                            "sleep": 30}), encoding="utf-8")
+        started = time.monotonic()
+        code, out = self.sweep("--dry-run",
+                               env=self.logged_env(KAOLA_SWEEP_FORGE_TIMEOUT="1"))
+        self.assertLess(time.monotonic() - started, 10)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["timed_out"], ["gh"])
+        self.assertEqual(out["forge"], "unavailable")
+        self.assertEqual(out["candidates"], [])
+
+    def test_unknown_list_never_removes_a_worktree(self) -> None:  # T6
+        self.init_state()
+        path = self.add_worktree(100)
+        self.issues["100"] = "CLOSED"
+        self.prs["100"] = self.worktree_head(path)
+        self.write_gh()
+        self.acp_rows.write_text(json.dumps({"rows": [], "status": {},
+                                             "list_sleep": 30}), encoding="utf-8")
+        code, out = self.sweep("--apply",
+                               env=self.logged_env(KAOLA_DISPATCH_RUNNER_TIMEOUT="1"))
+        self.assertEqual(code, 0, out)
+        self.assertTrue(path.exists())
+        self.assertIn("acp-unknown", out["skipped"].values())
+        self.assertEqual(out["acp"], "unavailable")
+        self.assertIn("acp", out["timed_out"])
+        self.assertEqual(out["removed"], [])
+
+    def test_missing_gh_is_forge_unavailable_not_timed_out(self) -> None:
+        self.init_state()
+        path = self.add_worktree(100)
+        self.issues["100"] = "CLOSED"
+        self.prs["100"] = self.worktree_head(path)
+        self.write_gh()
+        clean = Path(self.tmp.name) / "nogh-bin"
+        clean.mkdir()
+        for tool in ("git",):
+            target = shutil.which(tool)
+            self.assertIsNotNone(target)
+            (clean / tool).symlink_to(target)
+        env = self.logged_env()
+        env["PATH"] = str(clean)
+        code, out = self.sweep("--dry-run", env=env)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["forge"], "unavailable")
+        self.assertEqual(out["timed_out"], [])
+        self.assertIn("forge-unknown", out["skipped"].values())
+        self.assertTrue(path.exists())
+
+    def test_apply_requires_current_state(self) -> None:  # T7
+        path = self.add_worktree(100)
+        self.issues["100"] = "CLOSED"
+        self.prs["100"] = self.worktree_head(path)
+        self.write_gh()
+        stale = self.repo / ".kaola" / "old.tmp"
+        stale.write_text("leftover\n", encoding="utf-8")
+        two_days = time.time() - 2 * 86400
+        os.utime(stale, (two_days, two_days))
+
+        code, out = self.sweep("--apply")  # no state file at all
+        self.assertEqual((code, out["result"]), (2, "refused"), out)
+        self.assertEqual(out["reason"], "state-missing")
+        self.assertIn("state init", out["recovery"])
+        self.assertTrue(path.exists() and stale.exists())
+
+        self.file.write_text(json.dumps({"schema": "kaola-heartbeat-prompt/1",
+                                         "state": {}}), encoding="utf-8")
+        before = self.file.read_bytes()
+        code, out = self.sweep("--apply")
+        self.assertEqual((code, out["result"]), (2, "refused"), out)
+        self.assertEqual(out["reason"], "legacy-format")
+        self.assertIn("state migrate", out["recovery"])
+        self.assertTrue(path.exists() and stale.exists())
+        self.assertEqual(self.file.read_bytes(), before)
+        stops = []
+        if self.acp_calls.exists():
+            stops = [row for row in
+                     (json.loads(line) for line in self.acp_calls.read_text().splitlines())
+                     if row[1:2] == ["stop"]]
+        self.assertEqual(stops, [])
+
 
 class SweepCarrier(issue255.HolderFixture):
     """The Host carrier's due mechanism. Same fixture shape as the 255
@@ -534,9 +753,9 @@ class SweepCarrier(issue255.HolderFixture):
                 os.environ[key] = value
         super().tearDown()
 
-    def set_gh(self, issues: dict, prs: dict | None = None) -> None:
-        self.gh_data.write_text(json.dumps({"issues": issues, "prs": prs or {}}),
-                                encoding="utf-8")
+    def set_gh(self, issues: dict, prs: dict | None = None, **extra) -> None:
+        self.gh_data.write_text(json.dumps({"issues": issues, "prs": prs or {},
+                                            **extra}), encoding="utf-8")
 
     def kept_worker_record(self, session: str = "opencode-KT-i99-a",
                            holder: str = "h-99", issue: int = 99) -> str:
@@ -601,7 +820,15 @@ class SweepCarrier(issue255.HolderFixture):
 
     def host_change(self, revision: int) -> None:
         handled = getattr(self, "handled", 0)
-        self.write_node_state({"handled_host_revision": handled}, host_revision=revision)
+        path = self.repo / ".kaola" / "heartbeat-prompt.json"
+        try:
+            maintenance = (json.loads(path.read_text()).get("state") or {}).get(
+                "maintenance") or {}
+        except (OSError, ValueError):
+            maintenance = {}
+        # A Host business write keeps the rest of maintenance (last_sweep...).
+        maintenance["handled_host_revision"] = handled
+        self.write_node_state(maintenance, host_revision=revision)
 
     def batch_of(self, index: int) -> str:
         return self.fake.prompts[index]["params"]["text"].split("batch ", 1)[1].split()[0]
@@ -813,6 +1040,116 @@ class SweepCarrier(issue255.HolderFixture):
         settled = self.sweep_events("sideagent_sweep_settled")[0]
         self.assertEqual((settled["checkpoint"], settled["host_woken"], settled["removed"]),
                          ("verified", False, []))
+
+    # -- Issue #353: child-process bounds and anti-starvation -----------------
+
+    @staticmethod
+    def _pid_alive(pid: int) -> bool:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
+
+    def linked_worktree(self, issue: int = 5) -> tuple[Path, str]:
+        path = self.repo / ".kw" / "worktrees" / f"issue-{issue}"
+        git(self.repo, "worktree", "add", str(path), "-b", f"workflow/issue-{issue}")
+        return path, git(path, "rev-parse", "HEAD").strip()
+
+    def set_env(self, name: str, value: str) -> None:
+        old = os.environ.get(name)
+        os.environ[name] = value
+        self.addCleanup(lambda: os.environ.pop(name, None) if old is None
+                        else os.environ.__setitem__(name, old))
+
+    def test_scan_timeout_kills_the_tool_group_and_cools_down(self) -> None:  # T8
+        saved = getattr(holder_module, "SWEEP_SCAN_TIMEOUT_SECONDS", 600.0)
+        holder_module.SWEEP_SCAN_TIMEOUT_SECONDS = 2.0
+        self.addCleanup(setattr, holder_module, "SWEEP_SCAN_TIMEOUT_SECONDS", saved)
+        _path, head = self.linked_worktree(5)
+        self.set_gh({"5": "CLOSED"}, {"5": head}, sleep=30)
+        pid_file = Path(self.tmp.name) / "gh.pid"
+        self.set_env("KAOLA_SWEEP_FORGE_TIMEOUT", "60")
+        self.set_env("FAKE_GH_PID", str(pid_file))
+        self.write_sweep_state({"handled_host_revision": 0})
+        self.drive(lambda: bool(self.sweep_events("sideagent_sweep_scan_failed")),
+                   "scan_failed", timeout=10)
+        self.assertEqual(self.holder.node["sweep"]["phase"], "cooldown")
+        self.wait_for(lambda: pid_file.exists(), "fake gh pid file")
+        pid = int(pid_file.read_text())
+        self.wait_for(lambda: not self._pid_alive(pid), "fake gh process-group kill")
+        # A fast forge plus an expired cooldown recovers at the next boundaries.
+        self.set_gh({"5": "CLOSED"}, {"5": head})
+        self.holder.node["sweep"]["until"] = 0
+        self.drive(lambda: bool(self.sweep_events("sideagent_sweep_empty"))
+                   or any("sweep" in e for e in self.sweep_events("sideagent_node_batch")),
+                   "sweep recovery")
+
+    def test_timed_out_receipt_is_a_failed_scan(self) -> None:  # T9
+        _path, head = self.linked_worktree(5)
+        self.set_gh({"5": "CLOSED"}, {"5": head}, sleep=30)
+        self.set_env("KAOLA_SWEEP_FORGE_TIMEOUT", "1")
+        self.write_sweep_state({"handled_host_revision": 0})
+        self.drive(lambda: bool(self.sweep_events("sideagent_sweep_scan_failed")),
+                   "scan_failed", timeout=15)
+        self.assertEqual(self.holder.node["sweep"]["phase"], "cooldown")
+        doc = self.holder._lifecycle_state()
+        self.assertNotIn("last_sweep", doc["state"]["maintenance"])
+
+    def test_overdue_sweep_preempts_pending_reconcile(self) -> None:  # T10
+        old_at = datetime.fromtimestamp(time.time() - 3 * 3600,
+                                        tz=timezone.utc).isoformat()
+        self.write_sweep_state({"last_sweep": self.last_sweep(at=old_at),
+                                "handled_host_revision": 0})
+        stale = self.repo / ".kaola" / "x.tmp"
+        stale.write_text("leftover\n", encoding="utf-8")
+        two_days = time.time() - 2 * 86400
+        os.utime(stale, (two_days, two_days))
+        # A Host change is pending and the Host turn is active: nothing is sent.
+        self.host_change(1)
+        self.holder.turn["active"] = True
+        for _ in range(3):
+            self.boundary()
+        self.assertEqual(self.fake.prompts, [])
+        self.holder.turn["active"] = False
+        # A fresh Host change stays pending across every boundary: the overdue
+        # sweep still gets its batch through between reconcile batches.
+        rev = 1
+        handled_prompts = 0
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            self.boundary()
+            if any("sweep --apply" in p["params"]["text"] for p in self.fake.prompts):
+                break
+            if len(self.fake.prompts) > handled_prompts:
+                text = self.fake.prompts[handled_prompts]["params"]["text"]
+                if "sweep --apply" not in text and self.holder.node.get("batch"):
+                    batch = text.split("batch ", 1)[1].split()[0]
+                    self.checkpoint(batch, self.holder.node["holder"], through=rev)
+                    rev += 1
+                    self.host_change(rev)
+                    self.end_node_turn()
+                handled_prompts = len(self.fake.prompts)
+            time.sleep(0.1)
+        self.assertTrue(any("sweep --apply" in p["params"]["text"]
+                            for p in self.fake.prompts),
+                        "an overdue sweep batch is sent while a Host change is pending")
+        doc = self.holder._lifecycle_state()
+        self.assertGreater(doc.get("host_revision") or 0,
+                           (doc["state"].get("maintenance") or {}).get(
+                               "handled_host_revision") or -1)
+
+
+class SweepDocs(unittest.TestCase):
+    """Issue #353: the shipped Skill text names the new sweep duties."""
+
+    def test_close_out_sweep_docs(self) -> None:  # T11
+        maintenance = (REPO / "templates" / "orchestrator" / "references"
+                       / "doc-maintenance.md").read_text(encoding="utf-8")
+        self.assertIn("sweep --apply --repo", maintenance)
+        self.assertIn("maintenance.last_sweep", maintenance)
 
 
 if __name__ == "__main__":

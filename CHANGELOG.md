@@ -4,6 +4,12 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+Seats: restart required
+
+- **Backstop sweep performance and correctness (#353).** The sweep's forge lookup is one `gh api graphql` call per 50 issues (serial per-issue fallback only on an unusable answer; a timeout/OSError answers `forge: "unavailable"` with no fallback), with `KAOLA_SWEEP_FORGE_TIMEOUT` (default 20 s) and a merged-head set per issue; the scan spends one global `acp list --include-dead` instead of one per worktree, and an unanswered list now skips session and worktree items as `acp-unknown` instead of being read as "no live sessions" (a wrong removal risk). Receipts carry `acp` and `timed_out`. Apply re-verifies only planned candidates: a Host apply reuses its scan's forge facts, and a node `--apply --batch` rebuilds items from the plan ids with no rescan (event `sweep` gains `kept`, replayed into `sweep-kept`). `--apply`/`--record-empty` validate the state file before any action and answer a refusal with a `recovery` hint; `--dry-run` is unchanged. The holder bounds the sweep tool child by `SWEEP_SCAN_TIMEOUT_SECONDS` (600 s, process-group kill), treats a `timed_out` receipt as a failed scan (cooldown, `sideagent_sweep_scan_failed`, no record-empty), and an overdue sweep now preempts pending reconcile input at an idle boundary (never during a Host turn). The Host runs one `sweep --apply` at close-out; `--dry-run` stays identity-free and read-only. `scripts/kaola-acp-holder.py` is in the operator restart set (`docs/conventions.md`), so a running holder keeps the old sweep scheduling and unbounded tool call until it restarts. The observed vrpai heartbeat stall is not addressed (unreproduced).
+
 ## 0.9.20 — 2026-10-19 (computer-use-only presets skipped in automatic selection; DSH profile and verified CLI; Droid session/new wait)
 
 Fixes #350 (a computer-use-only preset such as `codex/luna` is never picked by the Sideagent fallback or another automatic Worker selection), updates the DSH profile and verified CLI (#351) and raises the Droid `session/new` wait to 60 s (#352).

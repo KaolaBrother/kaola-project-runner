@@ -313,6 +313,10 @@ try:
         raise ValueError
 except ValueError:
     SWEEP_INTERVAL_SECONDS = 24 * 3600.0
+# Issue #353: an objective failure bound on the sweep maintenance child
+# process (not a Host/Worker turn timeout). The tool runs in its own process
+# group so a stuck child (e.g. a hung `gh`) is killed wholesale.
+SWEEP_SCAN_TIMEOUT_SECONDS = 600.0
 SIDEAGENT_ROLES = ("sideagent", "sidekick")
 # Issue #299: a wake state_detail carries the agent's stopReason verbatim only
 # when it is one clean token; anything else reads "other".
@@ -5281,6 +5285,14 @@ class Holder:
             else:
                 self._sweep_pass(binding, doc, target, result)
             return result
+        sweep = node.get("sweep")
+        if (not (isinstance(sweep, dict) and sweep.get("phase") == "scanning")
+                and self._sweep_overdue(doc)):
+            # Issue #353: an overdue sweep runs at this idle boundary even
+            # though a reconcile input is pending; the pending input is
+            # handled right after it. A scanning sweep falls through.
+            self._sweep_pass(binding, doc, target, result)
+            return result
         if target is None:
             old = self._node_record(binding) or {}
             old_holder = old.get("holder_instance_id")
@@ -5374,6 +5386,32 @@ class Holder:
             return "interval"
         return "interval" if elapsed >= SWEEP_INTERVAL_SECONDS else None
 
+    def _sweep_overdue(self, doc: dict[str, Any] | None) -> bool:
+        """Issue #353 anti-starvation: a due sweep that keeps losing to pending
+        reconcile input wins anyway once it is overdue - immediately when the
+        ``interval`` reason is already twice the interval old, otherwise once
+        ``sweep_deferred_since`` (set at the first pending boundary that found
+        it due) is one interval old. The mark is dropped whenever it is not
+        due. Caller holds ``worker_events_lock``."""
+        reason = self._sweep_due(doc)
+        if reason is None:
+            self.node.pop("sweep_deferred_since", None)
+            return False
+        if reason == "interval":
+            last = ((((doc or {}).get("state") or {}).get("maintenance") or {})
+                    .get("last_sweep") or {})
+            try:
+                at = datetime.fromisoformat(str(last.get("at") or ""))
+                if time.time() - at.timestamp() >= 2 * SWEEP_INTERVAL_SECONDS:
+                    return True
+            except (ValueError, OSError):
+                pass
+        deferred = self.node.get("sweep_deferred_since")
+        if deferred is None:
+            self.node["sweep_deferred_since"] = time.monotonic()
+            return False
+        return time.monotonic() - deferred >= SWEEP_INTERVAL_SECONDS
+
     def _sweep_tool(self, argv: list[str]) -> dict[str, Any]:
         """`kaola-dispatch.py sweep` under this carrier's own identity."""
         tool = self._state_tool()
@@ -5383,17 +5421,29 @@ class Holder:
         env[DISPATCHER_ENV] = json.dumps(self.dispatcher_identity(), sort_keys=True)
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_dir.parent.parent.parent)
         try:
-            run = subprocess.run([sys.executable, tool, "sweep", "--repo", self.args.repo, "--file",
-                                  str(Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"),
-                                  *argv],
-                                 cwd=self.args.repo, env=env, stdin=subprocess.DEVNULL,
-                                 capture_output=True, text=True)
+            proc = subprocess.Popen([sys.executable, tool, "sweep", "--repo", self.args.repo,
+                                     "--file",
+                                     str(Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"),
+                                     *argv],
+                                    cwd=self.args.repo, env=env, stdin=subprocess.DEVNULL,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                    start_new_session=True)
             try:
-                value = json.loads(run.stdout)
+                out, _err = proc.communicate(timeout=SWEEP_SCAN_TIMEOUT_SECONDS)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                proc.communicate()
+                return {"error": "sweep tool timed out",
+                        "timeout_seconds": SWEEP_SCAN_TIMEOUT_SECONDS}
+            try:
+                value = json.loads(out)
             except ValueError:
-                return {"error": "sweep receipt unreadable", "exit": run.returncode}
-            if run.returncode:
-                return {"error": value, "exit": run.returncode}
+                return {"error": "sweep receipt unreadable", "exit": proc.returncode}
+            if proc.returncode:
+                return {"error": value, "exit": proc.returncode}
             return value
         except (OSError, ValueError) as exc:
             return {"error": str(exc)}
@@ -5404,7 +5454,7 @@ class Holder:
         queued like a scan's."""
         receipt = self._sweep_tool(["--dry-run"])
         planned = isinstance(receipt, dict) and "error" not in receipt \
-            and receipt.get("result") == "planned"
+            and receipt.get("result") == "planned" and not receipt.get("timed_out")
         candidates = [item["id"] for item in (receipt.get("candidates") or [])
                       if isinstance(item, dict) and isinstance(item.get("id"), str)] if planned else []
         recorded: dict[str, Any] | None = None
@@ -5437,7 +5487,8 @@ class Holder:
                                     "receipt_result": recorded.get("result")})
                 return
             self.node["sweep"] = {"phase": "queued", "key": receipt.get("key") or "",
-                                  "candidates": candidates, "reason": reason}
+                                  "candidates": candidates, "reason": reason,
+                                  "kept": receipt.get("kept") or []}
         self._kick_worker_events()
 
     def _sweep_prompt(self, batch: str) -> str:
@@ -5513,7 +5564,8 @@ class Holder:
                                 if isinstance(handled, int) else 0,
                                 "prompt_fingerprint": receipt["prompt_fingerprint"],
                                 "sweep": {"key": key, "candidates": sweep.get("candidates") or [],
-                                          "reason": sweep.get("reason")}})
+                                          "reason": sweep.get("reason"),
+                                          "kept": sweep.get("kept") or []}})
             result["receipt"] = {"batch": batch, "target_session": binding["session"]}
             return
         reason = (error or {}).get("code") or "relay-unadmitted"
