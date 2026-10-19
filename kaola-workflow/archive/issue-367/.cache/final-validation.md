@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: ./scripts/render-skills.py --check; ./scripts/validate.sh --suite test-issue-346-worker-grants; --suite test-issue-350-computer-use-roles; --suite test-issue-309-recovery-routes; --suite test-issue-295-delegator-seats; --suite test-issue-244-dispatch; --suite test-issue-218-preset-ids; --suite test-issue-74-kaola-delegator; --suite test-issue-345-worker-pool; --suite test-issue-324-wake-fixes; --suite test-issue-259-record-contract; --suite test-issue-296-shared-tier-seats; --suite test-issue-294-expert-ceiling; --suite test-issue-273-list-identity; --suite test-issue-111-model-tiers
+validated_candidate_hash: ca7779341e9c163513eaa276b644ecba74c8e0c4d1888d1654d22f28567a703e
