@@ -1,5 +1,5 @@
 {
-  "build": "9e4bf4899933",
+  "build": "547a7a6bf7d4",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "6c508525bfd5daad232cededdf05678a7605a8d4aeec3e548e759706bde131e1",
@@ -11,7 +11,7 @@
     "references/host-entry-matrix.md": "01e35b1383a0f83de1908810777c41ef0a46bf9af1f0e0e0a01414b16d097cfb",
     "references/host-startup.md": "804748a4f8f751d9d71e2adced9fae18a44d3c47fe48f23c33bc21e262851aa7",
     "references/issue-dispatch.md": "6407f91879482c6645c37eb439bd5ec09285bbe1f4860fbaf260ac9b715a4bda",
-    "references/lifecycle-state.md": "237a8374d30e10add08ace63bef1bc84051fdd2fab6941338e18cb7ab0dd6a93",
+    "references/lifecycle-state.md": "637fc318d0f87ac6e6486476742b4a3af6b5e37156d0a0999a5bbb5a21344ca3",
     "references/profile-catalog.md": "0cdbed8d7d9f784a277f1ad46c0e250263184c6e07b329355676633312302349",
     "references/public-research.md": "86e2ad1cd11840fd58900cde429e9b45457f149b67fa91a32e5fe6429a58407c",
     "references/qa-evidence.md": "bf9c3beff60f4407d0bf951ce7a67da4450ac6cca96062a960cd009c38daae7a",
@@ -24,9 +24,9 @@
     "references/zcode-native-skill-entry.md": "22f5e4ce50d92a0e264c71252616a9c2db8473817be1c5eb99d0a415f814918f",
     "scripts/kaola-acp-paths.py": "e435b3aeab7979fb1bff8d18b25087021ca1daf9a0015831fde46126d24261ac",
     "scripts/kaola-compact-recovery.py": "c45662a4297047bd860a46157e950b4aac460b3e9df1a889abe99ca687e90f27",
-    "scripts/kaola-dispatch.py": "0ce8475113056f3da14855f3aa9498fc697c0b9af83bf3c14275c0c03faf51e4",
-    "scripts/kaola-record-contract.py": "f6b51e2e0c54c4ecf49a7ac90f4642d118c8a281cddcb12d896429deaec5b8d7",
-    "scripts/kaola-recovery-routes.py": "6b74600d84eba473b9bbd1c4c5562d8ad18004f7408afc530f281f62215f996b",
+    "scripts/kaola-dispatch.py": "d57f52ae8a3769a8198c1ce9c34c22249e5711faa907cd34d392c71bd9e06e9c",
+    "scripts/kaola-record-contract.py": "2a9ec912ba7ace7f7de9048216d75fd268ea06389c94b710ba0e84a06bfe658c",
+    "scripts/kaola-recovery-routes.py": "4bea1422e83926aabc9dc03a8848876fb00af2d38cd7258ce13bb93e90d7aa79",
     "scripts/kaola-session-names.py": "772f2d729e61763851b78ab9d440c664df225bc4f08dc71f8ba0102ead411316"
   },
   "skill": "kaola-project-runner"

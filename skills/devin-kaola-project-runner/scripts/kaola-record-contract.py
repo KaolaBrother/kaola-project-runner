@@ -1731,6 +1731,22 @@ def cleanup_current(state: dict[str, Any]) -> tuple[list[dict[str, str]], dict[s
                 unverified.pop(warning)
                 removed.append(f"unverified.{warning}")
                 changed = True
+    # Issue #362: a record written before record revisions has no usable
+    # `rev`, so no --expect-rev value can ever name it. Assign its first
+    # revision; every gate on the record is unchanged.
+    for kind in sorted(RECORD_KEYS):
+        records = cleaned.get(kind)
+        if not isinstance(records, dict):
+            continue
+        for ident, record in records.items():
+            if not isinstance(record, dict):
+                continue
+            rev = record.get("rev")
+            if isinstance(rev, int) and not isinstance(rev, bool):
+                continue
+            record["rev"] = 1
+            removed.append(f"{kind}.{ident}.rev assigned 1 (pre-revision record)")
+            changed = True
     stones = cleaned.get("retired")
     if isinstance(stones, list):
         narrowed = []

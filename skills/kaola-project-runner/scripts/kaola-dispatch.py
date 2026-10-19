@@ -5614,9 +5614,35 @@ def validate_record(kind: str, record: dict[str, Any]) -> str | None:
     return None
 
 
+def record_versionless(record: Any) -> bool:
+    """Issue #362: a record written before record revisions carries no usable
+    `rev`, so no `--expect-rev` value can ever name it."""
+    return (isinstance(record, dict)
+            and (not isinstance(record.get("rev"), int) or isinstance(record.get("rev"), bool)))
+
+
+def migrate_command(args: argparse.Namespace) -> str:
+    """The read-only `state migrate` plan the operator reviews before --write."""
+    return shlex.join([sys.executable, str(Path(__file__).resolve()), "state", "migrate",
+                       "--file", str(args.file)])
+
+
+def versionless_recovery(args: argparse.Namespace) -> str:
+    """The documented repair for a record that predates record revisions (#362)."""
+    return (f"{migrate_command(args)} is the read-only plan whose removed list names each "
+            "record assigned rev 1; rerun it with --write, then `state check` shows the "
+            "record's rev and the normal command applies")
+
+
 def record_recovery(args: argparse.Namespace, doc: dict[str, Any], current: dict[str, Any] | None) -> str:
     """Name the existing operation. The Agent decides whether the duty is handled."""
     target = f"{args.kind}/{args.id}"
+    if current is not None and record_versionless(current):
+        return (f"{target} exists at file revision {doc['revision']} but predates record "
+                f"revisions (rev {current.get('rev')!r}); no --expect-rev value can name it. "
+                f"{versionless_recovery(args)}. If the matter is unresolved, retain its "
+                "original evidence and use the current decision/reconciliation route until "
+                "its proper type is established. Unknown is not resolved.")
     if current is None:
         text = (f"{target} is absent at file revision {doc['revision']}. Do not create a handled or "
                 "inapplicable row or move its text to another field. ")
@@ -6089,11 +6115,14 @@ def settle_recovery(args: argparse.Namespace, doc: dict[str, Any], current: dict
     maintenance = state.get("maintenance") if isinstance(state.get("maintenance"), dict) else {}
     last = maintenance.get("last_checkpoint") if isinstance(maintenance.get("last_checkpoint"), dict) else {}
     span = last.get("host_revision") or {}
-    command = shlex.join([sys.executable, str(Path(__file__).resolve()), "state", "update",
-                          "--file", str(args.file), "--writer", args.writer, "--source", "ORIGINAL_SOURCE",
-                          "--kind", "alerts", "--id", args.id, "--expect-rev", str(current.get("rev")),
-                          "--evidence", f"checkpoint:{last.get('batch') or 'BATCH'}",
-                          "--set", json.dumps({"inputs": {ident: None}})])
+    if record_versionless(current):
+        command = f"{versionless_recovery(args)}; the same update then removes the input"
+    else:
+        command = shlex.join([sys.executable, str(Path(__file__).resolve()), "state", "update",
+                              "--file", str(args.file), "--writer", args.writer, "--source", "ORIGINAL_SOURCE",
+                              "--kind", "alerts", "--id", args.id, "--expect-rev", str(current.get("rev")),
+                              "--evidence", f"checkpoint:{last.get('batch') or 'BATCH'}",
+                              "--set", json.dumps({"inputs": {ident: None}})])
     others = len((current.get("inputs") or {})) - 1
     inputs = current.get("inputs") if isinstance(current.get("inputs"), dict) else {}
     hint = _OBSOLETE_RETIRE_ROUTE if obsolete_input_class(ident, inputs.get(ident)) is not None else ""
@@ -6120,6 +6149,11 @@ def settle_inputs(args: argparse.Namespace, doc: dict[str, Any], current: dict[s
     if current is None:
         raise StateRefusal("record-missing", f"alerts/{args.id} is not current",
                            recovery=record_recovery(args, doc, current), unapplied=patch)
+    if record_versionless(current):
+        raise StateRefusal("record-versionless",
+                           f"alerts/{args.id} predates record revisions (rev "
+                           f"{current.get('rev')!r}); no --expect-rev value can name it",
+                           recovery=versionless_recovery(args), unapplied=patch)
     if args.expect_rev != current.get("rev"):
         raise StateRefusal("expect-rev-required" if args.expect_rev is None else "conflict",
                            f"alerts/{args.id} is at rev {current.get('rev')}, not {args.expect_rev}",
@@ -6229,6 +6263,12 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
     expected = args.expect_rev
     if not coalesce:
         actual = current.get("rev") if current else 0
+        if record_versionless(current):
+            raise StateRefusal("record-versionless",
+                               f"{kind}/{record_id} predates record revisions (rev "
+                               f"{current.get('rev')!r}); no --expect-rev value can name it",
+                               current=current, recovery=versionless_recovery(args),
+                               unapplied=patch)
         if current is not None and expected is None:
             raise StateRefusal("expect-rev-required", f"{kind}/{record_id} exists; pass --expect-rev",
                                current=current)
@@ -6641,6 +6681,10 @@ def _index_arguments(args: argparse.Namespace) -> list[str]:
 
 def retire_command(args: argparse.Namespace, kind: str, ident: str, record: dict[str, Any]) -> str:
     """One host retire the operator can run. It rewrites nothing by being built."""
+    if record_versionless(record):
+        # Issue #362: the assigned rev follows `state migrate --write`; the
+        # read-only plan is the next runnable step.
+        return migrate_command(args)
     parts = [sys.executable, str(Path(__file__).resolve()), "state", "retire",
              "--file", str(args.file), "--writer", "host", "--source", "ORIGINAL_SOURCE",
              "--kind", kind, "--id", str(ident), "--expect-rev", str(record.get("rev")),
@@ -6658,6 +6702,8 @@ def retire_command(args: argparse.Namespace, kind: str, ident: str, record: dict
 
 
 def update_hint_command(args: argparse.Namespace, kind: str, ident: str, record: dict[str, Any]) -> str:
+    if record_versionless(record):
+        return migrate_command(args)
     parts = [sys.executable, str(Path(__file__).resolve()), "state", "update",
              "--file", str(args.file), "--writer", "host", "--source", "ORIGINAL_SOURCE",
              "--kind", kind, "--id", str(ident), "--expect-rev", str(record.get("rev")),
@@ -7105,6 +7151,11 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
     if current is None:
         raise StateRefusal("record-missing", f"{kind}/{record_id} is not current",
                            recovery=record_recovery(args, doc, current))
+    if record_versionless(current):
+        raise StateRefusal("record-versionless",
+                           f"{kind}/{record_id} predates record revisions (rev "
+                           f"{current.get('rev')!r}); no --expect-rev value can name it",
+                           current=current, recovery=versionless_recovery(args))
     if args.expect_rev is None:
         raise StateRefusal("expect-rev-required", "retire needs --expect-rev of the current record")
     if args.expect_rev != current.get("rev"):
