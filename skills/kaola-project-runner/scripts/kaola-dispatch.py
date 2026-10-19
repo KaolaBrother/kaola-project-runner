@@ -393,8 +393,9 @@ def normalize_grants(auth: dict[str, Any]) -> list[dict[str, Any]]:
         if switch is not None and not isinstance(switch, bool):
             raise ValueError(f"{preset}: model_switch must be a boolean")
         count = item.get("count")
-        if count is not None and (not isinstance(count, int) or isinstance(count, bool) or count < 0):
-            raise ValueError(f"{preset}: count must be a non-negative integer")
+        if count is not None and count != "unlimited" and (
+                not isinstance(count, int) or isinstance(count, bool) or count < 0):
+            raise ValueError(f"{preset}: count must be a non-negative integer or the literal unlimited")
         shared = item.get("shared_seat")
         if shared is not None and not isinstance(shared, str):
             raise ValueError(f"{preset}: shared_seat must be a string")
@@ -1854,8 +1855,8 @@ def delegator_ceiling(repo: str, observations: list[dict[str, Any]] | None = Non
                         and all(isinstance(item, str) and item for item in grant["preset_ids"])):
                     named_ids = list(dict.fromkeys(grant["preset_ids"]))
             # A named row with known ids refuses those ids. Anything else,
-            # including a bad all-worker count, refuses the Worker class.
-            # Neither path turns the count into unlimited.
+            # including a row whose ids cannot be read, refuses the Worker
+            # class. Neither path turns the count into unlimited.
             if named_ids and "refuses the Worker class" not in (error.get("recovery") or ""):
                 bad_worker.add(int(match.group(1)))
                 for ident in named_ids:
@@ -1920,9 +1921,7 @@ def delegator_ceiling(repo: str, observations: list[dict[str, Any]] | None = Non
         for index, grant in enumerate(grant_rows):
             if index in bad_worker or not isinstance(grant, dict):
                 continue
-            if grant.get("scope") == "all-worker-presets" and "preset_ids" not in grant:
-                ids = set(catalog_workers)
-            elif isinstance(grant.get("preset_ids"), list) and "scope" not in grant:
+            if isinstance(grant.get("preset_ids"), list) and "scope" not in grant:
                 # Elite and Expert ids are not Worker grants, even when named.
                 ids = {ident for ident in grant["preset_ids"] if ident in catalog_workers}
             else:
@@ -1943,15 +1942,6 @@ def delegator_ceiling(repo: str, observations: list[dict[str, Any]] | None = Non
                 worker_expired.update(ids)
                 continue
             if window == "unreadable":
-                if grant.get("scope") == "all-worker-presets":
-                    worker_problem = RECORD.refusal(
-                        "authorization.worker_grants", "ISO-8601 instant with an offset",
-                        "Delegator: an unreadable Worker expiry refuses the Worker class and is not unlimited",
-                    )
-                    worker_ids.clear()
-                    worker_counts.clear()
-                    worker_expired.clear()
-                    break
                 for ident in ids:
                     worker_problems.setdefault(ident, "ceiling-unreadable")
                 continue
@@ -10130,7 +10120,11 @@ def command_delegator_migrate(args: argparse.Namespace) -> int:
     try:
         with StateLock(path):
             doc = _delegator_read(path)
-            migrated, blockers, dropped = RECORD.delegator_migrated(doc, frozenset(ident for ident, row in catalog_from_files(platform_paths(Path(__file__), None)).items() if row["class"] == "Expert"))
+            catalog = catalog_from_files(platform_paths(Path(__file__), None))
+            migrated, blockers, dropped = RECORD.delegator_migrated(
+                doc,
+                frozenset(ident for ident, row in catalog.items() if row["class"] == "Expert"),
+                frozenset(ident for ident, row in catalog.items() if row["class"] == "Worker"))
             if blockers or migrated is None:
                 delegator_recovery(args, doc, blockers)
                 return emit({"result": "blocked", "writes": False, "blockers": blockers,
@@ -10160,6 +10154,16 @@ def command_delegator_update(args: argparse.Namespace) -> int:
             limits = RECORD.aggregate_limit_blockers({key: value for key, value in auth_patch.items() if value is not None}, delegator=True)
             if limits:
                 return emit({"result": "refused", "reason": "invalid-input", **limits[0], "blockers": limits}, 2)
+            worker_rows = auth_patch.get("worker_grants")
+            if isinstance(worker_rows, list) and any(
+                    isinstance(row, dict) and "scope" in row for row in worker_rows):
+                refused = RECORD.refusal(
+                    "authorization.worker_grants",
+                    "one worker_grants row per preset in preset_ids",
+                    "Delegator: write one row per preset with its own count; granting all presets is one "
+                    "row per preset. A stored all-worker-presets row is expanded once by delegator migrate; "
+                    "the file was not changed")
+                return emit({"result": "refused", "reason": "invalid-input", **refused}, 2)
         receipt: dict[str, Any] | None = None
         with StateLock(path):
             doc = _delegator_read(path)
@@ -10206,7 +10210,11 @@ def command_delegator_update(args: argparse.Namespace) -> int:
                            for key, value in auth_patch.items() if value is not None and key not in RECORD.DELEGATOR_AUTH_KEYS]
                 if invalid:
                     return emit({"result": "refused", "reason": "invalid-input", "blockers": invalid, **invalid[0]}, 2)
-            normalized, blockers, _dropped = RECORD.delegator_migrated(merged, frozenset(ident for ident, row in catalog_from_files(platform_paths(Path(__file__), None)).items() if row["class"] == "Expert"))
+            catalog = catalog_from_files(platform_paths(Path(__file__), None))
+            normalized, blockers, _dropped = RECORD.delegator_migrated(
+                merged,
+                frozenset(ident for ident, row in catalog.items() if row["class"] == "Expert"),
+                frozenset(ident for ident, row in catalog.items() if row["class"] == "Worker"))
             for ident, item in (patch.get("watch") or {}).items() if isinstance(patch.get("watch"), dict) else []:
                 if (isinstance(item, dict) and item.get("status") in ("adopted", "settled")
                         and ident not in (doc.get("watch") or {})):

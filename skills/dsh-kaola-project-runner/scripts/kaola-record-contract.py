@@ -167,7 +167,7 @@ DELEGATOR_GRANT_KEYS = frozenset({
     "state", "lifetime", "expires", "special_requirements", "extra_seats",
 })
 # Worker rows are not elite/expert rows. `scope` stays off DELEGATOR_GRANT_KEYS.
-WORKER_GRANT_KEYS = frozenset({"preset_ids", "scope", "count", "state", "expires"})
+WORKER_GRANT_KEYS = frozenset({"preset_ids", "count", "state", "expires"})
 WORKER_SCOPE_ALL = "all-worker-presets"
 UNLIMITED_COUNT = "unlimited"
 DAY_START_KEYS = frozenset({"action", "state", "evidence"})
@@ -620,7 +620,7 @@ def aggregate_limit_blockers(auth: dict[str, Any], prefix: str = "authorization"
     return found
 
 
-def migrate_authorization_limits(auth: Any, delegator: bool = False, expert_ids: frozenset[str] = frozenset()) -> tuple[Any, list[dict[str, str]], list[str]]:
+def migrate_authorization_limits(auth: Any, delegator: bool = False, expert_ids: frozenset[str] = frozenset(), worker_ids: frozenset[str] = frozenset()) -> tuple[Any, list[dict[str, str]], list[str]]:
     """Consolidate source-bound legacy grants; refuse ambiguous owner intent."""
     if not isinstance(auth, dict):
         return auth, [], []
@@ -839,6 +839,29 @@ def migrate_authorization_limits(auth: Any, delegator: bool = False, expert_ids:
                     removed.append("authorization.worker_pool legacy default pool; not migrated into worker_grants")
                 rows = out.get("worker_grants")
                 if isinstance(rows, list):
+                    expanded: list[Any] = []
+                    scoped_row = False
+                    for row in rows:
+                        if (isinstance(row, dict) and row.get("scope") == WORKER_SCOPE_ALL
+                                and "preset_ids" not in row):
+                            scoped_row = True
+                            for ident in sorted(worker_ids - exclusions):
+                                grant = {key: value for key, value in row.items() if key != "scope"}
+                                grant["preset_ids"] = [ident]
+                                expanded.append(grant)
+                            removed.append(
+                                "authorization.worker_grants all-worker-presets row -> one row per covered, non-excluded Worker preset")
+                        else:
+                            expanded.append(row)
+                    if scoped_row and not worker_ids:
+                        blockers.append(refusal(
+                            "authorization.worker_grants",
+                            "one worker_grants row per preset in preset_ids",
+                            "Delegator: expanding a stored all-worker-presets row needs the Worker preset catalog; "
+                            "rerun delegator migrate through the installed dispatch tool"))
+                    else:
+                        rows = expanded
+                        out["worker_grants"] = expanded
                     for row in rows:
                         if isinstance(row, dict) and _string_list_ok(row.get("preset_ids")):
                             row["preset_ids"] = sorted(row["preset_ids"])
@@ -1025,9 +1048,10 @@ def _grant_preset_ids(row: Any) -> list[str]:
 def worker_grant_blockers(auth: dict[str, Any]) -> list[dict[str, str]]:
     """Closed shape of ``worker_grants``. A bad count never becomes unlimited.
 
-    A named row with known preset ids and a bad count refuses those ids.
-    An all-worker row, or a row whose ids cannot be read, refuses the Worker
-    class. ``scope`` is explicit; absence is not all-worker-presets.
+    Every Worker grant is one row per preset: ``preset_ids`` plus ``count``.
+    A named row with known preset ids and a bad count refuses those ids. A
+    row whose ids cannot be read refuses the Worker class. ``scope`` is no
+    grant form; a stored all-worker-presets row is expanded once by migration.
     """
     if "worker_grants" not in auth or auth.get("worker_grants") is None:
         return []
@@ -1039,8 +1063,6 @@ def worker_grant_blockers(auth: dict[str, Any]) -> list[dict[str, str]]:
         )]
     found: list[dict[str, str]] = []
     seen: dict[str, int] = {}
-    all_rows = 0
-    named_rows = 0
     for index, grant in enumerate(rows):
         path = f"authorization.worker_grants[{index}]"
         if not isinstance(grant, dict):
@@ -1050,7 +1072,14 @@ def worker_grant_blockers(auth: dict[str, Any]) -> list[dict[str, str]]:
             ))
             continue
         for field in sorted(grant):
-            if field not in WORKER_GRANT_KEYS:
+            if field == "scope":
+                found.append(refusal(
+                    f"{path}.scope", "no scope field; one worker_grants row per preset in preset_ids",
+                    "Delegator: every Worker grant names its presets in preset_ids with its own count; "
+                    "granting all presets is one row per preset. A stored all-worker-presets row is "
+                    "expanded once by delegator migrate; do not write a scope",
+                ))
+            elif field not in WORKER_GRANT_KEYS:
                 found.append(refusal(
                     f"{path}.{field}", ", ".join(sorted(WORKER_GRANT_KEYS)),
                     "Delegator: Worker grants store no class copy. Rehome this fact from its source; the file was not written",
@@ -1059,15 +1088,10 @@ def worker_grant_blockers(auth: dict[str, Any]) -> list[dict[str, str]]:
         has_scope = "scope" in grant
         ids = grant.get("preset_ids")
         ids_ok = _string_list_ok(ids) and bool(ids) and all(ids) and len(ids) == len(set(ids))
-        if has_ids == has_scope:
+        if not has_ids and not has_scope:
             found.append(refusal(
-                path, "preset_ids or scope all-worker-presets, exactly one",
-                "Delegator: do not infer all Worker presets from a missing scope, and do not send both",
-            ))
-        if has_scope and grant.get("scope") != WORKER_SCOPE_ALL:
-            found.append(refusal(
-                f"{path}.scope", WORKER_SCOPE_ALL,
-                "Delegator: all-worker-presets is the only Worker scope; do not infer it",
+                path, "preset_ids on one worker_grants row per preset",
+                "Delegator: source the exact Worker preset ids, one row per preset; the file was not written",
             ))
         if has_ids and not ids_ok:
             found.append(refusal(
@@ -1075,9 +1099,7 @@ def worker_grant_blockers(auth: dict[str, Any]) -> list[dict[str, str]]:
                 "Delegator: source the exact Worker preset ids; the file was not written",
             ))
         named = has_ids and not has_scope and ids_ok
-        scoped = has_scope and not has_ids and grant.get("scope") == WORKER_SCOPE_ALL
         if named:
-            named_rows += 1
             for ident in ids:
                 seen[ident] = seen.get(ident, 0) + 1
                 if seen[ident] > 1:
@@ -1085,8 +1107,6 @@ def worker_grant_blockers(auth: dict[str, Any]) -> list[dict[str, str]]:
                         path, "one authoritative row per preset",
                         f"Owner: reconcile duplicate Worker preset {ident} from original grants",
                     ))
-        if scoped:
-            all_rows += 1
         if not worker_count_ok(grant.get("count")):
             if named:
                 found.append(refusal(
@@ -1105,12 +1125,6 @@ def worker_grant_blockers(auth: dict[str, Any]) -> list[dict[str, str]]:
         if "expires" in grant and grant.get("expires") is not None and not isinstance(grant.get("expires"), str):
             found.append(refusal(f"{path}.expires", "string",
                                  "Delegator: source the original expiry; the file was not written"))
-    if all_rows > 1 or (all_rows and named_rows):
-        found.append(refusal(
-            "authorization.worker_grants",
-            "one all-worker-presets row, or named preset rows, not both",
-            "Delegator: reconcile overlapping Worker grants; do not keep two authorities",
-        ))
     other: set[str] = set()
     for key in ("elite_grants", "expert_task_grants"):
         for row in auth.get(key) or []:
@@ -1139,15 +1153,9 @@ def project_worker_grants(auth: Any) -> tuple[list[dict[str, Any]], str]:
     for grant in rows_in:
         if not isinstance(grant, dict):
             continue
-        row: dict[str, Any] = {}
-        if grant.get("scope") == WORKER_SCOPE_ALL and "preset_ids" not in grant:
-            row["scope"] = WORKER_SCOPE_ALL
-            row["coverage"] = "all-worker-presets"
-        elif _string_list_ok(grant.get("preset_ids")) and "scope" not in grant:
-            row["preset_ids"] = list(grant["preset_ids"])
-            row["coverage"] = "named-presets"
-        else:
+        if not (_string_list_ok(grant.get("preset_ids")) and "scope" not in grant):
             continue
+        row: dict[str, Any] = {"preset_ids": list(grant["preset_ids"]), "coverage": "named-presets"}
         count = grant.get("count")
         if count == UNLIMITED_COUNT or count_ok(count):
             row["count"] = count
@@ -1159,21 +1167,11 @@ def project_worker_grants(auth: Any) -> tuple[list[dict[str, Any]], str]:
     if not shown:
         return [], none
     parts = []
-    all_scope = False
-    named = False
     for row in shown:
         count = "unlimited" if row.get("count") == UNLIMITED_COUNT else row.get("count")
         expiry = f", expires {row['expires']}" if row.get("expires") else ""
-        if row.get("coverage") == "all-worker-presets":
-            all_scope = True
-            parts.append(f"all Worker presets, count {count}{expiry}")
-        else:
-            named = True
-            parts.append(f"{', '.join(row.get('preset_ids') or [])} count {count}{expiry}")
-    if all_scope and not named:
-        text = "Worker grants cover all Worker presets (" + "; ".join(parts) + ")."
-    else:
-        text = "Worker grants cover named presets: " + "; ".join(parts) + "."
+        parts.append(f"{', '.join(row.get('preset_ids') or [])} count {count}{expiry}")
+    text = "Worker grants cover named presets: " + "; ".join(parts) + "."
     if any(row.get("count") == UNLIMITED_COUNT for row in shown):
         text += " unlimited is explicit and is not a number."
     return shown, text
@@ -1325,8 +1323,9 @@ def authorization_blockers(auth: Any, prefix: str = "authorization") -> list[dic
                                      "granted, paused, revoked, or excluded",
                                      "set state to one of those tokens; the file was not written"))
             count = grant.get("count")
-            if "count" in grant and not count_ok(count):
-                found.append(refusal(f"{prefix}.grants[{index}].count", "nonnegative integer, excluding boolean",
+            if "count" in grant and not worker_count_ok(count):
+                found.append(refusal(f"{prefix}.grants[{index}].count",
+                                     "nonnegative integer or the literal unlimited, excluding boolean",
                                      "source the exact granted count; the file was not written"))
             ids = grant.get("preset_ids")
             if not (isinstance(grant.get("id"), str) and grant["id"] or _string_list_ok(ids) and ids and all(ids)):
@@ -2073,9 +2072,9 @@ def delegator_blockers(doc: dict[str, Any]) -> tuple[list[dict[str, str]], list[
     return blockers, dropped
 
 
-def delegator_migrated(doc: dict[str, Any], expert_ids: frozenset[str] = frozenset()) -> tuple[dict[str, Any] | None, list[dict[str, str]], list[str]]:
+def delegator_migrated(doc: dict[str, Any], expert_ids: frozenset[str] = frozenset(), worker_ids: frozenset[str] = frozenset()) -> tuple[dict[str, Any] | None, list[dict[str, str]], list[str]]:
     doc = json.loads(json.dumps(doc))
-    auth, limit_blockers, limit_removed = migrate_authorization_limits(doc.get("authorization"), delegator=True, expert_ids=expert_ids)
+    auth, limit_blockers, limit_removed = migrate_authorization_limits(doc.get("authorization"), delegator=True, expert_ids=expert_ids, worker_ids=worker_ids)
     if "authorization" in doc:
         doc["authorization"] = auth
     if limit_blockers:
