@@ -6547,6 +6547,263 @@ def index_identity_problem(index: dict[str, Any], repo: str) -> str | None:
     return None
 
 
+# Issue #354: diagnosis only. A row larger than this is named as a hint.
+# It is not a gate, a truncation, or a field length cap.
+_BLOAT_HINT_BYTES = 1536
+_BLOAT_LARGEST = 5
+_SHELL_DUTY_FIELDS = ("goal", "scope", "acceptance", "next", "wait", "dispatch",
+                      "sessions", "assignments", "session")
+_STALE_COLLECT_ROUTE = "stale-collect session-gone route"
+_STALE_COLLECT_ROUTE_KEY = "stale-collect-session-gone"
+
+
+def _blank(value: Any) -> bool:
+    return value in (None, "", [], {})
+
+
+def _record_bytes(record: dict[str, Any]) -> int:
+    return len(json.dumps(record, ensure_ascii=False, sort_keys=True).encode("utf-8"))
+
+
+def _revision_covered(handled: Any, task_rev: Any) -> bool:
+    """True when a later batch has already handled this task's host revision."""
+    if isinstance(handled, bool) or isinstance(task_rev, bool):
+        return False
+    if not isinstance(handled, int) or not isinstance(task_rev, int):
+        return False
+    return handled >= task_rev
+
+
+def _evidence_tokens(record: dict[str, Any]) -> list[str] | None:
+    evidence = record.get("evidence")
+    if isinstance(evidence, str):
+        return [evidence] if evidence else []
+    if isinstance(evidence, list) and all(isinstance(item, str) for item in evidence):
+        return list(evidence)
+    return None
+
+
+def _shell_task(record: dict[str, Any]) -> bool:
+    """A task whose only evidence is retired:tasks/ID and whose duty fields are empty."""
+    tokens = _evidence_tokens(record)
+    if not tokens or any(_RETIRED_TASK_EVIDENCE.fullmatch(token) is None for token in tokens):
+        return False
+    return all(_blank(record.get(field)) for field in _SHELL_DUTY_FIELDS)
+
+
+def _bloat_class(kind: str, record: dict[str, Any]) -> str | None:
+    if kind == "tasks":
+        if _shell_task(record):
+            return "shell"
+        verdict = record.get("verdict") if isinstance(record.get("verdict"), dict) else {}
+        if record.get("stage") == "done" and verdict.get("value") == "accepted":
+            return "accepted-done"
+        if verdict.get("value") == "cancelled":
+            return "cancelled"
+        return None
+    if kind == "decisions" and record.get("status") == "settled":
+        return "settled"
+    if kind == "alerts":
+        inputs = record.get("inputs")
+        if isinstance(inputs, dict) and not inputs:
+            return "resolved"
+    return None
+
+
+def _handled_evidence(args: argparse.Namespace, record: dict[str, Any]) -> str:
+    supplied = getattr(args, "evidence", None)
+    if isinstance(supplied, str) and supplied.strip():
+        return supplied
+    evidence = record.get("evidence")
+    if isinstance(evidence, str) and evidence.strip():
+        return evidence
+    if (isinstance(evidence, list) and len(evidence) == 1 and isinstance(evidence[0], str)
+            and evidence[0].strip()):
+        return evidence[0]
+    source = record.get("source")
+    if isinstance(source, str) and source.strip():
+        return source
+    return "ORIGINAL_HANDLED_EVIDENCE"
+
+
+def _cite_argument(args: argparse.Namespace, kind: str, record: dict[str, Any]) -> str | None:
+    if kind != "tasks":
+        return None
+    verdict = record.get("verdict") if isinstance(record.get("verdict"), dict) else {}
+    if verdict.get("value") != "accepted":
+        return None
+    repo = repo_of_state_file(Path(args.file))
+    if (repo / "README.md").is_file():
+        cite = {"path": "README.md", "locator": "README.md"}
+    else:
+        cite = {"path": "ORIGINAL_CITE_PATH", "locator": "ORIGINAL_CITE_PATH"}
+    return json.dumps(cite, ensure_ascii=False)
+
+
+def _index_arguments(args: argparse.Namespace) -> list[str]:
+    raw = getattr(args, "index", None)
+    if raw is None:
+        return []
+    values = raw if isinstance(raw, list) else [raw]
+    return [item for item in values if isinstance(item, str) and item]
+
+
+def retire_command(args: argparse.Namespace, kind: str, ident: str, record: dict[str, Any]) -> str:
+    """One host retire the operator can run. It rewrites nothing by being built."""
+    parts = [sys.executable, str(Path(__file__).resolve()), "state", "retire",
+             "--file", str(args.file), "--writer", "host", "--source", "ORIGINAL_SOURCE",
+             "--kind", kind, "--id", str(ident), "--expect-rev", str(record.get("rev")),
+             "--evidence", _handled_evidence(args, record)]
+    cite = _cite_argument(args, kind, record)
+    if cite:
+        parts.extend(("--cite", cite))
+    if kind == "tasks" and (record.get("dispatch") or task_seats(record)):
+        for index_path in _index_arguments(args):
+            parts.extend(("--index", index_path))
+        live = getattr(args, "live", None)
+        if isinstance(live, str) and live:
+            parts.extend(("--live", live))
+    return shlex.join(parts)
+
+
+def update_hint_command(args: argparse.Namespace, kind: str, ident: str, record: dict[str, Any]) -> str:
+    parts = [sys.executable, str(Path(__file__).resolve()), "state", "update",
+             "--file", str(args.file), "--writer", "host", "--source", "ORIGINAL_SOURCE",
+             "--kind", kind, "--id", str(ident), "--expect-rev", str(record.get("rev")),
+             "--set", "CURRENT_PATCH"]
+    return shlex.join(parts)
+
+
+def diagnose_state_bloat(doc: dict[str, Any], args: argparse.Namespace | None
+                         ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Computed residue. Nothing here is stored and nothing accumulates."""
+    state = doc["state"]
+    problems: list[dict[str, Any]] = []
+    grouped: dict[str, list[dict[str, Any]]] = {"terminal": [], "shell": [], "settled": [], "resolved": []}
+    collections: dict[str, dict[str, int]] = {}
+    sized: list[dict[str, Any]] = []
+    hints: list[dict[str, Any]] = []
+    for kind in RECORD_KINDS:
+        records = state.get(kind) if isinstance(state.get(kind), dict) else {}
+        total = 0
+        count = 0
+        for ident, record in records.items():
+            if not isinstance(record, dict):
+                continue
+            count += 1
+            nbytes = _record_bytes(record)
+            total += nbytes
+            sized.append({"kind": kind, "id": ident, "bytes": nbytes})
+            klass = _bloat_class(kind, record)
+            if klass is None:
+                if nbytes > _BLOAT_HINT_BYTES and args is not None:
+                    command = update_hint_command(args, kind, ident, record)
+                    hints.append({
+                        "kind": kind, "id": ident, "rev": record.get("rev"), "bytes": nbytes,
+                        "command": command,
+                        "detail": (f"{kind}/{ident} rev {record.get('rev')} is {nbytes} bytes. "
+                                   "Rewrite that same id in place; do not append. This hint is not a gate. "
+                                   + command),
+                    })
+                continue
+            command = retire_command(args, kind, ident, record) if args is not None else ""
+            item = {"kind": kind, "id": ident, "rev": record.get("rev"), "class": klass,
+                    "bytes": nbytes, "command": command}
+            if klass == "shell":
+                grouped["shell"].append(item)
+            elif klass == "settled":
+                grouped["settled"].append(item)
+            elif klass == "resolved":
+                grouped["resolved"].append(item)
+            else:
+                grouped["terminal"].append(item)
+            problems.append({
+                "code": "state-bloat", "level": "warn", "kind": kind, "id": ident,
+                "rev": record.get("rev"), "class": klass, "bytes": nbytes, "command": command,
+                "detail": (f"{kind}/{ident} rev {record.get('rev')} file revision {doc.get('revision')} "
+                           f"class {klass} ({nbytes} bytes). {command}"),
+            })
+        collections[kind] = {"count": count, "bytes": total}
+    largest = sorted(sized, key=lambda row: (-row["bytes"], row["kind"], str(row["id"])))[:_BLOAT_LARGEST]
+    diagnosis = {
+        "code": "state-bloat", "stored": False, "collections": collections,
+        "terminal": grouped["terminal"], "shell": grouped["shell"],
+        "settled": grouped["settled"], "resolved": grouped["resolved"],
+        "largest": largest, "hints": hints,
+    }
+    return problems, diagnosis
+
+
+def _stale_refusal(ref: str, task: dict[str, Any], args: argparse.Namespace, why: str) -> str:
+    ident = str(getattr(args, "id", "") or "")
+    file_rev = getattr(args, "_file_revision", None)
+    where = f"tasks/{ident} rev {task.get('rev')}"
+    if file_rev is not None:
+        where += f" file revision {file_rev}"
+    command = retire_command(args, "tasks", ident, task) if ident else ""
+    return f"{ref} is unknown; {where}: {why}. {_STALE_COLLECT_ROUTE}. {command}".strip()
+
+
+def stale_collect_session_gone(ref: str, row: dict[str, Any], task: dict[str, Any],
+                               live: list[dict[str, Any]], evidence: Any,
+                               args: argparse.Namespace, repo: str) -> dict[str, Any] | str | None:
+    """Retire the reproduced gap: collected proof is present, its outcome is
+    absent, and the session record is already gone.
+
+    None means this row is not that shape, so the continuation route and the
+    dead-holder route keep it. A string is a refusal and names this route.
+    A dict is the reconciliation. The index row is not rewritten here.
+    """
+    if row.get("status") != "unknown" or row.get("reason") != "fingerprint-differs":
+        return None
+    evidence_rows = row.get("evidence") if isinstance(row.get("evidence"), dict) else {}
+    collected = evidence_rows.get("collect_status") if isinstance(evidence_rows, dict) else None
+    if not isinstance(collected, dict) or not collected:
+        return None
+    if collected.get("outcome") is not None:
+        return None
+    status_evidence = evidence_rows.get("status") if isinstance(evidence_rows.get("status"), dict) else {}
+    if status_evidence.get("error_code") != "no-session":
+        return None
+    verdict = task.get("verdict") if isinstance(task.get("verdict"), dict) else {}
+    accepted = task.get("stage") == "done" and verdict.get("value") == "accepted"
+    cancelled = verdict.get("value") == "cancelled"
+    if not accepted and not cancelled:
+        return _stale_refusal(ref, task, args, "the task is not accepted-done or cancelled")
+    dispositions = task.get("dispositions") if isinstance(task.get("dispositions"), dict) else None
+    if dispositions is not None and dispositions.get(ref) != "accepted":
+        return _stale_refusal(ref, task, args, "its per-item disposition is not accepted")
+    if row.get("task_id") not in (None, getattr(args, "id", None)):
+        return _stale_refusal(ref, task, args, "the index row names another task")
+    session = session_name(row.get("session"))
+    if session is None:
+        return _stale_refusal(ref, task, args, "missing session link")
+    holder = row.get("holder_instance_id")
+    holder = holder if isinstance(holder, str) and holder else None
+    collected_holder = collected.get("holder_instance_id")
+    if (isinstance(collected_holder, str) and collected_holder and holder
+            and collected_holder != holder):
+        return _stale_refusal(ref, task, args, "collected holder differs from the recorded holder")
+    if (isinstance(collected.get("repo"), str) and collected.get("repo")
+            and isinstance(row.get("repo"), str) and row.get("repo")
+            and not same_repo(collected.get("repo"), row.get("repo"))):
+        return _stale_refusal(ref, task, args, "collected repo differs from the index row")
+    if isinstance(row.get("repo"), str) and row.get("repo") and not same_repo(row.get("repo"), repo):
+        return _stale_refusal(ref, task, args, "the index row repo is not this project")
+    if any(item.get("session") == session for item in live):
+        return _stale_refusal(
+            ref, task, args,
+            f"{session} is still listed; this route retires only when --live has no row for that session")
+    entry: dict[str, Any] = {
+        "item_id": ref, "session": session, "collect_status": "unknown",
+        "reason": "fingerprint-differs", "disposition": "accepted" if accepted else "cancelled",
+        "evidence": evidence, "live": "absent", "route": _STALE_COLLECT_ROUTE_KEY,
+    }
+    if holder:
+        entry["holder_instance_id"] = holder
+    return entry
+
+
 # Issue #333: a holder that died before collect captured last_prompt leaves the
 # index row unknown. These reasons are that close. A fingerprint-differs row
 # that already carries collected continuation evidence stays on the older route.
@@ -6726,11 +6983,18 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
                      "collect_status": "unknown", "reason": "fingerprint-differs",
                      "disposition": "accepted"}]
             else:
-                # Issue #333: the continuation proof above does not cover a holder
-                # that died before last_prompt. The dead-holder route reports the
-                # reconciliation and leaves the unknown index bytes alone.
-                settlement = dead_holder_unknown_settlement(
-                    ref, row, task, live, getattr(args, "evidence", None))
+                # Issue #354: collected outcome is absent and the session record
+                # is gone. That shape is not the continuation route (it needs
+                # outcome stopped) and not the dead-holder route (that route
+                # leaves a row that already has collected proof).
+                settlement = stale_collect_session_gone(
+                    ref, row, task, live, getattr(args, "evidence", None), args, repo)
+                if settlement is None:
+                    # Issue #333: the continuation proof above does not cover a holder
+                    # that died before last_prompt. The dead-holder route reports the
+                    # reconciliation and leaves the unknown index bytes alone.
+                    settlement = dead_holder_unknown_settlement(
+                        ref, row, task, live, getattr(args, "evidence", None))
                 if isinstance(settlement, dict):
                     args._reconciled_dispatch = getattr(args, "_reconciled_dispatch", []) + [settlement]
                 elif isinstance(settlement, str):
@@ -6857,6 +7121,7 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
         # its evidence, to a continuing duty; the receiver owns its stop.
         handed = handoff_seats(state["tasks"][handoff], current, record_id, args)
     elif kind == "tasks":
+        args._file_revision = doc.get("revision")
         open_refs = open_dispatch(current, args)
         if open_refs:
             raise StateRefusal("retire-unmet", "its dispatched work is not shown closed: "
@@ -7637,7 +7902,8 @@ def carrier_from_live(rows: list[dict[str, Any]] | None, repo: Path) -> tuple[di
 
 
 def state_problems(doc: dict[str, Any], path: Path, index: dict[str, Any] | None,
-                   rows: list[dict[str, Any]] | None, repo: Path) -> list[dict[str, Any]]:
+                   rows: list[dict[str, Any]] | None, repo: Path,
+                   args: argparse.Namespace | None = None) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     state = doc["state"]
     problems: list[dict[str, Any]] = []
 
@@ -7664,12 +7930,23 @@ def state_problems(doc: dict[str, Any], path: Path, index: dict[str, Any] | None
         if task.get("stage") == "done":
             verdict = task.get("verdict") if isinstance(task.get("verdict"), dict) else {}
             seats = task_seats(task)
-            close_open = not (
-                verdict.get("value") in ("accepted", "cancelled") and not seats and not task.get("dispatch")
-            )
-            if close_open:
-                note("done-not-retired", "watch", "done; retire it with its evidence once close-out is "
-                     "verified", "tasks", ident)
+            terminal = verdict.get("value") in ("accepted", "cancelled")
+            close_open = not (terminal and not seats and not task.get("dispatch"))
+            # A settled done task is still residue when its seats and dispatch
+            # are already empty. The next handled batch raises the level.
+            # The level never refuses a later write.
+            if close_open or terminal:
+                handled = None
+                maintenance = state.get("maintenance")
+                if isinstance(maintenance, dict):
+                    handled = maintenance.get("handled_host_revision")
+                level = "warn" if terminal and _revision_covered(handled, task.get("host_revision")) else "watch"
+                command = retire_command(args, "tasks", ident, task) if args is not None else ""
+                detail = (f"tasks/{ident} rev {task.get('rev')} file revision {doc.get('revision')}: "
+                          "done; retire it with its evidence once close-out is verified. " + command).strip()
+                problems.append({"code": "done-not-retired", "level": level, "detail": detail,
+                                 "kind": "tasks", "id": ident, "rev": task.get("rev"),
+                                 **({"command": command} if command else {})})
             if seats and rows is not None:
                 for detail in open_seats(seats, rows):
                     note("done-seat-open", "warn", f"done while {detail}", "tasks", ident)
@@ -7719,8 +7996,16 @@ def state_problems(doc: dict[str, Any], path: Path, index: dict[str, Any] | None
                                      for row in hosts):
             proven, why = carrier_from_live(rows, repo)
             if proven is None:
+                live_path = getattr(args, "live", None) if args is not None else None
+                migrate = ""
+                if isinstance(live_path, str) and live_path:
+                    migrate = shlex.join([sys.executable, str(Path(__file__).resolve()), "state", "migrate",
+                                          "--file", str(path), "--live", live_path])
+                detail = f"recorded carrier holder is not the live Host: {why}"
+                if migrate:
+                    detail += f". Next: {migrate}"
                 note("carrier-unproven", "severe" if len(json.dumps(doc)) > LEGACY_READER_MAX_BYTES
-                     else "warn", f"recorded carrier holder is not the live Host: {why}")
+                     else "warn", detail)
     try:
         _, sizes = render_state(json.loads(json.dumps(doc)), path)
     except StateRefusal as refusal:
@@ -7728,7 +8013,9 @@ def state_problems(doc: dict[str, Any], path: Path, index: dict[str, Any] | None
     else:
         if sizes["body_bytes"] > HOST_VIEW_MAX_BYTES * 3 // 4:
             note("host-view-near-limit", "watch", f"Host view is {sizes['body_bytes']} bytes")
-    return problems
+    extra, diagnosis = diagnose_state_bloat(doc, args)
+    problems.extend(extra)
+    return problems, diagnosis
 
 
 def command_state_check(args: argparse.Namespace) -> int:
@@ -7742,9 +8029,9 @@ def command_state_check(args: argparse.Namespace) -> int:
     except ValueError as exc:
         return fail("invalid-input", str(exc))
     repo = Path(args.repo).resolve() if args.repo else repo_of_state_file(path)
-    problems = state_problems(doc, path, index, rows, repo)
+    problems, diagnosis = state_problems(doc, path, index, rows, repo, args)
     return emit({"result": "checked", "revision": doc.get("revision"), "ok": not problems,
-                 "problems": problems, "read_only": True,
+                 "problems": problems, "diagnosis": diagnosis, "read_only": True,
                  "unchecked": [name for name, value in (("index", index), ("live", rows)) if value is None]})
 
 

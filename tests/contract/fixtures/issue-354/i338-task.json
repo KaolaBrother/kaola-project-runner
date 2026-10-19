@@ -1,0 +1,26 @@
+{
+  "acceptance": "issue acceptance list; affected suites + render --check green; Host reads the diff and receipts before finalize",
+  "created_at": "2026-10-16T14:21:03.573028+00:00",
+  "dispatch": [
+    "i338-effort-max"
+  ],
+  "dispositions": {
+    "i338-effort-max": "accepted"
+  },
+  "goal": "#338 dsh/opencode plain start applies effort max (yaml, suite test, live receipts)",
+  "host_revision": 322,
+  "next": "retire after #354 provides the route",
+  "rev": 8,
+  "scope": "own worktree .kw/worktrees/issue-338, branch workflow/issue-338",
+  "source": "Host turn 2026-10-19: i338 stays only because no current retire route covers its dispatch row; reproduced input for #354",
+  "stage": "done",
+  "updated_at": "2026-10-19T03:12:51.991525+00:00",
+  "verdict": {
+    "by": "host",
+    "value": "accepted",
+    "why": "main c18a6003 (archive issue-338 [sink]); live receipts dsh reasoning_effort=max / opencode effort=max applied+effective; Host suites exit 0"
+  },
+  "wait": "retire blocked by reproduced tool gap: dispatch i338-effort-max status unknown reason fingerprint-differs, stale collect_status outcome null, session record removed (no-session). Continuation route needs outcome=stopped; dead-holder route (#333) excludes rows with collected evidence. Fix belongs to #354 (settled-must-leave + executable refusal); retire this row when that named route lands.",
+  "writer": "host:zcode-KPR-orchestrator-main",
+  "writer_holder": "a9ec3f698c910e92cec7d778bfdb101c"
+}

@@ -1,0 +1,118 @@
+{
+  "acceptance": "accepted",
+  "acceptance_source": {
+    "host_revision": 321,
+    "state": ".kaola/heartbeat-prompt.json",
+    "task_id": "i338",
+    "task_rev": 7
+  },
+  "capture_since": 36,
+  "dispatch_event_cursor": 36,
+  "dispatcher": {
+    "holder_instance_id": "f07ed607fb720772b93486f16a7d61e1",
+    "platform": "zcode",
+    "session": "zcode-KPR-orchestrator-main"
+  },
+  "evidence": {
+    "collect_status": {
+      "acp_session_id": "01a14516-d876-7b41-8bb9-1d41aeb56636",
+      "dispatch_event_cursor": null,
+      "exit_code": 0,
+      "holder_instance_id": "4b486a5c911c7f8d18d076d0f3a702aa",
+      "mutation_status": "completed",
+      "outcome": null,
+      "prompt_fingerprint": "sha256:278ae0542975ff2c201766ee76fb55f3d6493c68dc9288eddea21b3185e7b149",
+      "repo": "/Users/ylpromax5/Workspace/kaola-project-runner-dev",
+      "result": null
+    },
+    "send": {
+      "acp_session_id": "01a14516-d876-7b41-8bb9-1d41aeb56636",
+      "dispatch_event_cursor": 36,
+      "exit_code": 0,
+      "holder_instance_id": null,
+      "mutation_status": "in_progress",
+      "outcome": "in_progress",
+      "prompt_fingerprint": "sha256:16134a506c9aa7356ac7277ba749900f7f6d286dfde318a5896988f5fe1eaaf0",
+      "repo": "/Users/ylpromax5/Workspace/kaola-project-runner-dev",
+      "result": null
+    },
+    "start": {
+      "acp_session_id": "01a14516-d876-7b41-8bb9-1d41aeb56636",
+      "dispatch_event_cursor": null,
+      "exit_code": 0,
+      "holder_instance_id": "4b486a5c911c7f8d18d076d0f3a702aa",
+      "mutation_status": null,
+      "outcome": null,
+      "prompt_fingerprint": null,
+      "repo": "/Users/ylpromax5/Workspace/kaola-project-runner-dev",
+      "result": null
+    },
+    "status": {
+      "acp_session_id": null,
+      "dispatch_event_cursor": null,
+      "error_code": "no-session",
+      "exit_code": 0,
+      "holder_instance_id": null,
+      "mutation_status": null,
+      "outcome": null,
+      "prompt_fingerprint": null,
+      "repo": "/Users/ylpromax5/Workspace/kaola-project-runner-dev",
+      "result": null
+    }
+  },
+  "holder_instance_id": "4b486a5c911c7f8d18d076d0f3a702aa",
+  "item_id": "i338-effort-max",
+  "notify_target": {
+    "platform": "zcode",
+    "session": "zcode-KPR-orchestrator-main"
+  },
+  "platform": "grok",
+  "preset": "grok/default",
+  "prompt_fingerprint": "sha256:278ae0542975ff2c201766ee76fb55f3d6493c68dc9288eddea21b3185e7b149",
+  "prompt_sha256": "sha256:16134a506c9aa7356ac7277ba749900f7f6d286dfde318a5896988f5fe1eaaf0",
+  "prompt_source": {
+    "kind": "full",
+    "prompt_sha256": "sha256:16134a506c9aa7356ac7277ba749900f7f6d286dfde318a5896988f5fe1eaaf0"
+  },
+  "reason": "fingerprint-differs",
+  "repo": "/Users/ylpromax5/Workspace/kaola-project-runner-dev",
+  "selection": {
+    "advertised": {
+      "effort": "high",
+      "model_id": "grok-4.7"
+    },
+    "advertised_source": "effective_selection",
+    "applied": {
+      "effort": "high",
+      "model_id": "grok-4.7"
+    },
+    "applied_state": {
+      "effort": "applied",
+      "model_id": "applied"
+    },
+    "comparison": "match",
+    "fields": {
+      "effort": {
+        "advertised": "match",
+        "applied": "match"
+      },
+      "model_id": {
+        "advertised": "match",
+        "applied": "match"
+      }
+    },
+    "requested": {
+      "effort": "high",
+      "model_id": "grok-4.7",
+      "preset": "grok/default",
+      "tier": "default"
+    },
+    "source": "config_application"
+  },
+  "session": "grok-KPR-i338-effort",
+  "status": "unknown",
+  "stop_reason": null,
+  "task_id": "i338",
+  "turn_active": true,
+  "turn_outcome": null
+}
