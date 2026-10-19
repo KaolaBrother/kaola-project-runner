@@ -4212,5 +4212,542 @@ class RenderedGuidance(unittest.TestCase):
         self.assertLessEqual(len(snapshot.encode()), 8192)
 
 
+class SideagentTaskRetire(StateProject):
+    """Issue #356: the bound node retires a Host-accepted or cancelled task
+    inside its reconcile batch, only when every strict condition re-verifies
+    under the state lock. Any unmet condition returns the input to the Host
+    through the checkpoint's `returned` verb."""
+
+    SESSION = "zcode-KT-sideagent"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.records = Path(self.tmp.name) / "records"
+        self.saved_root = os.environ.get("KAOLA_ACP_RECORD_ROOT")
+        os.environ["KAOLA_ACP_RECORD_ROOT"] = str(self.records)
+        self.index = self.repo / ".kaola" / "dispatch-index.json"
+        self.live = self.repo / "live.json"
+        self.init()
+        self.bind()
+
+    def tearDown(self) -> None:
+        if self.saved_root is None:
+            os.environ.pop("KAOLA_ACP_RECORD_ROOT", None)
+        else:
+            os.environ["KAOLA_ACP_RECORD_ROOT"] = self.saved_root
+        super().tearDown()
+
+    def node(self, holder: str) -> dict[str, str]:
+        """The bound session now runs this fresh holder: its own record says so."""
+        digest = hashlib.sha256(str(self.repo).encode()).hexdigest()[:16]
+        directory = self.records / "zcode" / self.SESSION / digest
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "record.json").write_text(json.dumps({"holder_instance_id": holder,
+                                                           "session_role": "sideagent"}), encoding="utf-8")
+        return self.caller_env(self.SESSION, holder)
+
+    def bind(self) -> None:
+        code, out = self.state("update", "--file", str(self.file), "--writer", "host", "--source", "bind",
+                               "--section", "sideagent", "--expect-revision", str(self.doc()["revision"]),
+                               "--set", json.dumps({"platform": "zcode", "session": self.SESSION,
+                                                    "state": "active", "mode": "node"}))
+        self.assertEqual(code, 0, out)
+
+    def checkpoint(self, env: dict | None, batch: str, through: int, entries: list,
+                   events: list | None = None) -> tuple[int, dict]:
+        return self.state("checkpoint", "--file", str(self.file), "--writer", "sideagent", "--source", batch,
+                          "--batch", batch, "--through-host-revision", str(through),
+                          "--entries", json.dumps(entries), *(["--events", json.dumps(events)] if events else []),
+                          env=env)
+
+    def sideagent_view(self) -> dict:
+        code, out = self.state("view", "--file", str(self.file), "--role", "sideagent")
+        self.assertEqual(code, 0, out)
+        return out
+
+    def write_index(self, items: list) -> None:
+        self.index.write_text(json.dumps({"schema": "kaola-dispatch-index/1",
+                                          "repo": str(self.repo), "items": items}), encoding="utf-8")
+
+    def write_live(self, rows: list) -> None:
+        self.live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": rows}),
+                             encoding="utf-8")
+
+    def host_task(self, ident: str, patch: dict) -> tuple[int, int]:
+        code, out = self.update("host", "tasks", ident, patch)
+        self.assertEqual(code, 0, out)
+        task = self.doc()["state"]["tasks"][ident]
+        return task["rev"], task["host_revision"]
+
+    def retire(self, ident: str, rev: int, *extra: str, env: dict | None = None) -> tuple[int, dict]:
+        return self.state("retire", "--file", str(self.file), "--writer", "sideagent",
+                          "--source", "b-1", "--kind", "tasks", "--id", ident,
+                          "--expect-rev", str(rev), "--evidence", f"host:tasks/{ident}@{rev}",
+                          *extra, env=env)
+
+    def section_entries(self) -> list:
+        sources = self.doc()["state"].get("section_sources") or {}
+        return [{"input": f"host:section/{name}@{source.get('host_revision')}",
+                 "retained": f"section/{name}"}
+                for name, source in sorted(sources.items())]
+
+    def refused_then_returned(self, ident: str, rev: int, host_rev: int, reason: str,
+                              *extra: str, detail: str = "") -> dict:
+        """The node's whole refusal path: bytes unchanged, exit 2, then the
+        checkpoint carries `returned` into returned_to_host and the alert."""
+        node = self.node("node-1")
+        before = self.file.read_bytes()
+        code, out = self.retire(ident, rev, *extra, env=node)
+        self.assertEqual((code, out.get("reason")), (2, reason), out)
+        if detail:
+            self.assertIn(detail, out.get("detail") or "", out)
+        self.assertEqual(self.file.read_bytes(), before, "a refused retire writes no state byte")
+        returned = f"{out['reason']}: {out['detail']}"
+        ident_in = f"host:tasks/{ident}@{host_rev}"
+        code, out = self.checkpoint(node, "b-1", host_rev,
+                                    self.section_entries() + [
+                                        {"input": ident_in, "returned": returned}])
+        self.assertEqual(code, 0, out)
+        record = out["value"]
+        self.assertFalse(record["verified"])
+        self.assertEqual(record["returned_to_host"][ident_in], returned)
+        alert = self.doc()["state"]["alerts"]["maintenance-returned"]
+        self.assertEqual(sorted(alert["inputs"]), [ident_in])
+        self.assertEqual(alert["inputs"][ident_in]["why"], "other")
+        self.assertIn(ident, self.doc()["state"]["tasks"], "the row stays current")
+        return record
+
+    def test_node_retires_an_accepted_task_and_a_cancelled_one(self) -> None:
+        (self.repo / "docs").mkdir(exist_ok=True)
+        (self.repo / "docs" / "delivery-t1.md").write_text("delivery\n", encoding="utf-8")
+        node = self.node("node-1")
+        rev1, hr1 = self.host_task("t1", {"stage": "done", "goal": "g", "dispatch": ["w1"],
+                                          "evidence": ["docs/delivery-t1.md"],
+                                          "verdict": {"value": "accepted"}})
+        self.write_index([{"item_id": "w1", "task_id": "t1", "status": "returned",
+                           "session": "zcode-KT-w1-a", "acceptance": "pending"}])
+        self.write_live([{"session": "zcode-KT-w1-a", "state": "stopped",
+                          "holder_instance_id": "h-w1"}])
+        rev2, hr2 = self.host_task("t2", {"stage": "done", "goal": "g",
+                                          "verdict": {"value": "cancelled"}})
+        through = self.doc()["host_revision"]
+        view = self.sideagent_view()
+        self.assertIn(f"host:tasks/t1@{hr1}", view["pending_host_changes"])
+        self.assertIn(f"host:tasks/t2@{hr2}", view["pending_host_changes"])
+        before_host_revision = self.doc()["host_revision"]
+        cite = json.dumps({"path": "docs/delivery-t1.md", "locator": "docs/delivery-t1.md"})
+        code, out = self.retire("t1", rev1, "--cite", cite,
+                                "--index", str(self.index), "--live", str(self.live), env=node)
+        self.assertEqual(code, 0, out)
+        code, out = self.retire("t2", rev2, env=node)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.doc()["host_revision"], before_host_revision,
+                         "a node retire is no Host business write")
+        self.assertNotIn("t1", self.doc()["state"]["tasks"])
+        self.assertNotIn("t2", self.doc()["state"]["tasks"])
+        self.assertFalse(self.doc()["state"].get("retired"), "no retirement stone is stored")
+        code, out = self.checkpoint(node, "b-1", through,
+                                    self.section_entries() + [
+                                        {"input": f"host:tasks/t1@{hr1}",
+                                         "applied": ["retired:tasks/t1"]},
+                                        {"input": f"host:tasks/t2@{hr2}",
+                                         "applied": ["retired:tasks/t2"]}])
+        self.assertEqual(code, 0, out)
+        self.assertTrue(out["value"]["verified"], out)
+        self.assertEqual(sorted(out["value"]["settled"]),
+                         sorted([f"host:tasks/t1@{hr1}", f"host:tasks/t2@{hr2}"] +
+                                [e["input"] for e in self.section_entries()]))
+        state = self.doc()["state"]
+        self.assertEqual(state["authorization"]["grants"], AUTH["grants"])
+        self.assertEqual(state["project"], {"code": "KT", "goal": "ship"})
+        self.assertIsNotNone(state["sideagent"])
+
+        # A task the Host keeps open is out of the rule; the node returns it.
+        rev3, hr3 = self.host_task("t3", {"stage": "done", "goal": "g", "keep_open": True,
+                                          "verdict": {"value": "cancelled"}})
+        before = self.file.read_bytes()
+        code, out = self.retire("t3", rev3, env=node)
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertEqual(self.file.read_bytes(), before)
+        ident = f"host:tasks/t3@{hr3}"
+        returned = f"{out['reason']}: {out['detail']}"
+        code, out = self.checkpoint(node, "b-2", hr3,
+                                    [{"input": ident, "returned": returned}])
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["value"]["returned_to_host"][ident], returned)
+        self.assertIn("t3", self.doc()["state"]["tasks"])
+
+    def test_a_verdict_that_is_not_final_is_returned(self) -> None:
+        rev, hr = self.host_task("t1", {"stage": "done", "goal": "g",
+                                        "verdict": {"value": "partial"}})
+        self.refused_then_returned("t1", rev, hr, "retire-unmet")
+        rev, hr = self.host_task("t2", {"stage": "review", "goal": "g",
+                                        "verdict": {"value": "accepted"}})
+        node = self.node("node-1")
+        code, out = self.retire("t2", rev, env=node)
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+
+    def test_open_dispatch_is_returned_and_a_handoff_still_retires(self) -> None:
+        (self.repo / "docs").mkdir(exist_ok=True)
+        (self.repo / "docs" / "d.md").write_text("delivery\n", encoding="utf-8")
+        rev, hr = self.host_task("t1", {"stage": "done", "goal": "g", "dispatch": ["w1"],
+                                        "evidence": ["docs/delivery-t1.md"],
+                                        "verdict": {"value": "accepted"}})
+        self.host_task("t2", {"stage": "doing", "goal": "g", "next": "keep going"})
+        self.write_index([{"item_id": "w1", "task_id": "t1", "status": "in-flight",
+                           "session": "zcode-KT-w1-a"}])
+        self.write_live([{"session": "zcode-KT-w1-a", "state": "stopped"}])
+        cite = json.dumps({"path": "docs/delivery-t1.md"})
+        hr = self.doc()["state"]["tasks"]["t1"]["host_revision"]
+        self.refused_then_returned("t1", rev, hr, "retire-unmet",
+                                   "--cite", cite, "--index", str(self.index),
+                                   "--live", str(self.live), detail="in-flight")
+        # The other side of condition 2: the existing --handoff route stays
+        # available to the node, moving seats and dispatch refs whole.
+        rev3, _ = self.host_task("t3", {"stage": "done", "goal": "g", "dispatch": ["w3"],
+                                        "sessions": ["zcode-KT-w3-a"],
+                                        "evidence": ["docs/delivery-t1.md"],
+                                        "verdict": {"value": "accepted"}})
+        node = self.node("node-1")
+        code, out = self.retire("t3", rev3, "--handoff", "t2", "--cite", CITE, env=node)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["value"]["handed_to"], "t2")
+        receiver = self.doc()["state"]["tasks"]["t2"]
+        self.assertIn("w3", receiver["dispatch"])
+        self.assertIn("zcode-KT-w3-a", receiver["sessions"])
+        self.assertNotIn("t3", self.doc()["state"]["tasks"])
+
+    def test_an_accepted_task_without_a_retrievable_cite_is_returned(self) -> None:
+        (self.repo / "docs").mkdir(exist_ok=True)
+        (self.repo / "docs" / "delivery-t1.md").write_text("delivery\n", encoding="utf-8")
+        rev, hr = self.host_task("t1", {"stage": "done", "goal": "g",
+                                        "evidence": ["docs/delivery-t1.md"],
+                                        "verdict": {"value": "accepted"}})
+        node = self.node("node-1")
+        before = self.file.read_bytes()
+        code, out = self.retire("t1", rev, env=node)
+        self.assertEqual((code, out.get("reason")), (2, "cite-required"), out)
+        code, out = self.retire("t1", rev, "--cite",
+                                json.dumps({"path": "docs/missing.md"}), env=node)
+        self.assertEqual((code, out.get("reason")), (2, "cite-required"), out)
+        self.assertEqual(self.file.read_bytes(), before)
+        ident = f"host:tasks/t1@{hr}"
+        returned = f"{out['reason']}: {out['detail']}"
+        code, out = self.checkpoint(node, "b-1", hr,
+                                    self.section_entries() + [
+                                        {"input": ident, "returned": returned}])
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["value"]["returned_to_host"][ident], returned)
+        # A retrievable cite retires, unless the returned alert now names the
+        # task; that reference is itself an unmet condition.
+        before = self.file.read_bytes()
+        code, out = self.retire("t1", rev, "--cite", CITE, env=node)
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("alerts/maintenance-returned", out.get("detail") or "")
+        self.assertEqual(self.file.read_bytes(), before)
+
+    def test_a_transcribed_task_is_returned(self) -> None:
+        rev, hr = self.host_task("t1", {"stage": "done", "goal": "g"})
+        node = self.node("node-1")
+        # The node transcribes the Host verdict; until the Host sees that echo
+        # the row stays current.
+        code, out = self.update("sideagent", "tasks", "t1", {"verdict": {"value": "accepted"}},
+                                "--expect-rev", str(rev), "--host-turn", "host-turn-3", env=node)
+        self.assertEqual(code, 0, out)
+        task = self.doc()["state"]["tasks"]["t1"]
+        self.assertIsInstance(task.get("transcribed"), dict)
+        self.refused_then_returned("t1", task["rev"], hr, "retire-unmet", detail="transcribed")
+
+    def test_wait_keep_open_and_open_references_are_returned(self) -> None:
+        rev, hr = self.host_task("t1", {"stage": "done", "goal": "g", "wait": "worker w runs",
+                                        "verdict": {"value": "cancelled"}})
+        self.refused_then_returned("t1", rev, hr, "retire-unmet", detail="waits")
+        rev, hr = self.host_task("t2", {"stage": "done", "goal": "g", "keep_open": True,
+                                        "verdict": {"value": "cancelled"}})
+        code, out = self.update("host", "tasks", "t2", {"keep_open": True}, "--expect-rev", "1")
+        self.assertEqual(code, 0, out)
+        rev = self.doc()["state"]["tasks"]["t2"]["rev"]
+        hr = self.doc()["state"]["tasks"]["t2"]["host_revision"]
+        node = self.node("node-1")
+        before = self.file.read_bytes()
+        code, out = self.retire("t2", rev, env=node)
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("open", out.get("detail") or "")
+        self.assertEqual(self.file.read_bytes(), before)
+
+    def test_a_pending_reference_blocks_and_a_settled_one_does_not(self) -> None:
+        rev, hr = self.host_task("t1", {"stage": "done", "goal": "g",
+                                        "verdict": {"value": "cancelled"}})
+        self.update("host", "decisions", "d1", {"owner": "host", "question": "retry tasks/t1?"})
+        self.update("host", "decisions", "d2", {"owner": "host", "question": "settled",
+                                                "status": "settled",
+                                                "detail": "host:tasks/t1@5 was decided"})
+        self.update("host", "decisions", "d3", {"owner": "host", "question": "alert owner",
+                                                "status": "settled"})
+        hr = self.doc()["state"]["tasks"]["t1"]["host_revision"]
+        node = self.node("node-1")
+        before = self.file.read_bytes()
+        code, out = self.retire("t1", rev, env=node)
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("decisions/d1", out.get("detail") or "")
+        self.assertNotIn("decisions/d2", out.get("detail") or "",
+                         "a settled decision's reference does not block")
+        self.assertEqual(self.file.read_bytes(), before)
+        code, out = self.state("retire", "--file", str(self.file), "--writer", "host", "--source", "s",
+                               "--kind", "decisions", "--id", "d1", "--expect-rev", "1",
+                               "--evidence", "owner answered")
+        self.assertEqual(code, 0, out)
+        rev = self.doc()["state"]["tasks"]["t1"]["rev"]
+        code, out = self.update("host", "alerts", "a1", {"level": "warn", "owner": "host",
+                                                        "summary": "watch host:tasks/t1@9"})
+        self.assertEqual(code, 0, out)
+        before = self.file.read_bytes()
+        code, out = self.retire("t1", rev, env=node)
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("alerts/a1", out.get("detail") or "")
+        self.assertEqual(self.file.read_bytes(), before)
+        code, out = self.state("retire", "--file", str(self.file), "--writer", "host", "--source", "s",
+                               "--kind", "alerts", "--id", "a1", "--expect-rev", "1", "--evidence", "seen")
+        self.assertEqual(code, 0, out)
+        rev = self.doc()["state"]["tasks"]["t1"]["rev"]
+        code, out = self.retire("t1", rev, env=node)
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("t1", self.doc()["state"]["tasks"])
+
+    def test_a_live_session_for_the_dispatch_row_is_returned(self) -> None:
+        (self.repo / "docs").mkdir(exist_ok=True)
+        (self.repo / "docs" / "d.md").write_text("delivery\n", encoding="utf-8")
+        rev, hr = self.host_task("t1", {"stage": "done", "goal": "g", "dispatch": ["w1"],
+                                        "evidence": ["docs/delivery-t1.md"],
+                                        "verdict": {"value": "accepted"}})
+        self.write_index([{"item_id": "w1", "task_id": "t1", "status": "returned",
+                           "session": "zcode-KT-w1-a"}])
+        self.write_live([{"session": "zcode-KT-w1-a", "state": "ready"}])
+        self.refused_then_returned("t1", rev, hr, "retire-unmet",
+                                   "--cite", json.dumps({"path": "docs/delivery-t1.md"}),
+                                   "--index", str(self.index), "--live", str(self.live),
+                                   detail="still live")
+
+    def test_a_conflict_is_retried_once_then_returned(self) -> None:
+        rev, hr = self.host_task("t1", {"stage": "done", "goal": "g",
+                                        "verdict": {"value": "cancelled"}})
+        rev2, hr2 = self.host_task("t2", {"stage": "done", "goal": "g",
+                                        "verdict": {"value": "cancelled"}})
+        self.update("host", "decisions", "d1", {"owner": "host", "question": "retry tasks/t2?"})
+        node = self.node("node-1")
+        code, out = self.update("sideagent", "tasks", "t1", {"next": "recheck"},
+                                "--expect-rev", str(rev), env=node)
+        self.assertEqual(code, 0, out)
+        before = self.file.read_bytes()
+        code, out = self.retire("t1", rev, env=node)
+        self.assertEqual((code, out.get("reason")), (3, "conflict"), out)
+        self.assertEqual(self.file.read_bytes(), before)
+        rev = self.sideagent_view()["state"]["tasks"]["t1"]["rev"]
+        code, out = self.retire("t1", rev, env=node)
+        self.assertEqual(code, 0, out)
+        # A still-referenced task is refused outright and returned instead.
+        code, out = self.retire("t2", rev2, env=node)
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        returned = f"{out['reason']}: {out['detail']}"
+        through = self.doc()["host_revision"]
+        d1_hr = self.doc()["state"]["decisions"]["d1"]["host_revision"]
+        code, out = self.checkpoint(node, "b-1", through,
+                                    self.section_entries() + [
+                                        {"input": f"host:tasks/t1@{hr}",
+                                         "applied": ["retired:tasks/t1"]},
+                                        {"input": f"host:tasks/t2@{hr2}",
+                                         "returned": returned},
+                                        {"input": f"host:decisions/d1@{d1_hr}",
+                                         "retained": "decisions/d1"}])
+        self.assertEqual(code, 0, out)
+        record = out["value"]
+        self.assertFalse(record["verified"])
+        self.assertIn(f"host:tasks/t1@{hr}", record["settled"])
+        self.assertEqual(record["returned_to_host"][f"host:tasks/t2@{hr2}"], returned)
+        self.assertNotIn("t1", self.doc()["state"]["tasks"])
+        self.assertIn("t2", self.doc()["state"]["tasks"])
+
+    def test_a_second_conflict_is_returned_not_forced(self) -> None:
+        rev, hr = self.host_task("t1", {"stage": "done", "goal": "g",
+                                        "verdict": {"value": "cancelled"}})
+        node = self.node("node-1")
+        for round_no in (1, 2):
+            code, out = self.update("sideagent", "tasks", "t1", {"next": f"recheck {round_no}"},
+                                    "--expect-rev", str(rev), env=node)
+            self.assertEqual(code, 0, out)
+            code, out = self.retire("t1", rev, env=node)
+            self.assertEqual((code, out.get("reason")), (3, "conflict"), out)
+            rev = self.doc()["state"]["tasks"]["t1"]["rev"]
+        returned = f"{out['reason']}: {out['detail']}"
+        ident = f"host:tasks/t1@{hr}"
+        through = self.doc()["host_revision"]
+        code, out = self.checkpoint(node, "b-1", through,
+                                    self.section_entries() + [
+                                        {"input": ident, "returned": returned}])
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["value"]["returned_to_host"][ident], returned)
+        self.assertIn("t1", self.doc()["state"]["tasks"], "a conflict never forces a retire")
+
+    def test_retire_stays_stable_across_repeated_batches(self) -> None:
+        (self.repo / "docs").mkdir(exist_ok=True)
+        doing_rev, _ = self.host_task("doing", {"stage": "doing", "goal": "standing",
+                                                "wait": "worker w-run runs", "next": "collect"})
+        self.update("host", "decisions", "d-standing", {"owner": "host",
+                                                        "question": "resume tasks/doing?"})
+        standing_index_row = {"item_id": "w-run", "task_id": "doing", "status": "in-flight",
+                              "session": "zcode-KT-run-a"}
+        for round_no in range(12):
+            node = self.node(f"node-{round_no}")
+            (self.repo / "docs" / f"delivery-t{round_no}.md").write_text("d\n", encoding="utf-8")
+            ident = f"t{round_no}"
+            rev, hr = self.host_task(ident, {"stage": "done", "goal": "g", "dispatch": [f"w{round_no}"],
+                                             "evidence": [f"docs/delivery-t{round_no}.md"],
+                                             "verdict": {"value": "accepted"}})
+            self.write_index([standing_index_row,
+                              {"item_id": f"w{round_no}", "task_id": ident, "status": "returned",
+                               "session": f"zcode-KT-w{round_no}-a"}])
+            self.write_live([{"session": f"zcode-KT-w{round_no}-a", "state": "stopped"}])
+            before_state = self.doc()["state"]
+            standing_task = json.loads(json.dumps(before_state["tasks"]["doing"]))
+            standing_decision = json.loads(json.dumps(before_state["decisions"]["d-standing"]))
+            standing_auth = json.loads(json.dumps(before_state["authorization"]))
+            conflict_returned = None
+            if round_no in (5, 11):
+                # An injected mid-batch conflict: the node re-reads and retries
+                # once; a second conflict in the last round is returned.
+                for attempt in (1, 2 if round_no == 11 else 1):
+                    code, out = self.update("sideagent", "tasks", ident, {"next": "recheck"},
+                                            "--expect-rev", str(rev), env=node)
+                    self.assertEqual(code, 0, out)
+                    code, out = self.retire(ident, rev, "--cite",
+                                            json.dumps({"path": f"docs/delivery-t{round_no}.md"}),
+                                            "--index", str(self.index), "--live", str(self.live), env=node)
+                    self.assertEqual((code, out.get("reason")), (3, "conflict"), out)
+                    rev = self.doc()["state"]["tasks"][ident]["rev"]
+                if round_no == 11:
+                    conflict_returned = f"{out['reason']}: {out['detail']}"
+            rev = self.sideagent_view()["state"]["tasks"][ident]["rev"]
+            if conflict_returned is None:
+                code, out = self.retire(ident, rev, "--cite",
+                                        json.dumps({"path": f"docs/delivery-t{round_no}.md"}),
+                                        "--index", str(self.index), "--live", str(self.live), env=node)
+                self.assertEqual(code, 0, out)
+            through = self.doc()["host_revision"]
+            handled = self.doc()["state"]["maintenance"].get("handled_host_revision") or 0
+            selected = dispatch_module.host_changes(self.doc(), handled, through)
+            resolved = {f"host:tasks/{ident}@{hr}": ({"returned": conflict_returned}
+                                                   if conflict_returned is not None
+                                                   else {"applied": [f"retired:tasks/{ident}"]})}
+            entries = []
+            for input_id in sorted(selected):
+                if input_id in resolved:
+                    entries.append({"input": input_id, **resolved[input_id]})
+                    continue
+                body = input_id[len("host:"):].rpartition("@")[0]
+                kind, _, record_id = body.partition("/")
+                entries.append({"input": input_id,
+                                "retained": f"{kind}/{record_id}"})
+            code, out = self.checkpoint(node, f"b-{round_no}", through, entries)
+            self.assertEqual(code, 0, out)
+            if conflict_returned is not None:
+                input_id = f"host:tasks/{ident}@{hr}"
+                self.assertFalse(out["value"]["verified"])
+                self.assertEqual(out["value"]["returned_to_host"][input_id], conflict_returned)
+                self.assertEqual(self.doc()["state"]["alerts"]["maintenance-returned"]
+                                 ["inputs"][input_id]["why"], "other")
+                continue
+            self.assertTrue(out["value"]["verified"], out)
+            state = self.doc()["state"]
+            open_done = [tid for tid, row in state["tasks"].items()
+                         if isinstance(row, dict) and row.get("stage") == "done"
+                         and (row.get("verdict") or {}).get("value") == "accepted"]
+            self.assertEqual(open_done, [], "every accepted+done task left the current set")
+            self.assertEqual(state["tasks"]["doing"], standing_task)
+            self.assertEqual(state["decisions"]["d-standing"], standing_decision)
+            self.assertEqual(state["authorization"], standing_auth)
+            self.assertNotIn("maintenance-returned", state.get("alerts") or {})
+            rows = {row["item_id"]: row for row in json.loads(self.index.read_text())["items"]}
+            self.assertEqual(rows["w-run"], standing_index_row,
+                             "the standing in-flight row is untouched")
+
+    def test_the_retire_result_and_index_keep_the_row_rebuildable(self) -> None:
+        (self.repo / "docs").mkdir(exist_ok=True)
+        (self.repo / "docs" / "delivery-t1.md").write_text("delivery\n", encoding="utf-8")
+        node = self.node("node-1")
+        rev, hr = self.host_task("t1", {"stage": "done", "goal": "g", "dispatch": ["w1"],
+                                        "evidence": ["docs/delivery-t1.md"],
+                                        "verdict": {"value": "accepted"}})
+        self.write_index([{"item_id": "w1", "task_id": "t1", "status": "returned",
+                           "session": "zcode-KT-w1-a", "acceptance": "pending"}])
+        self.write_live([{"session": "zcode-KT-w1-a", "state": "stopped"}])
+        code, out = self.retire("t1", rev, "--cite",
+                                json.dumps({"path": "docs/delivery-t1.md"}),
+                                "--index", str(self.index), "--live", str(self.live), env=node)
+        self.assertEqual(code, 0, out)
+        value = out["value"]
+        self.assertEqual((value["kind"], value["id"], value["outcome"]),
+                         ("tasks", "t1", "done"))
+        self.assertEqual(value["cite"]["path"], "docs/delivery-t1.md")
+        self.assertEqual(value["writer_holder"], "node-1")
+        self.assertTrue((self.repo / "docs" / "delivery-t1.md").is_file(),
+                        "the cite path the task recorded is retrievable")
+        row = json.loads(self.index.read_text())["items"][0]
+        self.assertEqual(row["task_id"], "t1")
+        self.assertEqual(row["acceptance"], "accepted")
+        source = row["acceptance_source"]
+        self.assertEqual((source["task_id"], source["task_rev"]), ("t1", rev))
+        self.assertEqual(source["host_revision"], hr,
+                         "the row rebuilds from cite + evidence + index")
+
+        # A task the Host keeps open stays; the node returns it.
+        rev2, hr2 = self.host_task("t2", {"stage": "done", "goal": "g", "keep_open": True,
+                                          "verdict": {"value": "cancelled"}})
+        before = self.file.read_bytes()
+        code, out = self.retire("t2", rev2, env=node)
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertEqual(self.file.read_bytes(), before)
+        ident = f"host:tasks/t2@{hr2}"
+        returned = f"{out['reason']}: {out['detail']}"
+        code, out = self.checkpoint(node, "b-2", hr2,
+                                    [{"input": ident, "returned": returned}])
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["value"]["returned_to_host"][ident], returned)
+        self.assertIn("t2", self.doc()["state"]["tasks"])
+
+    def test_the_node_prompt_names_the_retire_rule_and_returned_verb(self) -> None:
+        holder = holder_module.Holder.__new__(holder_module.Holder)
+        holder.host_name = "Host"
+        holder.args = argparse.Namespace(session="zcode-KT-host", repo=str(REPO))
+        holder._state_tool = lambda: None
+        prompt = holder._node_prompt("b-1", 0, 1, None)
+        for fragment in ("--writer sideagent", "--expect-rev", "retired:tasks/",
+                         "returned", "dispatch-index.json", "--include-dead"):
+            self.assertIn(fragment, prompt)
+        self.assertIn("never a restated, summarized or judged worker result", prompt)
+        self.assertIn("exact-stop only a finished worker whose reclaim the Host recorded", prompt)
+
+    def test_the_returned_verb_validates_its_shape_and_never_settles_a_host_row(self) -> None:
+        rev, hr = self.host_task("t1", {"stage": "doing", "goal": "g", "next": "host plans"})
+        node = self.node("node-1")
+        ident = f"host:tasks/t1@{hr}"
+        code, out = self.checkpoint(node, "b-1", hr,
+                                    self.section_entries() + [
+                                        {"input": ident, "returned": "why", "applied": ["tasks/t1"]}])
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["value"]["returned_to_host"][ident], "entry-needs-one-verb")
+        code, out = self.checkpoint(node, "b-2", hr,
+                                    self.section_entries() + [
+                                        {"input": ident, "returned": ""}])
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["value"]["returned_to_host"][ident], "returned-unreadable")
+        code, out = self.checkpoint(node, "b-3", hr,
+                                    self.section_entries() + [
+                                        {"input": ident, "returned": "host must judge this"}])
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["value"]["returned_to_host"][ident], "host must judge this",
+                         "a returned verb on a standing Host-owned input is not settled over")
+        self.assertIn("t1", self.doc()["state"]["tasks"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

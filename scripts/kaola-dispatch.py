@@ -7044,6 +7044,27 @@ def handoff_seats(receiver: dict[str, Any], task: dict[str, Any], task_id: str,
     return {"seats": sorted(seats), "dispatch": refs}
 
 
+def record_strings(value: Any):
+    """Every string in a record: dict keys, values, nested lists and dicts."""
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            yield from record_strings(key)
+            yield from record_strings(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            yield from record_strings(item)
+
+
+def task_referenced(value: Any, record_id: str) -> bool:
+    """Issue #356: any string in `value` names `tasks/<id>` - the bare id, or
+    the kind/id token inside a longer id or sentence (`host:tasks/t1@5`). An
+    overmatch only returns the input to the Host."""
+    token = re.compile(r"(?:^|[^A-Za-z0-9_])tasks/" + re.escape(record_id) + r"(?![A-Za-z0-9_#-])")
+    return any(text == record_id or token.search(text) for text in record_strings(value))
+
+
 def retire_absent_decision(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, Any]:
     """Host receipt for a decision id that was never a row.
 
@@ -7112,6 +7133,32 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
         raise StateRefusal("retire-unmet", "a task leaves the current set only when the Host accepted it "
                            "done or cancelled it", current=current)
     handoff = getattr(args, "handoff", None)
+    if args.writer == "sideagent" and kind == "tasks":
+        # Issue #356: a node retires a task only inside the strict rule. Every
+        # refusal here is one batch input returned to the Host with its reason.
+        sideagent_recovery = (
+            "retire nothing for this input and checkpoint "
+            f'{{"input": "host:tasks/{record_id}@{current.get("host_revision")}", '
+            '"returned": "<reason>: <detail>"}; the Host can retire the task '
+            "itself or clear the reference / rewrite the task")
+        if current.get("wait") not in (None, "", [], {}):
+            raise StateRefusal("retire-unmet", f"tasks/{record_id} still waits: {current.get('wait')}",
+                               current=current, recovery=sideagent_recovery)
+        if current.get("keep_open") is True:
+            raise StateRefusal("retire-unmet", f"the Host keeps tasks/{record_id} open",
+                               current=current, recovery=sideagent_recovery)
+        still_naming = []
+        for name, row in sorted((state.get("decisions") or {}).items()):
+            if (isinstance(row, dict) and row.get("status") != "settled"
+                    and task_referenced(row, record_id)):
+                still_naming.append(f"decisions/{name}")
+        for name, row in sorted((state.get("alerts") or {}).items()):
+            if isinstance(row, dict) and task_referenced(row, record_id):
+                still_naming.append(f"alerts/{name}")
+        if still_naming:
+            raise StateRefusal("retire-unmet", ", ".join(still_naming) +
+                               f" still reference tasks/{record_id}", current=current,
+                               recovery=sideagent_recovery)
     handed: dict[str, Any] = {}
     if handoff and (kind != "tasks" or handoff == record_id or handoff not in state.get("tasks", {})):
         raise StateRefusal("invalid-input", "--handoff names another current task that continues "
@@ -7649,6 +7696,14 @@ def checkpoint_entry(state: dict[str, Any], entry: Any, holder: str) -> tuple[st
             return entry["input"], None
         # Optional applied facts still require this node's own records.
     applied, retained = entry.get("applied"), entry.get("retained")
+    if "returned" in entry:
+        # Issue #356: the node's own reason for settling nothing, returned to
+        # the Host verbatim. Exactly one verb per entry.
+        if applied is not None or retained is not None:
+            return entry["input"], "entry-needs-one-verb"
+        if not isinstance(entry["returned"], str) or not entry["returned"]:
+            return entry["input"], "returned-unreadable"
+        return entry["input"], entry["returned"]
     if (applied is None) == (retained is None):
         return entry["input"], "entry-needs-applied-or-retained"
     if applied is not None:
@@ -7734,8 +7789,10 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
         if ident is None:
             raise StateRefusal("invalid-input", "each entry names its `input`")
         # A wrong verb on a present, owned, unchanged Host record is not
-        # "not applied". Only a selected input settles this way.
-        if problem and ident in selected and RECORD.standing_host_owned_input(state, ident):
+        # "not applied". Only a selected input settles this way. An explicit
+        # `returned` is the node's own reason, never settled over (#356).
+        if (problem and "returned" not in entry
+                and ident in selected and RECORD.standing_host_owned_input(state, ident)):
             problem = None
         seen.add(ident)
         revision = revision_of(ident)
