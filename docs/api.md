@@ -937,31 +937,35 @@ The candidate set is a closed rule set; everything else is never touched:
   (HEAD an ancestor of `refs/remotes/origin/HEAD`'s target, else `origin/main`, or equal to
   the merged PR's `headRefOid`; no fetch), with no live verified session for issue N in ROOT
   or in the worktree itself. Keep reasons: `outside-project`, `locked`, `uncommitted-changes`,
-  `unmerged-or-unpushed`, `live-session`, `cwd-occupied`, `cwd-unverifiable`. A worktree whose only
-  live session is itself an S1 candidate is still a candidate (the stop goes first). Every check is
-  re-verified immediately before `git worktree remove <path>` (no `--force`); the branch is left
-  for B1.
-- **W1 cwd guard (#369).** The removal goes through the same guarded wrapper as
+  `unmerged-or-unpushed`, `live-session`. A worktree whose only live session is itself an S1
+  candidate is still a candidate (the stop goes first). Every check is re-verified immediately
+  before `git worktree remove <path>` (no `--force`); the branch is left for B1.
+- **W1 cwd guard (#369/#389).** The removal goes through the same guarded wrapper as
   `worktree-remove` (below). It reads the cwd of the wrapper's own process chain (the caller's
   tool shell, agent CLI and holder) and of every live session tree of ROOT and its worktrees,
   from `/proc/<pid>/cwd` or `lsof -a -d cwd` (one call per pid list; a `(deleted)` suffix is
-  `cwd_deleted`). A live cwd inside the target keeps it `cwd-occupied`; a recorded
-  `tool_cwd.last_known` inside it is an occupant with `source: recorded` even with no process.
-  An unreadable probe keeps it `cwd-unverifiable`. The kept item carries `occupants` (`pid`,
-  `ppid`, `exe_basename`, `cwd`, `cwd_deleted`, `source`, `session`), `action: deferred` and its
-  `route`; the `sweep-kept` alert's `next` carries the recovery. A removal is never executed
-  under a live cwd.
-- **`worktree-remove` / `worktree-guard` (#369).** `python3 kaola-dispatch.py worktree-remove
-  --repo R --path P [--force] [--assume-clear] [--live ROWS] [--skills-root S]` relocates its own
-  cwd out of P first (`actions: [{action: relocated, occupant: self}]`), then defers on
-  `occupied` or `unverifiable` with exit 3 and a `route`, and otherwise runs
-  `git -C R worktree remove [--force] -- P`. A post-check repeats the occupancy probe: a cwd that
-  appeared between check and remove, or a process whose cwd was just deleted, is repaired by
-  recreating P as an empty directory (`result: removed`, `action: placeholder-restored`,
-  `post_check`). `--assume-clear` covers only the unreadable probe; a proven occupant still
-  defers. `worktree-guard` is the read-only form: the same occupancy receipt, exit 0 clear / 3
-  occupied or unverifiable. `--all-user-processes` widens the probe to this uid.
-- **The `worktree-guard` receipt is a frozen consumer contract (#374).** Kaola-Workflow
+  `cwd_deleted`). A live cwd inside the target, a recorded `tool_cwd.last_known` inside it
+  (`source: recorded`, even with no process), and an unreadable probe are recoverable under
+  #389: the sweep proceeds with a typed warning (`occupied-cwd-recoverable` or
+  `cwd-unverifiable`) and the holder recreates a vanished path. The receipt's top-level
+  `warnings[]` carries `{code, path, detail, recovery}`; a candidate also carries its own
+  `warnings[]`. Only a live process cwd plus uncommitted changes is a cwd hard block; the
+  existing `uncommitted-changes` keep independently protects any dirty worktree. A worktree is
+  never removed while uncommitted work would be lost.
+- **`worktree-remove` / `worktree-guard` (#369/#389).** `python3 kaola-dispatch.py
+  worktree-remove --repo R --path P [--force] [--assume-clear] [--live ROWS] [--skills-root S]`
+  relocates its own cwd out of P first (`actions: [{action: relocated, occupant: self}]`); a
+  failed relocation is itself a warning and does not stop the removal. It then runs
+  `git -C R worktree remove [--force] -- P` unless a live process cwd and uncommitted
+  changes hold at once (the one cwd hard block: `result: deferred`, `reason: cwd-occupied`,
+  exit 3 and a `route`). A live cwd or an unreadable probe alone proceeds with a typed warning. A
+  post-check repeats the occupancy probe: a live cwd that appeared between check and remove, or
+  a process whose cwd was just deleted, is repaired by recreating P as an empty directory
+  (`result: removed`, `action: placeholder-restored`, `post_check`, warning). An unverifiable
+  post-check adds no placeholder and never undoes the removal. `--assume-clear` is accepted for
+  compatibility and no longer changes the outcome. `worktree-guard` is the read-only form.
+  `--all-user-processes` widens the probe to this uid.
+- **The `worktree-guard` receipt is a frozen consumer contract (#374/#389).** Kaola-Workflow
   locates the Runner through `kaola-project-runner-locate receipt` (`root.path`) and runs
   `python3 <root>/scripts/kaola-dispatch.py worktree-guard --repo <project root> --path
   <worktree>` before each of its own `git worktree remove` calls. The fields below are that
@@ -969,13 +973,23 @@ The candidate set is a closed rule set; everything else is never touched:
   `./scripts/validate.sh` inventory and asserts the exact key sets, so renaming or dropping one
   breaks KPR's own gate before a consumer does.
   - Top level: `schema` (`kaola-worktree-remove/1`), `repo`, `path`, `result` (`clear` |
-    `occupied` | `unverifiable` | `refused`), `occupants`, `probe`, and `route` on every
-    non-clear answer (including `refused`).
+    `occupied` | `unverifiable` | `refused`), `occupants`, `probe`, `warnings`, and `route` on
+    every non-clear answer (including `refused`). `warnings` is always present, `[]` when there is
+    no recoverable finding.
+  - `result` is the classification, not the block signal. `occupied` means an occupant exists;
+    `unverifiable` means the probe could not answer. The exit code decides: `0` proceeds, even
+    for a warning-only `occupied` or `unverifiable` answer; `3` is the hard block, returned only
+    when a live process cwd is inside the worktree AND the worktree has uncommitted changes;
+    `2` is `refused` (for example `repo-missing`).
+  - `warnings[]`: `code` (`occupied-cwd-recoverable` | `cwd-unverifiable`), `path` (the
+    worktree), `detail` (the recoverable finding), and `recovery` (the executable repair/recheck:
+    `cd <repo>` for the occupant shell plus a `worktree-guard` recheck, or the wider
+    `--all-user-processes` recheck). A recorded-only cwd is `occupied-cwd-recoverable` as well.
   - `occupants[]`: `pid`, `ppid`, `exe_basename`, `cwd`, `cwd_deleted`, `source` (`process` |
     `recorded`), and `session` (`null`, or `{platform, session, role, holder_instance_id}`).
-  - Exit codes are stable for script consumers: `0` = `clear`; `3` = `occupied` or
-    `unverifiable` (the receipt is still valid JSON); `2` = `refused` (for example
-    `repo-missing`).
+  - Exit codes are stable for script consumers: `0` = proceed; `3` = the one hard block
+    (`occupied` + live cwd + uncommitted changes; the receipt is still valid JSON); `2` =
+    `refused`.
   - Coverage: `_sweep_list` reads one `list --include-dead` and `trees_from_rows` keeps every
     `identity: verified` row whose `repo` is the repo or the target, without filtering
     `session_role`. A Host, a Sideagent and a seat (worker) therefore each contribute their

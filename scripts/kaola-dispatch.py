@@ -8852,8 +8852,7 @@ SWEEP_KEPT_NEXT = {
     "uncommitted-changes": "Host: commit, discard or keep the changes",
     "unmerged-or-unpushed": "Host: merge or push the work first",
     "live-session": "Host: stop the issue's remaining live session first",
-    "cwd-occupied": "Host: a live process's shell is inside this worktree (see occupants); move that shell to the repo root or stop that seat, then rerun sweep",
-    "cwd-unverifiable": "Host: the cwd probe is unavailable on this machine (receipt names it); decide on the original receipt",
+    "cwd-occupied": "Host: a live process's shell is inside this worktree and it has uncommitted changes; commit/stash the changes, move that shell to the repo root, then rerun sweep",
     "remove-failed": "Host: read the original git receipt and decide",
 }
 # Issue #357, R2: `.kaola/` entries that are Project Runner artifacts (state,
@@ -9121,17 +9120,95 @@ def _sweep_cwd_occupancy(args: argparse.Namespace, repo: Path, target: Path,
                            all_user_processes=bool(getattr(args, "all_user_processes", False)))
 
 
-def _sweep_cwd_keep(occupancy: dict[str, Any] | None) -> tuple[str, dict[str, Any]] | None:
-    """The keep reason and receipt facts for one occupancy answer."""
+def _worktree_live_occupants(occupants: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """The occupants a live process still holds, never this wrapper itself."""
+    own = os.getpid()
+    return [item for item in occupants or []
+            if isinstance(item, dict) and item.get("source") == "process"
+            and item.get("pid") != own]
+
+
+def _worktree_uncommitted(target: Path) -> bool:
+    """Whether the target worktree has uncommitted or untracked content."""
+    rc, out = _sweep_git(target, "status", "--porcelain")
+    return rc == 0 and bool(out.strip())
+
+
+def _worktree_recheck(args: argparse.Namespace, repo: Path, target: Path,
+                      *, wider: bool = False) -> str:
+    """The executable recheck a typed cwd warning carries (Issue #389)."""
+    tool = shlex.quote(str(Path(__file__).resolve()))
+    command = (f"python3 {tool} worktree-guard --repo {shlex.quote(str(repo))} "
+               f"--path {shlex.quote(str(target))}")
+    return command + (" --all-user-processes" if wider else "")
+
+
+def _worktree_cwd_block(occupancy: dict[str, Any] | None, target: Path) -> bool:
+    """Issue #389: the one remaining hard block.
+
+    A live process cwd inside the worktree alone is recoverable (the cwd repair
+    tiers recreate a vanished path). It is unrecoverable only when continuing
+    would also discard uncommitted work, so both facts must hold."""
+    if not isinstance(occupancy, dict) or occupancy.get("result") != "occupied":
+        return False
+    if not _worktree_live_occupants(occupancy.get("occupants")):
+        return False
+    return _worktree_uncommitted(target)
+
+
+def _worktree_cwd_warning(args: argparse.Namespace, repo: Path, target: Path,
+                          occupancy: dict[str, Any] | None,
+                          *, post: bool = False) -> dict[str, Any] | None:
+    """The typed warning for one recoverable occupancy answer (Issue #389)."""
     if not isinstance(occupancy, dict):
         return None
-    if occupancy.get("result") == "occupied":
-        return "cwd-occupied", {"occupants": occupancy.get("occupants") or [],
-                                "action": "deferred"}
-    if occupancy.get("result") == "unverifiable":
-        return "cwd-unverifiable", {"occupants": [], "action": "deferred",
-                                    "cwd_probe": occupancy.get("probe")}
+    result = occupancy.get("result")
+    if result == "occupied":
+        live = _worktree_live_occupants(occupancy.get("occupants"))
+        if live:
+            detail = ("a live process cwd is inside the worktree; no uncommitted "
+                      "changes, so the operation proceeds and the holder repairs a "
+                      "vanished cwd")
+            if post:
+                detail = ("a live process cwd was inside the worktree when it was "
+                          "removed; the path was recreated as an empty placeholder")
+            recovery = (f"cd {shlex.quote(str(repo))}   # in the shell named in "
+                        f"occupants[], or stop that seat; recheck with: "
+                        f"{_worktree_recheck(args, repo, target)}")
+        else:
+            detail = ("a recorded tool cwd is inside the worktree but no live process "
+                      "holds it, so the operation proceeds")
+            recovery = (f"stop that seat or move its shell, then recheck with: "
+                        f"{_worktree_recheck(args, repo, target)}")
+        return {"code": "occupied-cwd-recoverable", "path": str(target),
+                "detail": detail, "recovery": recovery}
+    if result == "unverifiable":
+        probe = occupancy.get("probe") or "none"
+        return {"code": "cwd-unverifiable", "path": str(target),
+                "detail": (f"the cwd probe could not answer ({probe}); the operation "
+                           "proceeds and the holder repairs a vanished cwd"),
+                "recovery": ("rerun with the wider probe: "
+                             f"{_worktree_recheck(args, repo, target, wider=True)}")}
     return None
+
+
+def _worktree_merge_warnings(receipt: dict[str, Any],
+                             warnings: list[dict[str, Any]]) -> None:
+    """Add one warning per (code, path); a repeated answer is not duplicated."""
+    current = receipt.setdefault("warnings", [])
+    for warning in warnings:
+        if not any(item.get("code") == warning.get("code")
+                   and item.get("path") == warning.get("path") for item in current):
+            current.append(warning)
+
+
+def _worktree_hard_route(repo: Path, target: Path) -> str:
+    """The route the one hard block carries: the two facts and the repair."""
+    tool = shlex.quote(str(Path(__file__).resolve()))
+    return (f"a live process cwd is inside {target} and the worktree has uncommitted "
+            f"changes; move that shell to the repo root (cd {shlex.quote(str(repo))}) "
+            f"or commit/stash the changes, then rerun python3 {tool} worktree-guard "
+            f"--repo {shlex.quote(str(repo))} --path {shlex.quote(str(target))}")
 
 
 def _worktree_relocate_self(target: Path, repo: Path) -> dict[str, Any] | None:
@@ -9166,28 +9243,41 @@ def _worktree_occupancy(args: argparse.Namespace, repo: Path, target: Path,
 def _worktree_remove(args: argparse.Namespace, repo: Path, target: Path,
                      force: bool = False, rows: list[dict[str, Any]] | None = None,
                      known: bool | None = None) -> dict[str, Any]:
-    """Issue #369: the one runner-owned worktree removal.
+    """Issue #369/#389: the one runner-owned worktree removal.
 
-    A live cwd (or an unreadable probe) defers; an explicit ``--assume-clear``
-    covers only the unreadable probe. A removal that loses the check-then-
-    delete race is repaired into an empty placeholder so no shell dangles."""
+    A live cwd or an unreadable probe is recoverable: the removal proceeds with
+    a typed warning. Only a live process cwd plus uncommitted changes still
+    defers, because continuing would discard unrecoverable work. A removal that
+    loses the check-then-delete race is repaired into an empty placeholder so
+    no shell dangles. ``--assume-clear`` is kept for compatibility; it no
+    longer changes the outcome."""
     receipt: dict[str, Any] = {"schema": WORKTREE_REMOVE_SCHEMA,
-                               "repo": str(repo), "path": str(target)}
+                               "repo": str(repo), "path": str(target),
+                               "warnings": []}
     relocation = _worktree_relocate_self(target, repo)
     if relocation is not None:
         receipt["actions"] = [relocation]
         if relocation.get("action") == "relocate-failed":
-            receipt.update(result="deferred", reason="cwd-relocate-failed")
-            return receipt
+            # Issue #389: the wrapper's own cwd is recoverable too. The
+            # process exits after the removal, so a failed chdir warns and the
+            # removal still goes to the one occupancy decision below.
+            _worktree_merge_warnings(receipt, [{
+                "code": "occupied-cwd-recoverable", "path": str(target),
+                "detail": ("the wrapper could not leave the worktree it is removing "
+                           f"({relocation.get('error')}); the removal proceeds and "
+                           "the holder repairs a vanished path"),
+                "recovery": (f"cd {shlex.quote(str(repo))}   # in the shell that "
+                             "invoked the wrapper; recheck with: "
+                             f"{_worktree_recheck(args, repo, target)}")}])
     occupancy = _worktree_occupancy(args, repo, target, rows, known)
     receipt.update(occupants=occupancy.get("occupants") or [], probe=occupancy.get("probe"))
-    assume_clear = bool(getattr(args, "assume_clear", False))
-    if occupancy.get("result") != "clear" and not (
-            assume_clear and occupancy.get("result") == "unverifiable"):
-        reason = ("cwd-occupied" if occupancy.get("result") == "occupied"
-                  else "cwd-unverifiable")
-        receipt.update(result="deferred", reason=reason)
+    if _worktree_cwd_block(occupancy, target):
+        receipt.update(result="deferred", reason="cwd-occupied")
+        receipt["route"] = _worktree_hard_route(repo, target)
         return receipt
+    warning = _worktree_cwd_warning(args, repo, target, occupancy)
+    if warning is not None:
+        _worktree_merge_warnings(receipt, [warning])
     argv = ["worktree", "remove"]
     if force:
         argv.append("--force")
@@ -9199,21 +9289,25 @@ def _worktree_remove(args: argparse.Namespace, repo: Path, target: Path,
     post = _worktree_occupancy(args, repo, target, rows, known)
     receipt["post_check"] = {"result": post.get("result"), "probe": post.get("probe"),
                              "occupants": post.get("occupants") or []}
-    # The explicit --assume-clear covers the unreadable probe here too; a
-    # proven occupant always restores the placeholder.
-    post_blocked = (post.get("result") == "occupied"
-                    or (post.get("result") == "unverifiable" and not assume_clear))
-    if post_blocked:
-        # The race: a cwd appeared, or was revealed as deleted, between the
-        # check and the removal. Recreate the path so the shell spawns again.
+    # The race: a live cwd appeared, or was revealed as deleted, between the
+    # check and the removal. Recreate the path so the shell spawns again. A
+    # merely unverifiable post-check proves no occupant, so it adds no
+    # placeholder and never undoes the removal.
+    if _worktree_live_occupants(post.get("occupants")):
         try:
             target.mkdir(parents=True, exist_ok=True)
             receipt.update(result="removed", action="placeholder-restored")
+            warning = _worktree_cwd_warning(args, repo, target, post, post=True)
+            if warning is not None:
+                _worktree_merge_warnings(receipt, [warning])
         except OSError as exc:
             receipt.update(result="removed", action="placeholder-restore-failed",
                            error=str(exc))
     else:
         receipt["result"] = "removed"
+        warning = _worktree_cwd_warning(args, repo, target, post)
+        if warning is not None:
+            _worktree_merge_warnings(receipt, [warning])
     return receipt
 
 
@@ -9232,16 +9326,20 @@ def command_worktree_guard(args: argparse.Namespace) -> int:
     target = target.resolve()
     if not repo.is_dir():
         return emit({"schema": WORKTREE_REMOVE_SCHEMA, "result": "refused",
-                     "reason": "repo-missing", "detail": f"{repo} is not a directory"}, 2)
+                     "reason": "repo-missing", "detail": f"{repo} is not a directory",
+                     "warnings": []}, 2)
     occupancy = _worktree_occupancy(args, repo, target)
     receipt = {"schema": WORKTREE_REMOVE_SCHEMA, "repo": str(repo), "path": str(target),
                "result": occupancy.get("result"), "occupants": occupancy.get("occupants") or [],
-               "probe": occupancy.get("probe")}
-    if receipt["result"] != "clear":
-        receipt["route"] = _worktree_kept_route(
-            "cwd-occupied" if receipt["result"] == "occupied" else "cwd-unverifiable",
-            target, repo)
+               "probe": occupancy.get("probe"), "warnings": []}
+    block = _worktree_cwd_block(occupancy, target)
+    if block:
+        receipt["route"] = _worktree_hard_route(repo, target)
         return emit(receipt, 3)
+    warning = _worktree_cwd_warning(args, repo, target, occupancy)
+    if warning is not None:
+        _worktree_merge_warnings(receipt, [warning])
+        receipt["route"] = warning["recovery"]
     return emit(receipt, 0)
 
 
@@ -9253,10 +9351,12 @@ def command_worktree_remove(args: argparse.Namespace) -> int:
     target = target.resolve()
     if not repo.is_dir():
         return emit({"schema": WORKTREE_REMOVE_SCHEMA, "result": "refused",
-                     "reason": "repo-missing", "detail": f"{repo} is not a directory"}, 2)
+                     "reason": "repo-missing", "detail": f"{repo} is not a directory",
+                     "warnings": []}, 2)
     receipt = _worktree_remove(args, repo, target, force=bool(args.force))
     if receipt.get("result") == "deferred":
-        receipt["route"] = _worktree_kept_route(receipt.get("reason") or "", target, repo)
+        receipt.setdefault("route",
+                           _worktree_kept_route(receipt.get("reason") or "", target, repo))
         return emit(receipt, 3)
     return emit(receipt, 0)
 
@@ -9264,13 +9364,12 @@ def command_worktree_remove(args: argparse.Namespace) -> int:
 def _sweep_worktree_keep(entry: dict[str, Any], resolved: Path, repo: Path,
                          issue: int, merged_heads: dict[int, set[str]],
                          live_issue_sessions: dict[int, list[str]],
-                         other_rows: list[dict[str, Any]] | None,
-                         cwd_risk: tuple[str, dict[str, Any]] | None = None) -> str | None:
+                         other_rows: list[dict[str, Any]] | None) -> str | None:
     """The first closed reason this worktree must be kept, or None.
 
-    ``cwd_risk`` is ``_sweep_cwd_keep``'s answer for this worktree: the last
-    check before removal, so a worktree is never removed under a live cwd
-    (Issue #369)."""
+    Issue #389 removed the cwd keep reasons: a live cwd or an unreadable probe
+    is recoverable and the removal proceeds with a typed warning. Uncommitted
+    changes stay a keep because they are unrecoverable work."""
     if not _sweep_within(repo, resolved):
         return "outside-project"
     if entry.get("locked"):
@@ -9291,8 +9390,6 @@ def _sweep_worktree_keep(entry: dict[str, Any], resolved: Path, repo: Path,
         return "live-session"
     if any(isinstance(row, dict) and row.get("identity") == "verified" for row in other_rows or []):
         return "live-session"
-    if cwd_risk:
-        return cwd_risk[0]
     return None
 
 
@@ -9309,6 +9406,9 @@ def _sweep_scan(args: argparse.Namespace, repo: Path, acp: Path | None,
     bound_session = (binding or {}).get("session")
     caller_session = (caller or {}).get("session")
     exclude_session_ids = exclude_session_ids or set()
+    # Issue #389: recoverable cwd findings ride the receipt as warnings and
+    # never keep the item.
+    warnings: list[dict[str, Any]] = []
 
     workers: list[tuple[dict[str, Any], int]] = []
     issues: set[int] = set()
@@ -9468,21 +9568,22 @@ def _sweep_scan(args: argparse.Namespace, repo: Path, acp: Path | None,
             continue
         other_rows = ([row for row in all_rows if _sweep_row_repo(row, resolved)]
                       if inside else [])
-        # Issue #369: the last check before removal. A worktree is never
-        # removed while a live process cwd or a recorded tool cwd is inside it.
+        # Issue #369/#389: one last probe before removal. A live process cwd
+        # or an unreadable probe is recoverable and only warns; uncommitted
+        # changes stay the keep reason because they are unrecoverable work.
         occupancy = (_sweep_cwd_occupancy(args, repo, resolved, all_rows, rows_known)
                      if inside else None)
-        cwd_risk = _sweep_cwd_keep(occupancy)
+        warning = _worktree_cwd_warning(args, repo, resolved, occupancy)
         keep = _sweep_worktree_keep(entry, resolved, repo, issue, merged_heads,
-                                    live_by_issue, other_rows, cwd_risk=cwd_risk)
+                                    live_by_issue, other_rows)
         if keep:
-            facts = cwd_risk[1] if cwd_risk and keep == cwd_risk[0] else {}
-            if keep in ("cwd-occupied", "cwd-unverifiable"):
-                # The kept item carries its own route (Issue #369).
-                facts = {**facts, "route": _worktree_kept_route(keep, resolved, repo)}
-            kept.append({**base, "kept": keep, **facts})
+            kept.append({**base, "kept": keep})
         else:
-            candidates.append({**base, "reason": f"linked worktree of closed issue #{issue}"})
+            item = {**base, "reason": f"linked worktree of closed issue #{issue}"}
+            if warning is not None:
+                item["warnings"] = [warning]
+                warnings.append(warning)
+            candidates.append(item)
             released.add(str(resolved))
 
     # B1: merged local workflow/issue-N branches of closed issues. A branch
@@ -9633,7 +9734,7 @@ def _sweep_scan(args: argparse.Namespace, repo: Path, acp: Path | None,
     ids = sorted(candidate["id"] for candidate in candidates)
     key = hashlib.sha256(json.dumps(ids).encode("utf-8")).hexdigest()[:16] if ids else ""
     return {"candidates": candidates, "kept": kept, "skipped": skipped,
-            "report": report,
+            "report": report, "warnings": warnings,
             "key": key, "head": head.strip() or None, "forge": forge_state,
             "acp": acp, "acp_state": "known" if rows_known else "unavailable",
             "rows": rows, "all_rows": all_rows, "rows_known": rows_known,
@@ -9692,7 +9793,8 @@ def _sweep_apply_candidate(item: dict[str, Any], args: argparse.Namespace,
                            repo: Path, acp: Path | None,
                            merged_heads: dict[int, set[str]],
                            removed_ids: set[str],
-                           branch_rows: tuple[list[dict[str, Any]], bool] | None = None
+                           branch_rows: tuple[list[dict[str, Any]], bool] | None = None,
+                           warnings_out: list[dict[str, Any]] | None = None
                            ) -> tuple[str, str | None]:
     """Re-verify and remove one still-current candidate. Returns
     (outcome, kept-reason): outcome ``removed``, ``kept`` or ``skipped``.
@@ -9754,9 +9856,12 @@ def _sweep_apply_candidate(item: dict[str, Any], args: argparse.Namespace,
                                     live_by_issue, other_rows)
         if keep:
             return "kept", keep
-        # Issue #369: the same guarded wrapper, re-checked at delete time
-        # with this apply's own rows (no second session list).
+        # Issue #369/#389: the same wrapper, re-checked at delete time with
+        # this apply's own rows (no second session list). A recoverable cwd
+        # only warns; the hard block returns kept.
         receipt = _worktree_remove(args, repo, resolved, rows=all_rows, known=rows_known)
+        if warnings_out is not None:
+            warnings_out.extend(receipt.get("warnings") or [])
         if receipt.get("result") == "removed":
             return "removed", None
         return "kept", receipt.get("reason") or "remove-failed"
@@ -9907,6 +10012,7 @@ def command_sweep(args: argparse.Namespace) -> int:
                 "key": scan["key"], "candidates": scan["candidates"], "kept": scan["kept"],
                 "removed": extra.pop("removed", []), "skipped": scan["skipped"],
                 "report": scan.get("report", []),
+                "warnings": scan.get("warnings", []),
                 "head": scan["head"], "accepted_revision": None,
                 "forge": scan["forge"], "acp": scan["acp_state"],
                 "timed_out": sorted(_SWEEP_TIMED_OUT), **extra}
@@ -9997,6 +10103,7 @@ def command_sweep(args: argparse.Namespace) -> int:
     # the planned ids from the verified event - never a rescan.
     removed: list[str] = []
     removed_ids: set[str] = set()
+    apply_warnings: list[dict[str, Any]] = []
     if batch is None:
         current = {item["id"]: item for item in scan["candidates"]}
         states, merged_heads = scan["states"], scan["merged_heads"]
@@ -10035,7 +10142,7 @@ def command_sweep(args: argparse.Namespace) -> int:
         current_kept = {item["id"] for item in event_kept}
         kept_now = list(event_kept)
         scan = {"candidates": list(current.values()), "kept": event_kept,
-                "skipped": skipped, "key": sweep_key, "report": [],
+                "skipped": skipped, "key": sweep_key, "report": [], "warnings": [],
                 "head": head.strip() or None,
                 "forge": "known" if forge_known else "unavailable",
                 "acp_state": "known"}
@@ -10081,7 +10188,8 @@ def command_sweep(args: argparse.Namespace) -> int:
                     continue
             outcome, why = _sweep_apply_candidate(item, args, repo, acp,
                                                   merged_heads, removed_ids,
-                                                  branch_rows=branch_rows)
+                                                  branch_rows=branch_rows,
+                                                  warnings_out=apply_warnings)
             if outcome == "removed":
                 removed.append(ident)
                 if kind == "session":
@@ -10107,7 +10215,8 @@ def command_sweep(args: argparse.Namespace) -> int:
     except (OSError, ValueError) as exc:
         return fail("invalid-input", str(exc))
     result = "swept" if removed else "nothing"
-    out = receipt(result, removed=removed, accepted_revision=accepted_revision, **written)
+    out = receipt(result, removed=removed, accepted_revision=accepted_revision,
+                  warnings=apply_warnings, **written)
     out["kept"] = kept_now
     return emit(out)
 

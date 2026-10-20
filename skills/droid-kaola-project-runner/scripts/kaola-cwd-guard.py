@@ -9,8 +9,9 @@ One hyphenated module, loaded the way ``kaola-acp-sweep.py`` loads
 recorded tool cwd, lies inside the worktree ``target``. It never reads or
 copies a command line: an occupant names the argv[0] basename only.
 
-A probe that cannot answer reports ``unverifiable``; every caller treats that
-as occupied (fail-closed) unless an explicit override says otherwise.
+A probe that cannot answer reports ``unverifiable``. Issue #389 callers treat
+``occupied`` and ``unverifiable`` as recoverable and proceed with a typed
+warning; only a live process cwd plus uncommitted changes is a hard block.
 """
 
 from __future__ import annotations
@@ -201,8 +202,8 @@ def occupants(repo: Any, target: Any, trees: list[dict[str, Any]] | None = None,
     """``{"result", "occupants", "probe"}`` for one target directory.
 
     ``occupied`` means a live process cwd or a recorded tool cwd is inside
-    ``target``. ``unverifiable`` means the probe could not answer. Neither is
-    safe to remove under.
+    ``target``. ``unverifiable`` means the probe could not answer. Both are
+    recoverable findings under Issue #389; the wrapper decides the action.
     """
     table = process_table()
     if table is None:

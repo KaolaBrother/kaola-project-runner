@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
-"""Issue #374: the `worktree-guard` receipt Kaola-Workflow consumes is frozen here.
+"""Issue #374/#389: the `worktree-guard` receipt Kaola-Workflow consumes is frozen.
 
 Kaola-Workflow calls ``kaola-dispatch.py worktree-guard --repo <root> --path <wt>``
 before its own ``git worktree remove``. This suite is the KPR-side gate for that
 consumer contract:
 
 1. the clear, occupied and ``cwd-unverifiable`` receipts keep exactly the fields
-   documented in ``docs/api.md`` (a rename or a dropped field fails here);
-2. the exit codes scripts consume are stable: 0 clear, 3 occupied /
-   ``cwd-unverifiable``, 2 refused (missing repo);
-3. every verified ``list --include-dead`` row whose ``repo`` is the repo or the
+   documented in ``docs/api.md`` (a rename or a dropped field fails here), now
+   including ``warnings``;
+2. the exit codes scripts consume follow Issue #389: 0 = proceed (clear, or a
+   warning-only occupied / ``cwd-unverifiable`` answer), 3 = the one hard block
+   (a live process cwd inside the worktree AND uncommitted changes), 2 = refused;
+3. every warning is ``{code, path, detail, recovery}`` and its ``recovery``
+   carries the executable repair/recheck;
+4. every verified ``list --include-dead`` row whose ``repo`` is the repo or the
    target counts, whatever its ``session_role``: a Host, a Sideagent and a seat
    (worker) each appear as an occupant, and a live process tree is probed too.
 """
@@ -34,11 +38,13 @@ DISPATCH = REPO / "scripts" / "kaola-dispatch.py"
 # The frozen consumer surface. Exact equality is deliberate: the point of the
 # contract is that removing or renaming a field breaks this gate, not that an
 # additive field is silently admitted.
-GUARD_FIELDS = {"schema", "repo", "path", "result", "occupants", "probe", "route"}
-CLEAR_FIELDS = {"schema", "repo", "path", "result", "occupants", "probe"}
+GUARD_FIELDS = {"schema", "repo", "path", "result", "occupants", "probe", "route",
+                "warnings"}
+CLEAR_FIELDS = {"schema", "repo", "path", "result", "occupants", "probe", "warnings"}
 OCCUPANT_FIELDS = {"pid", "ppid", "exe_basename", "cwd", "cwd_deleted", "source", "session"}
 SESSION_FIELDS = {"platform", "session", "role", "holder_instance_id"}
-REFUSED_FIELDS = {"schema", "result", "reason", "detail", "route"}
+WARNING_FIELDS = {"code", "path", "detail", "recovery"}
+REFUSED_FIELDS = {"schema", "result", "reason", "detail", "route", "warnings"}
 SCHEMA = "kaola-worktree-remove/1"
 
 
@@ -108,6 +114,15 @@ class WorktreeGuardContract(unittest.TestCase):
         row.update(fields)
         return row
 
+    def warning(self, receipt: dict) -> dict:
+        self.assertEqual(len(receipt["warnings"]), 1, receipt)
+        warning = receipt["warnings"][0]
+        self.assertEqual(set(warning), WARNING_FIELDS, warning)
+        self.assertEqual(Path(warning["path"]).resolve(), self.wt.resolve())
+        self.assertTrue(warning["detail"], warning)
+        self.assertIn("worktree-guard", warning["recovery"], warning)
+        return warning
+
     def test_clear_receipt_is_frozen_and_exits_zero(self) -> None:
         done, receipt = self.run_guard([])
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
@@ -117,17 +132,20 @@ class WorktreeGuardContract(unittest.TestCase):
         self.assertEqual(receipt["repo"], str(self.repo.resolve()))
         self.assertEqual(receipt["path"], str(self.wt.resolve()))
         self.assertEqual(receipt["occupants"], [])
+        self.assertEqual(receipt["warnings"], [])
         self.assertTrue(receipt["probe"])
 
-    def test_host_sideagent_and_seat_rows_are_each_occupants(self) -> None:
+    def test_recorded_rows_are_occupants_and_warn_but_proceed(self) -> None:
         for role in ("host", "sideagent", "worker"):
             with self.subTest(role=role):
                 done, receipt = self.run_guard([self.row(role)])
-                self.assertEqual(done.returncode, 3, done.stdout + done.stderr)
+                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
                 self.assertEqual(set(receipt), GUARD_FIELDS, receipt)
                 self.assertEqual(receipt["schema"], SCHEMA)
                 self.assertEqual(receipt["result"], "occupied")
-                self.assertTrue(receipt["route"], receipt)
+                warning = self.warning(receipt)
+                self.assertEqual(warning["code"], "occupied-cwd-recoverable")
+                self.assertEqual(receipt["route"], warning["recovery"])
                 self.assertEqual(len(receipt["occupants"]), 1, receipt["occupants"])
                 occupant = receipt["occupants"][0]
                 self.assertEqual(set(occupant), OCCUPANT_FIELDS, occupant)
@@ -141,15 +159,16 @@ class WorktreeGuardContract(unittest.TestCase):
                 self.assertEqual(occupant["session"]["role"], role)
                 self.assertEqual(occupant["session"]["platform"], "codex")
 
-    def test_live_process_tree_of_a_seat_is_an_occupant(self) -> None:
+    def test_live_process_tree_of_a_seat_is_an_occupant_and_proceeds(self) -> None:
         live = subprocess.Popen(
             [sys.executable, "-c", "import time; time.sleep(30)"],
             cwd=str(self.wt), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
             done, receipt = self.run_guard([
                 self.row("worker", holder_pid=live.pid, tool_cwd_path=None)])
-            self.assertEqual(done.returncode, 3, done.stdout + done.stderr)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
             self.assertEqual(receipt["result"], "occupied")
+            self.assertEqual(self.warning(receipt)["code"], "occupied-cwd-recoverable")
             found = [occ for occ in receipt["occupants"] if occ["pid"] == live.pid]
             self.assertTrue(found, receipt["occupants"])
             self.assertEqual(found[0]["source"], "process")
@@ -158,7 +177,32 @@ class WorktreeGuardContract(unittest.TestCase):
             live.terminate()
             live.wait(timeout=30)
 
-    def test_cwd_unverifiable_exits_three_and_is_frozen(self) -> None:
+    def test_live_cwd_plus_uncommitted_changes_is_the_one_hard_block(self) -> None:
+        (self.wt / "dirty.txt").write_text("uncommitted\n", encoding="utf-8")
+        live = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            cwd=str(self.wt), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            done, receipt = self.run_guard([
+                self.row("worker", holder_pid=live.pid, tool_cwd_path=None)])
+            self.assertEqual(done.returncode, 3, done.stdout + done.stderr)
+            self.assertEqual(set(receipt), GUARD_FIELDS, receipt)
+            self.assertEqual(receipt["result"], "occupied")
+            self.assertEqual(receipt["warnings"], [])
+            self.assertTrue(receipt["route"], receipt)
+            self.assertIn("uncommitted", receipt["route"])
+        finally:
+            live.terminate()
+            live.wait(timeout=30)
+
+    def test_recorded_cwd_plus_uncommitted_changes_still_proceeds(self) -> None:
+        (self.wt / "dirty.txt").write_text("uncommitted\n", encoding="utf-8")
+        done, receipt = self.run_guard([self.row("worker")])
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(receipt["result"], "occupied")
+        self.assertEqual(self.warning(receipt)["code"], "occupied-cwd-recoverable")
+
+    def test_cwd_unverifiable_proceeds_with_warning(self) -> None:
         args = argparse.Namespace(repo=str(self.repo), path=str(self.wt), live=None,
                                   skills_root=None, all_user_processes=False)
         saved = dispatch._worktree_occupancy
@@ -170,12 +214,15 @@ class WorktreeGuardContract(unittest.TestCase):
                 code = dispatch.command_worktree_guard(args)
         finally:
             dispatch._worktree_occupancy = saved
-        self.assertEqual(code, 3, buf.getvalue())
+        self.assertEqual(code, 0, buf.getvalue())
         receipt = json.loads(buf.getvalue())
         self.assertEqual(set(receipt), GUARD_FIELDS, receipt)
         self.assertEqual(receipt["result"], "unverifiable")
         self.assertEqual(receipt["occupants"], [])
-        self.assertTrue(receipt["route"], receipt)
+        warning = self.warning(receipt)
+        self.assertEqual(warning["code"], "cwd-unverifiable")
+        self.assertIn("--all-user-processes", warning["recovery"])
+        self.assertEqual(receipt["route"], warning["recovery"])
 
     def test_missing_repo_is_a_refusal_with_exit_two(self) -> None:
         done = subprocess.run(
@@ -188,6 +235,7 @@ class WorktreeGuardContract(unittest.TestCase):
         self.assertEqual(receipt["schema"], SCHEMA)
         self.assertEqual(receipt["result"], "refused")
         self.assertEqual(receipt["reason"], "repo-missing")
+        self.assertEqual(receipt["warnings"], [])
 
 
 if __name__ == "__main__":

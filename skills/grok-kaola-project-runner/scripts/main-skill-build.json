@@ -1,5 +1,5 @@
 {
-  "build": "cb7fcf89106b",
+  "build": "55a4b0f50239",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "a390e7a1908412f6c2f3272edb2f651cc1e4b8f49b41f70e87156a8ac35c0029",
@@ -19,15 +19,15 @@
     "references/sideagent-node.md": "a50db2037719a456f8e5e098025c6d2e4941e9b778b862cb0ee0ff07e3cd2e58",
     "references/task-failure.md": "f60fe47ce2ce0ddd7d17594c4b57d8455342aa44d0cc3a9f4256129861307668",
     "references/worker-profiles.md": "90eeb1f417dabad9c881a0bbc620202acc5d829f3e650d2a064621db0e7e352c",
-    "references/workflow-worktree.md": "1db101d4d09d314fd6c2cdec49474cf53e097bbe87060d76ff3aee64504d1074",
+    "references/workflow-worktree.md": "77a18209a48fb3864e84c76d5b16ac251ba88c27ea87b622268b2763b8834c2a",
     "references/zcode-host-dispatch.md": "2ce02ee8c79e193bca566d0b644bb470ec013877c0e89c8cec23dc62f863e04b",
     "references/zcode-native-skill-entry.md": "22f5e4ce50d92a0e264c71252616a9c2db8473817be1c5eb99d0a415f814918f",
     "scripts/kaola-acp-paths.py": "e435b3aeab7979fb1bff8d18b25087021ca1daf9a0015831fde46126d24261ac",
     "scripts/kaola-compact-recovery.py": "c45662a4297047bd860a46157e950b4aac460b3e9df1a889abe99ca687e90f27",
-    "scripts/kaola-cwd-guard.py": "a04697595305a6833a1c8f2a1f3ed6488bbca8619544825b2f9346c056fb305f",
-    "scripts/kaola-dispatch.py": "5c9ada9794a3b806895e3db62328b5dda46ca179ce4b49e9ec718b3551e70b86",
+    "scripts/kaola-cwd-guard.py": "975be54b05f4aa8e08f18f1eb47da2c9999774639a7df092fe67365312e8c8af",
+    "scripts/kaola-dispatch.py": "101738e9d19cda326c299e2c3b0c482ea975c9c56c43e0e19f34a1b75c62a484",
     "scripts/kaola-record-contract.py": "2a9ec912ba7ace7f7de9048216d75fd268ea06389c94b710ba0e84a06bfe658c",
-    "scripts/kaola-recovery-routes.py": "419f588d7221fb242074db1bb7db4b7dc46fa91ddc28609669aa6010dd213dd4",
+    "scripts/kaola-recovery-routes.py": "7679ae1d8316f57691d75a8769e3206a6c1193855517ad1e4f23d6c11c528d70",
     "scripts/kaola-session-names.py": "772f2d729e61763851b78ab9d440c664df225bc4f08dc71f8ba0102ead411316"
   },
   "skill": "kaola-project-runner"

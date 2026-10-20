@@ -82,13 +82,13 @@ Acceptance and every re-run start and end at that root: before accepting a
 delivery whose finalize removes a worktree, and before re-running a check,
 confirm your own shell is at the canonical root, not inside the candidate.
 
-When a call still fails this way - the shell binary exists and the tool answers
-`spawn <shell> ENOENT`, or a tool reports a cwd that is gone - the cwd was
-removed under the live shell. Recover in place, no Host restart: from outside
-that shell run `mkdir -p <gone-dir>`; in the shell `cd <canonical-root>`; then
-`rmdir <gone-dir>`; rerun the failed call. Route: `tool-cwd-vanished`; the
-backstop sweep defers removal while a live cwd is inside a worktree
-(`cwd-occupied`).
+When a call still fails this way (`spawn <shell> ENOENT` or a tool reports a
+gone cwd), the cwd was removed under the live shell. Recover, no Host restart:
+outside that shell `mkdir -p <gone-dir>`; inside it `cd <canonical-root>`;
+then `rmdir <gone-dir>`; rerun the failed call. Route: `tool-cwd-vanished`. A
+live cwd alone is recoverable (#389): removal warns `occupied-cwd-recoverable`
+and the holder recreates the path; live cwd plus uncommitted changes is the one
+hard block (`cwd-occupied`).
 
 ## Foreign files and finalize safeguards
 
