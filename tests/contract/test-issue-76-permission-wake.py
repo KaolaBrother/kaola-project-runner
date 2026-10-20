@@ -286,7 +286,11 @@ class Sandbox:
                 base[key] = value
         return base
 
-    def session(self) -> str:
+    def session(self, host: bool = False) -> str:
+        # Issue #388: the carrier role follows the standard Host name; a
+        # non-standard name is a worker and is started without a host entry.
+        if host:
+            return f"zcode-KPR-orchestrator-{uuid.uuid4().hex[:8]}"
         return f"zcode-pw-{uuid.uuid4().hex[:8]}"
 
     def record_dir(self, session: str, platform: str = "zcode") -> Path:
@@ -399,7 +403,7 @@ def carrier_entries(record_dir: Path, event_kind: str | None = None) -> list[dic
 def test_permission_required_wakes_idle_host_while_turn_active() -> None:
     sandbox = Sandbox("idle-wake")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         worker = sandbox.session()
         sandbox.start(host, "basic")
         sandbox.write_prompt_file("HEARTBEAT V1: permission wake body.")
@@ -565,7 +569,7 @@ def test_droid_worker_wake_is_metadata_only_and_idempotent() -> None:
         fake = sandbox.dir / "fake-permission-agent.py"
         fake.write_text(PERMISSION_ACP_AGENT, encoding="utf-8")
         fake.chmod(fake.stat().st_mode | 0o755)
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         worker = f"droid-pw-{uuid.uuid4().hex[:8]}"
         sandbox.start(host, "basic")
         sandbox.write_prompt_file("HEARTBEAT DROID: metadata-only wake body.")
@@ -684,7 +688,7 @@ def test_unbound_worker_permission_is_unchanged() -> None:
 def test_worker_event_validation_accepts_permission_required() -> None:
     sandbox = Sandbox("validate")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         sandbox.start(host, "basic")
         host_dir = sandbox.record_dir(host)
         sock = holder_socket(host_dir)

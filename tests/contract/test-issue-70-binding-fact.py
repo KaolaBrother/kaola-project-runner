@@ -60,11 +60,16 @@ def test_binding_fact_is_the_holder_not_the_caller_environment() -> None:
     for — and the event still reaches the original Host."""
     sandbox = Sandbox("issue70-fact")
     try:
-        host = sandbox.session()
-        other_host = sandbox.session()
+        # Issue #388: the carrier role follows the standard Host name, so the
+        # carrier target must be named as a Host (a plain sandbox name is a
+        # worker and gets no host entry). The negative-control session stays a
+        # plain session: one repo has one Host, and this test only needs a
+        # second live target that the later environment names.
+        host = sandbox.session(host=True)
+        other = sandbox.session()
         worker = sandbox.session()
         sandbox.start(host, "basic")
-        sandbox.start(other_host, "basic")
+        sandbox.start(other, "basic")
         sandbox.write_prompt_file("HEARTBEAT: Issue #70 binding fact.")
 
         start = sandbox.start(worker, "basic", heartbeat_host=target_for(sandbox, host))
@@ -87,21 +92,21 @@ def test_binding_fact_is_the_holder_not_the_caller_environment() -> None:
         # A second start with a different host in the environment binds nothing.
         rebind = sandbox.cli(
             "start", "--mode", "yolo", session=worker, scenario="basic",
-            **{HEARTBEAT_HOST_ENV: json.dumps(target_for(sandbox, other_host))})
+            **{HEARTBEAT_HOST_ENV: json.dumps(target_for(sandbox, other))})
         check((rebind.get("error") or {}).get("code") == "session-exists",
               f"a second start on a live session is refused ({rebind.get('error')})")
         check(rebind.get("heartbeat_host_known") is True
               and rebind.get("heartbeat_host") == want,
               "the refused start still reports the binding in force "
               f"({rebind.get('heartbeat_host')})")
-        check(rebind.get("heartbeat_host_requested") == expected_fact(sandbox, other_host),
+        check(rebind.get("heartbeat_host_requested") == expected_fact(sandbox, other),
               "the refused start shows the target it asked for, distinct from the fact "
               f"({rebind.get('heartbeat_host_requested')})")
 
         # A send under the changed environment does not rebind either.
         reply = sandbox.cli("send", "--text", "work under a changed environment",
                             session=worker,
-                            **{HEARTBEAT_HOST_ENV: json.dumps(target_for(sandbox, other_host))})
+                            **{HEARTBEAT_HOST_ENV: json.dumps(target_for(sandbox, other))})
         check(reply.get("error") is None and reply.get("outcome") == "turn_completed",
               f"the worker still works normally ({reply.get('outcome')})")
         after = sandbox.cli("observe", session=worker)
@@ -110,11 +115,11 @@ def test_binding_fact_is_the_holder_not_the_caller_environment() -> None:
 
         # Behaviour, not just fields: the turn-end event went to the original Host.
         host_dir = sandbox.record_dir(host)
-        other_dir = sandbox.record_dir(other_host)
+        other_dir = sandbox.record_dir(other)
         hb.wait_until(lambda: hb.events_of_kind(host_dir, "worker_event"), 10,
                       "the idle event reaches the Host the holder is bound to")
         check(not hb.events_of_kind(other_dir, "worker_event"),
-              "the Host named only in the later environment receives nothing")
+              "the session named only in the later environment receives nothing")
     finally:
         sandbox.cleanup()
 
@@ -156,7 +161,7 @@ def test_rebinding_runs_through_the_existing_exact_stop_and_start() -> None:
     that gets woken."""
     sandbox = Sandbox("issue70-rebind")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         worker = sandbox.session()
         sandbox.start(host, "basic")
         sandbox.write_prompt_file("HEARTBEAT: Issue #70 recovery.")

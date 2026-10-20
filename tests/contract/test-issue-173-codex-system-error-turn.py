@@ -87,8 +87,8 @@ class CodexSystemErrorTurn(unittest.TestCase):
         root = Path(self._tmp.name)
         args = argparse.Namespace(
             record_dir=str(root / "record"), socket=str(root / "h.sock"),
-            platform="codex", session="codex-host-173", repo=str(root),
-            init_meta="", command="stub",
+            platform="codex", session="codex-KPR-orchestrator-173", repo=str(root),
+            init_meta="", command="stub", session_role="host",
         )
         self.holder = holder_module.Holder(args)
         self.agent = StubAgent()

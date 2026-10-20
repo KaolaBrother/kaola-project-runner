@@ -2654,7 +2654,8 @@ class RealAcpInjection(unittest.TestCase):
         doc = json.loads(state.read_text(encoding="utf-8"))
         doc["body"] = "STORED-BODY-SENTINEL"
         state.write_text(json.dumps(doc), encoding="utf-8")
-        host = "codex-KPR-i259-host"
+        # Issue #388: the carrier role follows the standard Host name.
+        host = "codex-KPR-orchestrator-record-contract"
         worker = "codex-KPR-i259-work"
         started = self.cli("start", session=host)
         self.assertEqual(started.get("state"), "ready", started.get("error") or started)

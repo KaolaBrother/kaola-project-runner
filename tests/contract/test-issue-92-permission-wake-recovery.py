@@ -371,7 +371,11 @@ class Sandbox:
                 base[key] = value
         return base
 
-    def session(self) -> str:
+    def session(self, host: bool = False) -> str:
+        # Issue #388: the carrier role follows the standard Host name; a
+        # non-standard name is a worker and is started without a host entry.
+        if host:
+            return f"zcode-KPR-orchestrator-{uuid.uuid4().hex[:8]}"
         return f"zcode-pr-{uuid.uuid4().hex[:8]}"
 
     def record_dir(self, session: str, platform: str = "zcode") -> Path:
@@ -514,7 +518,7 @@ def test_absent_host_recovers_the_wake_on_restart() -> None:
     single send attempt still receives exactly one actionable wake."""
     sandbox = Sandbox("restart")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         worker = sandbox.session()
         pending = arm_pending_wake_with_absent_host(sandbox, host, worker)
         request_id = pending.get("request_id")
@@ -618,7 +622,7 @@ def test_recovered_wake_is_not_prompted_twice() -> None:
     and not a second approval."""
     sandbox = Sandbox("dedup")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         worker = sandbox.session()
         pending = arm_pending_wake_with_absent_host(sandbox, host, worker)
         request_id = pending.get("request_id")
@@ -662,7 +666,7 @@ def test_settled_request_is_stale_and_never_wakes_the_host() -> None:
     still acts on the locator is told the request is gone."""
     sandbox = Sandbox("settled")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         worker = sandbox.session()
         pending = arm_pending_wake_with_absent_host(sandbox, host, worker)
         request_id = pending.get("request_id")
@@ -710,7 +714,7 @@ def test_exited_worker_wake_is_stale() -> None:
     write is the stale-delivery case, not this one.)"""
     sandbox = Sandbox("exited")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         worker = sandbox.session()
         arm_pending_wake_with_absent_host(sandbox, host, worker)
         worker_dir = sandbox.record_dir(worker)
@@ -747,7 +751,7 @@ def test_busy_host_stages_the_recovered_wake() -> None:
     the next completed turn boundary, exactly like a fresh one."""
     sandbox = Sandbox("busy")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         worker = sandbox.session()
         arm_pending_wake_with_absent_host(sandbox, host, worker, host_scenario="permission")
         host_dir = sandbox.record_dir(host)
@@ -796,7 +800,7 @@ def test_idle_and_unbound_paths_are_unchanged() -> None:
     task; an unbound worker still sends nothing at all."""
     sandbox = Sandbox("scope")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         bound = sandbox.session()
         unbound = sandbox.session()
         sandbox.start(host, "basic")
@@ -858,7 +862,7 @@ def test_a_reply_that_is_not_a_receipt_never_wedges_the_worker() -> None:
     would leave the turn active forever with no way back."""
     sandbox = Sandbox("badreply")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         worker = sandbox.session()
         sandbox.start(host, "basic")
         sandbox.write_prompt_file("HEARTBEAT V1: malformed carrier reply body.")
@@ -919,7 +923,7 @@ def test_a_host_answer_settles_the_debt_even_when_it_refuses() -> None:
     """
     sandbox = Sandbox("refused")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         worker = sandbox.session()
         sandbox.start(host, "basic")
         sandbox.write_prompt_file("HEARTBEAT V1: refused carrier body.")
@@ -971,8 +975,8 @@ def test_a_lost_receipt_retries_into_the_hosts_own_dedup() -> None:
     """
     sandbox = Sandbox("lostreceipt")
     try:
-        bound = sandbox.session()
-        live = sandbox.session()
+        bound = sandbox.session(host=True)
+        live = sandbox.session(host=True)
         worker = sandbox.session()
         sandbox.start(bound, "basic")
         sandbox.write_prompt_file("HEARTBEAT V1: lost receipt body.")
@@ -1447,7 +1451,7 @@ def test_a_real_permit_during_an_offer_is_a_stale_delivery() -> None:
     """
     sandbox = Sandbox("realpermit")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         worker = sandbox.session()
         arm_pending_wake_with_absent_host(sandbox, host, worker)
         worker_dir = sandbox.record_dir(worker)
