@@ -4,15 +4,9 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.9.23 — 2026-10-20 (agent tool-shell cwd trace; worktree guard warns and proceeds with one hard block; Kaola-Workflow guard contract frozen; installer backups quarantined; collect Runner fallback and bounded retry; Host carrier gated by session role; once-per-turn cwd notice; Argon tiers general implementation, never reviewers)
 
-Fixes #373 (agent tool-shell cwd trace and the #369 leftovers).
-Fixes #378 (the cwd-repair notice is delivered once per turn on a platform whose native steer answers `written`/`queued`, and its text is stable across retries).
-Fixes #377 (collect resolves a platform Runner beyond `--skills-root`, retries a `runner-missing` row with a bounded count, and reports a gone session as `session-gone`).
-Fixes #375 (installer `.drift.<pid>` backups are kept out of Skill discovery roots and no longer make the build-skew check refuse `start`).
-Fixes #389 (recoverable cwd findings become typed warnings and the worktree guard, wrapper and backstop sweep proceed; only a live cwd plus uncommitted changes still blocks).
-Fixes #388 (only a Host holder gets the Host heartbeat carrier; worker and Expert seats get the compact worker notice).
-Fixes #390 (Antigravity's Argon tiers are general implementation workers and are never reviewers, verifiers or acceptance authorities).
+Fixes #373 (the agent tool shell records its cwd through a runner-owned entry and the #369 leftovers are resolved), #374 (the `worktree-guard` receipt Kaola-Workflow consumes is frozen with a contract test), #375 (installer backups are quarantined outside Skill discovery roots and never block `start` alone), #377 (collect resolves a Runner beyond `--skills-root` and retries `runner-missing` with a bound), #378 (the cwd-repair notice is delivered once per turn with stable text), #388 (only a Host holder receives the Host heartbeat carrier), #389 (recoverable cwd findings warn and proceed; only a live cwd plus uncommitted changes blocks), #390 (Antigravity Argon tiers are general implementation workers and never reviewers) and #391 (the five Host-wake contract fixtures name their Hosts by the standard Host role; no product change).
 
 Seats: restart required
 
