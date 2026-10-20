@@ -1,0 +1,5 @@
+{"n":1,"name":"Read #369 tier A leftovers implementation surface","details":"dispatched: self — inspected the #369 holder, manifest, dispatch guard and tests in the run worktree","status":"done"}
+{"n":2,"name":"Implement tier A shell-entry cwd trace and #369 leftovers","details":"dispatched: self — landed on workflow/issue-373 in .kw/worktrees/issue-373 at 5b9a991aa8f4c94eeab552240fe1c66ca3415cb6","status":"done"}
+{"n":3,"name":"Un-skip and pass tier A contract tests plus Mock-ACP tier A-only repair","details":"dispatched: self — 23 holder cwd tests pass; tier A, tier A-only repair, batch steer, stale-file and fact-layer cases added","status":"done"}
+{"n":4,"name":"Live ZCode smoke and full validation","details":"dispatched: self — isolated ZCode 0.16.9 smoke passed; full ./scripts/validate.sh exit 0 (140 suites, 2023.88 s, log /tmp/kpr-373-validate-full3.log)","status":"done"}
+{"n":5,"name":"CHANGELOG/docs sync and report for Host acceptance","details":"dispatched: self — CHANGELOG Unreleased, docs/api.md, docs/zcode-host.md and docs/live-smoke issue-373 receipt at 5b9a991a; awaiting Host acceptance, no finalize/push","status":"done"}
