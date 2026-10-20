@@ -7,6 +7,7 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 ## Unreleased
 
 Fixes #377 (collect resolves a platform Runner beyond `--skills-root`, retries a `runner-missing` row with a bounded count, and reports a gone session as `session-gone`).
+Fixes #375 (installer `.drift.<pid>` backups are kept out of Skill discovery roots and no longer make the build-skew check refuse `start`).
 
 Seats: restart not required
 
@@ -24,6 +25,8 @@ Seats: restart not required
   needs no restart. This content change leaves the Grok Bot bridge at the unpinned content
   stage (`saveable: false`) so renderer checks stay green; the bridge is pinned in a later
   release commit.
+
+- **Installer backups leave the discovery root, and a backup alone never blocks `start` (#375).** A copy-mode `repair` or a `relink-drift` still keeps the previous Skill for inspection, but `scripts/install-local.sh` now moves it to a runner-owned quarantine run instead of `${root}/.${name}.drift.$$`: default `${XDG_STATE_HOME:-$HOME/.local/state}/kaola-project-runner/install-quarantine` (override `KAOLA_PROJECT_RUNNER_QUARANTINE`), one timestamped `run-*` directory per install, with `manifest.jsonl` rows recording `original_path`, `quarantine_path`, `root`, `skill`, `reason`, and `ts`. Every install also moves stale `.*.drift.*` / `.*.old.*` / `.*.tmp.*` siblings out of the roots it is about to write before it writes, prints every destination, and deletes nothing. The explicit recovery is `./scripts/install-local.sh --quarantine-stale-backups --skills-dir ROOT` (or the same flag with `--runtime NAME`), which performs only that move and installs no Skill; it is the `stale-install-backup` row in `scripts/kaola-recovery-routes.py`. `scripts/kaola-acp.py` `installed_worker_skills()` and the main-Skill comparison now exclude hidden installer backups, so a planted `.x-kaola-project-runner.drift.123` with old scripts produces neither `worker-skill-build-skew` nor `main-skill-build-skew`; a `start` that finds one reports `stale_install_backups`, `stale_install_backup_count`, `stale_install_backup_roots`, and `stale_install_backup_recovery` and continues. `scripts/kaola-acp.py` is the per-call CLI, `scripts/install-local.sh` is not a seat, and `scripts/kaola-recovery-routes.py` is a per-call table, so no running seat restarts for this change. This content change leaves the Grok Bot bridge at the unpinned content stage (`saveable: false`) so renderer checks stay green; the bridge is pinned in the release's follow-up pin commit.
 
 ## 0.9.22 — 2026-10-20 (worktree removal guarded against a live shell cwd; dsh permission delivery and resume receipt; per-preset Worker grants; shared Cursor+Grok quota pool; Host-record durability and rebind fixes)
 

@@ -40,6 +40,14 @@ assert_file() {
   [[ -f "$path" ]] || fail "$name" "expected file at $path"
 }
 
+quarantine_backup() {
+  # Issue #375: a kept previous copy lives in the runner-owned quarantine, not
+  # beside the Skill in the discovery root.
+  local home="$1" name="$2"
+  find "$home/.local/state/kaola-project-runner/install-quarantine" \
+    -type d -name ".${name}.drift.*" -print -quit 2>/dev/null || true
+}
+
 source_for() {
   local root="$1" name="$2"
   (cd "$root/skills/$name" && pwd -P)
@@ -99,6 +107,7 @@ run_installer() {
   local root="$1" home="$2"
   shift 2
   HOME="$home" DEVIN_CONFIG_DIR="$home/devin-config" \
+    XDG_STATE_HOME="$home/.local/state" \
     CODEX_HOME="${CODEX_HOME:-$home/codex-default}" "$root/scripts/install-local.sh" "$@"
 }
 
@@ -666,7 +675,7 @@ output="$(run_installer "$repo" "$home" --skills-dir "$dest" --method copy --pla
   || fail "test_edited_copy_repaired" "expected actionable drift report, got: $output"
 ! grep -q 'user edit' "$dest/grok-kaola-project-runner/SKILL.md" \
   || fail "test_edited_copy_repaired" "canonical payload not restored"
-backup="$(find "$dest" -maxdepth 1 -type d -name '.grok-kaola-project-runner.drift.*' -print -quit)"
+backup="$(quarantine_backup "$home" grok-kaola-project-runner)"
 [[ -n "$backup" ]] || fail "test_edited_copy_backup" "missing recoverable drift backup"
 grep -q 'user edit' "$backup/SKILL.md" \
   || fail "test_edited_copy_backup" "previous edited bytes not preserved"
@@ -724,7 +733,7 @@ assert_link "test_drifted_copy_to_link" "$dest/grok-kaola-project-runner" \
   "$(source_for "$repo" grok-kaola-project-runner)"
 [[ "$output" == *"repair:"* && "$output" == *"drift"* ]] \
   || fail "test_drifted_copy_to_link" "missing drift diagnosis: $output"
-backup="$(find "$dest" -maxdepth 1 -type d -name '.grok-kaola-project-runner.drift.*' -print -quit)"
+backup="$(quarantine_backup "$home" grok-kaola-project-runner)"
 [[ -n "$backup" ]] || fail "test_drifted_copy_to_link_backup" "missing previous copy"
 grep -q 'changed before relink' "$backup/SKILL.md" \
   || fail "test_drifted_copy_to_link_backup" "previous payload not retained"
@@ -1130,7 +1139,7 @@ output="$(run_installer "$repo" "$home" --skills-dir "$dest" --platform grok 2>&
   || fail "test_default_copy_modified_repaired" "expected drift repair report, got: $output"
 ! grep -q 'user edit' "$dest/grok-kaola-project-runner/SKILL.md" \
   || fail "test_default_copy_modified_repaired" "canonical content not restored"
-backup="$(find "$dest" -maxdepth 1 -type d -name '.grok-kaola-project-runner.drift.*' -print -quit)"
+backup="$(quarantine_backup "$home" grok-kaola-project-runner)"
 [[ -n "$backup" ]] || fail "test_default_copy_modified_backup" "missing recoverable backup"
 grep -q 'user edit' "$backup/SKILL.md" \
   || fail "test_default_copy_modified_backup" "previous bytes not retained"

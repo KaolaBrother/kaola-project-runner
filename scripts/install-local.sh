@@ -14,6 +14,10 @@ install_orchestrator=true
 orchestrator_skill_name="kaola-project-runner"
 external_skill_name="kaola-delegator"
 installer_python="${PYTHON_BIN:-python3}"
+quarantine_mode=false
+quarantine_base="${KAOLA_PROJECT_RUNNER_QUARANTINE:-${XDG_STATE_HOME:-$HOME/.local/state}/kaola-project-runner/install-quarantine}"
+quarantine_run_dir=""
+quarantine_moved_to=""
 
 # Issue #309: a refusal keeps its message and adds the route from
 # scripts/kaola-recovery-routes.py. The code token is the contract id.
@@ -33,6 +37,8 @@ ROUTE_INSTALL_RENDER='Run ./scripts/render-skills.py --write in this checkout, t
 ROUTE_INSTALL_FOREIGN='Do not delete this path. Pick another --skills-dir, or uninstall only a copy this installer owns.'
 ROUTE_INSTALL_KEEP='Do not force-delete user edits. Review the edit, restore the recorded bytes, or remove the path by hand only if it is yours, then rerun.'
 ROUTE_INSTALL_TEMP='Remove the named temporary path only if it is yours, then rerun. Do not continue a partial install.'
+ROUTE_INSTALL_QUARANTINE='Run ./scripts/install-local.sh --quarantine-stale-backups --skills-dir ROOT for the named root; it moves installer backups into the runner-owned quarantine and records each original path. Do not delete a Skill root or a backup by hand.'
+ROUTE_INSTALL_QUARANTINE_USAGE='Do not combine --quarantine-stale-backups with --uninstall; run one or the other.'
 ROUTE_INSTALL_HOOK='Read the named blocker, fix hooks.json or the compact-recovery entry, then rerun. Do not write Skills after this refusal.'
 ROUTE_INSTALL_BIN='Read the refs-tool error above, fix the bin-link ledger, then rerun.'
 ROUTE_INSTALL_VERIFY='Read the per-destination failure above and rerun. Do not treat this install as complete.'
@@ -45,6 +51,7 @@ usage() {
     '                                  [--method link|copy] [--platform ID[,ID...]]' \
     '                                  [--no-orchestrator]' \
     '                                  [--bin-links | --no-bin-links] [--uninstall]' \
+    '                                  [--quarantine-stale-backups]' \
     '' \
     'Consuming runtimes (verified native skill directories):' \
     '  codex        ${CODEX_HOME:-$HOME/.codex}/skills' \
@@ -145,7 +152,15 @@ usage() {
     'continuation docs/api.md#acp-layer-preparation-during-install and the platform' \
     'selection to continue with. That footer is not an ACP check; runtime/ACP completion' \
     'stays with the executing agent. --uninstall does not start that procedure.' \
-    'render-skills.py --verify-install checks payloads only, not runtimes.'
+    'render-skills.py --verify-install checks payloads only, not runtimes.' \
+    '--quarantine-stale-backups moves hidden .*.drift.*, .*.old.* and .*.tmp.*' \
+    'installer backups out of the selected Skills root(s) into the runner-owned' \
+    'directories under $KAOLA_PROJECT_RUNNER_QUARANTINE (default' \
+    '${XDG_STATE_HOME:-$HOME/.local/state}/kaola-project-runner/install-quarantine),' \
+    'one timestamped run directory with a manifest.jsonl recording each original path,' \
+    'and exits. It installs nothing and deletes nothing. Every install also moves such' \
+    'stale backups before it writes, and repair/relink-drift keeps the previous copy' \
+    'there instead of in the discovery root.'
 }
 
 skill_name_for() {
@@ -251,6 +266,7 @@ while [[ $# -gt 0 ]]; do
     --no-orchestrator) install_orchestrator=false; shift ;;
     --bin-links) bin_links_request=on; shift ;;
     --no-bin-links) bin_links_request=off; shift ;;
+    --quarantine-stale-backups) quarantine_mode=true; shift ;;
     --uninstall) mode=uninstall; shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; refuse 2 install-unknown-argument "$ROUTE_INSTALL_USAGE" "unknown argument: $1" ;;
@@ -296,6 +312,96 @@ if [[ -n "$runtime_alias" ]]; then
   if [[ ! -d "$retired_parent" || "$(canonical_dir "$retired_parent")" == "$(canonical_dir "$base_parent")" ]]; then
     retired_parent=""
   fi
+fi
+
+# Issue #375: installer drift/old/tmp siblings are hidden artifacts, not Skills.
+# They never stay in a discovery root: a repair keeps its previous copy in a
+# runner-owned quarantine run, and every install moves stale siblings there
+# before it writes. Nothing is deleted; each move is printed and recorded with
+# the original path in <run>/manifest.jsonl.
+quarantine_ensure_run_path() {
+  if [[ -z "$quarantine_run_dir" ]]; then
+    local stamp base candidate n=0
+    stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+    base="$quarantine_base/run-$stamp-$$"
+    candidate="$base"
+    while [[ -e "$candidate" || -L "$candidate" ]]; do
+      n=$((n + 1))
+      candidate="$base-$n"
+    done
+    quarantine_run_dir="$candidate"
+  fi
+}
+
+quarantine_is_backup_name() {
+  [[ "$1" =~ ^\..+\.(drift|old|tmp)\.[0-9]+$ ]]
+}
+
+quarantine_record() {
+  # $1 original path, $2 quarantine path, $3 reason, $4 skill name (optional)
+  local src="$1" dest="$2" reason="$3" skill="${4:-}" run
+  run="$(dirname "$dest")"
+  "$installer_python" -c 'import json, sys, time
+path, dest, reason, skill, root = sys.argv[1:6]
+print(json.dumps({
+    "schema": "kaola-project-runner-install-quarantine/1",
+    "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    "original_path": path,
+    "quarantine_path": dest,
+    "root": root,
+    "skill": skill or None,
+    "reason": reason,
+}, sort_keys=True))' "$src" "$dest" "$reason" "$skill" "$(dirname "$src")" >> "$run/manifest.jsonl"
+}
+
+quarantine_move() {
+  # $1 source, $2 reason, $3 skill name (optional). Prints the destination.
+  local src="$1" reason="$2" skill="${3:-}" name dest n=0 run
+  quarantine_ensure_run_path
+  run="$quarantine_run_dir"
+  mkdir -p "$run" || return 1
+  name="${src##*/}"
+  dest="$run/$name"
+  while [[ -e "$dest" || -L "$dest" ]]; do
+    n=$((n + 1))
+    dest="$run/$name.$n"
+  done
+  mv "$src" "$dest" || return 1
+  quarantine_record "$src" "$dest" "$reason" "$skill" \
+    || printf 'quarantine: moved %s -> %s but could not record %s/manifest.jsonl\n' "$src" "$dest" "$run" >&2
+  quarantine_moved_to="$dest"
+  printf 'quarantined: %s -> %s (manifest: %s/manifest.jsonl)\n' "$src" "$dest" "$run"
+}
+
+quarantine_scan_root() {
+  local root="$1" entry
+  for entry in "$root"/.*; do
+    [[ -e "$entry" || -L "$entry" ]] || continue
+    quarantine_is_backup_name "${entry##*/}" || continue
+    printf '%s\n' "$entry"
+  done
+}
+
+if [[ "$quarantine_mode" == true ]]; then
+  [[ "$mode" == install ]] || refuse 2 install-quarantine-with-uninstall "$ROUTE_INSTALL_QUARANTINE_USAGE" "--quarantine-stale-backups cannot be combined with --uninstall"
+  quarantine_roots=("${dest_parents[@]}")
+  [[ -n "$retired_parent" ]] && quarantine_roots+=("$retired_parent")
+  quarantined_count=0
+  for quarantine_root in "${quarantine_roots[@]}"; do
+    [[ -d "$quarantine_root" ]] || continue
+    while IFS= read -r quarantine_entry; do
+      [[ -n "$quarantine_entry" ]] || continue
+      quarantine_move "$quarantine_entry" "stale install backup" "" \
+        || refuse 1 install-quarantine-failed "$ROUTE_INSTALL_QUARANTINE" "could not quarantine stale install backup: $quarantine_entry"
+      quarantined_count=$((quarantined_count + 1))
+    done < <(quarantine_scan_root "$quarantine_root")
+  done
+  if [[ "$quarantined_count" -eq 0 ]]; then
+    printf 'quarantine: no stale install backups in: %s\n' "${quarantine_roots[*]}"
+  else
+    printf 'quarantine: %d stale install backup(s) moved; nothing was deleted and no Skill was installed\n' "$quarantined_count"
+  fi
+  exit 0
 fi
 
 if [[ "$mode" == install ]]; then
@@ -636,12 +742,22 @@ place_staged() {
   # If the staged rename fails, the previous target is restored from backup;
   # if restoration itself fails, the backup is retained and its recovery path
   # is reported instead of being deleted.
-  "$installer_python" -c 'import os, shutil, sys
+  "$installer_python" -c 'import errno, os, shutil, sys
 staged, target, backup, keep_previous = sys.argv[1:5]
+def move(src, dst):
+    try:
+        os.replace(src, dst)
+    except OSError as exc:
+        if exc.errno != errno.EXDEV:
+            raise
+        shutil.move(src, dst)
 moved = False
 if os.path.lexists(target):
     try:
-        os.replace(target, backup)
+        parent = os.path.dirname(backup)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        move(target, backup)
         moved = True
     except OSError as exc:
         sys.exit("place_staged: could not set aside %s -> %s: %s" % (target, backup, exc))
@@ -651,7 +767,7 @@ except OSError as exc:
     if not moved:
         sys.exit("place_staged: rename %s -> %s failed: %s" % (staged, target, exc))
     try:
-        os.replace(backup, target)
+        move(backup, target)
     except OSError as rb_exc:
         sys.exit(
             "place_staged: rename %s -> %s failed: %s; rollback failed: %s; "
@@ -842,7 +958,26 @@ destination_plan() {
   [[ -n "$legacy_referrers" ]] || legacy_referrers="$self_ref"
 
   local -a actions=() bin_actions=() payload_names=()
-  local bin_ledger="" want_user_hook=false hook_status=""
+  local -a stale_backups=()
+  local bin_ledger="" want_user_hook=false hook_status="" stale_entry="" stale_skill=""
+
+  # Issue #375: an install moves stale installer backups out of this root
+  # before it writes. The move is planned read-only here and prepended to the
+  # apply list, so a refusal anywhere still aborts before the first byte moves.
+  # A normal install only takes names in this checkout's generated catalog;
+  # --quarantine-stale-backups is the explicit recovery for any backup shape.
+  if [[ "$mode" == install && "$role" != retired ]]; then
+    while IFS= read -r stale_entry; do
+      [[ -n "$stale_entry" ]] || continue
+      [[ "${stale_entry##*/}" =~ ^\.(.+)\.(drift|old|tmp)\.[0-9]+$ ]] || continue
+      stale_skill="${BASH_REMATCH[1]}"
+      case " $catalog_names " in
+        *" $stale_skill "*) ;;
+        *) continue ;;
+      esac
+      stale_backups+=("quarantine-backup|${stale_entry##*/}|-|$stale_entry|stale install backup")
+    done < <(quarantine_scan_root "$target_parent")
+  fi
 
   for platform in "${selection[@]}"; do
     plan_skill "$(skill_name_for "$platform")" "$platform"
@@ -942,6 +1077,12 @@ destination_plan() {
   # Percent-q output is re-parsed as part of the eval'd assignment, so scalars
   # (any ordinary string) survive plan -> apply untouched; guarded expansions
   # below keep bash 3.2's set -u from erroring on an empty array.
+  # A stale backup is cleared before the skills it could shadow are replaced.
+  if [[ ${#stale_backups[@]} -gt 0 ]]; then
+    local -a merged_actions=("${stale_backups[@]}" ${actions[@]+"${actions[@]}"})
+    actions=("${merged_actions[@]}")
+  fi
+
   eval "${prefix}_parent=$(printf '%q' "$parent")"
   eval "${prefix}_role=$(printf '%q' "$role")"
   eval "${prefix}_rt=$(printf '%q' "$rt")"
@@ -993,11 +1134,16 @@ destination_apply() {
           "$name" "$target_parent" "${dest_parents[0]}" "$refs" >&2
       fi
       ;;
+    quarantine-backup)
+      quarantine_move "$target" "stale install backup" "" \
+        || refuse 1 install-quarantine-failed "$ROUTE_INSTALL_QUARANTINE" "could not quarantine stale install backup: $target"
+      ;;
     install|update|copy-over-link|repair)
       temp="$target_parent/.${name}.tmp.$$"
       keep_previous=0
       if [[ "$action" == repair ]]; then
-        backup="$target_parent/.${name}.drift.$$"
+        quarantine_ensure_run_path
+        backup="$quarantine_run_dir/.${name}.drift.$$"
         keep_previous=1
       else
         backup="$target_parent/.${name}.old.$$"
@@ -1022,7 +1168,10 @@ destination_apply() {
         write_receipt "$name" "$source" link "" "$refs"
       fi
       if [[ "$action" == repair ]]; then
-        printf 'repair: %s (managed drift; previous copy: %s; edit repo templates/manifests, not installed Skills)\n' "$target" "$backup"
+        quarantine_record "$target" "$backup" "repair" "$name" \
+          || printf 'quarantine: previous copy at %s could not be recorded in %s/manifest.jsonl\n' "$backup" "$(dirname "$backup")" >&2
+        printf 'repair: %s (managed drift; previous copy quarantined: %s; manifest: %s/manifest.jsonl; edit repo templates/manifests, not installed Skills)\n' \
+          "$target" "$backup" "$(dirname "$backup")"
       else
         printf '%s: %s\n' "$action" "$target"
       fi
@@ -1031,7 +1180,8 @@ destination_apply() {
       temp="$target_parent/.${name}.tmp.$$"
       keep_previous=0
       if [[ "$action" == relink-drift ]]; then
-        backup="$target_parent/.${name}.drift.$$"
+        quarantine_ensure_run_path
+        backup="$quarantine_run_dir/.${name}.drift.$$"
         keep_previous=1
       else
         backup="$target_parent/.${name}.old.$$"
@@ -1044,7 +1194,10 @@ destination_apply() {
       fi
       write_receipt "$name" "$source" link "" "$refs"
       if [[ "$action" == relink-drift ]]; then
-        printf 'repair: %s -> %s (managed drift; previous copy: %s; edit repo templates/manifests, not installed Skills)\n' "$target" "$source" "$backup"
+        quarantine_record "$target" "$backup" "relink-drift" "$name" \
+          || printf 'quarantine: previous copy at %s could not be recorded in %s/manifest.jsonl\n' "$backup" "$(dirname "$backup")" >&2
+        printf 'repair: %s -> %s (managed drift; previous copy quarantined: %s; manifest: %s/manifest.jsonl; edit repo templates/manifests, not installed Skills)\n' \
+          "$target" "$source" "$backup" "$(dirname "$backup")"
       else
         printf '%s: %s -> %s\n' "$action" "$target" "$source"
       fi

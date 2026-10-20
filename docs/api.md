@@ -135,6 +135,7 @@ scripts/install-local.sh [--runtime NAME | --skills-dir ABS_PATH]
                          [--method link|copy] [--platform ID[,ID...]]
                          [--no-orchestrator]
                          [--bin-links | --no-bin-links] [--uninstall]
+                         [--quarantine-stale-backups]
 ```
 
 Platform IDs are `grok`, `claude-code`, `opencode`, `kimi-cli`, `cursor-cli`, `devin`, `codex`, `zcode`, `droid`, `dsh`, and `antigravity`.
@@ -159,6 +160,24 @@ footer and does not start that procedure. Names this checkout no longer
 generates but a receipt still owns are obsolete copies: the installer retires one only when no
 other referrer remains and the copy's bytes still match the receipt, and preserves — with a
 named owner-safe next action — a modified, co-owned, foreign, or unreceipted path.
+
+### Installer backups and the quarantine
+
+The installer's `.${name}.drift.$$`, `.${name}.old.$$`, and `.${name}.tmp.$$` siblings are
+manageable artifacts, never Skills. A copy-mode `repair` and a `relink-drift` still keep the
+previous copy for inspection, but it goes to the runner-owned quarantine instead of the Skill
+discovery root. Each install also moves stale backup-shaped siblings in the roots it is about to
+write into the same quarantine before it writes, and prints every move. The default quarantine is
+`${XDG_STATE_HOME:-$HOME/.local/state}/kaola-project-runner/install-quarantine` (override with
+`KAOLA_PROJECT_RUNNER_QUARANTINE`); one timestamped `run-*` directory holds the moved entries and
+a `manifest.jsonl` whose rows record `schema`, `ts`, `original_path`, `quarantine_path`, `root`,
+`skill`, and `reason`. Nothing is deleted: the previous bytes stay available under the quarantine
+path. `./scripts/install-local.sh --quarantine-stale-backups --skills-dir ROOT` performs only
+that recovery for an existing root (it installs no Skill), and a normal install performs the same
+move. A stale backup is not an installed Skill, so it never causes the build-skew refusal and
+never blocks `start` on its own; a `start` that finds one reports `stale_install_backups` (with
+`stale_install_backup_count`, `stale_install_backup_roots`, and
+`stale_install_backup_recovery`) so the operator can run the quarantine command.
 
 ### ACP layer preparation during install
 
@@ -2321,7 +2340,12 @@ Host that cannot run the authorized install itself relays this exact route to th
 operator and keeps its task and seat. `worker-skill-build-skew` names
 the same per-root route with the skewed copies' platforms and `--no-orchestrator`. A passing Host `start` reports
 `main_skill_build`, which is `null` when there is no record to compare (a checkout invocation or a
-worker Skill built before the record).
+worker Skill built before the record). Hidden installer backups (`.${name}.drift.$$`,
+`.${name}.old.$$`, `.${name}.tmp.$$`) are never installed Skills and are never compared: a start
+reports them separately as `stale_install_backups` with `stale_install_backup_count`,
+`stale_install_backup_roots`, and the executable `stale_install_backup_recovery` route
+(`./scripts/install-local.sh --quarantine-stale-backups --skills-dir ROOT`), while a backup
+present by itself never produces `worker-skill-build-skew` and never blocks `start`.
 
 One live Host per canonical root (Issue #132). Before anything else a Host-named `start` (any
 platform, a `KAOLA_ACP_DISPATCHER`-dispatched one included) enumerates the other Host-named records

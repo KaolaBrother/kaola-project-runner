@@ -5642,6 +5642,16 @@ def is_worker_skill(path: Path) -> bool:
     return (path / "scripts" / "kaola-acp.py").is_file()
 
 
+# Issue #375: the installer's hidden set-aside names. A runtime does not load a
+# dot-directory, so none of these is an installed Skill; they are reported apart
+# so stale leftovers can be quarantined without ever blocking a start.
+INSTALL_BACKUP_NAME = re.compile(r"^\..+\.(?:drift|old|tmp)\.[0-9]+$")
+
+
+def is_install_backup(path: Path) -> bool:
+    return bool(INSTALL_BACKUP_NAME.match(path.name))
+
+
 def skill_frontmatter_name(path: Path) -> str | None:
     """The ``name:`` of a Skill directory's SKILL.md frontmatter, or None. A
     runtime loads a Skill by this name, so a renamed backup copy still counts."""
@@ -5691,13 +5701,47 @@ def installed_worker_skills(repo: str, platform: str = "zcode",
                 continue
             seen.add(key)
             try:
-                skills = sorted(path for path in root.iterdir() if match(path))
+                skills = sorted(path for path in root.iterdir()
+                                if not is_install_backup(path) and match(path))
             except OSError:
                 unreadable.append(str(root))
                 continue
             if skills:
                 found.append((root, skills))
     return found, unreadable
+
+
+def stale_install_backups(repo: str, platform: str = "zcode") -> list[str]:
+    """Hidden installer backups in the discovery roots (Issue #375).
+
+    They are not installed Skills and never make the build-skew check refuse.
+    The list is reported separately with the command that quarantines them."""
+    found: list[str] = []
+    seen: set[str] = set()
+    for base in (Path(repo), Path.home()):
+        for relative in HOST_SKILL_DISCOVERY_DIRS.get(platform, SKILL_DISCOVERY_DIRS):
+            root = base / relative
+            if not root.is_dir():
+                continue
+            try:
+                key = str(root.resolve())
+            except OSError:
+                continue
+            if key in seen:
+                continue
+            seen.add(key)
+            try:
+                entries = sorted(root.iterdir())
+            except OSError:
+                continue
+            for path in entries:
+                if not is_install_backup(path):
+                    continue
+                if not (path.is_dir() or path.is_symlink()):
+                    continue
+                if str(path) not in found:
+                    found.append(str(path))
+    return found
 
 
 def worker_skill_alignment(repo: str, platform: str = "zcode") -> dict[str, Any]:
@@ -5707,13 +5751,15 @@ def worker_skill_alignment(repo: str, platform: str = "zcode") -> dict[str, Any]
     Skill build to be the baseline; a ``~/.local/bin`` start does apply),
     ``build`` (the baseline ``kaola-acp.py`` digest,
     12 hex), ``roots`` (what was compared, for the receipt), ``skew`` (the
-    differing files) and ``unreadable_roots`` (Issue #106: existing default
-    roots that could not be listed, so no comparison was possible). Read-only:
+    differing files), ``unreadable_roots`` (Issue #106: existing default
+    roots that could not be listed, so no comparison was possible) and
+    ``stale_install_backups`` (Issue #375: hidden installer leftovers in the
+    same roots, reported but never counted as installed Skills). Read-only:
     nothing is written, probed, or spawned."""
     baseline_dir = skew_baseline_dir()
     if baseline_dir is None:
         return {"applies": False, "build": None, "roots": None, "skew": [],
-                "unreadable_roots": []}
+                "unreadable_roots": [], "stale_install_backups": []}
     baseline = {name: file_sha256(baseline_dir / name)
                 for name in WORKER_SKILL_SCRIPTS + WORKER_SKILL_OPTIONAL_SCRIPTS}
     roots: list[dict[str, Any]] = []
@@ -5739,7 +5785,8 @@ def worker_skill_alignment(repo: str, platform: str = "zcode") -> dict[str, Any]
                     "expected": expected[:12],
                 })
     return {"applies": True, "build": (baseline.get("kaola-acp.py") or "")[:12] or None,
-            "roots": roots, "skew": skew, "unreadable_roots": unreadable}
+            "roots": roots, "skew": skew, "unreadable_roots": unreadable,
+            "stale_install_backups": stale_install_backups(repo, platform)}
 
 
 def main_skill_build(files: dict[str, Any]) -> str:
@@ -5765,7 +5812,8 @@ def main_skill_alignment(repo: str, platform: str = "zcode") -> dict[str, Any]:
         record = None
     files = record.get("files") if isinstance(record, dict) else None
     if not isinstance(files, dict) or not files:
-        return {"applies": False, "build": None, "skills": None, "skew": []}
+        return {"applies": False, "build": None, "skills": None, "skew": [],
+                "stale_install_backups": []}
     build = main_skill_build(files)
     found: list[str] = []
     skew: list[dict[str, Any]] = []
@@ -5781,7 +5829,8 @@ def main_skill_alignment(repo: str, platform: str = "zcode") -> dict[str, Any]:
                 "expected": build,
                 "files": sorted(name for name in files if installed[name] != files[name]),
             })
-    return {"applies": True, "build": build, "skills": found, "skew": skew}
+    return {"applies": True, "build": build, "skills": found, "skew": skew,
+            "stale_install_backups": stale_install_backups(repo, platform)}
 
 
 def _pin_file(directory: Path) -> str | None:
@@ -6162,6 +6211,43 @@ def skill_refresh_route(roots: dict[str, list[str]], unmanaged: list[str],
     return text
 
 
+def stale_install_backup_recovery(paths: list[str]) -> str:
+    """The quarantine command for the roots of the named hidden backups (#375)."""
+    roots: list[str] = []
+    for raw in paths:
+        root = str(Path(raw).parent)
+        if root not in roots:
+            roots.append(root)
+    module = _load_recovery_routes()
+    text = ""
+    if module is not None:
+        _kind, text = module.lookup("stale-install-backup")
+    if not text:
+        text = ("Run ./scripts/install-local.sh --quarantine-stale-backups "
+                "--skills-dir ROOT for each named root; it moves installer backups "
+                "into the runner-owned quarantine and deletes nothing.")
+    commands = [
+        f"./scripts/install-local.sh --quarantine-stale-backups "
+        f"--skills-dir {shlex.quote(root)}" for root in roots
+    ]
+    if commands:
+        text += " Commands: " + "; ".join(commands) + "."
+    return text
+
+
+def attach_stale_install_backups(receipt: dict[str, Any],
+                                 alignment: dict[str, Any]) -> dict[str, Any]:
+    """Report hidden installer backups without making them a start blocker."""
+    paths = alignment.get("stale_install_backups") if isinstance(alignment, dict) else None
+    if not paths:
+        return receipt
+    receipt["stale_install_backups"] = paths
+    receipt["stale_install_backup_count"] = len(paths)
+    receipt["stale_install_backup_roots"] = sorted({str(Path(raw).parent) for raw in paths})
+    receipt["stale_install_backup_recovery"] = stale_install_backup_recovery(paths)
+    return receipt
+
+
 def main_skill_skew_refusal(args: argparse.Namespace, repo: str,
                             alignment: dict[str, Any]) -> dict[str, Any]:
     """Issue #121: an installed main Skill differs from this Host's build, and
@@ -6198,7 +6284,7 @@ def main_skill_skew_refusal(args: argparse.Namespace, repo: str,
         "mutation_performed": False,
         "mutation_status": "not_started",
     })
-    return receipt
+    return attach_stale_install_backups(receipt, alignment)
 
 
 def worker_skill_root_refusal(args: argparse.Namespace, repo: str,
@@ -6223,7 +6309,7 @@ def worker_skill_root_refusal(args: argparse.Namespace, repo: str,
         "mutation_performed": False,
         "mutation_status": "not_started",
     })
-    return receipt
+    return attach_stale_install_backups(receipt, alignment)
 
 
 def worker_skill_skew_refusal(args: argparse.Namespace, repo: str,
@@ -6265,7 +6351,7 @@ def worker_skill_skew_refusal(args: argparse.Namespace, repo: str,
         "mutation_performed": False,
         "mutation_status": "not_started",
     })
-    return receipt
+    return attach_stale_install_backups(receipt, alignment)
 
 
 def attach_binding_fact(receipt: dict[str, Any], facts: Any) -> dict[str, Any]:
@@ -6766,6 +6852,7 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
         receipt["worker_skill_build"] = alignment["build"]
         receipt["worker_skill_roots"] = alignment["roots"]
         receipt["main_skill_build"] = (main_alignment or {}).get("build")
+        attach_stale_install_backups(receipt, alignment)
     resolution = facts["resolution"]
     heartbeat_host = resolution["target"]
     # What this command asked for, and where that request came from. The fact
