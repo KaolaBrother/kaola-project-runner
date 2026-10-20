@@ -317,6 +317,17 @@ session, holder, and prompt fingerprint match becomes `returned` with reason
 `collected`, a short excerpt, and evidence pointers. `acceptance` stays
 `pending`. Idle or an ack alone stays `in-flight` and is not acceptance.
 
+A platform Runner is resolved in this order: `--skills-root`, the Skill root
+that holds the dispatch entry (its sibling Runner roots), then the checkout's
+`skills/` directory. The first existing
+`<platform>-kaola-project-runner/scripts/runtime-tmux.sh` wins, and
+`evidence.runner` records its path, source, and attempts. When none exists the
+row becomes `unknown` / `runner-missing` with `runner_missing_attempts` and
+`runner_missing_limit` (3); later collects retry it, and at the bound it stays
+`runner-missing` with the recovery route until a collect resolves a Runner. A
+Runner that reports `no-session` yields `unknown` / `session-gone`, not a
+lingering `in-flight` row.
+
 ## 4. Reclaim
 
 The Host exact-stops each session this plan started, with that platform's

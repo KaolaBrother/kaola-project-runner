@@ -90,6 +90,11 @@ COVERAGE = ("in-flight", "returned", "failed", "unknown", "not-run")
 # index mirror. Any other value — absent, renamed or unreadable — is a duty.
 CLOSED_COVERAGE = ("returned", "failed", "not-run")
 RUNNER_TIMEOUT = float(os.environ.get("KAOLA_DISPATCH_RUNNER_TIMEOUT", "120"))
+# Issue #377: a collect row whose platform Runner was not found is re-tried by
+# later collects. Three failed resolutions reach the bound; the row then keeps
+# its runner-missing refusal and recovery route until a runner becomes
+# resolvable, so a temporarily absent Skill is not a permanent loss.
+RUNNER_MISSING_RETRY_LIMIT = 3
 INDEX_LOCK = threading.Lock()
 SIDEAGENT_ROLES = ("sideagent", "sidekick")
 # Issue #255 lifecycle state. The file keeps its path and its `body` string, so
@@ -1458,6 +1463,59 @@ def session_absent(receipt: dict[str, Any] | None) -> bool:
     if isinstance(error, dict) and error.get("code") == "no-session":
         return True
     return receipt.get("reason") == "no-session"
+
+
+def runner_root_sources(skills_root: Path) -> list[tuple[Path, str]]:
+    """Issue #377 fallback order: the caller's root, the Skill root that holds
+    this entry (sibling Runner roots), then a checkout's skills/ directory."""
+    here = Path(__file__).resolve().parent
+    candidates = [
+        (skills_root, "skills-root"),
+        (here.parent.parent, "dispatch-skill-root"),
+        (here.parent / "skills", "checkout-skills"),
+    ]
+    roots: list[tuple[Path, str]] = []
+    for root, source in candidates:
+        if all(root != seen for seen, _ in roots):
+            roots.append((root, source))
+    return roots
+
+
+def runner_roots(skills_root: Path) -> list[Path]:
+    return [root for root, _ in runner_root_sources(skills_root)]
+
+
+def runner_resolution(skills_root: Path, platform: Any) -> tuple[Path | None, str | None]:
+    """The first existing platform Runner and the fallback root that supplied it."""
+    if not isinstance(platform, str) or not platform:
+        return None, None
+    for root, source in runner_root_sources(skills_root):
+        script = root / f"{platform}-kaola-project-runner" / "scripts" / "runtime-tmux.sh"
+        if script.is_file():
+            return script, source
+    return None, None
+
+
+def runner_script(skills_root: Path, platform: Any) -> Path | None:
+    return runner_resolution(skills_root, platform)[0]
+
+
+def runner_missing_attempts(item: dict[str, Any]) -> int:
+    value = item.get("runner_missing_attempts")
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return 0
+    return value
+
+
+def runner_missing_route() -> str:
+    module = _load_recovery_routes()
+    if module is not None:
+        try:
+            return module.lookup("runner-missing")[1]
+        except (AttributeError, KeyError, TypeError):
+            pass
+    return ("Render and install that platform Skill, then collect again with a root "
+            "that holds its Runner. Do not mark the item admitted.")
 
 
 def parse_stdout(text: str) -> dict[str, Any] | None:
@@ -4129,21 +4187,51 @@ def completed_turn(receipt: dict[str, Any]) -> bool:
 
 def collect_one(item: dict[str, Any], repo: str, skills_root: Path) -> dict[str, Any]:
     kept = dict(item)
-    if item.get("status") != "in-flight":
+    retry_missing = item.get("status") == "unknown" and item.get("reason") == "runner-missing"
+    if item.get("status") != "in-flight" and not retry_missing:
         return kept
     platform = item.get("platform")
     if not isinstance(platform, str):
         preset = item.get("preset")
         platform = preset.split("/", 1)[0] if isinstance(preset, str) and "/" in preset else None
-    script = None if not platform else skills_root / f"{platform}-kaola-project-runner" / "scripts" / "runtime-tmux.sh"
-    if script is None or not script.is_file():
-        kept.update(status="unknown", reason="runner-missing")
+    if not isinstance(kept.get("evidence"), dict):
+        kept["evidence"] = {}
+    script, runner_source = runner_resolution(skills_root, platform)
+    attempts = runner_missing_attempts(item)
+    if script is None:
+        # Resolve before refusing: a later collect may see the Runner even
+        # after the bound, so a temporarily absent Skill is not a permanent
+        # loss. The bound limits the recorded failed attempts, not the cheap
+        # path lookup.
+        if attempts >= RUNNER_MISSING_RETRY_LIMIT:
+            kept.update(status="unknown", reason="runner-missing",
+                        runner_missing_attempts=attempts,
+                        runner_missing_limit=RUNNER_MISSING_RETRY_LIMIT,
+                        runner_missing_exhausted=True)
+            kept.setdefault("recovery", runner_missing_route())
+            return kept
+        attempts += 1
+        kept.update(status="unknown", reason="runner-missing",
+                    runner_missing_attempts=attempts,
+                    runner_missing_limit=RUNNER_MISSING_RETRY_LIMIT)
+        kept["evidence"]["runner"] = {
+            "platform": platform, "path": None, "source": None,
+            "roots": [str(root) for root in runner_roots(skills_root)],
+        }
+        if attempts >= RUNNER_MISSING_RETRY_LIMIT:
+            kept["runner_missing_exhausted"] = True
+            kept["recovery"] = runner_missing_route()
         return kept
+    for key in ("runner_missing_attempts", "runner_missing_limit", "runner_missing_exhausted"):
+        kept.pop(key, None)
+    if item.get("runner_missing_exhausted"):
+        kept.pop("recovery", None)
+    kept["evidence"]["runner"] = {
+        "platform": platform, "path": str(script), "source": runner_source,
+        "attempts": attempts,
+    }
     probe = {"session": item.get("session"), "dispatch_event_cursor": item.get("dispatch_event_cursor")}
     code, receipt, note = run_runner(script, launch_argv(probe, repo, "status"))
-    kept.setdefault("evidence", {})
-    if not isinstance(kept["evidence"], dict):
-        kept["evidence"] = {}
     kept["evidence"]["collect_status"] = evidence(receipt, code, note)
     unread = receipt_unreadable(code, receipt, note)
     if unread or not isinstance(receipt, dict):
@@ -4178,6 +4266,9 @@ def collect_one(item: dict[str, Any], repo: str, skills_root: Path) -> dict[str,
         return kept
     if active is True:
         kept.update(status="in-flight", reason="still-running", acceptance="pending")
+        return kept
+    if session_absent(receipt):
+        kept.update(status="unknown", reason="session-gone")
         return kept
     if runner_refused(code, receipt):
         kept.update(status="failed", reason="turn-failed", acceptance="pending")
@@ -4243,7 +4334,11 @@ def command_collect(args: argparse.Namespace) -> int:
             return fail("invalid-input", "--item must name one exact index item")
         return read_turn(matches[0], repo, Path(args.skills_root), args.index)
     skills_root = Path(args.skills_root)
-    pending = [item for item in index["items"] if isinstance(item, dict) and item.get("status") == "in-flight"]
+    pending = [item for item in index["items"]
+               if isinstance(item, dict)
+               and (item.get("status") == "in-flight"
+                    or (item.get("status") == "unknown"
+                        and item.get("reason") == "runner-missing"))]
     updated: dict[str, dict[str, Any]] = {}
     own = list(index["items"])
     base = {"items": json.loads(json.dumps(own))}
@@ -4280,13 +4375,14 @@ def command_collect(args: argparse.Namespace) -> int:
 def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: str) -> int:
     """One read-only projection. Full native capture keeps evidence outside the excerpt."""
     platform = item.get("platform") or str(item.get("preset", "")).split("/", 1)[0]
-    script = skills_root / f"{platform}-kaola-project-runner" / "scripts" / "runtime-tmux.sh"
+    script, runner_source = runner_resolution(skills_root, platform)
     cursor = item.get("dispatch_event_cursor")
     result: dict[str, Any] = {
         "schema": "kaola-dispatch-turn/1", "item_id": item.get("item_id"),
         "repo": repo, "session": item.get("session"),
         "holder_instance_id": item.get("holder_instance_id"),
-        "source": {"index": index_path, "runner": str(script), "since": cursor,
+        "source": {"index": index_path, "runner": None if script is None else str(script),
+                   "runner_source": runner_source, "since": cursor,
                    "as_of": observed_at()},
         "unknown_reasons": [], "outcome": None, "stop_reason": None,
         "permission_evidence": [], "failure_evidence": [], "excerpt": None,
@@ -4395,7 +4491,7 @@ def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: st
             or isinstance(cursor, bool) or not isinstance(cursor, int) or cursor < 0):
         unknown.append("dispatch-binding-missing")
         return finish()
-    if not script.is_file():
+    if script is None or not script.is_file():
         unknown.append("runner-missing")
         return finish()
 

@@ -330,7 +330,7 @@ ROUTES: dict[str, tuple[str, str]] = {
     "revision-mismatch": ("route", "Check out the expected revision, or pass the current HEAD. Do not register a mismatch."),
     "revision-unrecorded": ("route", "Run ./scripts/render-skills.py --write, then start that worker again so it loads the new bytes. Do not treat the skewed skill as current."),
     "runner-default": ("route", "The item was admitted. Read its session with status. Do not start a second seat for the same item."),
-    "runner-missing": ("route", "The platform runner script is missing. Render and install that platform skill, then retry execute. Do not mark the item admitted."),
+    "runner-missing": ("route", "The platform Runner script was not found under --skills-root, the dispatch Skill root, or the checkout skills/ directory, and the bounded collect retry is exhausted. Render and install that platform Skill, then collect again with a root that holds its Runner; the next collect that resolves the Runner reads the seat. Until then the row stays runner-missing. Do not mark the item admitted."),
     "runner-python-missing": ("route", "Install python3 or set PYTHON_BIN to an executable, then rerun the same command."),
     "schema-unsupported": ("route", "Read detail and the current revision. Run the state command detail names (init, migrate, update, or retire) with that revision. Do not write a second file or retry the same patch unchanged."),
     "scoped-checkpoint-already-settled": ("route", "Read detail and the current revision. Run the state command detail names (init, migrate, update, or retire) with that revision. Do not write a second file or retry the same patch unchanged."),

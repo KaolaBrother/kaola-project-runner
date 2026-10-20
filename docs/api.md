@@ -576,7 +576,14 @@ profile, `roles` (a sorted list, empty when the preset has none), selection para
 that plan through each platform's existing `runtime-tmux.sh` and writes a
 correlation index (`correlation_only`); a `--no-wait` admission is `in-flight`,
 not a result. `collect` later correlates one status and, for a completed
-turn, one capture, without waiting out a slower sibling. `snapshot` writes
+turn, one capture, without waiting out a slower sibling. `collect` resolves
+each platform Runner through `--skills-root`, the dispatch Skill's sibling
+Runner root, then the checkout `skills/` directory; the chosen path and source
+are recorded in `evidence.runner`. A missing Runner is `unknown` /
+`runner-missing` with `runner_missing_attempts` and `runner_missing_limit` (3);
+later collects retry it, and at the bound the row stays refused with its
+recovery route until a collect resolves a Runner. A Runner that reports
+`no-session` is `unknown` / `session-gone`. `snapshot` writes
 the path given by `--out` (the Host carrier is
 `.kaola/heartbeat-prompt.json`) so `body` is a string that parses as one JSON
 object. The wrapper adds no schema key. `snapshot` refuses an `--out` that already holds
