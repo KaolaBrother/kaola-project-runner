@@ -942,6 +942,25 @@ The candidate set is a closed rule set; everything else is never touched:
   `post_check`). `--assume-clear` covers only the unreadable probe; a proven occupant still
   defers. `worktree-guard` is the read-only form: the same occupancy receipt, exit 0 clear / 3
   occupied or unverifiable. `--all-user-processes` widens the probe to this uid.
+- **The `worktree-guard` receipt is a frozen consumer contract (#374).** Kaola-Workflow
+  locates the Runner through `kaola-project-runner-locate receipt` (`root.path`) and runs
+  `python3 <root>/scripts/kaola-dispatch.py worktree-guard --repo <project root> --path
+  <worktree>` before each of its own `git worktree remove` calls. The fields below are that
+  consumer's contract; `tests/contract/test-issue-374-worktree-guard-contract.py` is in the
+  `./scripts/validate.sh` inventory and asserts the exact key sets, so renaming or dropping one
+  breaks KPR's own gate before a consumer does.
+  - Top level: `schema` (`kaola-worktree-remove/1`), `repo`, `path`, `result` (`clear` |
+    `occupied` | `unverifiable` | `refused`), `occupants`, `probe`, and `route` on every
+    non-clear answer (including `refused`).
+  - `occupants[]`: `pid`, `ppid`, `exe_basename`, `cwd`, `cwd_deleted`, `source` (`process` |
+    `recorded`), and `session` (`null`, or `{platform, session, role, holder_instance_id}`).
+  - Exit codes are stable for script consumers: `0` = `clear`; `3` = `occupied` or
+    `unverifiable` (the receipt is still valid JSON); `2` = `refused` (for example
+    `repo-missing`).
+  - Coverage: `_sweep_list` reads one `list --include-dead` and `trees_from_rows` keeps every
+    `identity: verified` row whose `repo` is the repo or the target, without filtering
+    `session_role`. A Host, a Sideagent and a seat (worker) therefore each contribute their
+    process tree and recorded `tool_cwd_path` to the occupancy answer.
 - **W2** a `prunable` worktree entry inside ROOT: `git -C ROOT worktree prune`, once per apply.
 - **B1** (#357) a local `workflow/issue-N` branch whose issue is CLOSED, not checked out in
   any surviving worktree (a branch still held by a kept or skipped worktree lands in

@@ -12,6 +12,19 @@ Seats: restart not required
 
 - **collect finds a Runner through the dispatch Skill or checkout fallback (#377).** `collect` now resolves `<platform>-kaola-project-runner/scripts/runtime-tmux.sh` in the order `--skills-root`, the Skill root that holds the running entry (its sibling Runner roots), then the checkout's `skills/` directory; the first existing file wins and `evidence.runner` records its path, source and attempts. A row with no Runner is `unknown` / `runner-missing` with `runner_missing_attempts` and `runner_missing_limit` (3), and later collects retry it instead of leaving it permanently unread. At the bound the row stays `runner-missing` with the `runner-missing` recovery route and resumes on the next collect that resolves a Runner. A status receipt of `no-session` is now `unknown` / `session-gone`, not `in-flight` / `no-result`. The new contract suite covers codex as the control plus devin, dsh, droid and opencode, the checkout `skills/` fallback, a stored row recovered on the next collect, the bound and its route, and the gone-session row. `scripts/kaola-dispatch.py` and `scripts/kaola-recovery-routes.py` are per-call files outside the operator restart set, so a running seat does not restart; a symlink install picks the change up on the next call and a copy install after the copy is replaced. This content change does not install. This content change leaves the Grok Bot bridge at the unpinned content stage (`saveable: false`) so renderer checks stay green; the bridge is pinned in a later release commit.
 
+- **The `worktree-guard` receipt Kaola-Workflow consumes is frozen (#374).** Kaola-Workflow
+  runs `kaola-dispatch.py worktree-guard` before its own `git worktree remove` and acts on
+  `result`, `occupants`, `route` and the process exit code. `docs/api.md` now states that
+  receipt and exit-code contract (0 clear, 3 occupied / `cwd-unverifiable`, 2 refused) and
+  records that every verified Host, Sideagent and seat row in `list --include-dead`
+  contributes its process tree and recorded tool cwd. The new
+  `tests/contract/test-issue-374-worktree-guard-contract.py` asserts the exact field sets for
+  the clear, occupied, unverifiable and refused receipts and is in the `./scripts/validate.sh`
+  inventory, so a rename breaks KPR's own gate. No runtime script changed; a running seat
+  needs no restart. This content change leaves the Grok Bot bridge at the unpinned content
+  stage (`saveable: false`) so renderer checks stay green; the bridge is pinned in a later
+  release commit.
+
 ## 0.9.22 — 2026-10-20 (worktree removal guarded against a live shell cwd; dsh permission delivery and resume receipt; per-preset Worker grants; shared Cursor+Grok quota pool; Host-record durability and rebind fixes)
 
 Fixes #359 (a wiped holder record directory wakes the Delegator), #360 (the declared dsh permission mode reaches a broker-launched holder), #361 (auto launch backend degrades to direct; a Host stop spares its seats), #362 (pre-revision state records migrate to a first revision), #363 (a resumed dsh session reports the permission it keeps), #364 (recovery routes for the remaining audited codes), #365 (rebind-host moves the recorded dispatcher), #367 (every Worker grant is a per-preset row), #368 (Grok and Cursor share one quota pool, each read by its own acquisition), #369 (a worktree is never removed under a live shell cwd) and #371 (an unreadable service manager is reported as unknown, not as an exited job).
