@@ -1164,6 +1164,18 @@ class MockAgent:
         if self.steering == "startedNewTurn":
             respond(request_id, {"outcome": "startedNewTurn"})
             return
+        if self.steering == "written":
+            # Issue #378: the dsh shape - the write was admitted into the
+            # running turn, but the platform confirms no consumption.
+            self.steer_texts.append(text)
+            respond(request_id, {"outcome": "written",
+                                 "confirmation": "native-admitted"})
+            return
+        if self.steering == "queued":
+            # Issue #378: a later-turn native queue is still a performed write.
+            self.steer_texts.append(text)
+            respond(request_id, {"outcome": "queued"})
+            return
         # injected: the running turn really takes the text
         self.steer_texts.append(text)
         if active is not None:
@@ -1298,7 +1310,8 @@ def main() -> int:
     parser.add_argument("--resume-any", action="store_true",
                         help="resume an id this process did not mint")
     parser.add_argument("--steering", default="none",
-                        choices=("none", "injected", "promptRequired", "startedNewTurn",
+                        choices=("none", "injected", "written", "queued",
+                                 "promptRequired", "startedNewTurn",
                                  "error", "silent", "weird"))
     parser.add_argument("--log", default="",
                         help="JSONL log path; overrides MOCK_ACP_LOG, which the "

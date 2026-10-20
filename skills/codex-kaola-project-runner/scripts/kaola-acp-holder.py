@@ -2561,6 +2561,23 @@ def normalize_session_role(raw: Any) -> str | None:
     raise ValueError(text)
 
 
+def cwd_steer_delivered(receipt: dict[str, Any]) -> bool:
+    """Issue #378: did this steer receipt deliver the cwd notice once?
+
+    ``injected`` is native consumption. A platform may instead confirm only the
+    write: dsh's ``_session/steering`` answers ``written``, and the holder's own
+    after-turn input answers ``queued``. Both performed the mutation
+    (``mutation_performed: true``), so the text reached the session's input and
+    the notice counts as delivered for this turn. The old ``== "injected"``
+    test re-steered it every 15 s for the whole turn on such platforms.
+    """
+    outcome = receipt.get("steer_outcome")
+    if outcome == "injected":
+        return True
+    return (outcome in ("written", "queued")
+            and receipt.get("mutation_performed") is True)
+
+
 class Holder:
     def __init__(self, args: argparse.Namespace):
         self.args = args
@@ -2703,7 +2720,8 @@ class Holder:
         # not steer V1/V2 for a session that no longer has that shell.
         self.tool_cwd: dict[str, Any] = {
             "last_known": None, "source": None, "observed_at": None, "exists": None,
-            "placeholder": [], "notice": "none", "notice_paths": [], "repairs": 0}
+            "placeholder": [], "notice": "none", "notice_paths": [], "notice_ts": None,
+            "repairs": 0}
         restored = previous_record.get("tool_cwd")
         if isinstance(restored, dict):
             restored_fact = self._restore_tool_cwd(restored)
@@ -2720,6 +2738,12 @@ class Holder:
         self.tool_cwd_trace_failed = False
         self.tool_cwd_probe_inflight = False
         self.tool_cwd_notice_inflight = False
+        # Issue #378: the backstop against a delivery loop. A notice batch that
+        # was steered once in this turn is never steered again in it, even when
+        # the receipt could not mark it delivered. One turn only, so the set
+        # stays tiny.
+        self.cwd_steer_turn: Any = None
+        self.cwd_steered_batches: set[tuple[str, ...]] = set()
         # N-2: the last path whose vanish was already recorded, so the status
         # tick does not replay one event per read.
         self.tool_cwd_vanished_path: str | None = None
@@ -3282,6 +3306,12 @@ class Holder:
                                         if isinstance(item, str) and item]
         if recorded.get("notice") in ("none", "pending", "delivered"):
             restored["notice"] = recorded["notice"]
+        if recorded.get("notice") == "pending":
+            # Issue #378: the batch's one stable stamp survives a holder
+            # restart, so a resumed retry keeps the same notice text.
+            notice_ts = recorded.get("notice_ts")
+            if isinstance(notice_ts, str) and notice_ts:
+                restored["notice_ts"] = notice_ts
         repairs = recorded.get("repairs")
         if isinstance(repairs, int) and not isinstance(repairs, bool) and repairs >= 0:
             restored["repairs"] = repairs
@@ -3634,9 +3664,26 @@ class Holder:
             if persistence != "per-call":
                 self._cwd_repair(path, "V2")
 
+    def _cwd_notice_ts(self) -> str:
+        """Issue #378: one stable timestamp for the pending batch.
+
+        The old text regenerated ``ts`` on every delivery attempt, so a retry
+        produced a new fingerprint and downstream dedupe could never match it.
+        The stamp is set when the batch is first staged, persisted in the
+        record, and cleared with the delivered batch.
+        """
+        with self.tool_cwd_lock:
+            stamp = self.tool_cwd.get("notice_ts")
+            if isinstance(stamp, str) and stamp:
+                return stamp
+            stamp = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+            self.tool_cwd["notice_ts"] = stamp
+        self.write_record()
+        return stamp
+
     def _cwd_notice_text(self, paths: list[str]) -> str:
         """The one notice text for one path or the whole repaired batch."""
-        ts = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+        ts = self._cwd_notice_ts()
         if len(paths) == 1:
             return TOOL_CWD_NOTE.format(path=paths[0], repo=self.args.repo, ts=ts)
         return TOOL_CWD_NOTE_BATCH.format(
@@ -3683,6 +3730,7 @@ class Holder:
                 return
             self.tool_cwd["notice"] = "delivered"
             self.tool_cwd["notice_paths"] = []
+            self.tool_cwd["notice_ts"] = None
         self.events.append({"kind": "tool_cwd_notice_delivered", "via": via})
         self.write_record()
 
@@ -3703,17 +3751,34 @@ class Holder:
         if not paths:
             self._cwd_notice_delivered("no-paths")
             return {"delivered": False, "reason": "no notice paths"}
-        text = self._cwd_notice_text(paths)
         if self.turn["active"]:
             if ((getattr(self.args, "native_steering", "") or "") == "supported"
                     and getattr(self.args, "steer_method", "")):
+                # Issue #378: at most one steer per notice batch per turn.
+                turn = self.turn
+                turn_key = turn.get("request_id")
+                if turn_key is None:
+                    turn_key = turn.get("started_at")
+                if self.cwd_steer_turn != turn_key:
+                    self.cwd_steer_turn = turn_key
+                    self.cwd_steered_batches = set()
+                batch = tuple(sorted(paths))
+                if batch in self.cwd_steered_batches:
+                    return {"delivered": False,
+                            "reason": "this notice batch was already steered in this turn"}
+                text = self._cwd_notice_text(paths)
+                # Recorded before the request goes out: even an ambiguous
+                # receipt must not make the next 15 s tick steer it again.
+                self.cwd_steered_batches.add(batch)
                 receipt = self.op_steer({"method": self.args.steer_method, "text": text,
                                          "timeout": STEER_TIMEOUT,
                                          "_steer_source": "self"})
-                if receipt.get("steer_outcome") == "injected":
+                if cwd_steer_delivered(receipt):
                     self._cwd_notice_delivered("steer")
-                    return {"delivered": True, "via": "steer"}
-                return {"delivered": False, "reason": "steer not injected"}
+                    return {"delivered": True, "via": "steer",
+                            "steer_outcome": receipt.get("steer_outcome")}
+                return {"delivered": False, "reason": "steer not delivered",
+                        "steer_outcome": receipt.get("steer_outcome")}
             return {"delivered": False, "reason": "turn-active"}
         if self.agent.proc is None or self.agent.exited.is_set():
             return {"delivered": False, "reason": "agent-not-running"}
@@ -3866,6 +3931,7 @@ class Holder:
                 # No repair claim survived, so there is nothing to announce.
                 self.tool_cwd["notice"] = "none"
                 self.tool_cwd["notice_paths"] = []
+                self.tool_cwd["notice_ts"] = None
             elif pending and not paths and remaining:
                 # A pre-#373 record: rebuild the batch from the surviving
                 # claims so the resumed notice still names every path.

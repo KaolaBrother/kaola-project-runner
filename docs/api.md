@@ -2075,7 +2075,8 @@ CLI binary, starts a session or seat, or writes a usage record.
 The holder records its own agent's tool-shell working directory before a removal can take it,
 repairs a vanished one, notices the agent, and cleans up. The fact is `record.json`'s
 `tool_cwd`: `{last_known, source: trace|note|process|null, observed_at, exists,
-placeholder: [PATH, ...], notice: none|pending|delivered, notice_paths: [PATH, ...], repairs}`.
+placeholder: [PATH, ...], notice: none|pending|delivered, notice_paths: [PATH, ...],
+notice_ts: STAMP|null, repairs}`.
 `placeholder` is a set, so several removed worktrees keep their own claims (N-1).
 `status`/`observe` carry it (`tool_cwd`) and every current repair duty
 (`tool_cwd_errors`: a list of `{code, path, message, route}`, so simultaneous duties all stay
@@ -2127,12 +2128,20 @@ the repo root, never a registered worktree (`os.makedirs`), and never for a path
 exists. A worktree list that cannot answer is recorded as `cwd-unverifiable` (probe `git`),
 creates nothing and keeps an existing claim. Repeated status ticks of the same missing path
 record one vanish event (N-2). The notice is fixed text naming the repaired path(s) and the repo
-root. One notice batch is staged for the whole repair set, so one steer names every repaired
-path in that batch; a `host_owned` worker event `kind: cwd_repaired` is staged per repaired
-path. It steers when the turn is active and the manifest declares `native_steering: supported`,
-otherwise the event batch is delivered as one self prompt at the next idle boundary. An
+root, stamped once per batch in `notice_ts` (cleared when that batch is delivered). A retry
+reuses the stored stamp, so the text and its `steer_fingerprint` do not churn. One notice batch
+is staged for the whole repair set, so one steer names every repaired path in that batch; a
+`host_owned` worker event `kind: cwd_repaired` is staged per repaired path. It steers when the
+turn is active and the manifest declares `native_steering: supported`, otherwise the event batch
+is delivered as one self prompt at the next idle boundary. A receipt of `injected`, or of
+`written`/`queued` with `mutation_performed: true` (dsh's native steer answers `written`), is
+delivery once for that turn: the notice becomes `delivered` and is not steered again. Even when a
+receipt cannot be marked as delivery, one `turn.request_id` never steers the same `notice_paths`
+batch twice; the notice then stays `pending` and rides the next boundary's self prompt. An
 undelivered notice stays `pending`, is visible in `status`, and is retried at every later
-boundary. A placeholder is removed (`os.rmdir`, empty only) once the reported cwd is outside it
+boundary; a V2 pre-emption while the shell cwd is unobserved stages a new batch, which gets its
+own steer (the delivered batch is not re-sent). A placeholder is removed (`os.rmdir`, empty only)
+once the reported cwd is outside it
 or at `op_stop`; a path that became a registered worktree again is dropped and left alone; a
 non-empty one is left and reported as `cwd-placeholder-not-empty`. Events:
 `tool_cwd_observed`, `tool_cwd_vanished`, `tool_cwd_unknown`, `tool_cwd_unverifiable`,
