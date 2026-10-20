@@ -80,6 +80,7 @@ class HolderCwdRepair(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls._tmp = tempfile.TemporaryDirectory(prefix="kaola-i369-holder-")
         cls.root = Path(cls._tmp.name)
+        cls._next_issue = 1000
         cls.repo = cls.root / "repo"
         cls.repo.mkdir()
         subprocess.run(["git", "init", "-q"], cwd=cls.repo, check=True)
@@ -124,7 +125,10 @@ class HolderCwdRepair(unittest.TestCase):
 
     def setUp(self) -> None:
         self.session = f"s-i369-{self._testMethodName.lower().replace('_', '-')}"[:79]
-        self.issue = abs(hash(self._testMethodName)) % 900 + 100
+        # A class-wide serial keeps every test's fixture path distinct even
+        # when a prior test left a placeholder behind.
+        self.issue = self.__class__._next_issue
+        self.__class__._next_issue += 1
         self._started = False
         self._worktrees: list[tuple[Path, str]] = []
         self.mock_log.unlink(missing_ok=True)
@@ -232,17 +236,26 @@ class HolderCwdRepair(unittest.TestCase):
         return self.repo / ".kw" / "worktrees" / f"issue-{self.issue}"
 
     def add_worktree_n(self, issue: int) -> Path:
-        path = self.repo / ".kw" / "worktrees" / f"issue-{issue}"
+        serial = self.__class__._next_issue
+        self.__class__._next_issue += 1
+        name = f"issue-{issue}-{serial}"
+        path = self.repo / ".kw" / "worktrees" / name
         path.parent.mkdir(parents=True, exist_ok=True)
         done = subprocess.run(["git", "-C", str(self.repo), "worktree", "add", str(path),
-                               "-b", f"workflow/issue-{issue}"],
+                               "-b", f"workflow/{name}"],
                               capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stderr)
-        self._worktrees.append((path, f"workflow/issue-{issue}"))
+        self._worktrees.append((path, f"workflow/{name}"))
         return path
 
     def add_worktree(self) -> Path:
         return self.add_worktree_n(self.issue)
+
+    def branch_for(self, path: Path) -> str:
+        for candidate, branch in self._worktrees:
+            if candidate == path:
+                return branch
+        self.fail(f"no tracked branch for {path}")
 
     def same_path(self, left: object, right: object) -> bool:
         if not isinstance(left, str) or not left or right is None:
@@ -397,7 +410,7 @@ class HolderCwdRepair(unittest.TestCase):
         self.remove_out_of_band(path)
         self.wait_for(lambda: path.is_dir(), "the placeholder")
         again = subprocess.run(["git", "-C", str(self.repo), "worktree", "add", str(path),
-                                f"workflow/issue-{self.issue}"],
+                                self.branch_for(path)],
                                capture_output=True, text=True)
         self.assertEqual(again.returncode, 0, again.stderr)
         self.send("go", "cwd_vanish", steering="none", vanish=vanish)
