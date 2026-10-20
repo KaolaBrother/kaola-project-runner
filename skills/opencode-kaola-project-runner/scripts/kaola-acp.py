@@ -6948,6 +6948,13 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
         except OSError:
             pass
     log_path = directory / "holder.out.log"
+    # Issue #388: the seat's own role decides whether it may carry the Host
+    # heartbeat prompt. Only a Host holder gets the platform's measured entry;
+    # every other role is started without --host-entry (the holder parser's
+    # empty default), so a worker/Expert holder cannot open Project Runner as
+    # its self-prompt. A resume whose same-native-session role is not yet
+    # provable stays null here and records the inherited role afterwards.
+    role = session_role_value(args, selection_basis(args), prior_record, repo)
     # Issue #132: keep --record-dir, --socket, --repo in this order; the
     # identity anchors (HOLDER_RECORD_DIR, HOLDER_SOCKET) parse it.
     holder_argv = [
@@ -6969,9 +6976,13 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
         # computes the wait.
         holder_argv += ["--resume-timeout", repr(resume_wait_seconds(args))]
     # Issue #119: the Host turn-opening entry and name come from this platform's
-    # own manifest, never from the platform id.
-    holder_argv += ["--host-entry", args.manifest.get("host_skill_entry") or "",
-                    "--host-name", args.manifest.get("runtime_name") or args.platform]
+    # own manifest, never from the platform id. Issue #388: only a Host holder
+    # is given the entry; omitting the flag leaves the holder's explicit empty
+    # default in force (a direct ZCode holder with no --session-role keeps its
+    # legacy fallback).
+    if role == "host":
+        holder_argv += ["--host-entry", args.manifest.get("host_skill_entry") or ""]
+    holder_argv += ["--host-name", args.manifest.get("runtime_name") or args.platform]
     holder_argv += ["--session-new-timeout", repr(session_new_timeout(args))]
     # Issue #369: the platform's measured tool-cwd facts, and the native
     # steering entry the holder's own cwd notice may use.
@@ -6991,9 +7002,9 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
     accepted = current_accepted_revision()
     holder_argv += ["--accepted-revision", accepted or ""]
     holder_argv += ["--baseline-exempt", "1" if skew_baseline_dir() is None else "0"]
-    # Issue #245: computed before spawn. A resume-preserved role stays null
-    # until the native session id proves the same session, below.
-    role = session_role_value(args, selection_basis(args), prior_record, repo)
+    # Issue #245: role was computed before spawn, where it also decides the
+    # Host carrier (#388). A resume-preserved role stays null until the native
+    # session id proves the same session, below.
     receipt["session_role"] = role
     holder_argv += ["--session-role", role or ""]
     # Issue #181: effective values, not raw flags. Absent --fast means the

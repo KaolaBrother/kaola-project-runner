@@ -1375,7 +1375,8 @@ class HolderFixture(unittest.TestCase):
         host_dir.mkdir(parents=True)
         args = argparse.Namespace(record_dir=str(host_dir), socket=str(root / "host.sock"),
                                   platform="zcode", session="zcode-KT-orchestrator-main",
-                                  repo=str(self.repo), init_meta="", command="stub")
+                                  repo=str(self.repo), init_meta="", command="stub",
+                                  session_role="host")
         self.holder = holder_module.Holder(args)
         self.agent = StubAgent()
         self.holder.agent = self.agent
@@ -3963,6 +3964,10 @@ class HolderNodeMode(HolderFixture):
         (self.side_dir / "record.json").write_text(json.dumps(record))
         self.host_change(5)
         self.boundary()
+        # Issue #388: the Host role reports the unconfirmed stop first. Settle
+        # that pass, then the fresh node's batch is admitted.
+        self.wait_for(lambda: len(self.agent.prompts()) == 1, "the stop-unconfirmed notice")
+        self.finish_host_turn()
         self.wait_for(lambda: len(self.fake.prompts) == 2, "a fresh node once the old holder is gone")
         self.assertEqual(self.fake.prompts[1]["params"]["expected_holder_instance_id"], "node-2")
         self.assertIn("sideagent_node_stop_confirmed_late", self.log_kinds())
@@ -4039,16 +4044,22 @@ class HolderNodeMode(HolderFixture):
         os.environ["FAKE_NODE_RECORD"] = str(Path(self.tmp.name) / "missing" / "record.json")
         self.host_change(4)
         self.boundary()
+        # Issue #388: a Host role now reports the unusable recipe before the
+        # failed start. Settle that pass, then read the start failure's own
+        # notification at the next boundary.
+        self.wait_for(lambda: len(self.agent.prompts()) == 1, "the recipe failure notice")
+        self.finish_host_turn()
         self.wait_for(lambda: "sideagent_node_start_failed" in self.log_kinds(), "the failed start")
-        self.wait_for(lambda: len(self.agent.prompts()) == 1, "the Host told of the failure")
-        self.assertIn("sideagent node start failed", self.agent.prompts()[0])
-        self.assertIn("host revision 1..4 not handled", self.agent.prompts()[0])
+        self.boundary()
+        self.wait_for(lambda: len(self.agent.prompts()) == 2, "the Host told of the failure")
+        self.assertIn("sideagent node start failed", self.agent.prompts()[1])
+        self.assertIn("host revision 1..4 not handled", self.agent.prompts()[1])
         self.finish_host_turn()
         self.host_change(5)
         self.boundary()
         time.sleep(0.3)
         self.assertEqual(self.node_count(), 1, "one recorded failure, no retry storm")
-        self.assertEqual(len(self.agent.prompts()), 1)
+        self.assertEqual(len(self.agent.prompts()), 2)
 
     def test_the_checkout_entrypoint_recipe_names_the_bound_platform_first(self) -> None:
         tail = ["start", "--repo", str(self.repo), "--session", "zcode-KT-sideagent", "--role", "sideagent"]

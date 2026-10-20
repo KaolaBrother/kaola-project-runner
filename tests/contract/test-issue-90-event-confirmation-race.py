@@ -100,7 +100,7 @@ class EventConfirmationRace(unittest.TestCase):
         args = argparse.Namespace(
             record_dir=str(root / "record"), socket=str(root / "h.sock"),
             platform="zcode", session="kaola-zcode-host-90", repo=str(root),
-            init_meta="", command="stub",
+            init_meta="", command="stub", session_role="host",
         )
         self._answers: dict = {}
         self.holder = holder_module.Holder(args)

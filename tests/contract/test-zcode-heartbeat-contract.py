@@ -269,7 +269,11 @@ class Sandbox:
                 base[key] = value
         return base
 
-    def session(self) -> str:
+    def session(self, host: bool = False) -> str:
+        # Issue #388: the carrier is chosen by session_role, so a session used
+        # as the Host needs the standard Host name that derives that role.
+        if host:
+            return host_session_name(uuid.uuid4().hex[:8])
         return f"zcode-hb-{uuid.uuid4().hex[:8]}"
 
     def record_dir(self, session: str, platform: str = "zcode") -> Path:
@@ -424,7 +428,7 @@ def assert_delivered_notification(sandbox: Sandbox, host: str, content: str,
 def test_terminated_event_delivers_full_body_and_confirms() -> None:
     sandbox = Sandbox("terminated")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         worker = sandbox.session()
         host_start = sandbox.start(host, "basic")
         body_v1 = "HEARTBEAT V1: recover authorization, dispatch verified work, close out."
@@ -503,7 +507,7 @@ def test_terminated_event_delivers_full_body_and_confirms() -> None:
 def test_idle_episode_reads_prompt_body_at_delivery_time() -> None:
     sandbox = Sandbox("idle")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         worker = sandbox.session()
         sandbox.start(host, "basic")
         worker_start = sandbox.start(
@@ -558,7 +562,7 @@ def test_idle_episode_reads_prompt_body_at_delivery_time() -> None:
 def test_busy_host_stages_then_flushes_after_turn_completed() -> None:
     sandbox = Sandbox("busy")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         worker = sandbox.session()
         sandbox.start(host, "permission")
         worker_start = sandbox.start(
@@ -616,7 +620,7 @@ def test_busy_host_stages_then_flushes_after_turn_completed() -> None:
 def test_bounded_queue_dedup_and_single_batch_flush() -> None:
     sandbox = Sandbox("queue")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         sandbox.start(host, "permission")
         body = "HEARTBEAT QUEUE: batch flush body."
         sandbox.write_prompt_file(body)
@@ -703,7 +707,7 @@ def test_carrier_needs_host_skill_entry() -> None:
     Issue #126 admitted codex) still fails closed."""
     sandbox = Sandbox("zcodeonly")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         sandbox.start(host, "basic")
 
         # The CLI fails closed on an entry-less target, a self target, and junk.
@@ -760,7 +764,7 @@ def test_carrier_needs_host_skill_entry() -> None:
 def test_resume_redelivers_unconfirmed_events() -> None:
     sandbox = Sandbox("resume")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         host_start = sandbox.start(host, "permission")
         body = "HEARTBEAT RESUME: redelivery body."
         sandbox.write_prompt_file(body)
@@ -891,7 +895,7 @@ def test_issue_66_defective_prompt_file_reports_its_defect() -> None:
 
     sandbox = Sandbox("defect")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         worker = sandbox.session()
         sandbox.start(host, "basic")
         # The audited real-world mistake: the working prompt written under
@@ -969,7 +973,7 @@ def test_issue_87_overflow_full_check_on_busy_host() -> None:
     auto-approves."""
     sandbox = Sandbox("overflow")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         sandbox.start(host, "permission")
         body = "HEARTBEAT OVERFLOW: full-check body."
         sandbox.write_prompt_file(body)
@@ -1044,7 +1048,7 @@ def test_issue_87_overflow_survives_stop_and_resume() -> None:
     rebuilt after exact Host stop and ``start --resume``."""
     sandbox = Sandbox("overflow-resume")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         host_start = sandbox.start(host, "permission")
         body = "HEARTBEAT OVERFLOW RESUME: redelivery body."
         sandbox.write_prompt_file(body)
@@ -1141,7 +1145,7 @@ def test_issue_87_oversized_heartbeat_prompt_is_not_injected() -> None:
 
     sandbox = Sandbox("oversize-live")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         worker = sandbox.session()
         sandbox.start(host, "basic")
         marker = "ISSUE87-LIVE-OVERSIZE-" + uuid.uuid4().hex
@@ -1341,7 +1345,7 @@ def test_issue_94_interrupt_steer_resends_verbatim_on_every_session() -> None:
     line itself."""
     sandbox = Sandbox("i94-interrupt")
     try:
-        host = sandbox.session()
+        host = sandbox.session(host=True)
         host_start = sandbox.start(host, "slow")
         # A Host-shaped session — an admitted prompt opened with the native
         # entry line — still gets a byte-verbatim resend: no prepend, no
@@ -1506,9 +1510,19 @@ def test_issue_104_dispatcher_refusals_open_nothing() -> None:
     sandbox = Sandbox("i104-refuse")
     try:
         host_a = host_session_name(uuid.uuid4().hex[:8])
-        host_b = sandbox.session()
         sandbox.start(host_a, "basic")
+        # Issue #388: a second live Host cannot share this repo (one Host per
+        # canonical root), so live Host B lives in its own repo. The explicit
+        # target still differs from the dispatcher's repo and is refused.
+        repo_a = sandbox.repo
+        repo_b = sandbox.dir / "repo-b"
+        repo_b.mkdir()
+        subprocess.run(["git", "init", "-q", str(repo_b)], check=True)
+        sandbox.repo = repo_b
+        host_b = sandbox.session(host=True)
         sandbox.start(host_b, "basic")
+        host_b_dir = sandbox.record_dir(host_b)
+        sandbox.repo = repo_a
         dispatcher_a = dispatcher_of(sandbox, host_a)
 
         # N1: dispatcher names a ZCode session that has no record at all.
@@ -1548,12 +1562,12 @@ def test_issue_104_dispatcher_refusals_open_nothing() -> None:
             sandbox, sandbox.session(), "heartbeat-host-conflict", "N5",
             **{DISPATCHER_ENV: json.dumps(dispatcher_a),
                HEARTBEAT_HOST_ENV: json.dumps({"platform": "zcode", "session": host_b,
-                                               "repo": str(sandbox.repo)})})
+                                               "repo": os.path.realpath(str(repo_b))})})
         check(receipt.get("heartbeat_host_source") == "explicit"
               and (receipt.get("heartbeat_host_requested") or {}).get("session") == host_b,
               "N5: the conflict receipt shows the explicit request that lost")
         check(not events_of_kind(sandbox.record_dir(host_a), "worker_event")
-              and not events_of_kind(sandbox.record_dir(host_b), "worker_event"),
+              and not events_of_kind(host_b_dir, "worker_event"),
               "N5: neither Host holder received anything")
 
         # A dispatcher value that is not the holder's fact shape is not a
@@ -1583,7 +1597,9 @@ def test_issue_104_dispatcher_refusals_open_nothing() -> None:
             **{DISPATCHER_ENV: json.dumps(dispatcher_a)})
         check("not alive" in receipt.get("detail", ""),
               f"N2: detail names the dead holder ({receipt.get('detail')})")
+        sandbox.repo = repo_b
         host_stop = sandbox.cli("stop", "--force", session=host_b)
+        sandbox.repo = repo_a
         check(host_stop.get("residual_pids") == [], "host B stops cleanly")
     finally:
         sandbox.cleanup()

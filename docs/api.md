@@ -2151,7 +2151,11 @@ is delivered as one self prompt at the next idle boundary. A receipt of `injecte
 `written`/`queued` with `mutation_performed: true` (dsh's native steer answers `written`), is
 delivery once for that turn: the notice becomes `delivered` and is not steered again. Even when a
 receipt cannot be marked as delivery, one `turn.request_id` never steers the same `notice_paths`
-batch twice; the notice then stays `pending` and rides the next boundary's self prompt. An
+batch twice; the notice then stays `pending` and rides the next boundary's self prompt. The
+payload follows the holder's own `session_role` (#388): only a `host` holder gets the Host
+carrier (`kaola-host-notify/1` with `host_skill_entry` and the heartbeat body); a worker,
+Expert or Sideagent holder gets the compact `kaola-worker-notify/1` notice carrying only the
+structured event lines, even when an older start passed it a Host entry. An
 undelivered notice stays `pending`, is visible in `status`, and is retried at every later
 boundary; a V2 pre-emption while the shell cwd is unobserved stages a new batch, which gets its
 own steer (the delivered batch is not re-sent). A placeholder is removed (`os.rmdir`, empty only)

@@ -696,8 +696,10 @@ OVERFLOW_FULL_CHECK_MARK = "kaola-host-notify/overflow-full-check"
 # alike. A busy `steer` guide is forwarded into the running turn instead and
 # is no new Skill invocation. The envelope owns this line; the Host's
 # heartbeat `body` does not carry it. Issue #119: this is the ZCode value and
-# the fallback for a holder spawned without --host-entry; every other platform
-# hands its own measured manifest line through --host-entry.
+# the fallback for a direct holder constructed without --host-entry; the CLI
+# now passes --host-entry only to a Host (#388), and its parser default (empty)
+# keeps every other role entry-less. Issue #388: only session_role == "host"
+# may use this entry as the heartbeat carrier.
 HOST_SKILL_ENTRY = "/kaola-project-runner"
 # Issue #90: how many recently confirmed worker event ids stay remembered, so a
 # worker retrying the same deterministic event_id after a confirmed Host turn is
@@ -2753,7 +2755,10 @@ class Holder:
         self.heartbeat_host = parse_heartbeat_host()
         self.dispatched_by = parse_dispatcher()
         # Issue #119: the turn-opening Skill entry line and display name this
-        # holder carries as a Host. Empty entry = not a carrier Host.
+        # holder carries as a Host. Empty entry = not a carrier Host. Issue
+        # #388: the CLI passes the flag only to a Host, so its parser default
+        # (empty) marks every other role; ``None`` remains the direct-holder
+        # construction path and keeps the legacy ZCode fallback.
         entry = getattr(args, "host_entry", None)
         if entry is None:
             entry = HOST_SKILL_ENTRY if args.platform == "zcode" else ""
@@ -5560,8 +5565,10 @@ class Holder:
                                ) -> tuple[str, dict[str, Any]]:
         """Issue #369: the compact carrier for a non-Host holder's own events.
 
-        A worker seat never receives the Host's heartbeat body; the staged
-        event lines are the whole prompt."""
+        Issue #388: a worker, Expert or Sideagent holder always uses this
+        payload, even when an older start armed it with a Host entry. The
+        staged event lines are the whole prompt; no Host heartbeat body or
+        one-pass Project Runner instruction is appended."""
         lines = [f"kaola-worker-notify/1: {self.args.platform} session {self.args.session}",
                  "worker events (structured, one JSON object per line):"]
         for event in events:
@@ -7538,7 +7545,12 @@ class Holder:
                 return {"delivered": False, "reason": "agent-not-running"}
             if self.turn["active"]:
                 return {"delivered": False, "reason": "prompt-in-progress"}
-            text, meta = (self._heartbeat_payload(staged, overflow_ready) if self.host_entry
+            # Issue #388: the Host carrier is for a Host role only. A non-Host
+            # holder keeps the compact worker notice even when a legacy start
+            # handed it an entry; the staged lines are the whole prompt and no
+            # heartbeat body or one-pass Project Runner instruction rides them.
+            carrier = self.host_entry and self.session_role == "host"
+            text, meta = (self._heartbeat_payload(staged, overflow_ready) if carrier
                           else self._worker_notice_payload(staged, overflow_ready))
             prompt = self.op_prompt({"text": text, "wait": False, "_prompt_source": "self"})
             error = prompt.get("error")
@@ -9671,7 +9683,7 @@ def main() -> int:
     parser.add_argument("--tool-shell", default="")
     parser.add_argument("--steer-method", default="")
     parser.add_argument("--native-steering", default="")
-    parser.add_argument("--host-entry", default=None)
+    parser.add_argument("--host-entry", default="")
     parser.add_argument("--host-name", default=None)
     parser.add_argument("--cli-version", default="")
     parser.add_argument("--accepted-revision", default="")
