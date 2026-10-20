@@ -1,34 +1,29 @@
 # Profile catalog
 
-Every supported runtime/preset with its owner-defined class and profile,
-rendered from `platforms/<id>.yaml` (`<tier>_model_class`,
-`<tier>_model_profile`). This is the full supported catalog, not a machine-local
-choice list, and a listed row grants nothing. A local row needs the runtime to be
-discovered on the bound execution target and its installed platform Runner to
-declare the tier. The Host then fetches only exact locally available rows allowed
-by current authorization
+Every supported runtime/preset with its owner-defined class and profile, rendered
+from `platforms/<id>.yaml` (`<tier>_model_class`, `<tier>_model_profile`). Full
+supported catalog, not a machine-local choice list; a listed row grants nothing. A
+local row needs the runtime discovered on the bound target and its installed Runner
+declaring the tier; the Host fetches only exact rows current authorization allows
 ([worker-profiles.md](worker-profiles.md) §Local availability and authorized rows).
-A preset may set `<tier>_model_roles` to the closed value `computer-use-only` (absent means none; an unknown value rejects the row). This table has no column for that field.
+A preset may set `<tier>_model_roles` to `computer-use-only` (absent means none;
+unknown rejects); this table has no column for it.
 
-Each row's **Preset ID** `<platform>/<tier>` is its one stable ID (the manifest
-platform id and its declared `--tier` word, e.g. `claude-code/default` vs
-`claude-code/opus-xhigh` vs `claude-code/sonnet`, or `cursor-cli/default` vs
-`grok/default`): grants,
-snapshots and authorization relays name a seat by that exact ID, and its Model
-and parameters stay on the same row — never a second mapping. The ID names a
-**configured preset**, not proof of the actually-running model: the manifest's
-model name and native launch ID come from the declaration, while installation,
-entitlement, applied selection and authorization remain separate facts (Droid's
-`auto` and Devin's ACP display both drift from these names). `claude-code/default`
-and `claude-code/opus-xhigh` both declare native launch ID `opus`; that alias is
-not a preset ID. An authorization
-item carries `special_requirements` only when the owner actually supplied one;
-absent means none.
+Each row's **Preset ID** `<platform>/<tier>` is its stable ID (manifest id plus
+declared `--tier`, e.g. `claude-code/default` vs `claude-code/opus-xhigh`, or
+`cursor-cli/default` vs `grok/default`). Grants, snapshots and relays name a seat by
+that exact ID; Model and parameters stay on the same row — never a second mapping.
+The ID names a **configured preset**, not the running model: name and native launch
+ID are declarations; installation, entitlement, applied selection and authorization
+are separate facts (Droid's `auto` and Devin's ACP display both drift).
+`claude-code/default` and `claude-code/opus-xhigh` both declare native launch ID
+`opus`; that alias is not a preset ID. An authorization item carries
+`special_requirements` only when the owner actually supplied one; absent means none.
 
 | Class | Runtime | `--tier` | Preset ID | Model | Effort / parameters | Profile |
 |---|---|---|---|---|---|---|
-| Elite | Antigravity | `default` | `antigravity/default` | Gemini 4 Argon | effort=medium (encoded in model ID) | Strong at UI and 3D design implementation only. Do not use for any other task (research, design docs, review, backend, debugging, investigation). |
-| Elite | Antigravity | `xhigh` | `antigravity/xhigh` | Gemini 4 Argon | effort=high (encoded in model ID) | Strong at UI and 3D design implementation only; higher-effort level for harder UI and 3D work, slower and uses more quota. Do not use for any other task (research, design docs, review, backend, debugging, investigation). |
+| Elite | Antigravity | `default` | `antigravity/default` | Gemini 4 Argon | effort=medium (encoded in model ID) | Strong implementation worker for well-scoped build tasks: features, UI and 3D, frontend and backend code, refactors, and tests. Sometimes reports work, files, or results that do not exist, so every output must be independently reviewed by another seat before it is accepted. Never use as a reviewer, verifier, or for acceptance decisions. |
+| Elite | Antigravity | `xhigh` | `antigravity/xhigh` | Gemini 4 Argon | effort=high (encoded in model ID) | Higher-effort Argon tier for harder or larger implementation tasks; slower and uses more quota. Same limits: every output must be independently reviewed by another seat before it is accepted, and it must never be used as a reviewer, verifier, or for acceptance decisions. |
 | Elite | Antigravity | `opus` | `antigravity/opus` | Claude Opus 5.5 | effort=high (encoded in model ID) | Strong at UI and 3D design implementation only; Opus level for UI and 3D work that needs more depth than the Argon tiers. Do not use for any other task (research, design docs, review, backend, debugging, investigation). |
 | Elite | Claude Code | `default` | `claude-code/default` | Opus 5.5 | effort=high | All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation. |
 | Elite | Claude Code | `opus-xhigh` | `claude-code/opus-xhigh` | Opus 5.5 | effort=xhigh | Plans, designs, and reviews difficult, complex work and handles deep reasoning tasks, with particular strength in UI and 3D visual design and review; does not perform implementation. |

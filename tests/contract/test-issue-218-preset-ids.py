@@ -199,8 +199,9 @@ class PresetCatalogTest(unittest.TestCase):
         self.assertEqual(
             rows["cursor-cli/opus"]["profile"].strip(),
             "All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation.")
-        # Issue #334: Antigravity adds antigravity/opus (claude-opus-5-5-high, Elite)
-        # alongside unchanged antigravity/default and antigravity/xhigh.
+        # Issue #334: Antigravity adds antigravity/opus (claude-opus-5-5-high, Elite).
+        # Issue #390: the Argon tiers are general implementation workers that must
+        # never review; antigravity/opus keeps its #343 wording.
         agy_opus = rows["antigravity/opus"]
         self.assertEqual(agy_opus["class"], "Elite")
         self.assertEqual(agy_opus["model"].strip(), "Claude Opus 5.5")
@@ -208,13 +209,27 @@ class PresetCatalogTest(unittest.TestCase):
         self.assertEqual(
             agy_opus["profile"].strip(),
             "Strong at UI and 3D design implementation only; Opus level for UI and 3D work that needs more depth than the Argon tiers. Do not use for any other task (research, design docs, review, backend, debugging, investigation).")
-        # Issue #343: every Antigravity row is UI and 3D design implementation only.
-        for tier in ("default", "xhigh", "opus"):
+        agy_default = rows["antigravity/default"]["profile"].strip()
+        self.assertEqual(
+            agy_default,
+            "Strong implementation worker for well-scoped build tasks: features, UI and 3D, "
+            "frontend and backend code, refactors, and tests. Sometimes reports work, files, "
+            "or results that do not exist, so every output must be independently reviewed by "
+            "another seat before it is accepted. Never use as a reviewer, verifier, or for "
+            "acceptance decisions.")
+        agy_xhigh = rows["antigravity/xhigh"]["profile"].strip()
+        self.assertEqual(
+            agy_xhigh,
+            "Higher-effort Argon tier for harder or larger implementation tasks; slower and "
+            "uses more quota. Same limits: every output must be independently reviewed by "
+            "another seat before it is accepted, and it must never be used as a reviewer, "
+            "verifier, or for acceptance decisions.")
+        for tier in ("default", "xhigh"):
             profile = rows[f"antigravity/{tier}"]["profile"].strip()
-            self.assertTrue(profile.startswith("Strong at UI and 3D design implementation only"), tier)
-            self.assertIn("Do not use for any other task (research, design docs, review, backend, "
-                          "debugging, investigation).", profile)
-            self.assertNotIn("generalist", profile)
+            self.assertIn("independently reviewed by another seat", profile, tier)
+            self.assertIn("reviewer, verifier, or for acceptance decisions", profile, tier)
+            self.assertNotIn("Do not use for any other task", profile, tier)
+            self.assertNotIn("generalist", profile, tier)
         agy_manifest, _ = self.by_id["antigravity/opus"]
         self.assertEqual(agy_manifest["named_tiers"], "xhigh,opus")
         self.assertEqual(agy_manifest["opus_model_id"], "claude-opus-5-5-high")
@@ -465,6 +480,8 @@ class AuthorizationNotationTest(unittest.TestCase):
             granted.write_text(json.dumps({"grants": [
                 {"id": "claude-code/haiku", "state": "granted", "count": 1},
                 {"id": "codex/luna", "state": "granted", "count": 1},
+                {"id": "antigravity/default", "state": "granted", "count": 1},
+                {"id": "antigravity/xhigh", "state": "granted", "count": 1},
             ]}), encoding="utf-8")
             granted_project = run(["project", "--authorization", str(granted),
                                    "--platforms", str(PLATFORMS)])
@@ -482,6 +499,13 @@ class AuthorizationNotationTest(unittest.TestCase):
             self.assertEqual(luna["class"], "Worker")
             self.assertEqual(luna["profile"], LUNA_PROFILE)
             self.assertEqual(luna["selection"]["effort"], "max")
+            # Issue #390: the Host's dispatch projection carries the Argon
+            # implementation-only and never-reviewer limits on the exact rows.
+            for tier in ("default", "xhigh"):
+                agy = granted_ids[f"antigravity/{tier}"]
+                self.assertEqual(agy["class"], "Elite")
+                self.assertIn("independently reviewed by another seat", agy["profile"])
+                self.assertIn("reviewer, verifier, or for acceptance decisions", agy["profile"])
 
             seats = run([
                 "project", "--seats", "--repo", str(repo),
