@@ -106,7 +106,10 @@ OPTIONAL = {"acp_command_default",
             # persistent|per-call|unknown (absent = unknown, every detector
             # stays on); `tool_cwd_note_regex` is the in-band note pattern with
             # one named `path` group. Absent means no in-band carrier.
-            "shell_cwd_persistence", "tool_cwd_note_regex"}
+            # Issue #373: `tool_shell` is the shell the agent's tool calls
+            # spawn when tier A's runner-owned entry hook applies: zsh|bash
+            # (absent = tier A off; `/bin/sh` tools have no entry hook).
+            "shell_cwd_persistence", "tool_cwd_note_regex", "tool_shell"}
 
 
 TIER_FIELDS = ("name", "id", "parameters", "effort", "profile", "class")
@@ -228,6 +231,10 @@ def parse_manifest(path: Path) -> dict[str, str]:
     # Issue #369: the tool-cwd facts. Absent persistence means unknown.
     if result.get("shell_cwd_persistence", "unknown") not in {"persistent", "per-call", "unknown"}:
         raise ValueError(f"{path}: invalid shell_cwd_persistence")
+    # Issue #373: tier A applies only where the tool shell is zsh or bash and
+    # the holder can supply the runner-owned entry file. Absent means off.
+    if result.get("tool_shell", "") not in {"", "zsh", "bash"}:
+        raise ValueError(f"{path}: invalid tool_shell")
     note = result.get("tool_cwd_note_regex")
     if note is not None and note != "":
         try:

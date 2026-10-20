@@ -331,6 +331,18 @@ ENV_ALLOWLIST = (
     "KAOLA_ACP_DISPATCHER",
 )
 
+# Issue #373: tier A's names. The holder sets these only when the platform
+# manifest declares `tool_shell`; the Write handle is this session's own
+# record-directory trace file, not another holder's record. Copied only when
+# KAOLA_TOOL_CWD_FILE is present, so a normal launch keeps the allowlist above.
+TIER_A_ENV = (
+    "KAOLA_TOOL_CWD_FILE",
+    "ZDOTDIR",
+    "KAOLA_USER_ZDOTDIR",
+    "BASH_ENV",
+    "KAOLA_USER_BASH_ENV",
+)
+
 # Protocol-documented backend modes / thought levels. These are vocabulary,
 # not a catalog read from the user's config.
 MODE_CHOICES = (
@@ -429,6 +441,16 @@ def build_child_env(entry: str | None = None) -> dict[str, str]:
     config revision to that copy, so a half-set pair is worse than none.
     """
     env = {k: os.environ[k] for k in ENV_ALLOWLIST if k in os.environ}
+    # Issue #373: tier A only. When the holder enabled the runner-owned tool
+    # entry, its names (a path under this session's record directory, the
+    # shell init file it owns, and the user values the entry restores) must
+    # reach the app-server so its tool shells inherit them. A session without
+    # KAOLA_TOOL_CWD_FILE forwards none of them, so the strict allowlist is
+    # unchanged for every other launch.
+    if os.environ.get("KAOLA_TOOL_CWD_FILE"):
+        for name in TIER_A_ENV:
+            if name in os.environ:
+                env[name] = os.environ[name]
     for name in DENIED_ENV:
         env.pop(name, None)
     env["ELECTRON_RUN_AS_NODE"] = "1"

@@ -129,10 +129,16 @@ names, USER, LOGNAME, SHELL, TZ, TERM) plus the explicit
 `KAOLA_ZCODE_ENTRY`/`KAOLA_ZCODE_NODE` runtime facts to the native child. The
 denied credential names (`ANTHROPIC_*`, `OPENAI_API_KEY`, `ZCODE_*`
 credential/remote/hub names) and the child-record write handle never reach any
-ZCode process. The plan credential reaches the app-server in memory only and
-never appears in Runner receipts or records: on a pre-3.12 app-server it rides
-the in-memory Coding Plan provider overlay inside the sandboxed descriptor, and
-on ZCode 3.12+ it is handed over per model request in the adapter's answer to
+ZCode process. Issue #373 adds one conditional copy: when the holder set
+`KAOLA_TOOL_CWD_FILE` (manifest `tool_shell: "zsh"`), the adapter forwards that
+path, `ZDOTDIR`, and the saved user `ZDOTDIR` value so the app-server's tool
+shells inherit the runner-owned entry; the entry writes only `$PWD` under this
+session's record directory, then restores and sources the user's own init. A
+session without `KAOLA_TOOL_CWD_FILE` forwards none of those names. The plan
+credential reaches the app-server in memory only and never appears in Runner
+receipts or records: on a pre-3.12 app-server it rides the in-memory Coding Plan
+provider overlay inside the sandboxed descriptor, and on ZCode 3.12+ it is
+handed over per model request in the adapter's answer to
 `interaction/requestProviderRuntimeHeaders`, for the one authorized provider
 only. The two provider-config names ZCode 3.12+ needs
 (`ZCODE_BUILTIN_PROVIDER_CONFIG_FILE`, `ZCODE_PERSONAL_PROVIDER_CONFIG_FILE`)

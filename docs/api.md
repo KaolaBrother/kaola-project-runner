@@ -2070,52 +2070,75 @@ returns `ok`. The failure vocabulary extends the Command Code one
 `login_required` for a 401/403 rejection. Neither probe spawns a
 CLI binary, starts a session or seat, or writes a usage record.
 
-## Tool cwd watch (#369)
+## Tool cwd watch (#369, #373)
 
 The holder records its own agent's tool-shell working directory before a removal can take it,
 repairs a vanished one, notices the agent, and cleans up. The fact is `record.json`'s
 `tool_cwd`: `{last_known, source: trace|note|process|null, observed_at, exists,
-placeholder: [PATH, ...], notice: none|pending|delivered, repairs}`. `placeholder` is a set, so
-several removed worktrees keep their own claims (N-1). `status`/`observe` carry it (`tool_cwd`)
-and the current repair duty (`tool_cwd_error`); `list` rows carry `tool_cwd_path` and
-`tool_cwd_exists`, plus `agent_pid`, `agent_pgid` and `agent_child_pgids` for the cwd guard's
-process trees. A resume restores `tool_cwd` from the previous record; a fresh start inherits
-only the placeholder claims, never a stale `last_known` (R2-1). Either boot reconciles each
-claim against the filesystem and `git worktree list`: exists + empty + unregistered stays, a
-registered or non-empty claim is dropped, and an unreadable list keeps the claim and records
-`cwd-unverifiable` (R2-2).
+placeholder: [PATH, ...], notice: none|pending|delivered, notice_paths: [PATH, ...], repairs}`.
+`placeholder` is a set, so several removed worktrees keep their own claims (N-1).
+`status`/`observe` carry it (`tool_cwd`) and every current repair duty
+(`tool_cwd_errors`: a list of `{code, path, message, route}`, so simultaneous duties all stay
+visible); `list` rows carry `tool_cwd_path` and `tool_cwd_exists`, plus `agent_pid`,
+`agent_pgid` and `agent_child_pgids` for the cwd guard's process trees. A resume restores
+`tool_cwd` from the previous record; a fresh start inherits only the placeholder claims, never a
+stale `last_known` (R2-1). Either boot reconciles each claim against the filesystem and
+`git worktree list`: exists + empty + unregistered stays, a registered or non-empty claim is
+dropped, and an unreadable list keeps the claim and records `cwd-unverifiable` (R2-2).
 
-Recording tiers: **A** a runner-owned shell-entry trace is not implemented (D1 open); **B** the
-manifest `tool_cwd_note_regex` applied to `tool_call`/`tool_call_update` `content` text only
-(zcode's measured Read note); **C** one rate-limited (`2 s`) cwd sample over the agent's own
-child processes on an execute-kind `tool_call`. Tier C accepts only a descendant whose
-`exe_basename` is a shell (`zsh`, `bash`, `sh`, `dash`, `fish`, ...); an adapter or other
-non-shell process is no observation at all and never replaces `last_known`. Signals: **V1** a
-recorded path that no longer exists; **V2** a registered worktree path that disappeared from
-`git -C REPO worktree list --porcelain`, refreshed at holder boot, turn end, on execute-kind
-events and on the status tick (with `shell_cwd_persistence` not `per-call`, an unknown
-`last_known` gets a pre-emptive placeholder); the refresh stays off the prompt path because
-the prompt path already holds `worker_events_lock`, which a staged notice also takes; **V3**
-`spawn <shell> ENOENT` while that shell exists, or `chdir|getcwd|shell-init ... No such file`,
-in `content`. V3 with no recorded path leaves the `tool-cwd-unknown` duty in `tool_cwd_error`
-instead of a silent no-op.
+The manifest fields are `shell_cwd_persistence` (`persistent|per-call|unknown`; absent =
+unknown), `tool_cwd_note_regex` (one named `path` group; absent = no in-band carrier), and
+`tool_shell` (`zsh|bash`; absent = tier A off). Recording tiers:
+
+- **A — runner-owned shell entry (#373).** When `tool_shell` is set, the holder exports
+  `KAOLA_TOOL_CWD_FILE=<record_dir>/tool-cwd` and either `ZDOTDIR=<record_dir>/shellenv`
+  (zsh) or `BASH_ENV=<record_dir>/shellenv/.bashenv` (bash) to its agent process. The
+  runner-owned entry writes `$PWD` once per top-level tool shell, guarded by
+  `KAOLA_TOOL_CWD_TRACED` so nested shells skip, then restores the user's own
+  `ZDOTDIR`/`BASH_ENV` and sources that init, so the user's shell setup is unchanged.
+  The holder reads the file on every execute-kind `tool_call`, at turn end and on the status
+  scan; a file older than the agent start is ignored. A failed (`ENOENT`) spawn writes nothing,
+  so the file keeps the dangling path V1 needs. ZCode is on (`platforms/zcode.yaml`
+  `tool_shell: "zsh"`); its adapter forwards only these tier A names into the app-server, and
+  only when the holder set `KAOLA_TOOL_CWD_FILE`. Tools that spawn `/bin/sh` (or another shell
+  without an entry hook) get no tier A record and stay on tiers B/C.
+- **B — in-band note.** `tool_cwd_note_regex` applied to
+  `tool_call`/`tool_call_update` `content` text only (zcode's measured Read note).
+- **C — live shell sample.** One rate-limited (`2 s`) cwd sample over the agent's own child
+  processes on an execute-kind `tool_call`. It accepts only a descendant whose `exe_basename`
+  is a shell (`zsh`, `bash`, `sh`, `dash`, `fish`, ...); an adapter or other non-shell process
+  is no observation at all.
+
+Observations are last-write by their own `observed_at`: a tier A record carries the entry
+file's mtime, so a newer tier A path beats an older tier C sample and a tier C sample can never
+overwrite a fresher tier A path; equal timestamps prefer trace over note over process.
+
+Signals: **V1** a recorded path that no longer exists; **V2** a registered worktree path that
+disappeared from `git -C REPO worktree list --porcelain`, refreshed at holder boot, turn end, on
+execute-kind events and on the status tick (with `shell_cwd_persistence` not `per-call`, an
+unknown `last_known` gets a pre-emptive placeholder); the refresh stays off the prompt path
+because the prompt path already holds `worker_events_lock`, which a staged notice also takes;
+**V3** `spawn <shell> ENOENT` while that shell exists, or
+`chdir|getcwd|shell-init ... No such file`, in `content`. V3 with no recorded path leaves the
+`tool-cwd-unknown` duty in `tool_cwd_errors` instead of a silent no-op.
 
 Repair: one placeholder per occurrence, coalesced on the path, and only inside the repo, never
 the repo root, never a registered worktree (`os.makedirs`), and never for a path that still
-exists. A worktree list that cannot answer is recorded as `tool_cwd_error`
-`cwd-unverifiable` (probe `git`), creates nothing and keeps an existing claim. Repeated status
-ticks of the same missing path record one vanish event (N-2). The notice is fixed text naming the path and the repo root;
-one notice is staged per repaired path, so a second removed worktree still gets its own. It
-steers when the turn is active and the manifest declares `native_steering: supported`,
-otherwise it is staged as a `host_owned` worker event `kind: cwd_repaired` and delivered as one
-self prompt at the next idle boundary. An undelivered notice stays `pending`, is visible in
-`status`, and is retried at every later boundary. A placeholder is removed (`os.rmdir`, empty
-only) once the reported cwd is outside it or at `op_stop`; a path that became a registered
-worktree again is dropped and left alone; a non-empty one is left and reported as
-`tool_cwd_error` `cwd-placeholder-not-empty`. Events: `tool_cwd_observed`,
-`tool_cwd_vanished`, `tool_cwd_unknown`, `tool_cwd_unverifiable`,
-`tool_cwd_placeholder_created`, `tool_cwd_notice_staged|delivered`,
-`tool_cwd_placeholder_removed|left`, `tool_cwd_repair_failed`.
+exists. A worktree list that cannot answer is recorded as `cwd-unverifiable` (probe `git`),
+creates nothing and keeps an existing claim. Repeated status ticks of the same missing path
+record one vanish event (N-2). The notice is fixed text naming the repaired path(s) and the repo
+root. One notice batch is staged for the whole repair set, so one steer names every repaired
+path in that batch; a `host_owned` worker event `kind: cwd_repaired` is staged per repaired
+path. It steers when the turn is active and the manifest declares `native_steering: supported`,
+otherwise the event batch is delivered as one self prompt at the next idle boundary. An
+undelivered notice stays `pending`, is visible in `status`, and is retried at every later
+boundary. A placeholder is removed (`os.rmdir`, empty only) once the reported cwd is outside it
+or at `op_stop`; a path that became a registered worktree again is dropped and left alone; a
+non-empty one is left and reported as `cwd-placeholder-not-empty`. Events:
+`tool_cwd_observed`, `tool_cwd_vanished`, `tool_cwd_unknown`, `tool_cwd_unverifiable`,
+`tool_cwd_trace_failed`, `tool_cwd_placeholder_created`,
+`tool_cwd_notice_staged|delivered`, `tool_cwd_placeholder_removed|left`,
+`tool_cwd_repair_failed`.
 
 ## Post-compaction Skill reread
 

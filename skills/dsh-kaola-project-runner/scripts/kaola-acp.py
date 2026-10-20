@@ -6977,6 +6977,7 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
     # steering entry the holder's own cwd notice may use.
     holder_argv += ["--tool-cwd-note-regex", str(args.manifest.get("tool_cwd_note_regex") or ""),
                     "--shell-cwd-persistence", str(args.manifest.get("shell_cwd_persistence") or ""),
+                    "--tool-shell", str(args.manifest.get("tool_shell") or ""),
                     "--steer-method", (args.manifest.get("acp_steer_method") or "").strip(),
                     "--native-steering", (args.manifest.get("native_steering") or "").strip()]
     init_meta = parse_manifest_meta(args.manifest.get("acp_init_meta") or "")

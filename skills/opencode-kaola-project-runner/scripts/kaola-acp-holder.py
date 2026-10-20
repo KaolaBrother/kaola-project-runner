@@ -272,12 +272,70 @@ TOOL_CWD_CONTENT_MAX = 4096
 # the agent CLI itself, a helper) says nothing about the tool shell.
 TOOL_CWD_SHELLS = frozenset({
     "ash", "bash", "csh", "dash", "fish", "ksh", "sh", "tcsh", "zsh"})
+# Issue #373: tier A. The holder writes a runner-owned shell entry file per
+# platform tool shell and exports the matching init environment to its agent;
+# the entry records $PWD once per top-level tool shell and then restores the
+# user's own init. `/bin/sh` and other shells have no supported entry hook and
+# stay on tiers B/C.
+TOOL_CWD_TRACE_FILE = "tool-cwd"
+TOOL_CWD_SHELLENV = "shellenv"
+TOOL_CWD_TRACE_GUARD = "KAOLA_TOOL_CWD_TRACED"
+TOOL_CWD_TRACE_SHELLS = ("zsh", "bash")
+TOOL_CWD_SOURCE_PRIORITY = {"trace": 3, "note": 2, "process": 1}
+TOOL_CWD_ZSH_ENTRY = """# Runner-owned tool-cwd entry (Issue #373). Writes $PWD once per top-level
+# tool shell, then restores and sources the user's own zsh init. Do not edit:
+# the holder rewrites this file on every start.
+if [ -z "${KAOLA_TOOL_CWD_TRACED:-}" ]; then
+  export KAOLA_TOOL_CWD_TRACED=1
+  { print -r -- "${PWD}" >| "${KAOLA_TOOL_CWD_FILE:-/dev/null}"; } 2>/dev/null
+fi
+if [ -n "${KAOLA_USER_ZDOTDIR:-}" ]; then
+  ZDOTDIR="${KAOLA_USER_ZDOTDIR}"
+  export ZDOTDIR
+else
+  unset ZDOTDIR
+fi
+unset KAOLA_USER_ZDOTDIR
+if [ -n "${ZDOTDIR:-}" ] && [ -f "${ZDOTDIR}/.zshenv" ]; then
+  . "${ZDOTDIR}/.zshenv"
+elif [ -z "${ZDOTDIR:-}" ] && [ -f "${HOME}/.zshenv" ]; then
+  . "${HOME}/.zshenv"
+fi
+true
+"""
+TOOL_CWD_BASH_ENTRY = """# Runner-owned tool-cwd entry (Issue #373). Writes $PWD once per top-level
+# tool shell, then restores and sources the user's own BASH_ENV. Do not edit:
+# the holder rewrites this file on every start.
+if [ -z "${KAOLA_TOOL_CWD_TRACED:-}" ]; then
+  export KAOLA_TOOL_CWD_TRACED=1
+  { printf '%s\\n' "${PWD}" >| "${KAOLA_TOOL_CWD_FILE:-/dev/null}"; } 2>/dev/null
+fi
+if [ -n "${KAOLA_USER_BASH_ENV:-}" ]; then
+  BASH_ENV="${KAOLA_USER_BASH_ENV}"
+  export BASH_ENV
+else
+  unset BASH_ENV
+fi
+unset KAOLA_USER_BASH_ENV
+if [ -n "${BASH_ENV:-}" ] && [ -f "${BASH_ENV}" ]; then
+  . "${BASH_ENV}"
+fi
+true
+"""
 TOOL_CWD_NOTE = (
     "[runner cwd-repair] Your shell working directory {path} was removed at {ts} "
     "(the linked worktree is gone). The runner recreated it as an empty placeholder "
     "so shell calls spawn again. Run: cd {repo} - then keep using absolute paths or "
     "(cd <dir> && ...). The placeholder is removed once your shell reports a directory "
     "outside it. Nothing else was changed.")
+# Issue #373: one steer names every path repaired in this batch, so a second
+# removed worktree cannot be hidden behind the latest signal.
+TOOL_CWD_NOTE_BATCH = (
+    "[runner cwd-repair] The runner repaired {count} shell working directories "
+    "removed with their linked worktrees at {ts}: {paths}. Each was recreated as an "
+    "empty placeholder so shell calls spawn again. Run: cd {repo} - then keep using "
+    "absolute paths or (cd <dir> && ...). A placeholder is removed once your shell "
+    "reports a directory outside it. Nothing else was changed.")
 CWD_REPAIR_FAILED_FALLBACK = (
     "The holder could not create the placeholder (detail names the OS error). Create "
     "the parent and `mkdir -p PATH` yourself, then send `cd REPO`; the holder removes "
@@ -1558,6 +1616,12 @@ class AgentConnection:
     def spawn(self, command: str, cwd: str, env: dict[str, str] | None = None) -> None:
         argv = shlex.split(command)
         env = dict(os.environ if env is None else env)
+        # Issue #373: the holder exports tier A's entry environment to its own
+        # agent. A guard inherited from some outer shell would silence every
+        # nested tool shell, so it is always dropped here, and the user's own
+        # ZDOTDIR/BASH_ENV is saved for the entry to restore.
+        env.pop(TOOL_CWD_TRACE_GUARD, None)
+        env.update(self.holder.tool_cwd_trace_env(env))
         # Lets an agent that spawns detached children record their identity
         # at spawn so stop can find them even if the agent dies first. The
         # record survives agent instances; keep only entries still identifying
@@ -2639,7 +2703,7 @@ class Holder:
         # not steer V1/V2 for a session that no longer has that shell.
         self.tool_cwd: dict[str, Any] = {
             "last_known": None, "source": None, "observed_at": None, "exists": None,
-            "placeholder": [], "notice": "none", "repairs": 0}
+            "placeholder": [], "notice": "none", "notice_paths": [], "repairs": 0}
         restored = previous_record.get("tool_cwd")
         if isinstance(restored, dict):
             restored_fact = self._restore_tool_cwd(restored)
@@ -2650,8 +2714,10 @@ class Holder:
         self.tool_cwd_lock = threading.Lock()
         self.tool_cwd_sampled_at = 0.0
         self.tool_cwd_worktrees: set[str] | None = None
-        self.tool_cwd_repair_error: dict[str, Any] | None = None
-        self.cwd_notice_text: str | None = None
+        # Issue #373: a list, not a single slot, so every simultaneous repair
+        # duty is visible in status at once.
+        self.tool_cwd_errors: list[dict[str, Any]] = []
+        self.tool_cwd_trace_failed = False
         self.tool_cwd_probe_inflight = False
         self.tool_cwd_notice_inflight = False
         # N-2: the last path whose vanish was already recorded, so the status
@@ -3185,11 +3251,13 @@ class Holder:
 
     @staticmethod
     def _restore_tool_cwd(recorded: dict[str, Any]) -> dict[str, Any]:
-        """Resume: the persisted fact, type-checked, with no new fields.
+        """Resume: the persisted fact, type-checked.
 
         A pre-set record spelled ``placeholder`` as one path; the current shape
         is a set of paths (N-1). Both restore, and the reconciliation step
-        decides which claims still fit."""
+        decides which claims still fit. Issue #373 adds ``notice_paths`` so a
+        resumed batch steer still names every repaired path; an older record
+        rebuilds it from the surviving placeholder claims."""
         restored: dict[str, Any] = {}
         last = recorded.get("last_known")
         if isinstance(last, str) and last:
@@ -3208,6 +3276,10 @@ class Holder:
         elif isinstance(placeholders, list):
             restored["placeholder"] = [item for item in placeholders
                                        if isinstance(item, str) and item]
+        notice_paths = recorded.get("notice_paths")
+        if isinstance(notice_paths, list):
+            restored["notice_paths"] = [item for item in notice_paths
+                                        if isinstance(item, str) and item]
         if recorded.get("notice") in ("none", "pending", "delivered"):
             restored["notice"] = recorded["notice"]
         repairs = recorded.get("repairs")
@@ -3216,11 +3288,17 @@ class Holder:
         return restored
 
     def _cwd_facts(self) -> dict[str, Any]:
-        """A serialisable snapshot: the one list is copied, not shared."""
+        """A serialisable snapshot: the lists are copied, not shared."""
         with self.tool_cwd_lock:
             facts = dict(self.tool_cwd)
             facts["placeholder"] = list(facts.get("placeholder") or [])
+            facts["notice_paths"] = list(facts.get("notice_paths") or [])
         return facts
+
+    def _cwd_errors_facts(self) -> list[dict[str, Any]]:
+        """Issue #373: every current repair duty, not only the latest one."""
+        with self.tool_cwd_lock:
+            return [dict(item) for item in self.tool_cwd_errors]
 
     def _cwd_guard(self) -> Any:
         """The sibling cwd guard module, or None when this copy lacks it."""
@@ -3244,6 +3322,78 @@ class Holder:
             sys.dont_write_bytecode = previous
         self._cwd_guard_module = module
         return module
+
+    # -- Issue #373: tier A, the runner-owned shell entry ----------------------
+
+    def _cwd_trace_shell(self) -> str:
+        shell = (getattr(self.args, "tool_shell", "") or "").strip().lower()
+        return shell if shell in TOOL_CWD_TRACE_SHELLS else ""
+
+    def _cwd_trace_prepare(self) -> Path:
+        """Write the runner-owned shell entries under this record directory.
+
+        Both files are written so one record can prove either shell variant,
+        but only the manifest's ``tool_shell`` names the init variable the
+        agent receives. The entry records $PWD once, then restores the user's
+        own ZDOTDIR/BASH_ENV and sources it: the user's shell init is
+        unchanged."""
+        shellenv = self.record_dir / TOOL_CWD_SHELLENV
+        shellenv.mkdir(mode=0o700, exist_ok=True)
+        (shellenv / ".zshenv").write_text(TOOL_CWD_ZSH_ENTRY, encoding="utf-8")
+        (shellenv / ".bashenv").write_text(TOOL_CWD_BASH_ENTRY, encoding="utf-8")
+        return shellenv
+
+    def tool_cwd_trace_env(self, base_env: dict[str, str]) -> dict[str, str]:
+        """The tier A environment for the agent process, or none when off.
+
+        Called by ``AgentConnection.spawn`` so the tool shell inherits it.
+        A write failure leaves tier A off rather than pointing ZDOTDIR at a
+        missing directory (that would silence the user's init)."""
+        shell = self._cwd_trace_shell()
+        if not shell:
+            return {}
+        try:
+            shellenv = self._cwd_trace_prepare()
+        except OSError as exc:
+            if not self.tool_cwd_trace_failed:
+                self.tool_cwd_trace_failed = True
+                self.events.append({"kind": "tool_cwd_trace_failed",
+                                    "error": str(exc)})
+                self.write_record()
+            return {}
+        env = {"KAOLA_TOOL_CWD_FILE": str(self.record_dir / TOOL_CWD_TRACE_FILE)}
+        if shell == "zsh":
+            env["ZDOTDIR"] = str(shellenv)
+            env["KAOLA_USER_ZDOTDIR"] = base_env.get("ZDOTDIR") or ""
+        else:
+            env["BASH_ENV"] = str(shellenv / ".bashenv")
+            env["KAOLA_USER_BASH_ENV"] = base_env.get("BASH_ENV") or ""
+        return env
+
+    def _cwd_trace_read(self) -> str | None:
+        """Tier A: read the entry's last write and record it.
+
+        A file older than this agent start belongs to a previous shell/session
+        and is ignored. A failed spawn writes nothing, so the file keeps the
+        dangling path V1 needs. Re-reading the same file is a no-op because
+        the recorded observation keeps the file's mtime."""
+        if not self._cwd_trace_shell():
+            return None
+        path = self.record_dir / TOOL_CWD_TRACE_FILE
+        try:
+            stat = path.stat()
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return None
+        started = getattr(self, "agent_started", None)
+        if isinstance(started, (int, float)) and not isinstance(started, bool):
+            if stat.st_mtime < started:
+                return None
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if not lines or not os.path.isabs(lines[0]):
+            return None
+        self._cwd_note(lines[0], "trace", observed_at=stat.st_mtime)
+        return lines[0]
 
     def _cwd_route(self, code: str, path: str | None = None) -> str:
         """The route text for one cwd code, single-sourced from the table."""
@@ -3319,16 +3469,32 @@ class Holder:
         # The deepest sampled cwd is a tool shell's, not the agent's own root.
         return max(candidates, key=lambda item: len(Path(item).parts))
 
-    def _cwd_note(self, path: Any, source: str) -> None:
-        """Record one observation of the agent's tool cwd, then check it."""
+    def _cwd_note(self, path: Any, source: str, *,
+                  observed_at: float | None = None) -> None:
+        """Record one observation of the agent's tool cwd, then check it.
+
+        Issue #373: observations carry their own ``observed_at`` (a tier A
+        entry's file mtime, not the read time), so a newer tier A record beats
+        an older tier C sample and an older sample can never overwrite a newer
+        trace. Equal timestamps prefer the more deterministic tier."""
         if not isinstance(path, str) or not path:
             return
         now = round(time.time(), 3)
+        observed = round(float(observed_at), 3) if observed_at is not None else now
         exists = os.path.isdir(path)
         with self.tool_cwd_lock:
+            current_at = self.tool_cwd.get("observed_at")
+            current_source = self.tool_cwd.get("source")
+            if isinstance(current_at, (int, float)) and not isinstance(current_at, bool):
+                if observed < current_at:
+                    return
+                if (observed == current_at
+                        and TOOL_CWD_SOURCE_PRIORITY.get(source, 0)
+                        < TOOL_CWD_SOURCE_PRIORITY.get(current_source, 0)):
+                    return
             changed = (self.tool_cwd.get("last_known") != path
-                       or self.tool_cwd.get("source") != source)
-            self.tool_cwd.update(last_known=path, source=source, observed_at=now,
+                       or current_source != source)
+            self.tool_cwd.update(last_known=path, source=source, observed_at=observed,
                                  exists=exists)
             if exists:
                 # N-2: a path that exists again re-arms the vanish event.
@@ -3337,6 +3503,7 @@ class Holder:
             self.events.append({"kind": "tool_cwd_observed", "path": path,
                                 "source": source, "exists": exists})
             self.write_record()
+        self._cwd_error_clear(None, None, codes=("tool-cwd-unknown",))
         self._cwd_check(path)
         # R4: a cwd outside the placeholder releases it.
         self._cwd_cleanup()
@@ -3393,19 +3560,56 @@ class Holder:
             return None
         return any(guard.same_path(item, path) for item in paths)
 
+    def _cwd_error_set(self, code: str, path: str | None, message: str,
+                       route: str) -> bool:
+        """Record one repair duty keyed by (code, path).
+
+        Issue #373: the fact is a list, so two simultaneous duties (for
+        example an unverifiable worktree list for one path and a non-empty
+        placeholder for another) both stay visible in status."""
+        entry = {"code": code, "path": path, "message": message, "route": route}
+        new = True
+        with self.tool_cwd_lock:
+            for index, item in enumerate(self.tool_cwd_errors):
+                if item.get("code") == code and item.get("path") == path:
+                    self.tool_cwd_errors[index] = entry
+                    new = False
+                    break
+            else:
+                self.tool_cwd_errors.append(entry)
+        self.write_record()
+        return new
+
+    def _cwd_error_clear(self, code: str | None = None, path: str | None = None,
+                         *, codes: tuple[str, ...] = ()) -> None:
+        """Drop the duties that match this code and/or path; keep the rest."""
+        with self.tool_cwd_lock:
+            before = len(self.tool_cwd_errors)
+            kept: list[dict[str, Any]] = []
+            for item in self.tool_cwd_errors:
+                matched = True
+                if codes:
+                    matched = matched and item.get("code") in codes
+                if code is not None:
+                    matched = matched and item.get("code") == code
+                if path is not None:
+                    matched = matched and item.get("path") == path
+                if not matched:
+                    kept.append(item)
+            self.tool_cwd_errors = kept
+            changed = len(kept) != before
+        if changed:
+            self.write_record()
+
     def _cwd_unverifiable(self, path: str) -> None:
         """N-3: git could not answer the worktree question. Fail closed and
-        leave the duty in ``tool_cwd_error`` instead of a silent refusal."""
-        with self.tool_cwd_lock:
-            current = self.tool_cwd_repair_error or {}
-            if current.get("code") == "cwd-unverifiable" and current.get("path") == path:
-                return
-            self.tool_cwd_repair_error = {
-                "code": "cwd-unverifiable", "path": path,
-                "message": "git worktree list did not answer",
-                "route": self._cwd_route("cwd-unverifiable", path)}
-        self.events.append({"kind": "tool_cwd_unverifiable", "path": path,
-                            "probe": "git"})
+        leave the duty in ``tool_cwd_errors`` instead of a silent refusal."""
+        new = self._cwd_error_set(
+            "cwd-unverifiable", path, "git worktree list did not answer",
+            self._cwd_route("cwd-unverifiable", path))
+        if new:
+            self.events.append({"kind": "tool_cwd_unverifiable", "path": path,
+                                "probe": "git"})
         self.write_record()
 
     def _cwd_worktree_refresh(self, *, signal: bool = True) -> None:
@@ -3430,24 +3634,36 @@ class Holder:
             if persistence != "per-call":
                 self._cwd_repair(path, "V2")
 
-    def _cwd_notice_text(self, path: str) -> str:
-        return TOOL_CWD_NOTE.format(path=path, repo=self.args.repo,
-                                    ts=time.strftime("%Y-%m-%dT%H:%M:%S%z"))
+    def _cwd_notice_text(self, paths: list[str]) -> str:
+        """The one notice text for one path or the whole repaired batch."""
+        ts = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+        if len(paths) == 1:
+            return TOOL_CWD_NOTE.format(path=paths[0], repo=self.args.repo, ts=ts)
+        return TOOL_CWD_NOTE_BATCH.format(
+            count=len(paths), paths=", ".join(paths), repo=self.args.repo, ts=ts)
 
     def _cwd_stage_notice(self, path: str) -> None:
-        """R3: keep one notice pending per path until a boundary delivers it.
+        """R3: keep one pending batch, one worker event per repaired path.
 
         N-5: the dedupe key is the repaired path, not "any cwd_repaired event
-        exists", so a second removed worktree still gets its own notice."""
-        text = self._cwd_notice_text(path)
+        exists", so a second removed worktree still gets its own notice.
+        Issue #373: the pending batch names every repaired path, so one steer
+        reports all of them instead of the latest."""
+        text = self._cwd_notice_text([path])
         staged = False
         with self.worker_events_lock:
+            with self.tool_cwd_lock:
+                paths = list(self.tool_cwd.get("notice_paths") or [])
+                if path not in paths:
+                    paths.append(path)
+                    staged = True
+                self.tool_cwd["notice_paths"] = paths
+                self.tool_cwd["notice"] = "pending"
             if any(item.get("kind") == "cwd_repaired" and item.get("path") == path
                    for item in self.pending_worker_events):
+                if staged:
+                    self.write_record()
                 return
-            with self.tool_cwd_lock:
-                self.cwd_notice_text = text
-                self.tool_cwd["notice"] = "pending"
             cursor = self.events.append({"kind": "tool_cwd_notice_staged", "path": path})
             self.pending_worker_events.append({
                 "schema": WORKER_EVENT_SCHEMA,
@@ -3466,7 +3682,7 @@ class Holder:
             if self.tool_cwd.get("notice") != "pending":
                 return
             self.tool_cwd["notice"] = "delivered"
-            self.cwd_notice_text = None
+            self.tool_cwd["notice_paths"] = []
         self.events.append({"kind": "tool_cwd_notice_delivered", "via": via})
         self.write_record()
 
@@ -3474,13 +3690,20 @@ class Holder:
         """R3 delivery order: steer while a turn runs, else one self prompt.
 
         An undelivered notice stays pending and is retried at every later
-        boundary; the repair never waits for it."""
+        boundary; the repair never waits for it. Issue #373: one steer names
+        every path in the pending repair batch."""
         with self.tool_cwd_lock:
             if self.tool_cwd.get("notice") != "pending":
                 return {"delivered": False, "reason": "no pending notice"}
-            text = self.cwd_notice_text
-        if not isinstance(text, str) or not text:
-            return {"delivered": False, "reason": "no notice text"}
+            paths = list(self.tool_cwd.get("notice_paths") or [])
+            if not paths:
+                # A pre-#373 record, or a claim cleaned before delivery: report
+                # whatever placeholders are still current.
+                paths = list(self.tool_cwd.get("placeholder") or [])
+        if not paths:
+            self._cwd_notice_delivered("no-paths")
+            return {"delivered": False, "reason": "no notice paths"}
+        text = self._cwd_notice_text(paths)
         if self.turn["active"]:
             if ((getattr(self.args, "native_steering", "") or "") == "supported"
                     and getattr(self.args, "steer_method", "")):
@@ -3506,10 +3729,10 @@ class Holder:
                 if item != path]
             if self.tool_cwd_vanished_path == path:
                 self.tool_cwd_vanished_path = None
-            error = self.tool_cwd_repair_error or {}
-            if error.get("code") == "cwd-placeholder-not-empty" \
-                    and error.get("path") == path:
-                self.tool_cwd_repair_error = None
+            # Issue #373: a resolved path drops its own duties, never another
+            # path's.
+            self.tool_cwd_errors = [item for item in self.tool_cwd_errors
+                                    if item.get("path") != path]
 
     def _cwd_repair(self, path: str, trigger: str) -> None:
         """R1: recreate a vanished path under the repo as an empty placeholder."""
@@ -3532,10 +3755,9 @@ class Holder:
         try:
             os.makedirs(path, exist_ok=True)
         except OSError as exc:
-            with self.tool_cwd_lock:
-                self.tool_cwd_repair_error = {
-                    "code": "cwd-repair-failed", "path": path, "message": str(exc),
-                    "route": self._cwd_route("cwd-repair-failed", path)}
+            self._cwd_error_set(
+                "cwd-repair-failed", path, str(exc),
+                self._cwd_route("cwd-repair-failed", path))
             self.events.append({"kind": "tool_cwd_repair_failed", "path": path,
                                 "error": str(exc)})
             self.write_record()
@@ -3547,7 +3769,7 @@ class Holder:
             placeholders.append(path)
             self.tool_cwd["placeholder"] = placeholders
             self.tool_cwd["repairs"] = int(self.tool_cwd.get("repairs") or 0) + 1
-            self.tool_cwd_repair_error = None
+        self._cwd_error_clear(path=path)
         self.events.append({"kind": "tool_cwd_placeholder_created", "path": path,
                             "trigger": trigger})
         self.write_record()
@@ -3594,11 +3816,9 @@ class Holder:
                 os.rmdir(placeholder)
             except OSError as exc:
                 reason = "not-empty" if os.path.isdir(placeholder) else str(exc)
-                with self.tool_cwd_lock:
-                    self.tool_cwd_repair_error = {
-                        "code": "cwd-placeholder-not-empty", "path": placeholder,
-                        "message": reason,
-                        "route": self._cwd_route("cwd-placeholder-not-empty", placeholder)}
+                self._cwd_error_set(
+                    "cwd-placeholder-not-empty", placeholder, reason,
+                    self._cwd_route("cwd-placeholder-not-empty", placeholder))
                 self.events.append({"kind": "tool_cwd_placeholder_left",
                                     "path": placeholder, "reason": reason})
                 self.write_record()
@@ -3641,13 +3861,15 @@ class Holder:
         with self.tool_cwd_lock:
             remaining = list(self.tool_cwd.get("placeholder") or [])
             pending = self.tool_cwd.get("notice") == "pending"
-            text = self.cwd_notice_text
+            paths = list(self.tool_cwd.get("notice_paths") or [])
             if pending and not remaining:
                 # No repair claim survived, so there is nothing to announce.
                 self.tool_cwd["notice"] = "none"
-                self.cwd_notice_text = None
-            elif pending and not isinstance(text, str) and remaining:
-                self.cwd_notice_text = self._cwd_notice_text(remaining[0])
+                self.tool_cwd["notice_paths"] = []
+            elif pending and not paths and remaining:
+                # A pre-#373 record: rebuild the batch from the surviving
+                # claims so the resumed notice still names every path.
+                self.tool_cwd["notice_paths"] = list(remaining)
 
     def _cwd_tick(self, *, deliver: bool = False) -> None:
         """The existing boundaries' one cwd check: V1, V2, R4, and R3 delivery.
@@ -3657,6 +3879,10 @@ class Holder:
         repairs nothing: its placeholder is already settled."""
         if self.stop_requested:
             return
+        # Issue #373: every status scan and turn-end boundary re-reads the
+        # tier A entry; it is cheap, and the file's own mtime keeps a stale
+        # session out.
+        self._cwd_trace_read()
         self._cwd_worktree_refresh()
         with self.tool_cwd_lock:
             last = self.tool_cwd.get("last_known")
@@ -3677,11 +3903,16 @@ class Holder:
             self.tool_cwd_notice_inflight = False
 
     def _cwd_tool_event(self, update: dict[str, Any]) -> None:
-        """Tier B, V3 and the tier C probe for one tool_call update.
+        """Tier A/B, V3 and the tier C probe for one tool_call update.
 
         The in-band text checks are cheap and stay inline. The process probe
         and the worktree refresh run on a short-lived thread hung on this
         existing event, so a slow ``lsof`` never stalls the ACP loop."""
+        execute_kind = (update.get("kind") or "") in ("execute", "shell")
+        if execute_kind:
+            # Issue #373: tier A's entry has already written the tool shell's
+            # $PWD by the time an execute event arrives.
+            self._cwd_trace_read()
         content = update.get("content")
         note = self._cwd_note_path(content)
         if note:
@@ -3699,21 +3930,17 @@ class Holder:
                 # Deviation d: V3 with no recorded path is the real emission
                 # point of the `tool-cwd-unknown` route.
                 self._cwd_unknown()
-        if update.get("kind") == "execute" and update.get("status") == "in_progress":
+        if execute_kind and update.get("status") == "in_progress":
             threading.Thread(target=self._cwd_probe, daemon=True).start()
 
     def _cwd_unknown(self) -> None:
         """V3 with no recorded path: leave the route for the operator."""
-        with self.tool_cwd_lock:
-            current = self.tool_cwd_repair_error or {}
-            if current.get("code") == "tool-cwd-unknown":
-                return
-            self.tool_cwd_repair_error = {
-                "code": "tool-cwd-unknown", "path": None,
-                "message": "the shell failed to spawn and no tool cwd was recorded",
-                "route": self._cwd_route("tool-cwd-unknown")}
-        self.events.append({"kind": "tool_cwd_unknown", "trigger": "V3"})
-        self.write_record()
+        new = self._cwd_error_set(
+            "tool-cwd-unknown", None,
+            "the shell failed to spawn and no tool cwd was recorded",
+            self._cwd_route("tool-cwd-unknown"))
+        if new:
+            self.events.append({"kind": "tool_cwd_unknown", "trigger": "V3"})
 
     def _cwd_probe(self) -> None:
         """Tier C plus the V2 refresh, at most one probe in flight."""
@@ -4146,10 +4373,10 @@ class Holder:
             "fatal_error": self.fatal_error,
             "turn_error": self.turn_error,
             "resume_pending": self.resume_pending_id is not None,
-            # Issue #369: the recorded tool cwd, and the one repair failure
-            # that still owes the operator a route.
+            # Issue #369/#373: the recorded tool cwd, and every current repair
+            # duty (a list, so simultaneous duties all stay visible).
             "tool_cwd": self._cwd_facts(),
-            "tool_cwd_error": self.tool_cwd_repair_error,
+            "tool_cwd_errors": self._cwd_errors_facts(),
         }
 
     def turn_receipt(self, wait_timeout: float | None = None,
@@ -9374,6 +9601,8 @@ def main() -> int:
     # native steering entry the holder's own cwd notice may use.
     parser.add_argument("--tool-cwd-note-regex", default=None)
     parser.add_argument("--shell-cwd-persistence", default="")
+    # Issue #373: the shell the tool calls spawn when tier A applies.
+    parser.add_argument("--tool-shell", default="")
     parser.add_argument("--steer-method", default="")
     parser.add_argument("--native-steering", default="")
     parser.add_argument("--host-entry", default=None)

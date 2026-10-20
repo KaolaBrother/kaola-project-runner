@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -712,6 +713,26 @@ class MockAgent:
         except OSError:
             self.cwd_child = None
 
+    def run_tier_a_shell(self, cwd: str) -> None:
+        """Issue #373: spawn the real zsh so the holder's entry writes $PWD.
+
+        The mock inherits the holder-set tier A environment exactly as the real
+        app-server does; the shell exits before any execute event, so the tier C
+        live sample cannot see it.
+        """
+        shell = "/bin/zsh" if os.path.exists("/bin/zsh") else shutil.which("zsh")
+        if not shell or not cwd or not os.path.isdir(cwd):
+            log_event({"event": "cwd_vanish_tier_a_unavailable", "cwd": cwd})
+            return
+        try:
+            done = subprocess.run([shell, "-c", "true"], cwd=cwd, env=os.environ,
+                                  capture_output=True, text=True, timeout=20)
+            log_event({"event": "cwd_vanish_tier_a_shell", "cwd": cwd,
+                       "rc": done.returncode, "stderr": done.stderr[:200]})
+        except (OSError, subprocess.SubprocessError) as exc:
+            log_event({"event": "cwd_vanish_tier_a_shell_failed", "cwd": cwd,
+                       "error": str(exc)})
+
     def run_cwd_vanish(self, session_id: str, request_id: Any) -> None:
         """Issue #369: the ZCode Read note carries the tool cwd.
 
@@ -756,6 +777,28 @@ class MockAgent:
                 execute(f"exec-v3u-{index}", "spawn /bin/zsh ENOENT", "failed")
             log_event({"event": "cwd_vanish_v3_unknown_sent"})
             message_chunk(session_id, "MOCK-REPLY cwd-v3-unknown")
+            self.finish_turn(request_id)
+            return
+        if mode == "tier_a":
+            # Issue #373: tier A alone. The real tool shell writes the trace
+            # file from the holder's environment; the execute events make the
+            # holder read it. No note text and no live shell child, so tiers B
+            # and C contribute nothing.
+            self.run_tier_a_shell(target)
+            execute("exec-tier-a-1", "echo shell-ok", "in_progress")
+            log_event({"event": "cwd_vanish_tier_a_ready", "path": target})
+            wait_marker()
+            execute("exec-tier-a-2", "echo shell-ok", "in_progress")
+            log_event({"event": "cwd_vanish_tier_a_after_removal", "path": target})
+            wait_placeholder()
+            log_event({"event": "cwd_vanish_placeholder_seen", "path": target,
+                       "exists": os.path.isdir(target)})
+            while release and not os.path.exists(release) and time.time() < deadline:
+                time.sleep(0.05)
+            self.run_tier_a_shell(repo)
+            execute("exec-tier-a-3", "echo shell-ok", "in_progress")
+            log_event({"event": "cwd_vanish_tier_a_repo", "path": repo})
+            message_chunk(session_id, "MOCK-REPLY cwd-tier-a")
             self.finish_turn(request_id)
             return
         if mode in ("tier_c_nonshell", "tier_c_shell"):

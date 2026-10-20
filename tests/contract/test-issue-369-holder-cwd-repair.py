@@ -30,6 +30,8 @@ skipped pending HUMAN_DECISION_REQUIRED D1; tier A is not implemented.
 from __future__ import annotations
 
 import hashlib
+import importlib.machinery
+import importlib.util
 import json
 import os
 import shlex
@@ -38,9 +40,11 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 REPO = Path(__file__).resolve().parents[2]
 MOCK = REPO / "tests" / "contract" / "mock-acp-agent.py"
@@ -100,6 +104,19 @@ class HolderCwdRepair(unittest.TestCase):
             + 'shell_cwd_persistence: "persistent"\n',
             encoding="utf-8")
         cls.cli_path = cls.fixture / "scripts" / "kaola-acp.py"
+        # Issue #373: a second fixture whose manifest declares the tool shell,
+        # so tier A is on only for its own tests. No note regex (tier B off)
+        # and per-call persistence (no V2 pre-emption).
+        cls.fixture_a = cls.root / "fixture-a"
+        shutil.copytree(REPO / "scripts", cls.fixture_a / "scripts")
+        shutil.copytree(REPO / "platforms", cls.fixture_a / "platforms")
+        manifest_a = cls.fixture_a / "platforms" / f"{PLATFORM}.yaml"
+        manifest_a.write_text(
+            manifest_a.read_text(encoding="utf-8")
+            + 'tool_shell: "zsh"\n'
+            + 'shell_cwd_persistence: "per-call"\n',
+            encoding="utf-8")
+        cls.cli_path_a = cls.fixture_a / "scripts" / "kaola-acp.py"
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -134,8 +151,10 @@ class HolderCwdRepair(unittest.TestCase):
             steering: str = "none", turn_ms: int = 0,
             vanish: dict[str, str] | None = None, caps: str = "",
             resume_any: bool = False, path_prefix: str = "",
+            tier_a: bool = False,
             check: bool = True, timeout: float = 60) -> dict:
-        argv = [sys.executable, str(self.cli_path), PLATFORM, command,
+        cli_path = self.cli_path_a if tier_a else self.cli_path
+        argv = [sys.executable, str(cli_path), PLATFORM, command,
                 "--repo", str(self.repo), "--session", self.session,
                 "--command", mock_command(scenario, steering, turn_ms, self.mock_log,
                                           vanish, caps, resume_any),
@@ -156,10 +175,11 @@ class HolderCwdRepair(unittest.TestCase):
 
     def start(self, scenario: str, steering: str = "none", turn_ms: int = 0,
               vanish: dict[str, str] | None = None, caps: str = "",
-              resume_any: bool = False, path_prefix: str = "") -> None:
+              resume_any: bool = False, path_prefix: str = "",
+              tier_a: bool = False) -> None:
         self.cli("start", scenario=scenario, steering=steering, turn_ms=turn_ms,
                  vanish=vanish, caps=caps, resume_any=resume_any,
-                 path_prefix=path_prefix)
+                 path_prefix=path_prefix, tier_a=tier_a)
         self._started = True
 
     def send(self, text: str = "go", scenario: str = "slow", steering: str = "none",
@@ -169,6 +189,12 @@ class HolderCwdRepair(unittest.TestCase):
 
     def status(self) -> dict:
         return self.cli("status", check=False)
+
+    def errors(self) -> list[dict]:
+        return self.status().get("tool_cwd_errors") or []
+
+    def has_error(self, code: str) -> bool:
+        return any(item.get("code") == code for item in self.errors())
 
     def tool_cwd(self) -> dict:
         return self.status().get("tool_cwd") or {}
@@ -395,8 +421,7 @@ class HolderCwdRepair(unittest.TestCase):
         (path / "stray.txt").write_text("kept\n", encoding="utf-8")
         self.send("go", "cwd_vanish", steering="none", vanish=vanish)
         self.wait_for(
-            lambda: (self.status().get("tool_cwd_error") or {}).get("code")
-            == "cwd-placeholder-not-empty",
+            lambda: self.has_error("cwd-placeholder-not-empty"),
             "the non-empty placeholder report")
         self.assertTrue((path / "stray.txt").is_file())
 
@@ -486,6 +511,31 @@ class HolderCwdRepair(unittest.TestCase):
                          {os.path.realpath(str(first)), os.path.realpath(str(second))},
                          staged)
 
+    def test_one_steer_names_every_repaired_path(self) -> None:
+        """Issue #373: the steer is one batch, not the latest path only."""
+        first = self.add_worktree_n(81)
+        second = self.add_worktree_n(82)
+        self.start("slow", steering="injected", turn_ms=30000)
+        self.send("go", "slow", steering="injected", turn_ms=30000)
+        self.wait_for(lambda: self.status().get("turn_active") is True,
+                      "the turn to become active")
+        self.remove_out_of_band(first)
+        self.remove_out_of_band(second)
+        self.wait_for(lambda: first.is_dir() and second.is_dir(),
+                      "both V2 placeholders")
+        self.wait_for(
+            lambda: any(e.get("event") == "steering" for e in self.mock_events()),
+            "the batch steer", timeout=60)
+        texts = [e.get("text", "") for e in self.mock_events()
+                 if e.get("event") == "steering"]
+        real_first = os.path.realpath(str(first))
+        real_second = os.path.realpath(str(second))
+        self.assertTrue(
+            any((real_first in text or str(first) in text)
+                and (real_second in text or str(second) in text)
+                for text in texts),
+            f"the steer did not name every repaired path: {texts}")
+
     # -- N-2: one vanish event per path -------------------------------------
 
     def test_repeated_status_ticks_do_not_replay_the_vanish_event(self) -> None:
@@ -511,8 +561,7 @@ class HolderCwdRepair(unittest.TestCase):
         self.start("cwd_vanish", steering="none", vanish=vanish)
         self.send("go", "cwd_vanish", steering="none", vanish=vanish)
         self.wait_for(
-            lambda: (self.status().get("tool_cwd_error") or {}).get("code")
-            == "tool-cwd-unknown",
+            lambda: self.has_error("tool-cwd-unknown"),
             "the tool-cwd-unknown duty")
         unknown = [e for e in self.events() if e.get("kind") == "tool_cwd_unknown"]
         self.assertEqual(len(unknown), 1, unknown)
@@ -559,8 +608,7 @@ class HolderCwdRepair(unittest.TestCase):
         marker.write_text("fail\n", encoding="utf-8")
         try:
             self.wait_for(
-                lambda: (self.status().get("tool_cwd_error") or {}).get("code")
-                == "cwd-unverifiable",
+                lambda: self.has_error("cwd-unverifiable"),
                 "the git-unverifiable report")
         finally:
             marker.unlink(missing_ok=True)
@@ -661,8 +709,7 @@ class HolderCwdRepair(unittest.TestCase):
             # unreadable worktree list and must keep the claim.
             self.send("again", "cwd_vanish", steering="none", vanish=vanish)
             self.wait_for(
-                lambda: (self.status().get("tool_cwd_error") or {}).get("code")
-                == "cwd-unverifiable",
+                lambda: self.has_error("cwd-unverifiable"),
                 "the unknown probe duty")
             state = self.tool_cwd()
             self.assertEqual(
@@ -693,12 +740,216 @@ class HolderCwdRepair(unittest.TestCase):
         finally:
             marker.unlink(missing_ok=True)
 
-    # -- case 7: tier A, pending D1 -----------------------------------------
+    # -- case 7: tier A -----------------------------------------------------
 
-    @unittest.skip("tier A (runner-owned ZDOTDIR/BASH_ENV shell entry) is not implemented: "
-                   "HUMAN_DECISION_REQUIRED D1 is open")
+    def shell_path(self, name: str) -> str | None:
+        fixed = f"/bin/{name}"
+        return fixed if os.path.exists(fixed) else shutil.which(name)
+
+    def tier_a_env(self, shellenv: Path, trace: Path, fake_home: Path,
+                   *, zsh: bool) -> dict[str, str]:
+        env = {key: value for key, value in os.environ.items()
+               if not key.startswith("KAOLA_")}
+        env.update({"HOME": str(fake_home), "KAOLA_TOOL_CWD_FILE": str(trace),
+                    "SMOKE_SHELLENV": str(shellenv)})
+        if zsh:
+            env["ZDOTDIR"] = str(shellenv)
+        else:
+            env["BASH_ENV"] = str(shellenv / ".bashenv")
+            env["KAOLA_USER_BASH_ENV"] = str(fake_home / ".bash_env")
+        return env
+
     def test_tier_a_shell_entry_records_the_cwd(self) -> None:
-        raise AssertionError("unreachable while D1 is open")
+        """The holder-generated entry writes $PWD for zsh and bash once, keeps
+        the user's init, and a missing trace directory adds no stderr."""
+        zsh = self.shell_path("zsh")
+        bash = self.shell_path("bash")
+        if not zsh or not bash:
+            self.skipTest("#151: zsh and bash are required for the tier A entry")
+        # Start a tier A holder only to have it generate the runner-owned files.
+        self.start("slow", tier_a=True)
+        shellenv = self.record_dir() / "shellenv"
+        self.wait_for(lambda: (shellenv / ".zshenv").is_file()
+                      and (shellenv / ".bashenv").is_file(),
+                      "the holder-generated shell entries")
+        fake_home = self.root / f"home-{self.issue}"
+        fake_home.mkdir(exist_ok=True)
+        (fake_home / ".zshenv").write_text(
+            f'printf ran > "{fake_home}/zsh-init-ran"\n', encoding="utf-8")
+        (fake_home / ".bash_env").write_text(
+            f'printf ran > "{fake_home}/bash-init-ran"\n', encoding="utf-8")
+        target = self.root / f"tier-a-{self.issue}"
+        target.mkdir(exist_ok=True)
+
+        zsh_trace = self.root / f"zsh-trace-{self.issue}"
+        zsh_env = self.tier_a_env(shellenv, zsh_trace, fake_home, zsh=True)
+        done = subprocess.run([zsh, "-c", "true"], cwd=target, env=zsh_env,
+                              capture_output=True, text=True, timeout=20)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stderr, "", "the zsh entry wrote to stderr")
+        self.assertTrue(self.same_path(zsh_trace.read_text(encoding="utf-8").strip(),
+                                       target), zsh_trace.read_text(encoding="utf-8"))
+        self.assertTrue((fake_home / "zsh-init-ran").is_file(),
+                        "the user's ~/.zshenv did not run")
+
+        bash_trace = self.root / f"bash-trace-{self.issue}"
+        bash_env = self.tier_a_env(shellenv, bash_trace, fake_home, zsh=False)
+        done = subprocess.run([bash, "-c", "true"], cwd=target, env=bash_env,
+                              capture_output=True, text=True, timeout=20)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stderr, "", "the bash entry wrote to stderr")
+        self.assertTrue(self.same_path(bash_trace.read_text(encoding="utf-8").strip(),
+                                       target), bash_trace.read_text(encoding="utf-8"))
+        self.assertTrue((fake_home / "bash-init-ran").is_file(),
+                        "the user's BASH_ENV did not run")
+
+        # A nested shell inherits the guard, even when it is pointed back at
+        # the runner-owned entry, so the sentinel survives.
+        nested_trace = self.root / f"nested-trace-{self.issue}"
+        nested_env = self.tier_a_env(shellenv, nested_trace, fake_home, zsh=True)
+        nested = ('printf "sentinel\\n" > "$KAOLA_TOOL_CWD_FILE"; '
+                  'ZDOTDIR="$SMOKE_SHELLENV" ' + zsh + ' -c true; '
+                  'cat "$KAOLA_TOOL_CWD_FILE"')
+        done = subprocess.run([zsh, "-c", nested], cwd=target, env=nested_env,
+                              capture_output=True, text=True, timeout=20)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout.strip().splitlines()[-1], "sentinel",
+                         done.stdout)
+        self.assertEqual(nested_trace.read_text(encoding="utf-8"), "sentinel\n")
+
+        nested_bash_trace = self.root / f"nested-bash-trace-{self.issue}"
+        nested_bash_env = self.tier_a_env(shellenv, nested_bash_trace, fake_home,
+                                          zsh=False)
+        nested = ('printf "sentinel\\n" > "$KAOLA_TOOL_CWD_FILE"; '
+                  'BASH_ENV="$SMOKE_SHELLENV/.bashenv" ' + bash + ' -c true; '
+                  'cat "$KAOLA_TOOL_CWD_FILE"')
+        done = subprocess.run([bash, "-c", nested], cwd=target, env=nested_bash_env,
+                              capture_output=True, text=True, timeout=20)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout.strip().splitlines()[-1], "sentinel",
+                         done.stdout)
+
+        # A missing trace directory is silent: the entry suppresses its own
+        # redirection failure instead of leaking shell-init noise.
+        missing = self.root / f"missing-{self.issue}" / "tool-cwd"
+        zsh_env["KAOLA_TOOL_CWD_FILE"] = str(missing)
+        done = subprocess.run([zsh, "-c", "true"], cwd=target, env=zsh_env,
+                              capture_output=True, text=True, timeout=20)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stderr, "", done.stderr)
+        bash_env["KAOLA_TOOL_CWD_FILE"] = str(missing)
+        done = subprocess.run([bash, "-c", "true"], cwd=target, env=bash_env,
+                              capture_output=True, text=True, timeout=20)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stderr, "", done.stderr)
+
+    def test_tier_a_alone_records_repairs_and_cleans_up(self) -> None:
+        """Mock-ACP: with tiers B/C disabled, the holder's own entry records
+        the worktree cwd and a removal out of band is repaired and cleaned."""
+        if not self.shell_path("zsh"):
+            self.skipTest("#151: zsh is required for the tier A entry")
+        path = self.add_worktree()
+        self.marker().unlink(missing_ok=True)
+        vanish = self.vanish(path, "tier_a")
+        self.start("cwd_vanish", steering="none", vanish=vanish, tier_a=True)
+        self.send("go", "cwd_vanish", steering="none", vanish=vanish)
+        self.wait_for(lambda: self.same_path(self.tool_cwd().get("last_known"), path)
+                      and self.tool_cwd().get("source") == "trace",
+                      "tier A to record the tool cwd")
+        observed = [e for e in self.events() if e.get("kind") == "tool_cwd_observed"]
+        self.assertTrue(any(e.get("source") == "trace" for e in observed), observed)
+        self.assertFalse(any(e.get("source") in ("note", "process") for e in observed),
+                         f"tier B/C observed with tier A only: {observed}")
+
+        self.remove_out_of_band(path, release_marker=True)
+        self.wait_for(lambda: path.is_dir(), "the tier A placeholder")
+        state = self.tool_cwd()
+        self.assertEqual([os.path.realpath(item) for item in state.get("placeholder") or []],
+                         [os.path.realpath(str(path))], state)
+
+        self.release().write_text("go\n", encoding="utf-8")
+        self.wait_for(lambda: not path.is_dir(), "the placeholder cleanup")
+        self.assertIn("tool_cwd_placeholder_removed", self.event_kinds())
+
+
+class CwdFactsUnit(unittest.TestCase):
+    """Issue #373 leftovers at the fact layer: observed_at precedence and the
+    repair-duty list (the integration harness covers the same status surface)."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        path = REPO / "scripts" / "kaola-acp-holder.py"
+        loader = importlib.machinery.SourceFileLoader("kaola_acp_holder_i373", str(path))
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        cls.module = importlib.util.module_from_spec(spec)
+        loader.exec_module(cls.module)
+
+    def holder(self):
+        class Events:
+            def __init__(self) -> None:
+                self.cursor = 0
+                self.items: list[dict] = []
+
+            def append(self, event, ts=None):
+                self.cursor += 1
+                self.items.append(event)
+                return self.cursor
+
+        holder = self.module.Holder.__new__(self.module.Holder)
+        holder.tool_cwd = {
+            "last_known": None, "source": None, "observed_at": None, "exists": None,
+            "placeholder": [], "notice": "none", "notice_paths": [], "repairs": 0}
+        holder.tool_cwd_lock = threading.Lock()
+        holder.tool_cwd_errors = []
+        holder.tool_cwd_vanished_path = None
+        holder.args = SimpleNamespace(repo=str(REPO))
+        holder.events = Events()
+        holder.write_record = lambda **extra: None
+        holder._cwd_check = lambda path: None
+        holder._cwd_cleanup = lambda **extra: None
+        return holder
+
+    def test_newer_tier_a_beats_an_older_tier_c_sample(self) -> None:
+        holder = self.holder()
+        holder._cwd_note("/tier-a", "trace", observed_at=200.0)
+        holder._cwd_note("/tier-c-old", "process", observed_at=100.0)
+        self.assertEqual(holder.tool_cwd["last_known"], "/tier-a",
+                         holder.tool_cwd)
+        self.assertEqual(holder.tool_cwd["source"], "trace")
+        holder._cwd_note("/tier-c-tie", "process", observed_at=200.0)
+        self.assertEqual(holder.tool_cwd["last_known"], "/tier-a",
+                         "a same-time tier C sample overwrote the trace")
+        self.assertEqual(holder.tool_cwd["source"], "trace")
+
+    def test_tier_a_file_older_than_the_agent_start_is_ignored(self) -> None:
+        holder = self.holder()
+        holder.args = SimpleNamespace(repo=str(REPO), tool_shell="zsh")
+        with tempfile.TemporaryDirectory(prefix="kaola-i373-trace-") as tmp:
+            holder.record_dir = Path(tmp)
+            trace = holder.record_dir / "tool-cwd"
+            trace.write_text("/old/path\n", encoding="utf-8")
+            os.utime(trace, (100.0, 100.0))
+            holder.agent_started = 200.0
+            self.assertIsNone(holder._cwd_trace_read())
+            self.assertIsNone(holder.tool_cwd["last_known"])
+            trace.write_text("/fresh/path\n", encoding="utf-8")
+            os.utime(trace, (300.0, 300.0))
+            self.assertEqual(holder._cwd_trace_read(), "/fresh/path")
+            self.assertEqual(holder.tool_cwd["last_known"], "/fresh/path")
+            self.assertEqual(holder.tool_cwd["source"], "trace")
+            self.assertEqual(holder.tool_cwd["observed_at"], 300.0)
+
+    def test_every_simultaneous_repair_duty_is_visible(self) -> None:
+        holder = self.holder()
+        holder._cwd_error_set("cwd-unverifiable", "/a", "one", "route-a")
+        holder._cwd_error_set("cwd-repair-failed", "/b", "two", "route-b")
+        facts = holder._cwd_errors_facts()
+        self.assertEqual([(item["code"], item["path"]) for item in facts],
+                         [("cwd-unverifiable", "/a"), ("cwd-repair-failed", "/b")])
+        holder._cwd_error_clear("cwd-unverifiable", "/a")
+        self.assertEqual([item["path"] for item in holder._cwd_errors_facts()], ["/b"])
+        holder._cwd_error_clear(path="/b")
+        self.assertEqual(holder._cwd_errors_facts(), [])
 
 
 if __name__ == "__main__":
