@@ -25,7 +25,6 @@ No platform binary or credential is used: the mock ACP agent is the seat.
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import json
 import os
 import shlex
