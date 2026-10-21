@@ -4190,13 +4190,20 @@ class Holder:
         # child thread, and an update outside a turn belongs to no turn at all.
         # The LAST status in the turn wins, so a turn that recovers (idle) stays
         # healthy; only an explicit `systemError` marks it.
-        if turn["active"] and same_session:
-            thread_status = ((update.get("_meta") or {}).get("codex") or {}).get("threadStatus")
-            if isinstance(thread_status, dict):
-                turn["error"] = (
-                    {"code": "agent-system-error", "threadStatus": thread_status["type"]}
-                    if thread_status.get("type") == "systemError" else None
-                )
+        # Issue #381/R1: this writer runs outside self.lock, so a terminal
+        # publisher holding self.lock does not exclude it. The active check and
+        # the error write happen under view_lock, the same lock under which a
+        # terminal publisher re-reads the error and sets active=False: an
+        # accepted error is either seen by that publication or rejected as
+        # arriving after the turn ended. Pure in-memory work, so the leaf rule holds.
+        with self.view_lock:
+            if turn["active"] and same_session:
+                thread_status = ((update.get("_meta") or {}).get("codex") or {}).get("threadStatus")
+                if isinstance(thread_status, dict):
+                    turn["error"] = (
+                        {"code": "agent-system-error", "threadStatus": thread_status["type"]}
+                        if thread_status.get("type") == "systemError" else None
+                    )
         if variant != "usage_update" or same_session:
             self.projection.apply(update, self.events.cursor + 1, received_at)
         cursor = self.events.append({"kind": "session_update", "sessionId": params.get("sessionId"),
@@ -4934,15 +4941,18 @@ class Holder:
             if not turn["active"] or self.turn is not turn or not turn.get("agent_initiated"):
                 return
             stop = turn.get("stop_reason")
-            if canceled or turn.get("cancel_requested") or stop == "cancelled":
-                outcome = "turn_canceled"
-            elif turn.get("error"):
-                outcome = "turn_failed"
-            else:
-                outcome = "agent_turn_completed"
+            cancel = bool(canceled or turn.get("cancel_requested") or stop == "cancelled")
+
+            def decide(error: object) -> str:
+                if cancel:
+                    return "turn_canceled"
+                return "turn_failed" if error else "agent_turn_completed"
+
             # Issue #381/F3: provider evidence may read a file. Compute it
             # before the publication lock; the locked block only assigns it.
-            failure = self._turn_failure_summary(outcome, turn.get("error"))
+            pre_error = turn.get("error")
+            pre_outcome = decide(pre_error)
+            pre_failure = self._turn_failure_summary(pre_outcome, pre_error)
             with self.view_lock:
                 # Issue #381/F2: the check above is only advisory because
                 # on_agent_exit does not take self.lock. Revalidate the exact
@@ -4952,6 +4962,19 @@ class Holder:
                 if (not turn["active"] or self.turn is not turn
                         or not turn.get("agent_initiated")):
                     return
+                # Issue #381/R1: while the summary was read the turn was still
+                # active, so a session/update may have accepted a new error or
+                # a recovery. Decide the outcome from the error current under
+                # this lock; reuse the pre-read summary only when that evidence
+                # is unchanged, otherwise stay file-I/O free here.
+                current_error = turn.get("error")
+                outcome = decide(current_error)
+                if outcome != "turn_failed":
+                    failure = None
+                elif pre_outcome == "turn_failed" and pre_error == current_error:
+                    failure = pre_failure
+                else:
+                    failure = scrub(unavailable_provider_summary("evidence-raced"))
                 # Issue #381: the synthetic turn's terminal state and its
                 # turn_ended cursor are one publication, so a view cannot see
                 # active=false with the previous live cursor.

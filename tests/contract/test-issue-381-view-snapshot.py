@@ -16,7 +16,11 @@ fanout after the release.
 The suite covers the ten research 5.2 cases and pins invariants I1-I6.
 The independent review's F1-F4 races are cases 11-15: response x exit,
 synthetic finish x exit, admission x exit, provider evidence I/O outside
-the publish lock, and the no-write admission distinction.
+the publish lock, and the no-write admission distinction.  The review's
+R1 races are cases 16-18: a session/update threadStatus error or recovery
+accepted while the synthetic finisher pre-reads its evidence (fail-to-
+recover and no-fail-to-fail), and the check+write atomicity of that error
+writer against the finisher's publication lock.
 
 I1 terminal freshness   - a terminal view's cursor is strictly newer than the
                           last view that observed the turn active.
@@ -43,6 +47,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import sys
 import tempfile
 import threading
 import time
@@ -864,6 +869,186 @@ class ViewSnapshotCase(unittest.TestCase):
         self.assertEqual(view["event_cursor"], 0)
         self.assertFalse(any(row.get("kind") == "turn_ended"
                              for row in self.read_events(holder)))
+
+    # -- review R1: session/update evidence vs the synthetic finisher --------
+
+    def _open_agent_initiated_turn(self, holder) -> dict[str, object]:
+        """Open the agent-initiated turn exactly as case 12 does."""
+        written_at = round(time.time(), 3)
+        holder.turn.update({
+            "active": False, "outcome": "turn_completed", "stop_reason": "end_turn",
+            "written_at": written_at, "fingerprint": "sha256:prior",
+        })
+        holder.last_prompt = {
+            "fingerprint": "sha256:prior", "written_at": written_at,
+            "transport": "acp", "mutation_status": "completed",
+            "stop_reason": "end_turn",
+        }
+        holder.on_session_update({
+            "sessionId": "mock-session-1",
+            "update": {"sessionUpdate": "agent_message_chunk",
+                       "content": {"type": "text", "text": "continuation"}},
+        })
+        turn = holder.turn
+        self.assertTrue(turn["active"])
+        self.assertTrue(turn.get("agent_initiated"))
+        return turn
+
+    @staticmethod
+    def _codex_status_update(status: str) -> dict[str, object]:
+        return {
+            "sessionId": "mock-session-1",
+            "update": {"sessionUpdate": "session_info_update",
+                       "_meta": {"codex": {"threadStatus": {"type": status}}}},
+        }
+
+    def _paused_update(self, holder, status: str, pause_text: str):
+        """Run one real session_info_update in a thread paused (via settrace)
+        at the first line of on_session_update containing ``pause_text``.
+        ``assigned`` is set when the update reaches the projection apply line,
+        i.e. after the error write and its lock have completed."""
+        code = holder.on_session_update.__func__.__code__
+        text = Path(code.co_filename).read_text().splitlines()
+        pause_line = next(i + 1 for i, line in enumerate(text)
+                          if i + 1 > code.co_firstlineno and pause_text in line)
+        after_line = next(
+            i + 1 for i, line in enumerate(text)
+            if i + 1 > pause_line
+            and 'if variant != "usage_update" or same_session:' in line)
+        entered = threading.Event()
+        release = threading.Event()
+        assigned = threading.Event()
+
+        def trace(frame, event, arg):
+            if frame.f_code is code and event == "line":
+                if frame.f_lineno == pause_line:
+                    entered.set()
+                    if not release.wait(5):
+                        raise AssertionError("paused update was never released")
+                elif frame.f_lineno == after_line:
+                    assigned.set()
+            return trace
+
+        def run() -> None:
+            sys.settrace(trace)
+            try:
+                holder.on_session_update(self._codex_status_update(status))
+            finally:
+                sys.settrace(None)
+
+        thread = threading.Thread(name="update", target=run, daemon=True)
+        thread.start()
+        self.assertTrue(entered.wait(3), "update did not reach the pause line")
+        return thread, release, assigned
+
+    def _last_turn_ended(self, holder) -> dict[str, object]:
+        ended = [row for row in self.read_events(holder)
+                 if row.get("kind") == "turn_ended"]
+        self.assertTrue(ended, "no turn_ended event was published")
+        return ended[-1]
+
+    def test_case_16_synthetic_finish_evidence_recovers_after_preread(self) -> None:
+        """An accepted error cleared during the pre-read stays recovered."""
+        holder, _stub = self.make_holder("synthetic-recover")
+        target = self._open_agent_initiated_turn(holder)
+        holder.on_session_update(self._codex_status_update("systemError"))
+        self.assertEqual(target["error"]["code"], "agent-system-error")
+        updater, release, assigned = self._paused_update(
+            holder, "idle", 'if turn["active"] and same_session:')
+        original = holder._turn_failure_summary
+
+        def summary(outcome, error):
+            result = original(outcome, error)
+            release.set()
+            self.assertTrue(assigned.wait(5),
+                            "paused update did not finish its error write")
+            return result
+
+        holder._turn_failure_summary = summary
+        try:
+            holder._finish_agent_turn(target)
+        finally:
+            release.set()
+        self.join(updater)
+        self.assertIsNone(target["error"])
+        self.assertEqual(target["outcome"], "agent_turn_completed")
+        self.assertIsNone(holder.turn_error)
+        ended = self._last_turn_ended(holder)
+        self.assertEqual(ended["outcome"], "agent_turn_completed")
+        self.assertNotIn("error", ended)
+        view = holder.op_view({})
+        self.assertFalse(view["turn"]["active"])
+        self.assertEqual(view["turn"]["outcome"], view["turns"][-1]["outcome"])
+        self.assertEqual(view["turn"]["outcome"], "agent_turn_completed")
+
+    def test_case_17_synthetic_finish_failure_arrives_after_preread(self) -> None:
+        """An error accepted during the pre-read fails the turn it landed on."""
+        holder, _stub = self.make_holder("synthetic-late-error")
+        target = self._open_agent_initiated_turn(holder)
+        self.assertIsNone(target["error"])
+        updater, release, assigned = self._paused_update(
+            holder, "systemError", 'if turn["active"] and same_session:')
+        original = holder._turn_failure_summary
+
+        def summary(outcome, error):
+            result = original(outcome, error)
+            release.set()
+            self.assertTrue(assigned.wait(5),
+                            "paused update did not finish its error write")
+            return result
+
+        holder._turn_failure_summary = summary
+        try:
+            holder._finish_agent_turn(target)
+        finally:
+            release.set()
+        self.join(updater)
+        self.assertEqual(target["error"]["code"], "agent-system-error")
+        self.assertEqual(target["outcome"], "turn_failed")
+        self.assertEqual(holder.turn_error["source"], "unavailable")
+        self.assertEqual(holder.turn_error["reason"], "evidence-raced")
+        ended = self._last_turn_ended(holder)
+        self.assertEqual(ended["outcome"], "turn_failed")
+        self.assertEqual(ended["error"]["reason"], "evidence-raced")
+        view = holder.op_view({})
+        self.assertFalse(view["turn"]["active"])
+        self.assertEqual(view["turn"]["outcome"], view["turns"][-1]["outcome"])
+        self.assertEqual(view["turn"]["outcome"], "turn_failed")
+
+    def test_case_18_error_writer_check_and_write_are_one_publication(self) -> None:
+        """The error writer holds view_lock across check and write, so the
+        finisher cannot publish between them."""
+        holder, _stub = self.make_holder("writer-atomicity")
+        target = self._open_agent_initiated_turn(holder)
+        self.assertIsNone(target["error"])
+        updater, release, _assigned = self._paused_update(
+            holder, "systemError", 'turn["error"] = (')
+        finisher = threading.Thread(
+            name="finisher",
+            target=lambda: holder._finish_agent_turn(target),
+            daemon=True)
+        finisher.start()
+        try:
+            time.sleep(0.2)
+            self.assertTrue(finisher.is_alive(),
+                            "finisher did not block on view_lock")
+            self.assertTrue(holder.turn["active"],
+                            "finisher published while the writer held view_lock")
+        finally:
+            release.set()
+        self.join(finisher)
+        self.join(updater)
+        self.assertEqual(target["error"]["code"], "agent-system-error")
+        self.assertEqual(target["outcome"], "turn_failed")
+        self.assertEqual(holder.turn_error["source"], "unavailable")
+        self.assertEqual(holder.turn_error["reason"], "evidence-raced")
+        ended = self._last_turn_ended(holder)
+        self.assertEqual(ended["outcome"], "turn_failed")
+        self.assertEqual(ended["error"]["reason"], "evidence-raced")
+        view = holder.op_view({})
+        self.assertFalse(view["turn"]["active"])
+        self.assertEqual(view["turn"]["outcome"], view["turns"][-1]["outcome"])
+        self.assertEqual(view["turn"]["outcome"], "turn_failed")
 
 
 class LeafGuard:
