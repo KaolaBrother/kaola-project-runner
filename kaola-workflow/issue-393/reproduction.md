@@ -60,7 +60,17 @@ the path and stages `cwd_repaired`, and the turn end delivers the self prompt.
 | 4 | pre-#388 (`f46e1d4e^`) | `worker` | `/kaola-project-runner` | `/kaola-project-runner` | yes | yes |
 
 Variant 4 is the only reproducing case. It runs the holder bytes from
-`f46e1d4e^`, the commit before the #388 fix. Its CLI also appended
+`f46e1d4e^`, the commit before the #388 fix:
+
+```bash
+cp -R <run-tree>/scripts /tmp/kpr-pre388
+git -C <run-tree> show f46e1d4e^:scripts/kaola-acp-holder.py \
+  > /tmp/kpr-pre388/kaola-acp-holder.py
+# then the direct-holder command above, with --session-role worker
+# and --host-entry /kaola-project-runner
+```
+
+Its CLI also appended
 `--host-entry` unconditionally; its holder selected the carrier on
 `self.host_entry` alone:
 
@@ -140,6 +150,21 @@ above: the carrier route is reachable only from pre-#388 holder bytes.
    control; the only reproducing variant).
 8. Record and event scan of the local ACP sessions for pre-#388 vs current
    carrier deliveries.
+
+## Host check before closing
+
+The one fact that decides the incident is the vrpai worker holder's build:
+
+- If the worker record says `runner_build: db475e966dc8` (v0.9.23 holder),
+  `session_role: worker`, `host_skill_entry: /kaola-project-runner`, and
+  `status` reports `stale: false`, then this non-reproduction is incomplete:
+  capture that record and its cwd-repair events before closing.
+- If the record says an older build (local pre-#388 seats report
+  `55072ca6c5e7`), or `status.stale` is true with
+  `restart_files: ["kaola-acp-holder.py"]`, the incident is the known
+  live-seat condition: restart the worker seat so it loads the role-gated
+  holder, and confirm the next `cwd_repaired` self prompt is
+  `kaola-worker-notify/1`.
 
 ## Conclusion
 
