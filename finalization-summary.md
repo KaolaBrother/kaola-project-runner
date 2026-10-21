@@ -1,67 +1,50 @@
-# Finalization Summary — Issue #212
+# Finalization Summary — Issue #379
 
 ## Delivered
 
-The KPR portion of the paired design with Kaola-Workflow #1110: Host-side
-finalize safeguards for foreign files, as one new section
-`## Foreign files and finalize safeguards` in the Project Runner
-`workflow-worktree` reference (source template and generated copy), stated
-exactly once — no main-SKILL, doc-maintenance, issue-dispatch, or heartbeat
-edits, so the merged #208 wording stands untouched.
+Fixed KPR #379 on `workflow/issue-379`: send, steer and steer_interrupt error
+receipts now state the mutation fact for **this** request.
 
-The four duties, faithful to the issue body:
+- `no-session`, `record-lost`, `holder-socket-missing` and a `holder-lost`
+  observed before any wire attempt report `mutation_performed: false` with
+  `mutation_status: not_started`; that pre-wire `holder-lost` also carries
+  `previous_prompt`, while `record.last_prompt` still serves `status`/`observe`.
+- `holder-closed`, send/read-stage failures, a stage-less `holder-unreachable`,
+  and a `holder-lost` discovered only after a wire attempt report `null` with
+  `mutation_status: unknown`. A frame that may have been written is never
+  flattened to false.
+- The holder busy receipt now uses `outcome: refused_busy` instead of the
+  successful `--no-wait` word `in_progress`; `mutation_performed: false` and the
+  active turn's `mutation_status` are unchanged.
+- A `start --text`/`--stdin` failure receipt keeps the internal prompt
+  request's mutation, so an unknown brief frame stays unknown.
+- Steer error receipts carry the matching
+  `steer_outcome`/`steer_consumed`/`steer_confirmation`.
+- `status`, `observe`, `capture`, `permit`, `cancel` and `stop` keep their
+  previous `holder_lost_receipt` facts.
+- The `error.stage` hook is in place for #383: connect will be definite
+  `false`, send/read stay `unknown`; the post-wire holder-loss source marker
+  keeps today's stage-less wire death unknown.
+- `docs/api.md` and `CHANGELOG.md` updated; templates and the 8191/8192-byte
+  budgets are unchanged. Generated Skill script copies were re-rendered.
 
-1. When a known foreign/protected file or an upstream finalize limitation
-   affects the current run, the Host conveys that concrete constraint to the
-   worker responsible for finalization through existing task/run records; the
-   Skill adds no global ownership table, scan schedule, classifier, or filter.
-2. The finalizing worker reads the run's existing Workflow
-   preview/finalization receipts, preserves unrelated files, and reports
-   ownership ambiguity or a blocked sink honestly; copying a file mechanically
-   does not establish that it belongs to the task; never delete, stage, or
-   adopt unrelated files merely to clean the checkout.
-3. The Host reuses those receipts plus the candidate diff for
-   acceptance/closeout — confirming known protected paths did not enter the
-   delivered candidate/archive and that any temporary protection was restored;
-   concrete mismatches return to the responsible worker; no second acceptance
-   engine, no unconditional duplicate test run.
-4. The affected run keeps its narrow `.git/info/exclude` protection
-   (byte-preserved baseline, scoped protection applied before mirroring/sink,
-   restoration on completion or interruption, coordinated shared edits,
-   exact-remaining-duty reporting when restoration is unsafe) as a temporary,
-   project-specific measure; the section names no file.
+Candidate: `56a65dabc93427477ff77a4435ac92655bdd3e14` on `workflow/issue-379`;
+parent `9781d9342788fce1718f828bf50919b29695f5d6`. No tag, release, install, or
+amplification of the change was performed.
 
-Retirement is by conditions, not issue closure: remove the workaround only
-after an authorized fixed-version adoption plus the bounded consumer evidence
-that the known foreign file stays excluded and unchanged; the general handoff
-and receipt duties are durable.
+## Acceptance Evidence
 
-Honest upstream status: **Kaola-Workflow #1110 remains UNRESOLVED.** This run
-delivers consumer-side guidance and the retained scoped mitigation only; no KW
-fix is claimed, merged, or deployed, and no KPR code, installed plugin, or
-external repository was touched.
-
-## Files Changed
-
-- `templates/orchestrator/references/workflow-worktree.md` (source; 4827 →
-  7501 B against the unchanged 8192 B ceiling)
-- `skills/kaola-project-runner/references/workflow-worktree.md` (rendered,
-  byte-identical to source)
-- `skills/<10 platforms>-kaola-project-runner/scripts/main-skill-build.json`
-  (regenerated hash manifests via `render-skills.py --write`)
-- `CHANGELOG.md` (Unreleased entry, guidance only, `Seats: restart not
-  required`)
-- Run state: `finalization-summary.md`, `.cache/doc-docking.md`
-
-## Test Coverage
-
-Focused, diff-scoped chains on the frozen candidate `cb75fc0e` (and re-run at
-finalize): `./scripts/render-skills.py --check` PASS with budgets OK;
-`tests/contract/test-issue-52-workflow-worktree.py` 9/9 OK (the suite pinning
-the edited reference); `tests/contract/test-progressive-disclosure.py` 15/15
-OK (byte budgets). Contract suites 65 and 162 were not run: they pin nothing
-in this reference and their three known failures on main belong to in-flight
-#209, untouched by this run.
+- Independent review: `/tmp/kpr379rev/REVIEW.md` (F1/F2 raised and fixed).
+- Post-fix boundary probes: `/tmp/kpr379r2/evidence/boundary-probes.json`
+  (`post_write_holder_death` null/unknown; `start_brief_text` and
+  `start_brief_stdin` null/unknown).
+- Seven-shape reproduction: `/tmp/kpr379/evidence-fixed.json`.
+- Host acceptance: `56a65dab` diff reviewed; joint run plus two isolated reruns
+  were 19/19 OK; the astra first-run holder-closed difference was not
+  reproduced after the fixture hardening.
+- Focused validation logs: `/tmp/i379-r2-joint.log`,
+  `/tmp/i379-r2-isolated.log`, `/tmp/i379-r2-related.log`, and
+  `/tmp/i379-joint-fixed-*.log`.
 
 ## Validation
 
@@ -69,24 +52,20 @@ in this reference and their three known failures on main belong to in-flight
 
 ## Documentation Docking
 
-DOCKED — `.cache/doc-docking.md`. CHANGELOG updated; the `docs/architecture.md`
-pointer to the generated reference remains accurate (additive section); all
-other checked surfaces no-impact with reasons recorded there.
+DOCKED — `.cache/doc-docking.md`. `docs/api.md` records the request-scoped
+contract, false vs null, `refused_busy`, the brief-failure preservation and the
+`error.stage` forward boundary; `CHANGELOG.md` records the behavior and the
+holder-restart/CLI-per-call facts.
 
 ## Follow-Up Items
 
-- Kaola-Workflow #1110 (open, upstream-owned): the mechanical finalize
-  mirror/staging fix. After an authorized fixed-version adoption plus the
-  bounded consumer evidence, remove the run-scoped exclude workaround per the
-  section's retire-by-conditions paragraph — never merely because an issue
-  closed. No new KPR follow-up filed: the run discovered nothing beyond the
-  already-filed upstream defect.
-- Current mitigation state at this finalize: main-checkout
-  `.git/info/exclude` baseline 541 B (sha256
-  `321dffcb77a68a6c079d35da12944866b895b4cc9fb3b1fae72fe9468c7eafeb`),
-  restored byte-exact after sink; both protected research docs untouched and
-  unstaged throughout.
+- #383 will add `error.stage` (`connect`/`send`/`read`) and the holder timeout;
+  the #379 wrapper and the post-wire stage preservation are ready for it.
+- `scripts/kaola-acp-holder.py` is in the operator restart set, so a running
+  holder keeps the old busy word until it restarts; `scripts/kaola-acp.py` is
+  the per-call CLI and takes effect with installation.
+- No release, tag, publish, or install is part of this finalization.
 
-Final readiness: ready. Merge sink to `main`, close #212 with the
-upstream-UNRESOLVED statement, archive, then remove the run worktree and
-branch. No release, tag, or install.
+Final readiness: ready. Merge sink to `main`, close #379 with the requested
+comment, archive the run, and remove the run worktree and branch. No release,
+tag, or install.
