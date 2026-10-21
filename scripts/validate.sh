@@ -317,6 +317,7 @@ python_suites_all=(
   "test-issue-354-state-bloat.py"
   "test-issue-372-stale-collect-retire.py"
   "test-issue-362-versionless-retire.py"
+  "test-issue-395-alert-direct-retire.py"
   "test-issue-267-rejection-count.py"
   "test-issue-268-selection-continuity.py"
   "test-issue-273-list-identity.py"
@@ -524,6 +525,7 @@ python_suites_b=(
   "test-issue-377-runner-fallback.py"
   "test-issue-289-dead-holder-stop.py"
   "test-issue-362-versionless-retire.py"
+  "test-issue-395-alert-direct-retire.py"
   "test-issue-359-record-loss.py")
 
 # Selectable shell contract suites: they run serially before the Python lanes.

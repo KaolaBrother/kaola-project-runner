@@ -5770,11 +5770,45 @@ def migrate_command(args: argparse.Namespace) -> str:
                        "--file", str(args.file)])
 
 
-def versionless_recovery(args: argparse.Namespace) -> str:
-    """The documented repair for a record that predates record revisions (#362)."""
-    return (f"{migrate_command(args)} is the read-only plan whose removed list names each "
-            "record assigned rev 1; rerun it with --write, then `state check` shows the "
-            "record's rev and the normal command applies")
+def direct_retire_candidate(kind: Any, record: Any) -> bool:
+    """Issue #395's narrow shape: a resolved alert before record revisions.
+
+    ``inputs`` is an empty object, so the alert has no outstanding input. Only
+    this shape may retire with ``--expect-rev 0``; a missing, null, non-object,
+    or non-empty ``inputs`` stays on the migrate route.
+    """
+    return (kind == "alerts" and isinstance(record, dict)
+            and record_versionless(record)
+            and isinstance(record.get("inputs"), dict)
+            and not record.get("inputs"))
+
+
+def direct_retire_requested(args: argparse.Namespace, kind: Any, record: Any) -> bool:
+    """The narrow path is explicit: ``--expect-rev 0`` and non-empty evidence."""
+    evidence = getattr(args, "evidence", None)
+    return (direct_retire_candidate(kind, record)
+            and getattr(args, "expect_rev", None) == 0
+            and isinstance(evidence, str) and bool(evidence.strip()))
+
+
+def versionless_recovery(args: argparse.Namespace, record: Any = None) -> str:
+    """The documented repair for a record that predates record revisions (#362).
+
+    Issue #395 adds one direct exit: a resolved alert (empty ``inputs``) retires
+    with ``--expect-rev 0`` and evidence without a migration. Every other
+    versionless record still needs the migrate plan.
+    """
+    migrate = (f"{migrate_command(args)} is the read-only plan whose removed list names each "
+               "record assigned rev 1; rerun it with --write, then `state check` shows the "
+               "record's rev and the normal command applies")
+    kind = getattr(args, "kind", None)
+    ident = getattr(args, "id", None)
+    if (direct_retire_candidate(kind, record) and isinstance(ident, str) and ident):
+        direct = retire_command(args, kind, ident, record)
+        return (f"This alert is resolved (inputs is an empty object) but predates record "
+                f"revisions, so it can retire directly with: {direct}. For any other write, "
+                f"{migrate}.")
+    return migrate
 
 
 def record_recovery(args: argparse.Namespace, doc: dict[str, Any], current: dict[str, Any] | None) -> str:
@@ -5782,10 +5816,10 @@ def record_recovery(args: argparse.Namespace, doc: dict[str, Any], current: dict
     target = f"{args.kind}/{args.id}"
     if current is not None and record_versionless(current):
         return (f"{target} exists at file revision {doc['revision']} but predates record "
-                f"revisions (rev {current.get('rev')!r}); no --expect-rev value can name it. "
-                f"{versionless_recovery(args)}. If the matter is unresolved, retain its "
-                "original evidence and use the current decision/reconciliation route until "
-                "its proper type is established. Unknown is not resolved.")
+                f"revisions (rev {current.get('rev')!r}). {versionless_recovery(args, current)}. "
+                "If the matter is unresolved, retain its original evidence and use the current "
+                "decision/reconciliation route until its proper type is established. "
+                "Unknown is not resolved.")
     if current is None:
         text = (f"{target} is absent at file revision {doc['revision']}. Do not create a handled or "
                 "inapplicable row or move its text to another field. ")
@@ -6259,7 +6293,7 @@ def settle_recovery(args: argparse.Namespace, doc: dict[str, Any], current: dict
     last = maintenance.get("last_checkpoint") if isinstance(maintenance.get("last_checkpoint"), dict) else {}
     span = last.get("host_revision") or {}
     if record_versionless(current):
-        command = f"{versionless_recovery(args)}; the same update then removes the input"
+        command = f"{versionless_recovery(args, current)}; the same update then removes the input"
     else:
         command = shlex.join([sys.executable, str(Path(__file__).resolve()), "state", "update",
                               "--file", str(args.file), "--writer", args.writer, "--source", "ORIGINAL_SOURCE",
@@ -6296,7 +6330,7 @@ def settle_inputs(args: argparse.Namespace, doc: dict[str, Any], current: dict[s
         raise StateRefusal("record-versionless",
                            f"alerts/{args.id} predates record revisions (rev "
                            f"{current.get('rev')!r}); no --expect-rev value can name it",
-                           recovery=versionless_recovery(args), unapplied=patch)
+                           recovery=versionless_recovery(args, current), unapplied=patch)
     if args.expect_rev != current.get("rev"):
         raise StateRefusal("expect-rev-required" if args.expect_rev is None else "conflict",
                            f"alerts/{args.id} is at rev {current.get('rev')}, not {args.expect_rev}",
@@ -6410,7 +6444,7 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
             raise StateRefusal("record-versionless",
                                f"{kind}/{record_id} predates record revisions (rev "
                                f"{current.get('rev')!r}); no --expect-rev value can name it",
-                               current=current, recovery=versionless_recovery(args),
+                               current=current, recovery=versionless_recovery(args, current),
                                unapplied=patch)
         if current is not None and expected is None:
             raise StateRefusal("expect-rev-required", f"{kind}/{record_id} exists; pass --expect-rev",
@@ -6824,13 +6858,19 @@ def _index_arguments(args: argparse.Namespace) -> list[str]:
 
 def retire_command(args: argparse.Namespace, kind: str, ident: str, record: dict[str, Any]) -> str:
     """One host retire the operator can run. It rewrites nothing by being built."""
-    if record_versionless(record):
+    if direct_retire_candidate(kind, record):
+        # Issue #395: a resolved alert's empty inputs are the structural proof,
+        # so --expect-rev 0 names it without a migration.
+        expected = 0
+    elif record_versionless(record):
         # Issue #362: the assigned rev follows `state migrate --write`; the
         # read-only plan is the next runnable step.
         return migrate_command(args)
+    else:
+        expected = record.get("rev")
     parts = [sys.executable, str(Path(__file__).resolve()), "state", "retire",
              "--file", str(args.file), "--writer", "host", "--source", "ORIGINAL_SOURCE",
-             "--kind", kind, "--id", str(ident), "--expect-rev", str(record.get("rev")),
+             "--kind", kind, "--id", str(ident), "--expect-rev", str(expected),
              "--evidence", _handled_evidence(args, record)]
     cite = _cite_argument(args, kind, record)
     if cite:
@@ -7356,20 +7396,29 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
         raise StateRefusal("invalid-input", f"kind must be one of {', '.join(RECORD_KINDS)}")
     if getattr(args, "absent", False):
         return retire_absent_decision(args, doc)
-    current = state.get(kind, {}).get(record_id)
+    current = state.get(kind, {}).get(record_id) if isinstance(state.get(kind), dict) else None
     if current is None:
         raise StateRefusal("record-missing", f"{kind}/{record_id} is not current",
                            recovery=record_recovery(args, doc, current))
-    if record_versionless(current):
-        raise StateRefusal("record-versionless",
-                           f"{kind}/{record_id} predates record revisions (rev "
-                           f"{current.get('rev')!r}); no --expect-rev value can name it",
-                           current=current, recovery=versionless_recovery(args))
-    if args.expect_rev is None:
-        raise StateRefusal("expect-rev-required", "retire needs --expect-rev of the current record")
-    if args.expect_rev != current.get("rev"):
-        raise StateRefusal("conflict", f"{kind}/{record_id} is at rev {current.get('rev')}, not "
-                           f"{args.expect_rev}", current=current)
+    if not isinstance(current, dict):
+        raise StateRefusal("state-unreadable",
+                           f"{kind}/{record_id} is not a record object; the file was not changed",
+                           current=current)
+    direct = direct_retire_requested(args, kind, current)
+    if not direct and record_versionless(current):
+        detail = (f"{kind}/{record_id} predates record revisions (rev "
+                  f"{current.get('rev')!r})")
+        detail += ("; a resolved alert retires directly with --expect-rev 0 and --evidence"
+                   if direct_retire_candidate(kind, current)
+                   else "; no --expect-rev value can name it")
+        raise StateRefusal("record-versionless", detail,
+                           recovery=versionless_recovery(args, current))
+    if not direct:
+        if args.expect_rev is None:
+            raise StateRefusal("expect-rev-required", "retire needs --expect-rev of the current record")
+        if args.expect_rev != current.get("rev"):
+            raise StateRefusal("conflict", f"{kind}/{record_id} is at rev {current.get('rev')}, not "
+                               f"{args.expect_rev}", current=current)
     if not args.evidence:
         raise StateRefusal("evidence-required", "retirement names the evidence that ends the duty",
                            recovery=record_recovery(args, doc, current))
@@ -7463,6 +7512,7 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
             )
     stone = {"kind": kind, "id": record_id, "outcome": args.outcome or current.get("stage") or "resolved",
              "at": observed_at(),
+             **({"evidence": args.evidence} if direct else {}),
              **({"reconciled_dispatch": args._reconciled_dispatch}
                 if getattr(args, "_reconciled_dispatch", None) else {}),
              **({"cite": cite} if cite else {}),

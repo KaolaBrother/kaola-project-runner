@@ -9,6 +9,11 @@ resolved legacy alert could never leave the file or the Host view. The
 documented repair is ``state migrate`` (read-only plan, then ``--write``):
 it assigns ``rev 1`` to each pre-revision record, and every normal gate
 then applies unchanged. Unresolved records stay refused.
+
+Issue #395 narrows this: an ``alerts`` row whose ``inputs`` is an empty
+object (structurally resolved) retires directly with explicit
+``--expect-rev 0`` and non-empty ``--evidence``; every other versionless
+record still takes the migration.
 """
 from __future__ import annotations
 
@@ -122,60 +127,76 @@ class VersionlessRecords(unittest.TestCase):
             self.assertEqual(rows[ident]["class"], "resolved")
             self.assertIsNone(rows[ident]["rev"])
             self.assertGreater(rows[ident]["bytes"], 2000)
-            # The emitted next step is the migrate plan, never a command with
-            # a literal --expect-rev None.
+            # Issue #395: a resolved alert with empty inputs emits the direct
+            # retire command, never a literal --expect-rev None.
             self.assertIn("state", rows[ident]["command"])
-            self.assertIn("migrate", rows[ident]["command"])
-            self.assertNotIn("--expect-rev", rows[ident]["command"])
+            self.assertIn("retire", rows[ident]["command"])
+            self.assertIn("--expect-rev 0", rows[ident]["command"])
+            self.assertIn("--evidence", rows[ident]["command"])
+            self.assertNotIn("migrate", rows[ident]["command"])
+            self.assertNotIn("--expect-rev None", rows[ident]["command"])
+        view_before = self.host_view_bytes()
 
-        # Every --expect-rev path refuses a pre-revision record and names the
-        # documented migrate repair.
-        for extra in ([], ["--expect-rev", "0"]):
-            code, out = self.retire("alerts", ALERT_IDS[0], *extra)
-            self.assertEqual((code, out.get("reason")), (2, "record-versionless"), out)
-            self.assertIn("state", out["recovery"])
-            self.assertIn("migrate", out["recovery"])
-            self.assertIn("--write", out["recovery"])
+        # Without the explicit zero, the record-versionless refusal stays and
+        # names both exits: direct retire for this shape, migrate otherwise.
+        code, out = self.retire("alerts", ALERT_IDS[0])
+        self.assertEqual((code, out.get("reason")), (2, "record-versionless"), out)
+        self.assertIn("retire", out["recovery"])
+        self.assertIn("--expect-rev 0", out["recovery"])
+        self.assertIn("migrate", out["recovery"])
+        self.assertIn("--write", out["recovery"])
+
+        # Issue #395 direct exit: explicit --expect-rev 0 plus evidence removes
+        # the resolved alert without assigning a revision; the receipt keeps
+        # the evidence instead of silently dropping it with the row.
+        code, out = self.retire("alerts", ALERT_IDS[0], "--expect-rev", "0")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["value"]["kind"], "alerts")
+        self.assertEqual(out["value"]["id"], ALERT_IDS[0])
+        self.assertEqual(out["value"]["evidence"], "original handled evidence")
+        doc = self.doc()
+        self.assertNotIn(ALERT_IDS[0], doc["state"].get("alerts") or {})
+        self.assertEqual(set(doc["state"].get("alerts") or {}), {ALERT_IDS[1]})
+
+        # The remaining row still refuses update and the returned-input settle;
+        # both require the migration.
         code, out = run(["state", "update", "--file", str(self.file), "--writer", "host",
-                         "--source", "evt", "--kind", "alerts", "--id", ALERT_IDS[0],
+                         "--source", "evt", "--kind", "alerts", "--id", ALERT_IDS[1],
                          "--expect-rev", "0", "--set", json.dumps({"summary": "x"})])
         self.assertEqual((code, out.get("reason")), (2, "record-versionless"), out)
         self.assertIn("migrate", out["recovery"])
         code, out = run(["state", "update", "--file", str(self.file), "--writer", "host",
-                         "--source", "evt", "--kind", "alerts", "--id", ALERT_IDS[0],
+                         "--source", "evt", "--kind", "alerts", "--id", ALERT_IDS[1],
                          "--expect-rev", "0", "--set", json.dumps({"inputs": {"any": None}})])
         self.assertEqual((code, out.get("reason")), (2, "record-versionless"), out)
 
-        # The read-only plan names each assigned revision and writes nothing.
+        # The read-only plan names the remaining assigned revision and writes
+        # nothing.
         before_bytes = self.file.read_bytes()
         code, out = run(["state", "migrate", "--file", str(self.file)])
         self.assertEqual(code, 0, out)
         self.assertEqual(out["result"], "planned", out)
         self.assertFalse(out["writes"])
         removed = out["report"]["removed"]
-        for ident in ALERT_IDS:
-            self.assertIn(f"alerts.{ident}.rev assigned 1 (pre-revision record)", removed)
+        self.assertIn(f"alerts.{ALERT_IDS[1]}.rev assigned 1 (pre-revision record)", removed)
+        self.assertNotIn(f"alerts.{ALERT_IDS[0]}.rev assigned 1 (pre-revision record)", removed)
         self.assertEqual(self.file.read_bytes(), before_bytes)
 
-        # --write assigns the first revision; the records stay current rows.
+        # --write assigns the first revision; the remaining row stays current.
         code, out = run(["state", "migrate", "--file", str(self.file), "--write"])
         self.assertEqual(code, 0, out)
         self.assertEqual(out["result"], "migrated", out)
         doc = self.doc()
-        for ident in ALERT_IDS:
-            self.assertEqual(doc["state"]["alerts"][ident]["rev"], 1, ident)
-            self.assertTrue(doc["state"]["alerts"][ident]["inputs"] == {})
+        self.assertEqual(doc["state"]["alerts"][ALERT_IDS[1]]["rev"], 1)
+        self.assertTrue(doc["state"]["alerts"][ALERT_IDS[1]]["inputs"] == {})
 
         # state check now emits a runnable retire command at the assigned rev.
         code, out = self.check()
         self.assertEqual(code, 0, out)
         rows = self.bloat_rows(out)
-        view_before = self.host_view_bytes()
-        ran, removed_out = execute(rows[ALERT_IDS[0]]["command"])
-        self.assertIn("--expect-rev 1", rows[ALERT_IDS[0]]["command"])
+        ran, removed_out = execute(rows[ALERT_IDS[1]]["command"])
+        self.assertIn("--expect-rev 1", rows[ALERT_IDS[1]]["command"])
         self.assertEqual(ran, 0, removed_out)
-        code, out = self.retire("alerts", ALERT_IDS[1], "--expect-rev", "1")
-        self.assertEqual(code, 0, out)
 
         doc = self.doc()
         self.assertEqual(doc["state"].get("alerts") or {}, {})
@@ -183,6 +204,22 @@ class VersionlessRecords(unittest.TestCase):
         code, out = self.check()
         self.assertEqual(code, 0, out)
         self.assertFalse(any(ident in self.bloat_rows(out) for ident in ALERT_IDS), out)
+
+    def test_guard_non_alert_versionless_kind_still_refuses_zero(self) -> None:
+        # Issue #395's direct path is alerts-only. A versionless settled
+        # decision still takes the migrate route even at --expect-rev 0.
+        doc = self.doc()
+        doc["state"]["decisions"]["legacy-decision"] = {
+            "owner": "user", "question": "ship?", "status": "settled",
+            "evidence": "owner said yes", "created_at": "2026-09-01T00:00:00Z",
+            "updated_at": "2026-09-02T00:00:00Z", "source": "legacy", "writer": "host"}
+        self.write_doc(doc)
+        before = self.file.read_bytes()
+        code, out = self.retire("decisions", "legacy-decision", "--expect-rev", "0")
+        self.assertEqual((code, out.get("reason")), (2, "record-versionless"), out)
+        self.assertIn("migrate", out["recovery"])
+        self.assertIn("--write", out["recovery"])
+        self.assertEqual(self.file.read_bytes(), before)
 
     def test_guard_unresolved_versionless_records_stay_refused(self) -> None:
         blob = "pending recovery " + "y" * 300

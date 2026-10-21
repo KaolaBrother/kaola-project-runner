@@ -874,11 +874,14 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   [state-format migration](conventions.md#state-format-updates-and-migration).
   On schema `/2`, the report includes `removed`. Each name is a locator.
   A current record written before record revisions carries no usable `rev`, so
-  every `--expect-rev` path (`update`, `retire`, and the returned-input settle)
-  refuses it `record-versionless` and names this migration as the repair; the
-  write assigns `rev 1` (`<kind>.<id>.rev assigned 1` in `removed`), after which
-  the normal command and all its gates apply unchanged. `check` emits the
-  read-only plan as such a row's `command`.
+  `update`, the returned-input settle, and `retire` of a non-alert or
+  unresolved row refuse it `record-versionless` and name this migration as the
+  repair; the write assigns `rev 1` (`<kind>.<id>.rev assigned 1` in `removed`),
+  after which the normal command and all its gates apply unchanged. `check`
+  emits the read-only plan as such a row's `command`. One narrow exception
+  (#395): an `alerts` row whose `inputs` is an empty object (resolved) retires
+  directly with explicit `--expect-rev 0` and non-empty `--evidence`; `check`
+  emits that direct command instead, and the receipt keeps the evidence.
 - `delegator view|update|migrate --file .kaola/delegator-heartbeat.json` is the Delegator file tool.
   `project.user_language` is an optional string. It is the language for Delegator replies to the user.
   A missing key stores no language. The tool does not choose one.
