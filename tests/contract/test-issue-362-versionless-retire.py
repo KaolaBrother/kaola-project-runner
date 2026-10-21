@@ -206,11 +206,13 @@ class VersionlessRecords(unittest.TestCase):
         self.assertFalse(any(ident in self.bloat_rows(out) for ident in ALERT_IDS), out)
 
     def test_guard_non_alert_versionless_kind_still_refuses_zero(self) -> None:
-        # Issue #395's direct path is alerts-only. A versionless settled
-        # decision still takes the migrate route even at --expect-rev 0.
+        # Issue #395's direct path is alerts-only. This decision has the same
+        # empty inputs, missing rev, explicit zero, and evidence as an alert;
+        # only kind differs, so removing the kind guard must turn this red.
         doc = self.doc()
         doc["state"]["decisions"]["legacy-decision"] = {
             "owner": "user", "question": "ship?", "status": "settled",
+            "inputs": {},
             "evidence": "owner said yes", "created_at": "2026-09-01T00:00:00Z",
             "updated_at": "2026-09-02T00:00:00Z", "source": "legacy", "writer": "host"}
         self.write_doc(doc)

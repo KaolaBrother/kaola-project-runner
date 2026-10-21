@@ -147,6 +147,30 @@ class AlertDirectRetire(unittest.TestCase):
         code, out = self.retire("--expect-rev", "0")
         self.assertEqual((code, out.get("reason")), (2, "record-missing"), out)
 
+    def test_nonzero_expect_rev_stays_versionless(self) -> None:
+        # The direct path is exactly --expect-rev 0; every other explicit
+        # value still refuses, even on the otherwise eligible shape.
+        self.plant(legacy_alert(inputs={}))
+        before = self.file.read_bytes()
+        code, out = self.retire("--expect-rev", "1")
+        self.assertEqual((code, out.get("reason")), (2, "record-versionless"), out)
+        self.assertIn("migrate", out["recovery"])
+        self.assertIn(IDENT, self.doc()["state"]["alerts"])
+        self.assertEqual(self.file.read_bytes(), before)
+
+    def test_blank_evidence_stays_versionless(self) -> None:
+        # Evidence must be non-empty after stripping. Empty and whitespace-only
+        # values must not take the direct path or drop the row.
+        for label, evidence in (("empty", ""), ("whitespace", " \t\n")):
+            with self.subTest(label=label):
+                self.plant(legacy_alert(inputs={}))
+                before = self.file.read_bytes()
+                code, out = self.retire("--expect-rev", "0", evidence=evidence)
+                self.assertEqual((code, out.get("reason")), (2, "record-versionless"), out)
+                self.assertIn("migrate", out["recovery"])
+                self.assertIn(IDENT, self.doc()["state"]["alerts"])
+                self.assertEqual(self.file.read_bytes(), before)
+
     def test_unresolved_or_non_dict_inputs_still_take_the_migration(self) -> None:
         for label, inputs in (
             ("non-empty", {"batch:1": {"why": "pending", "evidence": "e"}}),
