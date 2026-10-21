@@ -2229,6 +2229,9 @@ def holder_lost_receipt(args: argparse.Namespace, repo: str,
 
 
 PROMPT_STEER_OPS = frozenset({"prompt", "steer", "steer_interrupt"})
+# Issue #380: the client-supplied message id is accepted only by send/steer,
+# and only while the live holder advertises the admission ledger.
+CLIENT_MESSAGE_ID_FEATURE = "client-message-id/1"
 # Issue #379: these answers prove this request wrote nothing. ``holder-lost`` is
 # in this set only when it carries no stage or the connect stage; a send/read
 # loss may have happened after the frame was written.
@@ -4011,6 +4014,41 @@ def steer_after_turn_refusal(args: argparse.Namespace, directory: Path) -> dict[
                       "message": "this live holder has no delivery-after-turn operation; it would "
                                  "write a concurrent prompt. Nothing was written. Keep ongoing work; "
                                  "adopt a new holder only at a safe restart boundary"}}
+
+
+def client_message_id_unsupported(
+    args: argparse.Namespace, repo: str, directory: Path | None,
+) -> dict[str, Any] | None:
+    """Issue #380: refuse an id a live pre-#380 holder cannot deduplicate.
+
+    A dead holder is left to the ordinary transport path. The refusal is a
+    pre-mutation fact for this request; the recovery route is an idle
+    drain-restart, not a second holder.
+    """
+    if directory is None:
+        return None
+    record = read_record(directory) or {}
+    if not pid_alive(record.get("holder_pid")):
+        return None
+    if CLIENT_MESSAGE_ID_FEATURE in (record.get("holder_features") or []):
+        return None
+    receipt = base_receipt(args, repo)
+    receipt.update({
+        "outcome": "client_message_id_unsupported",
+        "mutation_status": "not_started",
+        "mutation_performed": False,
+        "client_message_id": getattr(args, "client_message_id", None),
+        "holder_instance_id": record.get("holder_instance_id"),
+        "error": {
+            "code": "client-message-id-unsupported",
+            "message": ("this live holder does not advertise client-message-id/1, so it "
+                        "cannot deduplicate a supplied id; nothing was written. Wait "
+                        "until this seat is idle, then drain-restart it. Do not start a "
+                        "second holder"),
+            "holder_instance_id": record.get("holder_instance_id"),
+        },
+    })
+    return receipt
 
 
 def validate_heartbeat_target(target: Any, args: argparse.Namespace, repo: str,
@@ -9347,6 +9385,9 @@ def main() -> int:
     parser.add_argument("--request-id")
     parser.add_argument("--option")
     parser.add_argument("--expected-holder-instance-id")
+    # Issue #380: accepted only by send/steer; other commands refuse it as
+    # invalid-input before any transport work.
+    parser.add_argument("--client-message-id")
     parser.add_argument("--launch-backend", choices=LAUNCH_BACKENDS, default=None,
                         help="holder launch backend: auto (default), direct, launchd or systemd-user")
     parser.add_argument("--key")
@@ -9407,11 +9448,36 @@ def main() -> int:
         die(f"no ACP command for platform {args.platform} (use --command)")
     args.agent_command, args.agent_command_facts = resolve_agent_command(args.agent_command)
 
+    # Issue #380: only send/steer may name one message. Any other command is a
+    # usage refusal before any transport work (preflight included).
+    if args.client_message_id is not None and args.command not in ("send", "steer"):
+        receipt = base_receipt(args, repo)
+        receipt.update({
+            "result": "refused", "reason": "invalid-input",
+            "outcome": "invalid_input",
+            "mutation_status": "not_started", "mutation_performed": False,
+            "client_message_id": args.client_message_id,
+            "error": {
+                "code": "invalid-input",
+                "message": "--client-message-id is accepted only by send and steer",
+            },
+        })
+        _emit_receipt(receipt)
+        return 1
+
     if args.command == "preflight":
         receipt = command_preflight(args, repo)
         _emit_receipt(receipt)
         return 0
     directory = record_dir(args, repo) if args.session else None
+    if args.client_message_id is not None:
+        # A live holder that predates the feature refuses the id rather than
+        # silently opening a duplicate turn. A dead holder keeps its ordinary
+        # transport answer.
+        refused = client_message_id_unsupported(args, repo, directory)
+        if refused is not None:
+            _emit_receipt(refused)
+            return 0
     if args.command == "start":
         receipt = command_start(args, repo)
         # Issue #313: advisory only. Every issue_name value still returns the
@@ -9452,6 +9518,8 @@ def main() -> int:
         wait_selection, bound_holder_id = resolve_send_wait(args, repo, directory)
         prompt_params = {"text": text, "wait": wait_selection["wait"], "timeout": timeout,
                          "max_final_chars": args.max_final_chars}
+        if args.client_message_id is not None:
+            prompt_params["client_message_id"] = args.client_message_id
         if args.expected_holder_instance_id is not None:
             prompt_params["expected_holder_instance_id"] = args.expected_holder_instance_id
         elif bound_holder_id is not None:
@@ -9494,9 +9562,18 @@ def main() -> int:
             # Composite: cancel the running turn, confirm it stopped, then send
             # the text once as the next turn on the SAME session. The Agent asked
             # for this by name; the Runner never selects it on its own.
+            interrupt_params: dict[str, Any] = {
+                "text": text, "timeout": timeout,
+                "cancel_timeout": args.cancel_timeout,
+            }
+            if args.client_message_id is not None:
+                interrupt_params["client_message_id"] = args.client_message_id
+            if args.expected_holder_instance_id is not None:
+                interrupt_params["expected_holder_instance_id"] = (
+                    args.expected_holder_instance_id)
             receipt = op_or_holder_lost(
                 args, repo, directory, "steer_interrupt",
-                {"text": text, "timeout": timeout, "cancel_timeout": args.cancel_timeout},
+                interrupt_params,
                 sock_timeout,
             )
             receipt.setdefault("native_steering", native_steering)
@@ -9532,6 +9609,8 @@ def main() -> int:
                     ),
                 },
             })
+            if args.client_message_id is not None:
+                receipt["client_message_id"] = args.client_message_id
         elif not method:
             # `--steer-mode native` on a platform that has no native entry.
             receipt = base_receipt(args, repo)
@@ -9556,13 +9635,27 @@ def main() -> int:
                     ),
                 },
             })
+            if args.client_message_id is not None:
+                receipt["client_message_id"] = args.client_message_id
         else:
             delivery = args.delivery or args.manifest.get("steering_delivery", "native")
             refusal = steer_after_turn_refusal(args, directory)
+            if refusal is not None and args.client_message_id is not None:
+                refusal["client_message_id"] = args.client_message_id
+            steer_params: dict[str, Any] = {
+                "text": text, "method": method, "timeout": timeout,
+                "delivery": delivery,
+            }
+            if args.client_message_id is not None:
+                steer_params["client_message_id"] = args.client_message_id
+            if args.expected_holder_instance_id is not None:
+                # Issue #380: only an explicitly supplied binding is forwarded;
+                # a normal steer remains unbound.
+                steer_params["expected_holder_instance_id"] = (
+                    args.expected_holder_instance_id)
             receipt = refusal if refusal is not None else op_or_holder_lost(
                 args, repo, directory, "steer",
-                {"text": text, "method": method, "timeout": timeout,
-                 "delivery": delivery},
+                steer_params,
                 sock_timeout,
             )
             receipt.setdefault("native_steering", native_steering)

@@ -356,7 +356,13 @@ HEARTBEAT_STATE_FILE_MAX_BYTES = 1048576
 HEARTBEAT_STATE_SCHEMA = "kaola-heartbeat-prompt/2"
 HOLDER_FEATURES = ("heartbeat-state/2", "sideagent-relay/1", "preserve-dispatched/1", "steer-after-turn/1",
                    "sideagent-node/1", "project-compact-notice/1", "host-compact-maintenance/1",
-                   "sideagent-sweep/1")
+                   "sideagent-sweep/1", "client-message-id/1")
+# Issue #380: a client may name one send/steer so a resend after a lost
+# receipt replays the original admission instead of opening a second turn.
+# The ledger is process-local and bounded; an evicted id is admitted again as
+# a new message.
+CLIENT_MESSAGE_ID_MAX_BYTES = 200
+CLIENT_MESSAGE_ID_LEDGER_MAX = 64
 # Issue #255 node mode: the Host carrier starts one fresh maintenance node per
 # batch from the binding's exact Runner argv (never a shell string), and
 # exact-stops it after its turn end. Bounds on that one start and stop only.
@@ -2157,20 +2163,26 @@ class ViewProjection:
         # until a tool call, a new prompt, or turn end closes it.
         self._open_message: dict[str, Any] | None = None
 
-    def add_user_from_prompt(self, text: str, cursor: int, started_at: float | None = None) -> None:
+    def add_user_from_prompt(self, text: str, cursor: int, started_at: float | None = None,
+                             client_message_id: str | None = None) -> None:
         """The prompt opens a turn. Its message has no event-log line, so no ``received_at``."""
         with self.lock:
             self._prompt_texts.append(text)
             self._open_message = None
-            self._add_message_locked("user", text, None, cursor, None)
-            self.turns.append({
+            self._add_message_locked("user", text, None, cursor, None, client_message_id)
+            turn: dict[str, Any] = {
                 "started_at": started_at,
                 "ended_at": None,
                 "outcome": None,
                 "stop_reason": None,
                 "start_cursor": cursor,
                 "end_cursor": None,
-            })
+            }
+            # Issue #380: a client-supplied id is echoed only when one was
+            # supplied; an older client's view keeps its exact previous shape.
+            if client_message_id is not None:
+                turn["clientMessageId"] = client_message_id
+            self.turns.append(turn)
             if len(self.turns) > TIMELINE_MAX:
                 del self.turns[: len(self.turns) - TIMELINE_MAX]
                 self.turns_dropped = True
@@ -2296,7 +2308,7 @@ class ViewProjection:
 
     def _add_message_locked(
         self, role: str, text: str, message_id: str | None, cursor: int,
-        received_at: float | None,
+        received_at: float | None, client_message_id: str | None = None,
     ) -> None:
         if message_id is not None:
             for message in reversed(self.messages):
@@ -2321,6 +2333,8 @@ class ViewProjection:
             "cursor": cursor,
             "received_at": received_at,
         }
+        if client_message_id is not None:
+            message["clientMessageId"] = client_message_id
         self.messages.append(message)
         self._open_message = message
         if len(self.messages) > TIMELINE_MAX:
@@ -2646,6 +2660,11 @@ class Holder:
         except (OSError, ValueError):
             previous_record = {}
         self.last_prompt: dict[str, Any] = previous_record.get("last_prompt") or {}
+        # Issue #380: one in-memory FIFO admission ledger, guarded by
+        # ``self.lock``. It is deliberately not persisted: a holder restart
+        # cannot replay the original receipt, and ``last_prompt`` only answers
+        # the narrow same-id/same-text restart case.
+        self.client_message_ledger: list[dict[str, Any]] = []
         self.fatal_error: dict[str, Any] | None = None
         # Issue #335: last settled turn's provider-error summary, or None when
         # that turn did not fail. Cleared on the next non-failed terminal
@@ -4086,6 +4105,10 @@ class Holder:
                     "mutation_status": "in_progress",
                     "stop_reason": None,
                 }
+                # A continuation is still that same last prompt for the restart
+                # check; it adds no new client id of its own.
+                if previous.get("client_message_id") is not None:
+                    self.last_prompt["client_message_id"] = previous["client_message_id"]
                 self._note_delegator_working_again()
                 start_cursor = self.events.append(
                     {"kind": "turn_started", "prompt_source": "self", "agent_initiated": True},
@@ -4319,6 +4342,10 @@ class Holder:
             "mutation_status": turn["mutation_status"],
             "stop_reason": turn["stop_reason"],
         }
+        # Issue #380: the client id belongs to this prompt's lifetime; keep it
+        # on the record so a post-restart resend can be recognized.
+        if turn.get("client_message_id") is not None:
+            self.last_prompt["client_message_id"] = turn["client_message_id"]
         self.write_record()
         self.fanout_follow_delta()
         with self.turn_cond:
@@ -4358,6 +4385,8 @@ class Holder:
                 "mutation_status": turn["mutation_status"],
                 "stop_reason": None,
             }
+            if turn.get("client_message_id") is not None:
+                self.last_prompt["client_message_id"] = turn["client_message_id"]
         for key, entry in list(self.pending_permissions.items()):
             self.pending_permissions.pop(key, None)
         self.projection.close_message()
@@ -4556,6 +4585,26 @@ class Holder:
             expected = params.get("expected_holder_instance_id")
             if expected is not None and expected != self.holder_instance_id:
                 return self._holder_instance_mismatch("prompt", expected)
+            text = params.get("text") or ""
+            fingerprint = "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+            client_message_id, id_refusal = self._client_message_id_param(params)
+            if id_refusal is not None:
+                return id_refusal
+            # Issue #380: a holder-internal follow-up already owns a ledger
+            # entry for this id (the steer it completes); it only attaches the
+            # id to the new prompt row/turn and never re-registers.
+            registered_elsewhere = bool(params.get("_client_message_id_registered"))
+            if client_message_id is not None and not registered_elsewhere:
+                replay, conflict = self._client_message_verdict_locked(
+                    client_message_id, "prompt", fingerprint)
+                if replay is not None:
+                    return replay
+                if conflict is not None:
+                    return conflict
+                restart = self._client_message_restart_unknown(
+                    client_message_id, fingerprint)
+                if restart is not None:
+                    return restart
             if self.stop_requested:
                 return {"outcome": "stopping", "mutation_status": "not_started",
                         "mutation_performed": False,
@@ -4586,11 +4635,9 @@ class Holder:
                         "outcome": "refused_busy", "mutation_performed": False,
                         "active_turn_request_id": self.turn.get("request_id"),
                         "mutation_status": self.turn["mutation_status"]}
-            text = params.get("text") or ""
             # Read before anything is written: every event this turn produces
             # has a cursor strictly greater than this one.
             dispatch_cursor = self.events.cursor
-            fingerprint = "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
             previous = self.last_prompt or {}
             self.turn = self._empty_turn()
             source = params.get("_prompt_source")
@@ -4638,12 +4685,18 @@ class Holder:
                     "stop_reason": None,
                 }
                 self.write_record()
-                return {"outcome": "turn_failed", "mutation_status": "not_started",
-                        "mutation_performed": False,
-                        "error": {"code": "acp-write-failed", "message": "prompt frame was not written"}}
+                failed = {"outcome": "turn_failed", "mutation_status": "not_started",
+                          "mutation_performed": False,
+                          "error": {"code": "acp-write-failed",
+                                    "message": "prompt frame was not written"}}
+                if client_message_id is not None:
+                    failed["client_message_id"] = client_message_id
+                return failed
             self.turn["request_id"] = request_id
             self.turn["written_at"] = round(time.time(), 3)
             self.turn["mutation_status"] = "in_progress"
+            if client_message_id is not None:
+                self.turn["client_message_id"] = client_message_id
             self.last_prompt = {
                 "fingerprint": fingerprint,
                 "written_at": self.turn["written_at"],
@@ -4651,7 +4704,25 @@ class Holder:
                 "mutation_status": "in_progress",
                 "stop_reason": None,
             }
-            self.projection.add_user_from_prompt(text, self.events.cursor, self.turn["written_at"])
+            admission_receipt = {
+                "outcome": "in_progress", "mutation_status": "in_progress",
+                "mutation_performed": True, "prompt_fingerprint": fingerprint,
+                "duplicate_warning": duplicate, "acp_session_id": self.acp_session_id,
+                # Issue #65: this id comes from THIS call's admission, under
+                # the lock. Reading `self.turn` afterwards can pick up a turn
+                # someone else started.
+                "turn_request_id": request_id,
+                "dispatch_event_cursor": dispatch_cursor,
+                "event_cursor": self.events.cursor,
+            }
+            if client_message_id is not None:
+                self.last_prompt["client_message_id"] = client_message_id
+                admission_receipt["client_message_id"] = client_message_id
+                if not registered_elsewhere:
+                    self._client_message_register_locked(
+                        client_message_id, "prompt", fingerprint, admission_receipt)
+            self.projection.add_user_from_prompt(
+                text, self.events.cursor, self.turn["written_at"], client_message_id)
             self.write_record()
 
         threading.Thread(
@@ -4666,15 +4737,7 @@ class Holder:
             # which is after the reply, so `capture --since <event_cursor>` would
             # skip the very reply being accepted. This cursor precedes the
             # turn's own output and is the correct `--since` value.
-            return {"outcome": "in_progress", "mutation_status": "in_progress",
-                    "mutation_performed": True, "prompt_fingerprint": fingerprint,
-                    "duplicate_warning": duplicate, "acp_session_id": self.acp_session_id,
-                    # Issue #65: this id comes from THIS call's admission, under
-                    # the lock. Reading `self.turn` afterwards can pick up a turn
-                    # someone else started.
-                    "turn_request_id": request_id,
-                    "dispatch_event_cursor": dispatch_cursor,
-                    "event_cursor": self.events.cursor}
+            return admission_receipt
         # Issue #317: this caller is still waiting on the send. The all-ended
         # wake waits until the caller has left (return, timeout, or a failed
         # reply write on the way out).
@@ -4690,13 +4753,18 @@ class Holder:
                     if deadline and time.monotonic() >= deadline and self.turn["active"]:
                         break
             if self.turn["active"]:
-                return {**self.turn_receipt(max_final_chars=max_chars),
-                        "outcome": "prompt_timeout",
-                        "dispatch_event_cursor": dispatch_cursor,
-                        "duplicate_warning": duplicate}
+                receipt = {**self.turn_receipt(max_final_chars=max_chars),
+                           "outcome": "prompt_timeout",
+                           "dispatch_event_cursor": dispatch_cursor,
+                           "duplicate_warning": duplicate}
+                if client_message_id is not None:
+                    receipt["client_message_id"] = client_message_id
+                return receipt
             receipt = self.turn_receipt(max_final_chars=max_chars)
             receipt["duplicate_warning"] = duplicate
             receipt["dispatch_event_cursor"] = dispatch_cursor
+            if client_message_id is not None:
+                receipt["client_message_id"] = client_message_id
             return receipt
         finally:
             self._leave_send_waiter()
@@ -4767,6 +4835,8 @@ class Holder:
                 "mutation_status": "completed",
                 "stop_reason": stop,
             }
+            if previous.get("client_message_id") is not None:
+                self.last_prompt["client_message_id"] = previous["client_message_id"]
             self.write_record()
         self.fanout_follow_delta()
         with self.turn_cond:
@@ -7974,6 +8044,184 @@ class Holder:
             for key in list(self.pending_permissions):
                 self._settle_pending_permission_locked(key, "cancelled")
 
+    def _client_message_id_param(
+        self, params: dict[str, Any],
+    ) -> tuple[str | None, dict[str, Any] | None]:
+        """Issue #380: validate one optional client-supplied message id.
+
+        Absent means the legacy path and changes nothing. Present but empty or
+        invalid is a clean no-write refusal. The holder is authoritative; the
+        CLI only gates which command may carry the flag.
+        """
+        if "client_message_id" not in params:
+            return None, None
+        raw = params.get("client_message_id")
+        if raw is None or raw == "":
+            return None, {
+                "outcome": "client_message_id_rejected",
+                "mutation_status": "not_started",
+                "mutation_performed": False,
+                "client_message_id": "",
+                "error": {"code": "client-message-id-empty",
+                          "message": "client_message_id must be a non-empty string"},
+            }
+        if not isinstance(raw, str):
+            return None, {
+                "outcome": "client_message_id_rejected",
+                "mutation_status": "not_started",
+                "mutation_performed": False,
+                "error": {"code": "client-message-id-invalid",
+                          "message": "client_message_id must be a string"},
+            }
+        try:
+            encoded = raw.encode("utf-8")
+        except UnicodeEncodeError:
+            encoded = b""
+        if (not encoded or len(encoded) > CLIENT_MESSAGE_ID_MAX_BYTES
+                or any(ord(ch) < 0x20 or 0x7F <= ord(ch) <= 0x9F for ch in raw)):
+            return None, {
+                "outcome": "client_message_id_rejected",
+                "mutation_status": "not_started",
+                "mutation_performed": False,
+                "error": {
+                    "code": "client-message-id-invalid",
+                    "message": (f"client_message_id must be at most "
+                                f"{CLIENT_MESSAGE_ID_MAX_BYTES} UTF-8 bytes with no C0/C1 "
+                                "control characters"),
+                },
+            }
+        return raw, None
+
+    def _client_message_replay_locked(self, entry: dict[str, Any]) -> dict[str, Any]:
+        """Return the original admission receipt with replay markers."""
+        receipt = copy.deepcopy(entry.get("receipt") or {})
+        receipt.update({
+            "idempotent_replay": True,
+            # Prompt and native steer receipts name the turn they bound to; the
+            # composite names the new turn it opened.
+            "replay_of_turn_request_id": (receipt.get("turn_request_id")
+                                          or receipt.get("new_turn_request_id")),
+            "holder_instance_id": self.holder_instance_id,
+            "client_message_id": entry["client_message_id"],
+        })
+        return receipt
+
+    def _client_message_conflict_locked(
+        self, client_message_id: str, op: str, fingerprint: str,
+        entry: dict[str, Any],
+    ) -> dict[str, Any]:
+        return {
+            "outcome": "client_message_id_conflict",
+            "mutation_status": "not_started",
+            "mutation_performed": False,
+            "client_message_id": client_message_id,
+            "conflicting_op": entry.get("op"),
+            "conflicting_text_matches": entry.get("fingerprint") == fingerprint,
+            "conflicting_acp_session_matches": (
+                entry.get("acp_session_id") == self.acp_session_id),
+            "holder_instance_id": self.holder_instance_id,
+            "error": {
+                "code": "client-message-id-conflict",
+                "message": ("this client_message_id is already bound to a different op, "
+                            "text or ACP session; nothing was written - use a new id for "
+                            "a different message"),
+                "holder_instance_id": self.holder_instance_id,
+                "conflicting_op": entry.get("op"),
+            },
+        }
+
+    def _client_message_verdict_locked(
+        self, client_message_id: str, op: str, fingerprint: str,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+        """Look up one id under ``self.lock``: replay, conflict, or no hit."""
+        for entry in self.client_message_ledger:
+            if entry.get("client_message_id") != client_message_id:
+                continue
+            if (entry.get("op") == op
+                    and entry.get("fingerprint") == fingerprint
+                    and entry.get("acp_session_id") == self.acp_session_id
+                    and isinstance(entry.get("receipt"), dict)):
+                return self._client_message_replay_locked(entry), None
+            return None, self._client_message_conflict_locked(
+                client_message_id, op, fingerprint, entry)
+        return None, None
+
+    def _client_message_register_locked(
+        self, client_message_id: str, op: str, fingerprint: str,
+        receipt: dict[str, Any],
+    ) -> None:
+        """Register one successful admission; keep the newest 64 ids.
+
+        Eviction is by admission order: the 65th registration drops the oldest
+        entry, which may then be reused as a new message.
+        """
+        entry = {
+            "client_message_id": client_message_id,
+            "op": op,
+            "fingerprint": fingerprint,
+            "acp_session_id": self.acp_session_id,
+            "holder_instance_id": self.holder_instance_id,
+            "registered_at": round(time.time(), 3),
+            "receipt": copy.deepcopy(receipt),
+        }
+        self.client_message_ledger[:] = [
+            old for old in self.client_message_ledger
+            if old.get("client_message_id") != client_message_id
+        ]
+        self.client_message_ledger.append(entry)
+        if len(self.client_message_ledger) > CLIENT_MESSAGE_ID_LEDGER_MAX:
+            del self.client_message_ledger[
+                : len(self.client_message_ledger) - CLIENT_MESSAGE_ID_LEDGER_MAX
+            ]
+
+    def _client_message_withdraw_locked(
+        self, client_message_id: str, op: str, fingerprint: str,
+    ) -> None:
+        """Drop a reservation whose operation proved a clean no-write."""
+        self.client_message_ledger[:] = [
+            entry for entry in self.client_message_ledger
+            if not (entry.get("client_message_id") == client_message_id
+                    and entry.get("op") == op
+                    and entry.get("fingerprint") == fingerprint)
+        ]
+
+    def _client_message_restart_unknown(
+        self, client_message_id: str, fingerprint: str,
+    ) -> dict[str, Any] | None:
+        """Issue #380: the id was the last prompt before this holder restarted.
+
+        The in-memory ledger is gone, so the original receipt cannot be
+        replayed. Refuse rather than silently opening a duplicate turn; the
+        caller reads status/capture and decides.
+        """
+        last = self.last_prompt if isinstance(self.last_prompt, dict) else {}
+        if (last.get("client_message_id") != client_message_id
+                or last.get("fingerprint") != fingerprint):
+            return None
+        previous = {key: last.get(key) for key in
+                    ("fingerprint", "written_at", "transport", "mutation_status",
+                     "stop_reason") if key in last}
+        previous["client_message_id"] = client_message_id
+        return {
+            "outcome": "client_message_id_restart_unknown",
+            "mutation_status": "not_started",
+            "mutation_performed": False,
+            "client_message_id": client_message_id,
+            "restart_unknown": True,
+            "previous_prompt": previous,
+            "holder_instance_id": self.holder_instance_id,
+            "error": {
+                "code": "client-message-id-restart-unknown",
+                "message": ("this client_message_id and text were the last prompt before "
+                            "this holder restarted; the original receipt is not retained, "
+                            "so the resend was refused rather than admitted again. Read "
+                            "status/capture and decide whether the prior send is enough; "
+                            "use a new id only for a different message"),
+                "holder_instance_id": self.holder_instance_id,
+                "client_message_id": client_message_id,
+            },
+        }
+
     def _holder_instance_mismatch(self, op: str, expected: Any) -> dict[str, Any]:
         self.events.append({"kind": "holder_instance_mismatch", "op": op,
                             "expected_holder_instance_id": expected})
@@ -8038,6 +8286,24 @@ class Holder:
             "steer_text_chars": len(text),
             "steer_fingerprint": "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest(),
         }
+        client_message_id, id_refusal = self._client_message_id_param(params)
+        if id_refusal is not None:
+            return {**base, **id_refusal}
+        if client_message_id is not None:
+            base["client_message_id"] = client_message_id
+        with self.lock:
+            # Issue #380: bind the op to one holder even when the turn is idle;
+            # a mismatch is a pre-write fact for this steer.
+            expected = params.get("expected_holder_instance_id")
+            if expected is not None and expected != self.holder_instance_id:
+                return {**base, **self._holder_instance_mismatch("steer", expected)}
+            if client_message_id is not None:
+                replay, conflict = self._client_message_verdict_locked(
+                    client_message_id, "steer", base["steer_fingerprint"])
+                if replay is not None:
+                    return replay
+                if conflict is not None:
+                    return conflict
         if not method:
             return {**base, "steer_outcome": "unsupported", "steer_consumed": False,
                     "outcome": "steer_unsupported",
@@ -8098,6 +8364,11 @@ class Holder:
                             "expected_holder_instance_id": self.holder_instance_id,
                             "expected_prior_turn_request_id": turn_req_id,
                             "expected_acp_session_id": session_id}
+                        if client_message_id is not None:
+                            # The steer registration owns this id; the prompt it
+                            # becomes only attaches the id to its row/turn.
+                            follow["client_message_id"] = client_message_id
+                            follow["_client_message_id_registered"] = True
                         if self_source:
                             follow["_prompt_source"] = "self"
                         sent = self.op_prompt(follow)
@@ -8126,6 +8397,10 @@ class Holder:
             }
             if extra:
                 queued_receipt.update(extra)
+            if client_message_id is not None:
+                # Caller holds self.lock on both queue paths.
+                self._client_message_register_locked(
+                    client_message_id, "steer", base["steer_fingerprint"], queued_receipt)
             return queued_receipt
 
         with self.lock:
@@ -8183,6 +8458,25 @@ class Holder:
                                 "request_id": steer_request_id,
                                 "turn_request_id": turn_request_id_before,
                                 "fingerprint": base["steer_fingerprint"]})
+            if client_message_id is not None:
+                # Issue #380: the frame is written, but the native answer may
+                # still be pending. Reserve the id now with a conservative
+                # in-flight receipt, so a resend during the wait cannot write a
+                # second steer. A clean no-write outcome withdraws it below.
+                provisional = {
+                    **base, "steer_outcome": "written", "steer_consumed": None,
+                    "steer_confirmation": "write-only",
+                    "outcome": "steer_in_progress",
+                    "steer_request_id": steer_request_id,
+                    "turn_request_id": turn_request_id_before,
+                    "turn_prompt_fingerprint": turn_fingerprint,
+                    "turn_active": True,
+                    "mutation_status": self.turn.get("mutation_status"),
+                    "mutation_performed": None,
+                }
+                self._client_message_register_locked(
+                    client_message_id, "steer", base["steer_fingerprint"],
+                    provisional)
         base["steer_request_id"] = steer_request_id
         base["turn_request_id"] = turn_request_id_before
 
@@ -8373,6 +8667,18 @@ class Holder:
                                 "steer_outcome": outcome,
                                 "steer_consumed": consumed,
                                 "turn_request_id_preserved": receipt["turn_request_id_preserved"]})
+            if client_message_id is not None:
+                if receipt.get("mutation_performed") is not False:
+                    # Issue #380: replace the in-flight reservation with the
+                    # final receipt. True and unknown stay registered; a
+                    # possible write must not be repeated under the same id.
+                    self._client_message_register_locked(
+                        client_message_id, "steer", base["steer_fingerprint"], receipt)
+                else:
+                    # A clean no-write steer is not registered, so the same id
+                    # may be retried once the condition is fixed.
+                    self._client_message_withdraw_locked(
+                        client_message_id, "steer", base["steer_fingerprint"])
         return receipt
 
     def op_steer_interrupt(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -8408,6 +8714,38 @@ class Holder:
             "steer_text_chars": len(text),
             "steer_fingerprint": "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest(),
         }
+        client_message_id, id_refusal = self._client_message_id_param(params)
+        if id_refusal is not None:
+            return {**base, **id_refusal}
+        if client_message_id is not None:
+            base["client_message_id"] = client_message_id
+            with self.lock:
+                replay, conflict = self._client_message_verdict_locked(
+                    client_message_id, "steer_interrupt", base["steer_fingerprint"])
+                if replay is not None:
+                    return replay
+                if conflict is not None:
+                    return conflict
+
+        def finish(receipt: dict[str, Any], *, cancel_sent: bool = False,
+                   prompt_sent: bool = False) -> dict[str, Any]:
+            """Issue #380: keep the reservation only at a mutation point.
+
+            A clean no-write path is retryable, so it withdraws the placeholder
+            and leaves no ledger entry.
+            """
+            if client_message_id is not None:
+                with self.lock:
+                    if cancel_sent or prompt_sent:
+                        self._client_message_register_locked(
+                            client_message_id, "steer_interrupt",
+                            base["steer_fingerprint"], receipt)
+                    else:
+                        self._client_message_withdraw_locked(
+                            client_message_id, "steer_interrupt",
+                            base["steer_fingerprint"])
+            return receipt
+
         if not text.strip():
             return {**base, "steer_outcome": "not_consumed", "steer_consumed": False,
                     "steer_confirmation": "none", "outcome": "steer_rejected",
@@ -8428,7 +8766,34 @@ class Holder:
                     "interrupted": None, "turn_was_active": False,
                     "side_effects_possible": False}
 
+        cancel_sent = False
         with self.lock:
+            # Issue #380: validate the holder identity at the composite's entry,
+            # before any cancel can be written.
+            expected = params.get("expected_holder_instance_id")
+            if expected is not None and expected != self.holder_instance_id:
+                return {**base,
+                        **self._holder_instance_mismatch("steer_interrupt", expected)}
+            if client_message_id is not None:
+                # Re-check under the same lock that admits the reservation. A
+                # clean no-write path below withdraws it; a cancel or prompt
+                # replaces it with the final receipt.
+                replay, conflict = self._client_message_verdict_locked(
+                    client_message_id, "steer_interrupt", base["steer_fingerprint"])
+                if replay is not None:
+                    return replay
+                if conflict is not None:
+                    return conflict
+                provisional = {
+                    **base, "outcome": "steer_interrupt_in_progress",
+                    "interrupted": None, "steer_outcome": "in_progress",
+                    "steer_consumed": None, "steer_confirmation": "none",
+                    "turn_request_id": self.turn.get("request_id"),
+                    "mutation_status": "in_progress", "mutation_performed": None,
+                }
+                self._client_message_register_locked(
+                    client_message_id, "steer_interrupt",
+                    base["steer_fingerprint"], provisional)
             # Hold the turn OBJECT, not just its id: `self.turn` is replaced when
             # a new prompt is admitted, so this is what keeps every later fact
             # bound to the turn the Agent targeted.
@@ -8474,7 +8839,7 @@ class Holder:
             if cancel.get("outcome") == "turn-changed":
                 # The targeted turn was replaced before our cancel could go out.
                 # Sending now would dispatch onto a turn nobody asked to steer.
-                return {**base, "interrupted": None,
+                return finish({**base, "interrupted": None,
                         "steer_outcome": "unknown", "steer_consumed": None,
                         "steer_confirmation": "none", "outcome": "steer_turn_changed",
                         "mutation_status": mutation_after, "mutation_performed": None,
@@ -8485,10 +8850,10 @@ class Holder:
                                              + ("cancelled and " if not cancel_sent else "")
                                              + "the steering text was NOT sent; observe the "
                                                "session and decide again - do not resend blindly",
-                                  "detail": cancel.get("error")}}
+                                  "detail": cancel.get("error")}}, cancel_sent=cancel_sent)
             if not snapshot["is_current"]:
                 # Our turn did stop, but a different one already took the session.
-                return {**base, "interrupted": True,
+                return finish({**base, "interrupted": True,
                         "steer_outcome": "unknown", "steer_consumed": None,
                         "steer_confirmation": "none", "outcome": "steer_turn_changed",
                         "mutation_status": mutation_after, "mutation_performed": None,
@@ -8496,18 +8861,19 @@ class Holder:
                                   "message": "the targeted turn stopped but another turn now owns "
                                              "the session, so the steering text was NOT sent; "
                                              "observe the session and decide again - do not "
-                                             "resend blindly"}}
+                                             "resend blindly"}}, cancel_sent=cancel_sent)
             if still_active or cancel.get("outcome") == "cancel-unconfirmed":
                 # Nothing is sent onto a session whose previous turn may still be
                 # running: that is how a duplicate dispatch happens.
-                return {**base, "interrupted": None,
+                return finish({**base, "interrupted": None,
                         "steer_outcome": "unknown", "steer_consumed": None,
                         "steer_confirmation": "none", "outcome": "steer_cancel_unconfirmed",
                         "mutation_status": mutation_after, "mutation_performed": None,
                         "error": {"code": "steer-cancel-unconfirmed",
                                   "message": "the running turn did not confirm it stopped, so "
                                              "the steering text was NOT sent; verify the turn "
-                                             "with observe before deciding - do not resend blindly"}}
+                                             "with observe before deciding - do not resend blindly"}},
+                        cancel_sent=cancel_sent)
             if not cancel_sent and cancel.get("outcome") == "no-active-turn":
                 # Still our turn, but it finished on its own between the snapshot
                 # and the cancel, so no cancel was ever sent. Claiming an
@@ -8534,7 +8900,16 @@ class Holder:
         # Agent's text verbatim. This send opens a NEW turn; the composite
         # path is not a Host recovery entry (Issue #94) and adds no native
         # Skill entry line - the caller supplies it when wanted.
-        prompt = self.op_prompt({"text": text, "wait": False})
+        follow: dict[str, Any] = {
+            "text": text, "wait": False,
+            "expected_holder_instance_id": self.holder_instance_id,
+        }
+        if client_message_id is not None:
+            # The composite registration owns this id; the prompt row/turn only
+            # attaches it.
+            follow["client_message_id"] = client_message_id
+            follow["_client_message_id_registered"] = True
+        prompt = self.op_prompt(follow)
         base["send_receipt"] = {
             key: prompt.get(key) for key in
             ("outcome", "mutation_status", "prompt_fingerprint",
@@ -8545,17 +8920,18 @@ class Holder:
         if (send_error or {}).get("code") == "prompt-in-progress":
             # A different turn was admitted between the cancel and this send.
             # Nothing was written, and this steer is not that turn's.
-            return {**base, "steer_outcome": "not_consumed", "steer_consumed": False,
+            return finish({**base, "steer_outcome": "not_consumed", "steer_consumed": False,
                     "steer_confirmation": "none", "outcome": "steer_turn_changed",
                     "mutation_performed": False,
                     "current_turn_request_id": prompt.get("active_turn_request_id"),
                     "error": {"code": "steer-turn-changed",
                               "message": "a different turn started before the steering text could "
                                          "be sent, so nothing was sent; observe the session and "
-                                         "decide again - do not resend blindly"}}
+                                         "decide again - do not resend blindly"}},
+                    cancel_sent=cancel_sent)
         if send_error or prompt.get("outcome") != "in_progress":
             failed_cleanly = prompt.get("mutation_status") == "not_started"
-            return {**base,
+            return finish({**base,
                     "steer_outcome": "not_consumed" if failed_cleanly else "unknown",
                     "steer_consumed": False if failed_cleanly else None,
                     "outcome": "steer_send_failed",
@@ -8565,7 +8941,8 @@ class Holder:
                               "message": "the turn was stopped but the steering text was not "
                                          "accepted as the next turn; it was sent once and is "
                                          "not resent here",
-                              "detail": send_error or {"outcome": prompt.get("outcome")}}}
+                              "detail": send_error or {"outcome": prompt.get("outcome")}}},
+                    cancel_sent=cancel_sent, prompt_sent=not failed_cleanly)
 
         # From the send's own atomic admission - not from `self.turn`, which by
         # now may already describe somebody else's turn.
@@ -8591,7 +8968,7 @@ class Holder:
                             "cancelled_turn_request_id": cancelled_request_id,
                             "new_turn_request_id": new_request_id,
                             "fingerprint": base["steer_fingerprint"]})
-        return receipt
+        return finish(receipt, cancel_sent=cancel_sent, prompt_sent=True)
 
     def cancel_turn(self, target: dict[str, Any] | None, timeout: float | None,
                     ) -> tuple[dict[str, Any], bool, dict[str, Any]]:
@@ -9252,10 +9629,12 @@ class Holder:
             return self.op_compact_notice(params)
         if op == "prompt":
             # A socket client must not claim the prompt was holder-internal.
-            # That claim is what suppresses a Delegator wake.
+            # That claim is what suppresses a Delegator wake. Issue #380: the
+            # same applies to the internal "already registered" marker.
             if isinstance(params, dict):
                 params = dict(params)
                 params.pop("_prompt_source", None)
+                params.pop("_client_message_id_registered", None)
             return self.op_prompt(params)
         if op == "steer":
             # Issue #369: a socket client must not claim a holder-internal steer.
@@ -9264,6 +9643,9 @@ class Holder:
                 params.pop("_steer_source", None)
             return self.op_steer(params)
         if op == "steer_interrupt":
+            if isinstance(params, dict):
+                params = dict(params)
+                params.pop("_client_message_id_registered", None)
             return self.op_steer_interrupt(params)
         if op == "wait":
             return self.op_wait(params)
