@@ -2154,10 +2154,15 @@ class ViewProjection:
         self.commands: list[dict[str, Any]] | None = None
         self.usage: dict[str, Any] | None = None
         self.messages_dropped = False
+        # Issue #384: the flags stay for older readers, but disclosure needs
+        # the number of rows this process actually removed, per cap class.
+        self.messages_timeline_dropped = 0
         self.turns: list[dict[str, Any]] = []
         self.turns_dropped = False
+        self.turns_dropped_count = 0
         self.answered_permissions: list[dict[str, Any]] = []
         self.answered_dropped = False
+        self.answered_dropped_count = 0
         self._prompt_texts: list[str] = []
         # The last appended message; chunks without messageId append to it
         # until a tool call, a new prompt, or turn end closes it.
@@ -2196,8 +2201,10 @@ class ViewProjection:
                 turn["clientMessageId"] = client_message_id
             self.turns.append(turn)
             if len(self.turns) > TIMELINE_MAX:
-                del self.turns[: len(self.turns) - TIMELINE_MAX]
+                removed = len(self.turns) - TIMELINE_MAX
+                del self.turns[:removed]
                 self.turns_dropped = True
+                self.turns_dropped_count += removed
 
     def start_agent_turn(self, cursor: int, started_at: float | None = None) -> None:
         """Issue #341: an agent-initiated continuation turn has no user prompt message."""
@@ -2213,8 +2220,10 @@ class ViewProjection:
                 "end_cursor": None,
             })
             if len(self.turns) > TIMELINE_MAX:
-                del self.turns[: len(self.turns) - TIMELINE_MAX]
+                removed = len(self.turns) - TIMELINE_MAX
+                del self.turns[:removed]
                 self.turns_dropped = True
+                self.turns_dropped_count += removed
 
     def end_turn(self, ended_at: float, cursor: int, outcome: Any, stop_reason: Any) -> None:
         with self.lock:
@@ -2231,8 +2240,10 @@ class ViewProjection:
         with self.lock:
             self.answered_permissions.append(answered)
             if len(self.answered_permissions) > TIMELINE_MAX:
-                del self.answered_permissions[: len(self.answered_permissions) - TIMELINE_MAX]
+                removed = len(self.answered_permissions) - TIMELINE_MAX
+                del self.answered_permissions[:removed]
                 self.answered_dropped = True
+                self.answered_dropped_count += removed
 
     def close_message(self) -> None:
         with self.lock:
@@ -2351,8 +2362,10 @@ class ViewProjection:
         self.messages.append(message)
         self._open_message = message
         if len(self.messages) > TIMELINE_MAX:
-            del self.messages[: len(self.messages) - TIMELINE_MAX]
+            removed = len(self.messages) - TIMELINE_MAX
+            del self.messages[:removed]
             self.messages_dropped = True
+            self.messages_timeline_dropped += removed
 
     def _upsert_tool_locked(self, update: dict[str, Any]) -> None:
         tool_id = update.get("toolCallId")
@@ -2388,6 +2401,7 @@ class ViewProjection:
             return copy.deepcopy({
                 "messages": self.messages,
                 "messages_dropped": self.messages_dropped,
+                "messages_timeline_dropped": self.messages_timeline_dropped,
                 "thinking_chars": self.thinking_chars,
                 "thinking_text": self.thinking_text,
                 "thinking_message_id": self.thinking_message_id,
@@ -2398,8 +2412,10 @@ class ViewProjection:
                 "usage": self.usage,
                 "turns": self.turns,
                 "turns_dropped": self.turns_dropped,
+                "turns_dropped_count": self.turns_dropped_count,
                 "answered_permissions": self.answered_permissions,
                 "answered_dropped": self.answered_dropped,
+                "answered_dropped_count": self.answered_dropped_count,
             })
 
 
@@ -2658,6 +2674,12 @@ class Holder:
         self.agent_child_groups: dict[int, dict[int, str]] = {}
         self.swept_child_pgids: list[int] = []
         self.projection = ViewProjection()
+        # Issue #384: the projection is in-memory only. When this process
+        # starts against an existing event log, rows at or before this cursor
+        # belong to an earlier holder process and are not available here.
+        # `None` means no earlier event history existed at construction.
+        self.projection_reset_cursor = (
+            self.events.cursor if self.events.cursor > 0 else None)
         self.followers: list[Follower] = []
         self.followers_lock = threading.Lock()
         self.turn: dict[str, Any] = self._empty_turn()
@@ -9353,11 +9375,6 @@ class Holder:
         tools = proj["tools"]
         tools_truncated = any(tool.get("truncated") for tool in tools)
         messages = proj["messages"]
-        timeline_truncated = bool(proj["messages_dropped"])
-        cursor_gap = False
-        if isinstance(since, int):
-            oldest = self.events.oldest_cursor()
-            cursor_gap = oldest is not None and since < oldest
         pending = []
         for entry in pending_entries:
             pending.append({
@@ -9366,10 +9383,6 @@ class Holder:
                 "tool_call_id": entry.get("tool_call_id"),
                 "options": permission_options_view(entry),
             })
-        truncated = bool(
-            thinking_truncated or tools_truncated or timeline_truncated or cursor_gap
-            or proj["turns_dropped"] or proj["answered_dropped"]
-        )
         payload = {
             "schema": VIEW_SCHEMA,
             "platform": self.args.platform,
@@ -9381,8 +9394,6 @@ class Holder:
             "holder_instance_id": self.holder_instance_id,
             "agent_alive": agent_alive,
             "event_cursor": cursor,
-            "truncated": truncated,
-            "cursor_gap": cursor_gap,
             "messages": messages,
             "thinking": thinking,
             "tools": tools,
@@ -9400,7 +9411,29 @@ class Holder:
         if models is not None:
             payload["models"] = models
         payload["model"] = self._view_model()
-        self._fit_view(payload)
+        # Issue #384: publish the disclosure before the byte cap so its own
+        # bytes participate in the fit; recompute after any message drop.
+        dropped = {"tools": 0, "messages": 0,
+                   "answered_permissions": 0, "turns": 0}
+        disclosure = self._view_truncation(proj, messages, dropped, since)
+        payload.update(disclosure)
+        payload["truncated"] = bool(
+            thinking_truncated or tools_truncated
+            or disclosure["truncated_event_log"] or disclosure["truncated_rows"])
+        for _ in range(6):
+            extra = self._fit_view(payload)
+            if any(extra.values()):
+                dropped = {key: dropped.get(key, 0) + extra.get(key, 0)
+                           for key in set(dropped) | set(extra)}
+                disclosure = self._view_truncation(
+                    proj, payload["messages"], dropped, since)
+                payload.update(disclosure)
+                payload["truncated"] = bool(
+                    payload.get("truncated") or thinking_truncated or tools_truncated
+                    or disclosure["truncated_event_log"]
+                    or disclosure["truncated_rows"])
+            if len(json.dumps(payload, ensure_ascii=False).encode("utf-8")) <= VIEW_BYTES:
+                break
         return payload
 
     def _view_model(self) -> dict[str, Any]:
@@ -9485,11 +9518,18 @@ class Holder:
         return module.view_models(self.session_meta, catalog)
 
     @staticmethod
-    def _fit_view(payload: dict[str, Any]) -> None:
-        """Whole-view cap: drop oldest tools, messages, answers, then turns, until it fits."""
+    def _fit_view(payload: dict[str, Any]) -> dict[str, int]:
+        """Whole-view cap: drop oldest tools, messages, answers, then turns, until it fits.
+
+        Returns the number of rows removed from each class so the caller can
+        disclose the byte-cap drops (Issue #384). Counts describe this call,
+        not the projection's lifetime.
+        """
+        dropped = {"tools": 0, "messages": 0,
+                   "answered_permissions": 0, "turns": 0}
         size = len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
         if size <= VIEW_BYTES:
-            return
+            return dropped
         payload["truncated"] = True
         for key in ("tools", "messages", "answered_permissions", "turns"):
             items = payload[key]
@@ -9499,8 +9539,86 @@ class Holder:
                 drop += 1
             if drop:
                 payload[key] = items[drop:]
+                dropped[key] = drop
             if size <= VIEW_BYTES:
-                return
+                return dropped
+        return dropped
+
+    def _view_truncation(self, proj: dict[str, Any], messages: list[dict[str, Any]],
+                         dropped: dict[str, int], since: int | None) -> dict[str, Any]:
+        """Issue #384: disclose what this view cannot carry, by class.
+
+        The view is still the compacted snapshot, not a delta or a replay. A
+        client must be able to tell an old event-log window (``since`` below
+        the oldest retained event) from missing projection rows (timeline,
+        byte-cap or holder restart), without inferring either from
+        ``truncated`` alone.
+        """
+        timeline_dropped = int(proj.get("messages_timeline_dropped") or 0)
+        bytes_dropped = int(dropped.get("messages") or 0)
+        messages_dropped = timeline_dropped + bytes_dropped
+        earliest = messages[0].get("cursor") if messages else None
+        restart_boundary = self.projection_reset_cursor
+        turns_dropped = (int(proj.get("turns_dropped_count") or 0)
+                         + int(dropped.get("turns") or 0))
+        answered_dropped = (int(proj.get("answered_dropped_count") or 0)
+                            + int(dropped.get("answered_permissions") or 0))
+        tools_dropped = int(dropped.get("tools") or 0)
+        rows_missing = bool(messages_dropped or restart_boundary is not None
+                            or turns_dropped or answered_dropped or tools_dropped)
+        oldest_event = self.events.oldest_cursor()
+        event_gap = bool(isinstance(since, int) and oldest_event is not None
+                         and since < oldest_event)
+        # The earliest cursor this payload can describe completely: a restart
+        # boundary when this process began with an earlier event log, raised
+        # to the oldest surviving row when a cap actually removed rows.
+        projection_floor = restart_boundary
+        if timeline_dropped or bytes_dropped:
+            if earliest is not None:
+                projection_floor = max(projection_floor or 0, int(earliest))
+            elif self.events.cursor > 0:
+                projection_floor = max(projection_floor or 0, self.events.cursor)
+        rows_gap = bool(isinstance(since, int) and projection_floor is not None
+                        and since < projection_floor)
+        reasons: list[str] = []
+        if event_gap:
+            reasons.append("event-log")
+        if rows_gap:
+            reasons.append("rows")
+        return {
+            "messages_dropped": messages_dropped,
+            "earliest_cursor": earliest,
+            "cursor_gap": event_gap or rows_gap,
+            "cursor_gap_reasons": reasons,
+            "truncated_event_log": event_gap,
+            "truncated_rows": rows_missing,
+            "truncation": {
+                "event_log": {
+                    "gap": event_gap,
+                    "reason": "since-below-oldest-event" if event_gap else None,
+                    "oldest_cursor": oldest_event,
+                },
+                "rows": {
+                    "missing": rows_missing,
+                    "reason": "projection-rows-missing" if rows_missing else None,
+                    "messages": {
+                        "kept": len(messages),
+                        "timeline": {"dropped": timeline_dropped,
+                                     "reason": "timeline-cap"},
+                        "bytes": {"dropped": bytes_dropped,
+                                  "reason": "view-bytes"},
+                        "restart": {
+                            "dropped": None if restart_boundary is not None else 0,
+                            "reason": "holder-restart",
+                            "boundary_cursor": restart_boundary,
+                        },
+                    },
+                    "tools": {"dropped": tools_dropped},
+                    "turns": {"dropped": turns_dropped},
+                    "answered_permissions": {"dropped": answered_dropped},
+                },
+            },
+        }
 
     def fanout_follow_delta(self) -> None:
         with self.followers_lock:

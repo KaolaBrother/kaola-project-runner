@@ -10,7 +10,28 @@
   "agent_alive": true,
   "event_cursor": 418,
   "truncated": false,
+  "truncated_event_log": false,
+  "truncated_rows": false,
+  "messages_dropped": 0,
+  "earliest_cursor": 12,
   "cursor_gap": false,
+  "cursor_gap_reasons": [],
+  "truncation": {
+    "event_log": {"gap": false, "reason": null, "oldest_cursor": 1},
+    "rows": {
+      "missing": false,
+      "reason": null,
+      "messages": {
+        "kept": 2,
+        "timeline": {"dropped": 0, "reason": "timeline-cap"},
+        "bytes": {"dropped": 0, "reason": "view-bytes"},
+        "restart": {"dropped": 0, "reason": "holder-restart", "boundary_cursor": null}
+      },
+      "tools": {"dropped": 0},
+      "turns": {"dropped": 0},
+      "answered_permissions": {"dropped": 0}
+    }
+  },
   "messages": [
     {"role": "user", "text": "Fix the login redirect loop.", "messageId": null, "cursor": 12, "received_at": null},
     {"role": "assistant", "text": "I'll start by reading the auth middleware.", "messageId": "m1", "cursor": 40, "received_at": 1759630930.204}
