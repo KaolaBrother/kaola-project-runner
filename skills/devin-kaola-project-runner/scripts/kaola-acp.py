@@ -2248,9 +2248,14 @@ def _stamp_request_mutation(receipt: dict[str, Any], op: str) -> dict[str, Any]:
     happened after the frame was written, so ``null``/``unknown`` is the only
     honest claim. Issue #383 adds ``error.stage``; when it is present this
     classification uses it, and when it is absent the conservative answer is
-    kept.
+    kept. A ``holder-lost`` produced after a wire attempt carries an internal
+    source marker: its no-stage form is still uncertain, unlike the pre-check
+    that proved the holder was already dead before this request.
     """
-    if op not in PROMPT_STEER_OPS or not isinstance(receipt, dict):
+    if not isinstance(receipt, dict):
+        return receipt
+    wire_attempted = bool(receipt.pop("_wire_attempted", False))
+    if op not in PROMPT_STEER_OPS:
         return receipt
     error = receipt.get("error")
     if not isinstance(error, dict):
@@ -2264,9 +2269,11 @@ def _stamp_request_mutation(receipt: dict[str, Any], op: str) -> dict[str, Any]:
         # No stage predates #383 and cannot prove the connect step failed.
         uncertain = stage != "connect"
     elif holder_lost:
-        # A missing stage predates #383 and means the holder was already dead
-        # before this request (the pre-check); send/read lose the write.
-        uncertain = stage in UNCERTAIN_ERROR_STAGES
+        # A missing stage predates #383. The pre-check proved the holder dead
+        # before this request; a post-wire death may have lost a written
+        # frame, so that source stays uncertain until #383 adds the stage.
+        uncertain = (stage not in (None, "connect")
+                     or (stage is None and wire_attempted))
     else:
         uncertain = False
     unsent = (
@@ -2902,6 +2909,10 @@ def _op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
                     return refused
                 return force_kill_from_record(args, repo, record)
             lost = holder_lost_receipt(args, repo, record)
+            # This death was discovered after the wire attempt, so the
+            # pre-check's "definitely unsent" no longer applies.
+            if op in PROMPT_STEER_OPS:
+                lost["_wire_attempted"] = True
             # Issue #383 puts connect/send/read on the wire error; keep it so
             # a read-stage holder death is not misread as definitely unsent.
             stage = (response.get("error") or {}).get("stage")
@@ -6754,11 +6765,15 @@ def brief_empty_receipt(args: argparse.Namespace, repo: str) -> dict[str, Any]:
 
 def stamp_brief_undelivered(receipt: dict[str, Any], reason: str, *,
                             detail: str | None = None, admitted: bool = False,
-                            turn_id: Any = None) -> dict[str, Any]:
+                            turn_id: Any = None,
+                            request_mutation: dict[str, Any] | None = None
+                            ) -> dict[str, Any]:
     """A requested brief was not verified as a dispatch.
 
     Drop ``ready`` and ``prompt_fingerprint`` so neither can be read as one.
-    A turn that was admitted keeps its id and mutation.
+    A turn that was admitted keeps its id and mutation. When the prompt request
+    itself returned a mutation fact, that fact wins: a frame that may have been
+    written stays ``null``/``unknown`` instead of being flattened to unsent.
     """
     receipt.pop("prompt_fingerprint", None)
     if admitted and turn_id is not None:
@@ -6774,7 +6789,12 @@ def stamp_brief_undelivered(receipt: dict[str, Any], reason: str, *,
         receipt.setdefault("action", "start")
     elif not receipt.get("reason"):
         receipt["reason"] = reason
-    if (not admitted and receipt.get("mutation_status")
+    if request_mutation:
+        for key in ("mutation_performed", "mutation_status"):
+            if key in request_mutation:
+                receipt[key] = request_mutation[key]
+    if (not admitted and not request_mutation
+            and receipt.get("mutation_status")
             in (None, "in_progress", "accepted", "completed")):
         receipt["mutation_status"] = "not_started"
         receipt["mutation_performed"] = False
@@ -6875,7 +6895,12 @@ def deliver_start_brief(args: argparse.Namespace, repo: str, receipt: dict[str, 
     if receipt.get("acp_session_id") or receipt.get("holder_pid"):
         detail = ("the seat is up but this start did not verify the brief turn; "
                   "this receipt is not a dispatch")
-    stamp_brief_undelivered(receipt, reason, detail=detail, admitted=admitted, turn_id=turn_id)
+    request_mutation = {
+        key: reply[key] for key in ("mutation_performed", "mutation_status")
+        if key in reply
+    }
+    stamp_brief_undelivered(receipt, reason, detail=detail, admitted=admitted,
+                            turn_id=turn_id, request_mutation=request_mutation)
     reply_error = reply.get("error")
     if isinstance(reply_error, dict) and "error" not in receipt:
         receipt["error"] = reply_error

@@ -2954,18 +2954,22 @@ Every `send`, `steer` and `steer_interrupt` receipt states `mutation_performed` 
 request**, not for the previous turn. `false` means this request wrote nothing; `null` means the
 outcome is unknown because the request may have been written (never resend blindly); `true` means
 the frame was written. The pre-write answers `no-session`, `record-lost`,
-`holder-socket-missing` and a dead-holder `holder-lost` report `false` with
-`mutation_status: not_started`; a dead-holder `holder-lost` also carries the prior prompt as
-`previous_prompt`, while `record.last_prompt` keeps it for `status`/`observe`. `holder-closed` and
-a `send`/`read` stage failure report `null` with `mutation_status: unknown`; a
-`holder-unreachable` without a stage stays unknown because the connect step is not proven.
-Issue #383 adds `error.stage` (`connect`, `send`, `read`); when present it selects the row, and a
-missing stage keeps the conservative `null`. A `prompt-in-progress` refusal reports
-`outcome: refused_busy`, `mutation_performed: false`, and the active turn's `mutation_status`
-(not this request's). A steer error in this class also carries `steer_outcome: not_consumed` and
-`steer_consumed: false` when nothing was written, or `steer_outcome: unknown` and
-`steer_consumed: null` when uncertain. `status`, `observe`, `capture`, `permit`, `cancel` and
-`stop` keep their existing `holder_lost_receipt` facts.
+`holder-socket-missing` and a `holder-lost` observed **before** any wire attempt report `false`
+with `mutation_status: not_started`; that dead-holder form also carries the prior prompt as
+`previous_prompt`, while `record.last_prompt` keeps it for `status`/`observe`. A `holder-lost`
+observed only **after** a wire attempt stays unknown when it has no stage, because the frame may
+have been written. `holder-closed` and a `send`/`read` stage failure report `null` with
+`mutation_status: unknown`; a `holder-unreachable` without a stage stays unknown because the
+connect step is not proven. Issue #383 adds `error.stage` (`connect`, `send`, `read`); when
+present it selects the row (connect is `false`, send/read are `null`), and a missing stage keeps
+the conservative `null`. A `prompt-in-progress` refusal reports `outcome: refused_busy`,
+`mutation_performed: false`, and the active turn's `mutation_status` (not this request's). A steer
+error in this class also carries `steer_outcome: not_consumed` and `steer_consumed: false` when
+nothing was written, or `steer_outcome: unknown` and `steer_consumed: null` when uncertain.
+`status`, `observe`, `capture`, `permit`, `cancel` and `stop` keep their existing
+`holder_lost_receipt` facts. A `start --text`/`--stdin` failure receipt keeps this prompt
+request's mutation fact: a brief whose frame may have been written reports `null`/`unknown`, not
+`false`.
 
 After send, the agent observes/captures the response and, when applicable, verifies durable
 Workflow/Git/forge state. The Runner does not decide how to handle a draft, approval, output,

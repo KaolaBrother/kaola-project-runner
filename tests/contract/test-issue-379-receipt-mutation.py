@@ -11,16 +11,22 @@ request for an uncertain one (or the reverse):
 
 This suite pins the wrapper that answers the first two for the request that
 just failed, the holder's ``refused_busy`` word, the steer companion fields,
-the status/observe regression boundary, the start-brief prompt path, the
-forward ``error.stage`` hook (#383), and the consumer classification matrix.
+the status/observe regression boundary, the start-brief prompt and failure
+paths, the post-wire holder-death boundary, the forward ``error.stage`` hook
+(#383), and the consumer classification matrix. The holder-closed fixture also
+serves a deliberate ``state`` probe, the shape a Host ``kaola-acp list`` scan
+can send to a temporary record, so that probe cannot consume the send's only
+connection.
 
 Run: python3 tests/contract/test-issue-379-receipt-mutation.py -v
 """
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import socket
@@ -31,6 +37,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 REPO = Path(__file__).resolve().parents[2]
 CLI = REPO / "scripts" / "kaola-acp.py"
@@ -249,23 +256,43 @@ class ReceiptMutationCase(unittest.TestCase):
 
         server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         server.bind(str(sock))
-        server.listen(1)
+        server.listen(2)
+        server.settimeout(0.2)
         received: list[bytes] = []
         errors: list[BaseException] = []
         ready = threading.Event()
+        finished = threading.Event()
 
         def stub() -> None:
             ready.set()
             try:
-                connection, _ = server.accept()
-                data = b""
-                while b"\n" not in data:
-                    chunk = connection.recv(65536)
-                    if not chunk:
-                        break
-                    data += chunk
-                received.append(data)
-                connection.close()
+                while not finished.is_set():
+                    try:
+                        connection, _ = server.accept()
+                    except socket.timeout:
+                        continue
+                    try:
+                        data = b""
+                        while b"\n" not in data:
+                            chunk = connection.recv(65536)
+                            if not chunk:
+                                break
+                            data += chunk
+                        if not data:
+                            continue
+                        received.append(data)
+                        if b'"op": "prompt"' in data:
+                            break
+                        # A Host `kaola-acp list` liveness scan can probe a
+                        # temporary record's socket before the prompt arrives.
+                        # Answer it and keep listening for the request under
+                        # test instead of letting the probe consume the stub.
+                        try:
+                            connection.sendall(b'{"state": "ready"}\n')
+                        except OSError:
+                            pass
+                    finally:
+                        connection.close()
             except BaseException as exc:  # noqa: BLE001
                 errors.append(exc)
             finally:
@@ -274,18 +301,31 @@ class ReceiptMutationCase(unittest.TestCase):
         thread = threading.Thread(target=stub, daemon=True)
         thread.start()
         self.assertTrue(ready.wait(2), "stub never listened")
+        # A Host `kaola-acp list` scan can probe this temporary record's
+        # socket at any moment. Deliver one probe deterministically so the
+        # fixture's multi-connection protection is covered, then run the send
+        # whose reply must still decide this receipt.
+        probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        probe.settimeout(2)
+        probe.connect(str(sock))
+        probe.sendall(b'{"op": "state", "request_id": "probe", "params": {}}\n')
+        probe.recv(65536)
+        probe.close()
         try:
             rc, receipt = self.cli("send", "--text", "x", "--no-wait", check=False)
         finally:
+            finished.set()
             thread.join(timeout=5)
         self.assertEqual(rc, 0)
-        self.assertEqual((receipt.get("error") or {}).get("code"), "holder-closed")
+        self.assertEqual((receipt.get("error") or {}).get("code"), "holder-closed",
+                         {"receipt": receipt, "stub_errors": errors,
+                          "stub_received": received})
         self.assertIsNone(receipt.get("mutation_performed"))
         self.assertEqual(receipt.get("mutation_status"), "unknown")
         self.assertFalse(errors, errors)
-        self.assertTrue(received, "stub received no request")
-        self.assertIn(b'"op": "prompt"', received[0])
-        self.assertIn(b'"text": "x"', received[0])
+        prompt_frames = [frame for frame in received if b'"op": "prompt"' in frame]
+        self.assertTrue(prompt_frames, {"received": received, "errors": errors})
+        self.assertIn(b'"text": "x"', prompt_frames[0])
 
     def test_holder_unreachable_without_stage_is_uncertain(self) -> None:
         self.start()
@@ -455,6 +495,45 @@ class ReceiptClassificationTests(unittest.TestCase):
         self.assertEqual(lost["steer_outcome"], "not_consumed")
         self.assertIs(lost["steer_consumed"], False)
 
+    def test_post_wire_holder_death_is_uncertain(self) -> None:
+        receipt = self.stamp("prompt", "holder-lost", _wire_attempted=True,
+                             record={"last_prompt": {"fingerprint": "sha256:old"}})
+        self.assertIsNone(receipt["mutation_performed"])
+        self.assertEqual(receipt["mutation_status"], "unknown")
+        self.assertNotIn("_wire_attempted", receipt)
+
+        for stage in ("send", "read"):
+            receipt = self.stamp("prompt", "holder-lost", stage,
+                                 _wire_attempted=True)
+            self.assertIsNone(receipt["mutation_performed"], stage)
+            self.assertEqual(receipt["mutation_status"], "unknown", stage)
+
+        # With #383's stage the wire attempt is already classified; connect is
+        # still definitely unsent and send/read are unknown.
+        receipt = self.stamp("prompt", "holder-lost", "connect",
+                             _wire_attempted=True)
+        self.assertIs(receipt["mutation_performed"], False)
+        self.assertEqual(receipt["mutation_status"], "not_started")
+
+        # The pre-check has no marker and remains definitely unsent.
+        receipt = self.stamp("prompt", "holder-lost")
+        self.assertIs(receipt["mutation_performed"], False)
+        self.assertEqual(receipt["mutation_status"], "not_started")
+
+    def test_brief_failure_keeps_the_request_mutation(self) -> None:
+        receipt = {"mutation_status": "not_started", "mutation_performed": False}
+        self.module.stamp_brief_undelivered(
+            receipt, "holder-closed",
+            request_mutation={"mutation_performed": None,
+                              "mutation_status": "unknown"})
+        self.assertIsNone(receipt["mutation_performed"])
+        self.assertEqual(receipt["mutation_status"], "unknown")
+
+        default = {}
+        self.module.stamp_brief_undelivered(default, "brief-turn-unverified")
+        self.assertIs(default["mutation_performed"], False)
+        self.assertEqual(default["mutation_status"], "not_started")
+
     def test_consumer_classification_matrix(self) -> None:
         """KaolaTerminal's published branches over these receipt shapes."""
 
@@ -489,6 +568,217 @@ class ReceiptClassificationTests(unittest.TestCase):
         self.assertEqual(classify(lost), "unsent")
         accepted = {"mutation_performed": True, "outcome": "in_progress"}
         self.assertEqual(classify(accepted), "accepted")
+
+
+
+BOUNDARY_STUB = r"""
+import socket, sys, time
+from pathlib import Path
+
+sock, ready, frames, mode = sys.argv[1:5]
+server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+server.bind(sock)
+server.listen(4)
+Path(ready).write_text("ready")
+deadline = time.monotonic() + 15
+while time.monotonic() < deadline:
+    server.settimeout(max(0.1, deadline - time.monotonic()))
+    try:
+        connection, _ = server.accept()
+    except socket.timeout:
+        break
+    data = b""
+    while b"\n" not in data:
+        chunk = connection.recv(65536)
+        if not chunk:
+            break
+        data += chunk
+    with open(frames, "ab") as handle:
+        handle.write(data)
+    if b'"op": "prompt"' in data:
+        if mode == "partial":
+            connection.sendall(b'{"incomplete":')
+            connection.close()
+            break
+        connection.close()
+        # The start-brief path probes state once after the prompt. Serve that
+        # trailing probe so the fixture can exit on its own.
+        try:
+            server.settimeout(5.0)
+            follow, _ = server.accept()
+            trailing = b""
+            while b"\n" not in trailing:
+                chunk = follow.recv(65536)
+                if not chunk:
+                    break
+                trailing += chunk
+            with open(frames, "ab") as handle:
+                handle.write(trailing)
+            follow.close()
+        except (socket.timeout, OSError):
+            pass
+        break
+    # A Host `kaola-acp list` scan may probe this temporary record first.
+    try:
+        connection.sendall(b'{"state": "ready"}\n')
+    except OSError:
+        pass
+    connection.close()
+server.close()
+"""
+
+
+class BoundaryIntegrationTests(unittest.TestCase):
+    """The two review probes: post-wire death and start-brief failures."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        spec = importlib.util.spec_from_file_location("kaola_acp_379_bound", CLI)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        cls.module = module
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory(prefix="kpr-i379-bound-")
+        self.root = Path(self.tmp.name)
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
+        subprocess.run(["git", "config", "user.email", "kpr379@example.invalid"],
+                       cwd=self.repo, check=True)
+        subprocess.run(["git", "config", "user.name", "kpr379"],
+                       cwd=self.repo, check=True)
+        (self.repo / "README.md").write_text("kpr379\n", encoding="utf-8")
+        subprocess.run(["git", "add", "README.md"], cwd=self.repo, check=True)
+        subprocess.run(["git", "commit", "-qm", "init"], cwd=self.repo, check=True)
+        self.extra: list[subprocess.Popen] = []
+
+    def tearDown(self) -> None:
+        for proc in self.extra:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=5)
+        last_error: OSError | None = None
+        for _ in range(25):
+            try:
+                self.tmp.cleanup()
+                return
+            except OSError as exc:
+                last_error = exc
+                time.sleep(0.2)
+        if last_error is not None:
+            raise last_error
+
+    def args(self, command: str, **kw) -> argparse.Namespace:
+        values = {
+            "platform": "grok", "session": "grok-w379-boundary",
+            "command": command, "wait": False, "timeout": 1,
+            "max_final_chars": 1000, "expected_holder_instance_id": None,
+        }
+        values.update(kw)
+        return argparse.Namespace(**values)
+
+    def stub(self, mode: str) -> tuple[subprocess.Popen, Path, Path]:
+        sock = self.root / "s"
+        ready = self.root / "ready"
+        frames = self.root / "frames"
+        proc = subprocess.Popen(
+            [sys.executable, "-c", BOUNDARY_STUB, str(sock), str(ready),
+             str(frames), mode])
+        self.extra.append(proc)
+        wait_for(ready.exists, 5, "boundary stub ready")
+        return proc, sock, frames
+
+    def test_post_write_holder_death_is_unknown(self) -> None:
+        proc, sock, frames = self.stub("partial")
+        record = {
+            "holder_pid": proc.pid,
+            "state": "ready",
+            "last_prompt": {"fingerprint": "sha256:older",
+                            "mutation_status": "completed",
+                            "stop_reason": "end_turn"},
+        }
+        wire: dict = {}
+        real_socket = self.module.socket_request
+
+        def read_then_reap(*call_args, **call_kwargs):
+            reply = real_socket(*call_args, **call_kwargs)
+            wire.update(reply)
+            proc.wait(timeout=5)
+            return reply
+
+        directory = self.root / "records" / "grok" / "s" / "digest"
+        try:
+            with patch.object(self.module, "sock_path", return_value=sock), \
+                 patch.object(self.module, "read_record", return_value=record), \
+                 patch.object(self.module, "socket_request",
+                              side_effect=read_then_reap):
+                result = self.module.op_or_holder_lost(
+                    self.args("send"), str(self.repo), directory, "prompt",
+                    {"text": "second", "wait": False}, 1)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+        self.assertEqual((wire.get("error") or {}).get("code"),
+                         "holder-unreachable")
+        self.assertNotIn("stage", wire.get("error") or {})
+        self.assertEqual((result.get("error") or {}).get("code"), "holder-lost")
+        self.assertIsNone(result.get("mutation_performed"))
+        self.assertEqual(result.get("mutation_status"), "unknown")
+        self.assertNotIn("_wire_attempted", result)
+        self.assertTrue(frames.is_file(), "stub received no request")
+        self.assertIn(b'"text": "second"', frames.read_bytes())
+
+    def start_brief_failure(self, source: str) -> None:
+        proc, sock, frames = self.stub("close")
+        record = {"holder_pid": proc.pid, "state": "ready"}
+        ready_receipt = {"state": "ready", "acp_session_id": "fixture-acp",
+                         "holder_pid": proc.pid}
+        inner: list[dict] = []
+        real_op = self.module.op_or_holder_lost
+
+        def capture(*call_args, **call_kwargs):
+            reply = real_op(*call_args, **call_kwargs)
+            inner.append(reply)
+            return reply
+
+        args = self.args("start", text="brief" if source == "text" else None,
+                         stdin=source == "stdin")
+        stdin = io.StringIO("brief") if source == "stdin" else sys.stdin
+        directory = self.root / "records" / "grok" / "s" / "digest"
+        try:
+            with patch.object(self.module, "sock_path", return_value=sock), \
+                 patch.object(self.module, "record_dir", return_value=directory), \
+                 patch.object(self.module, "read_record", return_value=record), \
+                 patch.object(self.module, "_command_start_seat",
+                              return_value=ready_receipt), \
+                 patch.object(self.module, "op_or_holder_lost",
+                              side_effect=capture), \
+                 patch.object(sys, "stdin", stdin):
+                result = self.module.command_start(args, str(self.repo))
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+        self.assertTrue(inner, "start brief did not call the prompt wrapper")
+        self.assertEqual((inner[0].get("error") or {}).get("code"),
+                         "holder-closed")
+        self.assertIsNone(inner[0].get("mutation_performed"))
+        self.assertEqual(inner[0].get("mutation_status"), "unknown")
+        self.assertEqual((result.get("error") or {}).get("code"),
+                         "holder-closed")
+        self.assertIsNone(result.get("mutation_performed"))
+        self.assertEqual(result.get("mutation_status"), "unknown")
+        self.assertFalse(result.get("brief_delivered"))
+        self.assertIn(b'"text": "brief"', frames.read_bytes())
+
+    def test_start_brief_text_failure_keeps_unknown(self) -> None:
+        self.start_brief_failure("text")
+
+    def test_start_brief_stdin_failure_keeps_unknown(self) -> None:
+        self.start_brief_failure("stdin")
 
 
 if __name__ == "__main__":
