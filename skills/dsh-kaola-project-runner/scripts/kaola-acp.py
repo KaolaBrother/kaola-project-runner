@@ -1923,17 +1923,102 @@ def pid_alive(pid: Any) -> bool:
     return True
 
 
+# Issue #383: client transport bounds. ``--timeout`` is the holder's wait, not
+# the client's socket deadline; ``REPLY_GRACE`` covers the holder's record write
+# and reply serialization. A no-wait send/start brief only waits for admission,
+# so an omitted ``--timeout`` still gets a bound; ``send --wait`` and ``wait``
+# keep the unbounded socket because a real turn or a long poll may run for
+# minutes. The stage facts are what decide whether a failure proves nothing was
+# written.
+REPLY_GRACE = 30.0
+ADMISSION_BOUND = 30.0
+STEER_ADMISSION_BOUND = 30.0
+CANCEL_GRACE = 5.0
+
+
+def client_socket_timeout(args: argparse.Namespace, wait: bool | None = None
+                          ) -> float | None:
+    """The client-side transport bound for one holder call (Issue #383).
+
+    ``send``/``start`` use ``wait`` (only they have a resolved wait selection).
+    An explicit ``--timeout`` keeps the historical ``timeout + 30`` reply
+    window. Without it, a no-wait admission is bounded at 30 s, while
+    ``send --wait`` and ``wait`` remain unbounded. ``steer`` without a timeout
+    uses the holder's own 30 s native-steer wait plus the grace; ``cancel``
+    without one uses its 5 s grace; ``steer_interrupt`` uses the largest cancel
+    wait it may pass to the holder. ``wake`` is unchanged by this issue.
+    """
+    command = args.command
+    timeout = args.timeout
+    if command in ("send", "start"):
+        if timeout is not None:
+            return timeout + REPLY_GRACE
+        return ADMISSION_BOUND if wait is False else None
+    if command == "steer":
+        return ((timeout if timeout is not None else STEER_ADMISSION_BOUND)
+                + REPLY_GRACE)
+    if command == "steer_interrupt":
+        base = max(getattr(args, "cancel_timeout", None) or 0.0,
+                   timeout or 0.0, CANCEL_GRACE)
+        return base + REPLY_GRACE
+    if command in ("cancel", "key"):
+        return ((timeout if timeout is not None else CANCEL_GRACE)
+                + REPLY_GRACE)
+    if command == "wait":
+        return None if timeout is None else timeout + REPLY_GRACE
+    if command == "wake":
+        return None if timeout is None else timeout + REPLY_GRACE
+    raise ValueError(f"no client socket bound for {command}")
+
+
+def socket_failure(code: str, stage: str, message: str,
+                   timeout: float | None = None) -> dict[str, Any]:
+    """Issue #383: one transport failure with the stage that decided it.
+
+    Only connect and send prove the complete request line was not written: the
+    newline is the last byte, so a ``sendall`` failure cannot leave a frame the
+    holder can parse. A read failure means the request was written and may have
+    been admitted, so ``mutation_performed`` is ``null`` rather than ``false``.
+    """
+    error: dict[str, Any] = {"code": code, "stage": stage, "message": message}
+    if timeout is not None:
+        error["timeout_s"] = timeout
+    if stage in ("connect", "send"):
+        return {"error": error, "outcome": "not_sent",
+                "mutation_performed": False, "mutation_status": "not_started"}
+    return {"error": error, "outcome": "unknown",
+            "mutation_performed": None, "mutation_status": "unknown"}
+
+
 def socket_request(sock_path: Path, op: str, params: dict[str, Any],
                    timeout: float | None) -> dict[str, Any]:
     connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    stage = "connect"
+    # One absolute deadline, not one allowance per syscall. Without this,
+    # connect + sendall + recv could each consume the full timeout and a
+    # nominal 30 s bound could take 90 s.
+    deadline = None if timeout is None else time.monotonic() + timeout
+
+    def remaining() -> float | None:
+        if deadline is None:
+            return None
+        left = deadline - time.monotonic()
+        if left <= 0:
+            raise TimeoutError("timed out")
+        return left
+
     try:
-        connection.settimeout(timeout)
+        connection.settimeout(remaining())
         connection.connect(str(sock_path))
+        stage = "send"
         payload = json.dumps({"op": op, "request_id": secrets.token_hex(8),
                               "params": params}).encode("utf-8") + b"\n"
+        connection.settimeout(remaining())
         connection.sendall(payload)
+        stage = "read"
         buffer = bytearray()
         while True:
+            connection.settimeout(remaining())
             data = connection.recv(65536)
             if not data:
                 break
@@ -1943,9 +2028,13 @@ def socket_request(sock_path: Path, op: str, params: dict[str, Any],
                 return json.loads(line.decode("utf-8"))
         if buffer:
             return json.loads(buffer.decode("utf-8"))
-        return {"error": {"code": "holder-closed", "message": "holder closed the connection"}}
+        return socket_failure("holder-closed", "read",
+                              "holder closed the connection")
+    except (TimeoutError, socket.timeout) as exc:
+        return socket_failure("holder-timeout", stage,
+                              str(exc) or "timed out", timeout)
     except (OSError, ValueError) as exc:
-        return {"error": {"code": "holder-unreachable", "message": str(exc)}}
+        return socket_failure("holder-unreachable", stage, str(exc), timeout)
     finally:
         connection.close()
 
@@ -2229,16 +2318,23 @@ def holder_lost_receipt(args: argparse.Namespace, repo: str,
 
 
 PROMPT_STEER_OPS = frozenset({"prompt", "steer", "steer_interrupt"})
+# Issue #383: these calls can mutate the session. A transport timeout keeps its
+# stage fact on them; read-only calls (state/capture/wait) never grow a
+# mutation claim from a failed read.
+MUTATING_OPS = frozenset({
+    "prompt", "steer", "steer_interrupt", "cancel", "permit", "stop",
+    "wake_delegator",
+})
 # Issue #380: the client-supplied message id is accepted only by send/steer,
 # and only while the live holder advertises the admission ledger.
 CLIENT_MESSAGE_ID_FEATURE = "client-message-id/1"
 # Issue #379: these answers prove this request wrote nothing. ``holder-lost`` is
-# in this set only when it carries no stage or the connect stage; a send/read
-# loss may have happened after the frame was written.
+# in this set only when it carries no stage, the connect stage, or the send
+# stage; a read loss may have happened after the frame was written.
 UNSENT_RECEIPT_CODES = frozenset({
     "no-session", "record-lost", "holder-socket-missing", "holder-lost",
 })
-UNCERTAIN_ERROR_STAGES = frozenset({"send", "read"})
+UNCERTAIN_ERROR_STAGES = frozenset({"read"})
 
 
 def _stamp_request_mutation(receipt: dict[str, Any], op: str) -> dict[str, Any]:
@@ -2246,14 +2342,16 @@ def _stamp_request_mutation(receipt: dict[str, Any], op: str) -> dict[str, Any]:
 
     ``holder_lost_receipt`` describes the previous prompt because ``status``
     and ``observe`` need that historical fact. A send or steer must not inherit
-    it. A connect failure proves nothing was written. ``holder-closed``, a
-    send/read failure, and a ``holder-unreachable`` without a stage may have
-    happened after the frame was written, so ``null``/``unknown`` is the only
-    honest claim. Issue #383 adds ``error.stage``; when it is present this
-    classification uses it, and when it is absent the conservative answer is
-    kept. A ``holder-lost`` produced after a wire attempt carries an internal
-    source marker: its no-stage form is still uncertain, unlike the pre-check
-    that proved the holder was already dead before this request.
+    it. A connect or send failure proves nothing was written: the request line
+    ends with a newline, and a failed ``sendall`` cannot have delivered the
+    complete line the holder parses. ``holder-closed``, a read failure, and a
+    ``holder-unreachable`` without a stage may have happened after the frame
+    was written, so ``null``/``unknown`` is the only honest claim. Issue #383
+    adds ``error.stage``; when it is present this classification uses it, and
+    when it is absent the conservative answer is kept. A ``holder-lost``
+    produced after a wire attempt carries an internal source marker: its
+    no-stage form is still uncertain, unlike the pre-check that proved the
+    holder was already dead before this request.
     """
     if not isinstance(receipt, dict):
         return receipt
@@ -2268,20 +2366,21 @@ def _stamp_request_mutation(receipt: dict[str, Any], op: str) -> dict[str, Any]:
     holder_lost = code == "holder-lost"
     if code == "holder-closed":
         uncertain = True
-    elif code == "holder-unreachable":
+    elif code in ("holder-unreachable", "holder-timeout"):
         # No stage predates #383 and cannot prove the connect step failed.
-        uncertain = stage != "connect"
+        uncertain = stage not in ("connect", "send")
     elif holder_lost:
         # A missing stage predates #383. The pre-check proved the holder dead
         # before this request; a post-wire death may have lost a written
         # frame, so that source stays uncertain until #383 adds the stage.
-        uncertain = (stage not in (None, "connect")
+        uncertain = (stage == "read"
                      or (stage is None and wire_attempted))
     else:
         uncertain = False
     unsent = (
         code in UNSENT_RECEIPT_CODES
-        or (code == "holder-unreachable" and stage == "connect")
+        or (code in ("holder-unreachable", "holder-timeout")
+            and stage in ("connect", "send"))
     )
     # A holder that answers with its own mutation fact owns it. holder-lost is
     # the exception: its value came from the previous prompt.
@@ -2903,7 +3002,10 @@ def _op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
             return receipt
         return holder_lost_receipt(args, repo, record)
     response = socket_request(sock, op, params, timeout)
-    if response.get("error", {}).get("code") == "holder-unreachable":
+    wire_error = response.get("error")
+    wire_code = (wire_error.get("code")
+                 if isinstance(wire_error, dict) else None)
+    if wire_code in ("holder-unreachable", "holder-timeout"):
         if record and not pid_alive(record.get("holder_pid")):
             if op == "stop":
                 refused = holder_instance_mismatch_receipt(
@@ -2911,6 +3013,16 @@ def _op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
                 if refused is not None:
                     return refused
                 return force_kill_from_record(args, repo, record)
+            if wire_code == "holder-timeout":
+                # Issue #383: a timeout is this request's transport fact, not
+                # the previous prompt's mutation. Keep the stage and add the
+                # death fact; converting to holder-lost would borrow a
+                # historical mutation claim (#379).
+                receipt = base_receipt(args, repo)
+                receipt.update(response)
+                receipt["holder_alive"] = False
+                _stamp_timeout_verification(receipt, args, repo, op, params)
+                return _scope_transport_mutation(receipt, op)
             lost = holder_lost_receipt(args, repo, record)
             # This death was discovered after the wire attempt, so the
             # pre-check's "definitely unsent" no longer applies.
@@ -2924,9 +3036,14 @@ def _op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
                 error["stage"] = stage
             return lost
         if record and op == "stop" and params.get("force"):
+            # Issue #383: a wedged holder must remain force-stoppable. The
+            # timeout is the same unreachable answer for this recovery branch;
+            # the probe inside still refuses to signal an answering instance.
             return force_stop_unreachable(args, repo, directory, record, params)
     receipt = base_receipt(args, repo)
     receipt.update(response)
+    _stamp_timeout_verification(receipt, args, repo, op, params)
+    _scope_transport_mutation(receipt, op)
     if record is None:
         # Issue #359: the socket answers (or is stale) while the record dir is
         # gone. Attach the loss fact so status stays honest about bookkeeping.
@@ -2934,6 +3051,65 @@ def _op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
         if row is not None:
             receipt["record_lost"] = _record_loss_recovery(
                 row, pid_alive(row.get("holder_pid")))
+    return receipt
+
+
+def _scope_transport_mutation(receipt: dict[str, Any], op: str) -> dict[str, Any]:
+    """Keep a transport mutation claim only on a call that can mutate.
+
+    ``status``, ``observe``, ``capture`` and ``wait`` must not grow a
+    ``mutation_performed`` key from a failed read; ``cancel``, ``permit``,
+    ``stop``, ``wake_delegator`` and the prompt/steer family do (Issue #383).
+    """
+    if op in MUTATING_OPS:
+        return receipt
+    # A successful ``wait``/``status``/``capture`` reply may legitimately carry
+    # the turn's own ``mutation_status``; only a transport failure would grow a
+    # claim about a write this read-only call never made.
+    if not isinstance(receipt.get("error"), dict):
+        return receipt
+    receipt.pop("mutation_performed", None)
+    receipt.pop("mutation_status", None)
+    return receipt
+
+
+def _stamp_timeout_verification(receipt: dict[str, Any],
+                                args: argparse.Namespace, repo: str,
+                                op: str, params: dict[str, Any]
+                                ) -> dict[str, Any]:
+    """Issue #383: give a read-stage timeout an actionable, text-free check.
+
+    The request text is never copied into the receipt; only its fingerprint and
+    the command that can prove a late admission are added. ``status`` can still
+    show the previous (or empty) turn while an admission is in progress: the
+    holder publishes a turn only after the agent frame is written (#381), so
+    ``turn_active: false`` is not proof that this request was not delivered.
+    """
+    error = receipt.get("error")
+    if not isinstance(error, dict) or error.get("code") != "holder-timeout":
+        return receipt
+    if op not in PROMPT_STEER_OPS:
+        return receipt
+    text = params.get("text")
+    if isinstance(text, str):
+        fingerprint = "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+        key = ("steer_fingerprint" if op in ("steer", "steer_interrupt")
+               else "prompt_fingerprint")
+        receipt.setdefault(key, fingerprint)
+    if error.get("stage") != "read":
+        # Connect/send already prove nothing was written; only a read timeout
+        # can be admitted late and needs a verify route.
+        return receipt
+    receipt.setdefault("verify", {
+        "command": (f"kaola-acp {args.platform} status --repo {repo} "
+                    f"--session {args.session}"),
+        "match": ("last_prompt.fingerprint" if op == "prompt"
+                  else "steer_fingerprint"),
+        "note": ("A read-stage timeout may still be admitted. Check status and "
+                 "capture before deciding; turn_active:false while admission is "
+                 "in progress is not proof of non-delivery."),
+        "do_not": "resend before checking status/capture",
+    })
     return receipt
 
 
@@ -6869,7 +7045,7 @@ def deliver_start_brief(args: argparse.Namespace, repo: str, receipt: dict[str, 
     directory = record_dir(args, repo)
     wait_selection, bound_holder_id = resolve_send_wait(args, repo, directory)
     timeout = args.timeout
-    sock_timeout = (timeout + 30.0) if timeout else None
+    sock_timeout = client_socket_timeout(args, wait_selection["wait"])
     prompt_params: dict[str, Any] = {
         "text": text,
         "wait": wait_selection["wait"],
@@ -9428,6 +9604,25 @@ def main() -> int:
 
     args.manifest = load_manifest(args.platform)
     repo = resolve_repo(args.repo)
+    # Issue #383: 0 used to mean "unbounded" and a negative value reached
+    # socket.settimeout as an error. Neither is a usable bound; refuse before
+    # any record or transport work so the caller gets one typed answer.
+    if args.timeout is not None and args.timeout <= 0:
+        receipt = base_receipt(args, repo)
+        receipt.update({
+            "result": "refused",
+            "reason": "invalid-input",
+            "outcome": "invalid_input",
+            "mutation_status": "not_started",
+            "mutation_performed": False,
+            "error": {
+                "code": "invalid-input",
+                "message": "--timeout must be greater than 0 seconds; omit it "
+                           "for the command's default bound",
+            },
+        })
+        _emit_receipt(receipt)
+        return 1
     if not tier_declared(args.manifest, args.tier):
         _emit_receipt(tier_refusal(args, repo))
         return 1
@@ -9507,7 +9702,6 @@ def main() -> int:
         return command_follow(args, repo, directory)
 
     timeout = args.timeout
-    sock_timeout = (timeout + 30.0) if timeout else None
 
     if args.command == "send":
         text = args.text
@@ -9516,6 +9710,7 @@ def main() -> int:
         if not text:
             die("send requires --text or --stdin")
         wait_selection, bound_holder_id = resolve_send_wait(args, repo, directory)
+        sock_timeout = client_socket_timeout(args, wait_selection["wait"])
         prompt_params = {"text": text, "wait": wait_selection["wait"], "timeout": timeout,
                          "max_final_chars": args.max_final_chars}
         if args.client_message_id is not None:
@@ -9574,7 +9769,7 @@ def main() -> int:
             receipt = op_or_holder_lost(
                 args, repo, directory, "steer_interrupt",
                 interrupt_params,
-                sock_timeout,
+                client_socket_timeout(args),
             )
             receipt.setdefault("native_steering", native_steering)
             receipt.setdefault("steer_mode", "interrupt")
@@ -9656,7 +9851,7 @@ def main() -> int:
             receipt = refusal if refusal is not None else op_or_holder_lost(
                 args, repo, directory, "steer",
                 steer_params,
-                sock_timeout,
+                client_socket_timeout(args),
             )
             receipt.setdefault("native_steering", native_steering)
             receipt.setdefault("steer_mode", "native")
@@ -9665,7 +9860,8 @@ def main() -> int:
                 receipt.update(holder_predates_steer(method, error))
     elif args.command == "wait":
         receipt = op_or_holder_lost(
-            args, repo, directory, "wait", {"timeout": timeout}, sock_timeout
+            args, repo, directory, "wait", {"timeout": timeout},
+            client_socket_timeout(args)
         )
     elif args.command in ("observe", "status"):
         receipt = op_or_holder_lost(args, repo, directory, "state", {}, 10.0)
@@ -9726,7 +9922,8 @@ def main() -> int:
         if args.expected_holder_instance_id is not None:
             params["expected_holder_instance_id"] = args.expected_holder_instance_id
         receipt = op_or_holder_lost(
-            args, repo, directory, "cancel", params, sock_timeout
+            args, repo, directory, "cancel", params,
+            client_socket_timeout(args)
         )
     elif args.command == "key":
         if args.key != "escape":
@@ -9738,7 +9935,8 @@ def main() -> int:
             if args.expected_holder_instance_id is not None:
                 params["expected_holder_instance_id"] = args.expected_holder_instance_id
             receipt = op_or_holder_lost(
-                args, repo, directory, "cancel", params, sock_timeout
+                args, repo, directory, "cancel", params,
+                client_socket_timeout(args)
             )
     elif args.command == "answer":
         receipt = base_receipt(args, repo)
@@ -9757,7 +9955,8 @@ def main() -> int:
         elif isinstance((record or {}).get("holder_instance_id"), str):
             params["expected_holder_instance_id"] = record["holder_instance_id"]
         receipt = op_or_holder_lost(
-            args, repo, directory, "wake_delegator", params, sock_timeout)
+            args, repo, directory, "wake_delegator", params,
+            client_socket_timeout(args))
     elif args.command == "stop":
         # Issue #73: a stop is bound to the exact holder instance the Agent
         # verified, so a same-named session rebuilt by a later instance is

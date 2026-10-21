@@ -327,7 +327,13 @@ class ReceiptMutationCase(unittest.TestCase):
         self.assertTrue(prompt_frames, {"received": received, "errors": errors})
         self.assertIn(b'"text": "x"', prompt_frames[0])
 
-    def test_holder_unreachable_without_stage_is_uncertain(self) -> None:
+    def test_holder_unreachable_connect_stage_is_unsent(self) -> None:
+        """Issue #383: the transport now proves the connect step failed.
+
+        The stage-less form stays unknown through the unit matrix in
+        ``ReceiptClassificationTests``; this integration case pins the real
+        socket's connect refusal.
+        """
         self.start()
         self.cli("stop")
         self.started = False
@@ -344,11 +350,11 @@ class ReceiptMutationCase(unittest.TestCase):
 
         rc, receipt = self.cli("send", "--text", "x", "--no-wait", check=False)
         self.assertEqual(rc, 0)
-        self.assertEqual((receipt.get("error") or {}).get("code"),
-                         "holder-unreachable")
-        self.assertNotIn("stage", receipt.get("error") or {})
-        self.assertIsNone(receipt.get("mutation_performed"))
-        self.assertEqual(receipt.get("mutation_status"), "unknown")
+        error = receipt.get("error") or {}
+        self.assertEqual(error.get("code"), "holder-unreachable")
+        self.assertEqual(error.get("stage"), "connect")
+        self.assertIs(receipt.get("mutation_performed"), False)
+        self.assertEqual(receipt.get("mutation_status"), "not_started")
 
     # -- holder busy ---------------------------------------------------------
 
@@ -438,10 +444,15 @@ class ReceiptClassificationTests(unittest.TestCase):
         for stage in (None, "connect"):
             receipt = self.stamp("prompt", "holder-lost", stage)
             self.assertIs(receipt["mutation_performed"], False, stage)
-        for stage in ("send", "read"):
-            receipt = self.stamp("prompt", "holder-lost", stage)
-            self.assertIsNone(receipt["mutation_performed"], stage)
-            self.assertEqual(receipt["mutation_status"], "unknown", stage)
+        # Issue #383: the newline is the last byte, so a failed sendall cannot
+        # have delivered a frame the holder can parse. Only a read failure is
+        # uncertain.
+        receipt = self.stamp("prompt", "holder-lost", "send")
+        self.assertIs(receipt["mutation_performed"], False)
+        self.assertEqual(receipt["mutation_status"], "not_started")
+        receipt = self.stamp("prompt", "holder-lost", "read")
+        self.assertIsNone(receipt["mutation_performed"])
+        self.assertEqual(receipt["mutation_status"], "unknown")
 
         for stage in (None, "read"):
             receipt = self.stamp("prompt", "holder-closed", stage)
@@ -455,6 +466,9 @@ class ReceiptClassificationTests(unittest.TestCase):
         self.assertIs(receipt["mutation_performed"], False)
         self.assertEqual(receipt["mutation_status"], "not_started")
         receipt = self.stamp("prompt", "holder-unreachable", "send")
+        self.assertIs(receipt["mutation_performed"], False)
+        self.assertEqual(receipt["mutation_status"], "not_started")
+        receipt = self.stamp("prompt", "holder-unreachable", "read")
         self.assertIsNone(receipt["mutation_performed"])
         self.assertEqual(receipt["mutation_status"], "unknown")
 
@@ -495,21 +509,26 @@ class ReceiptClassificationTests(unittest.TestCase):
         self.assertEqual(lost["steer_outcome"], "not_consumed")
         self.assertIs(lost["steer_consumed"], False)
 
-    def test_post_wire_holder_death_is_uncertain(self) -> None:
+    def test_post_wire_holder_death_uses_the_stage(self) -> None:
         receipt = self.stamp("prompt", "holder-lost", _wire_attempted=True,
                              record={"last_prompt": {"fingerprint": "sha256:old"}})
         self.assertIsNone(receipt["mutation_performed"])
         self.assertEqual(receipt["mutation_status"], "unknown")
         self.assertNotIn("_wire_attempted", receipt)
 
-        for stage in ("send", "read"):
-            receipt = self.stamp("prompt", "holder-lost", stage,
-                                 _wire_attempted=True)
-            self.assertIsNone(receipt["mutation_performed"], stage)
-            self.assertEqual(receipt["mutation_status"], "unknown", stage)
+        # Issue #383: a send-stage loss never delivered the trailing newline;
+        # a read-stage loss may have been admitted.
+        receipt = self.stamp("prompt", "holder-lost", "send",
+                             _wire_attempted=True)
+        self.assertIs(receipt["mutation_performed"], False)
+        self.assertEqual(receipt["mutation_status"], "not_started")
+        receipt = self.stamp("prompt", "holder-lost", "read",
+                             _wire_attempted=True)
+        self.assertIsNone(receipt["mutation_performed"])
+        self.assertEqual(receipt["mutation_status"], "unknown")
 
-        # With #383's stage the wire attempt is already classified; connect is
-        # still definitely unsent and send/read are unknown.
+        # With #383's stage the wire attempt is already classified; connect and
+        # send are definitely unsent and read is unknown.
         receipt = self.stamp("prompt", "holder-lost", "connect",
                              _wire_attempted=True)
         self.assertIs(receipt["mutation_performed"], False)
@@ -723,7 +742,9 @@ class BoundaryIntegrationTests(unittest.TestCase):
                 proc.wait()
         self.assertEqual((wire.get("error") or {}).get("code"),
                          "holder-unreachable")
-        self.assertNotIn("stage", wire.get("error") or {})
+        # Issue #383: the partial reply proves the frame was read, so this is
+        # the read stage, not an unknown pre-wire state.
+        self.assertEqual((wire.get("error") or {}).get("stage"), "read")
         self.assertEqual((result.get("error") or {}).get("code"), "holder-lost")
         self.assertIsNone(result.get("mutation_performed"))
         self.assertEqual(result.get("mutation_status"), "unknown")

@@ -9983,7 +9983,12 @@ class Holder:
         except Exception:
             pass
         self.write_record()
-        self._cancel_pending_permissions()
+        if not force:
+            # Issue #383: a force stop must not wait on self.lock. A prompt can
+            # hold it while its agent stdin write is blocked; the agent is
+            # about to be terminated, so answering its pending permissions is
+            # moot. The normal stop keeps the settlement.
+            self._cancel_pending_permissions()
         self._reclaim_node()
         if not force:
             if self.turn["active"]:

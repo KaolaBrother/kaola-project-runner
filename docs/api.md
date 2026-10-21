@@ -3067,18 +3067,94 @@ the frame was written. The pre-write answers `no-session`, `record-lost`,
 with `mutation_status: not_started`; that dead-holder form also carries the prior prompt as
 `previous_prompt`, while `record.last_prompt` keeps it for `status`/`observe`. A `holder-lost`
 observed only **after** a wire attempt stays unknown when it has no stage, because the frame may
-have been written. `holder-closed` and a `send`/`read` stage failure report `null` with
-`mutation_status: unknown`; a `holder-unreachable` without a stage stays unknown because the
+have been written. `holder-closed` and a `read` stage failure report `null` with
+`mutation_status: unknown`; a `connect` or `send` stage failure reports `false`/`not_started`
+because the request line ends with a newline, and a failed `sendall` cannot have delivered the
+complete line the holder parses. A `holder-unreachable` without a stage stays unknown because the
 connect step is not proven. Issue #383 adds `error.stage` (`connect`, `send`, `read`); when
-present it selects the row (connect is `false`, send/read are `null`), and a missing stage keeps
-the conservative `null`. A `prompt-in-progress` refusal reports `outcome: refused_busy`,
+present it selects the row (connect and send are `false`, read is `null`), and a missing stage
+keeps the conservative `null`. A client deadline expiry is `error.code: holder-timeout` with
+`stage` and `timeout_s`; it follows the same matrix, and a prompt/steer read-stage timeout also
+carries a text-free `verify` block (the request fingerprint and the `status` command that can
+prove a late admission). A `prompt-in-progress` refusal reports `outcome: refused_busy`,
 `mutation_performed: false`, and the active turn's `mutation_status` (not this request's). A steer
 error in this class also carries `steer_outcome: not_consumed` and `steer_consumed: false` when
 nothing was written, or `steer_outcome: unknown` and `steer_consumed: null` when uncertain.
 `status`, `observe`, `capture`, `permit`, `cancel` and `stop` keep their existing
-`holder_lost_receipt` facts. A `start --text`/`--stdin` failure receipt keeps this prompt
-request's mutation fact: a brief whose frame may have been written reports `null`/`unknown`, not
-`false`.
+`holder_lost_receipt` facts; a transport timeout on `cancel`, `permit`, `stop` or `wake_delegator`
+carries the same `mutation_performed`/`mutation_status` pair, while `status`/`observe`/`capture`/
+`wait` never grow those keys from a failed read. A `start --text`/`--stdin` failure receipt keeps
+this prompt request's mutation fact: a brief whose frame may have been written reports
+`null`/`unknown`, not `false`.
+
+### Client transport bounds and timeouts (Issue #383)
+
+`--timeout SECONDS` is the **holder-side** wait, not the client's socket deadline. The client
+uses one monotonic deadline for the whole exchange: `connect`, `sendall` and every `recv`
+recompute the remaining time from that one deadline and `settimeout(remaining)`. Three stages
+therefore cannot accumulate three separate allowances; a 30 s bound is 30 s, not 90 s. A transport
+failure without a stage keeps the conservative `null` classification; a present stage is the only
+thing that proves whether the complete request line was written.
+
+| Command / holder op | Holder-side wait | Client socket bound without `--timeout` | With `--timeout T` |
+|---|---|---|---|
+| `send --no-wait` (prompt) | admission only | **30 s** | `T + 30 s` |
+| `send --wait` (prompt) | until the turn ends | **unbounded** (a real turn may run for minutes) | `T + 30 s` |
+| `start --text/--stdin` brief | same admission as `send` | **30 s** when `--no-wait`; unbounded with `--wait` | `T + 30 s` |
+| `steer` (native) | `T` if given, else the holder's 30 s native-steer wait | **60 s** | `T + 30 s` |
+| `steer --steer-mode interrupt` | `cancel_timeout`, else `T`, else the 5 s cancel grace, then admission | **35 s** | `max(cancel_timeout, T, 5 s) + 30 s` |
+| `cancel` / `key escape` | `T` if given, else the 5 s cancel grace | **35 s** | `T + 30 s` |
+| `wait` | `T` if given, else until the turn ends | **unbounded** | `T + 30 s` |
+| `wake` | holder wake work | unbounded (unchanged by #383) | `T + 30 s` |
+| `stop` | fixed | 30 s | ignored |
+| `permit` | fixed | 10 s | ignored |
+| `status` / `observe` | fixed (no admission lock) | 10 s | ignored |
+| `capture` / `view` | fixed (no admission lock) | 15 s | ignored |
+
+`--timeout 0`, a negative value, or `--timeout 0.0` is refused as a typed `invalid-input` receipt
+(exit 1, `mutation_performed: false`, `mutation_status: not_started`) before any record or
+transport work; `0` no longer means "unbounded". `--timeout` is accepted for legacy compatibility
+on commands that ignore it (`stop`, `permit`, `status`, `observe`, `capture`, `view`), but it has
+no effect there. `start`'s `--timeout` covers only the first brief, never `session/new` or a
+resume wait.
+
+`steer --no-wait` is a **no-op**: `--wait`/`--no-wait` is read only by `send` and `start`. A
+steer's wait is the holder's native steer timeout (30 s by default), so its client bound is 60 s
+without `--timeout`. The issue title's "send/steer --no-wait" does not describe steer's actual
+control.
+
+The failure shape is one of:
+
+```json
+{"error": {"code": "holder-timeout", "stage": "read", "timeout_s": 30.0, "message": "timed out"},
+ "outcome": "unknown", "mutation_performed": null, "mutation_status": "unknown",
+ "prompt_fingerprint": "sha256:...",
+ "verify": {"command": "kaola-acp grok status --repo REPO --session SESSION",
+            "match": "last_prompt.fingerprint",
+            "note": "A read-stage timeout may still be admitted. ...",
+            "do_not": "resend before checking status/capture"}}
+```
+
+and, for connect/send, the same error code with `"outcome": "not_sent"`,
+`"mutation_performed": false`, `"mutation_status": "not_started"`. The request text is never
+copied into a failure receipt.
+
+A read-stage timeout is genuinely uncertain. The request frame was written, and a holder that was
+merely stopped or slow can admit it after the client gave up; `SIGCONT` evidence for this issue
+showed the abandoned prompt completing with the exact `last_prompt.fingerprint`. Check `status`
+and `capture` for the fingerprint before deciding, and never resend blindly. `status` can still
+show the previous (or empty) turn while an admission is in progress: the holder publishes a turn
+only after the agent frame is written (Issue #381), so `turn_active: false` during a blocked
+admission is not proof that the request was not delivered.
+
+A wedged holder remains recoverable. `stop --force` skips pending-permission settlement, which is
+the one path that used to wait on the same admission lock a blocked prompt holds; it therefore
+answers well under its 30 s bound for a lock-wedged holder and kills the agent group. A send blocked on
+that admission then receives a definitive `acp-write-failed` with
+`mutation_performed: false`/`mutation_status: not_started` (or the connection closes), so its
+recovery is not another guess. The holder still writes an agent stdin while holding its admission
+lock; this issue bounds the client and keeps force-stop available, but it does not shorten that
+holder-side critical section.
 
 After send, the agent observes/captures the response and, when applicable, verifies durable
 Workflow/Git/forge state. The Runner does not decide how to handle a draft, approval, output,
