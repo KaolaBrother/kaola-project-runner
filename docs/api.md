@@ -1194,7 +1194,7 @@ Delegator is not already there and the Host did not continue by itself:
 | no active seat turn, that list is empty, and this all-ended episode has not yet sent `all-idle` | `all-idle` |
 | no active seat turn, that list is empty, real work has resumed since the last `all-idle`, and the Host is all-ended | `all-idle` once, even if the turn is the Delegator's and the previous latch was set |
 | no active seat turn, that list is empty, this all-ended episode already sent `all-idle`, real work has not resumed, and a Delegator turn admitted without `--wait` ends | `host_turn_done` once for that turn |
-| the same, but the turn is a self turn or was admitted with `--wait` (the caller already holds the result) | no wake |
+| the same, but the turn is a self turn or was admitted with `--wait` (a `--wait` caller usually already has the result; a timeout or a caller that disappears is not decided here) | no wake |
 | prompt source `delegator` (this send or steer) and a seat still has an active turn | no wake |
 | undelivered host-view row `kind=decisions`, `why=host-decision` | `question_waiting` |
 | undelivered host-view row `kind=tasks` and `why` one of `awaiting-verdict`, `delivery-open`, `verdict-missing` | `delivery_review` |
