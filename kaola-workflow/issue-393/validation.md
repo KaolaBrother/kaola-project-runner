@@ -51,8 +51,9 @@ validate: total wall: 43.9712 s
 residual_pids: []
 ```
 
-The same run reported `render-skills: PASS`, all twelve
-`validate-skill.*` rows PASS, and `kaola-grok-bot-verify: PASS` at the content
+The same run reported `render-skills: PASS`, all thirteen
+`validate-skill.*` rows PASS (11 worker Skills + `kaola-project-runner` +
+`kaola-delegator`), and `kaola-grok-bot-verify: PASS` at the content
 stage. The final standalone rerun at `e4d5567b` reported `Ran 6 tests in
 43.153s` and `OK`. Earlier runs at the same test bytes reported `Ran 6 tests in
 44.501s` (candidate `d959ab2b`, total wall 46.1919 s) and `Ran 6 tests in
@@ -82,6 +83,8 @@ argv produced `kaola-worker-notify/1`.
 
 ## Scope
 
-This is a subset run. `KAOLA_FULL_GATE=1` is the Host's close-out gate. No
-product code changed; the suite pins the current cwd-repair carrier route and
-records the non-reproduction.
+This is a subset run. The full `KAOLA_FULL_GATE=1` close-out gate comes from
+the Delegator handoff dated 2026-10-21 for this run (the run's delivery stop
+boundary); it is a delivery instruction in that handoff, not a definition in
+this repository. No product code changed; the suite pins the current
+cwd-repair carrier route and records the non-reproduction.

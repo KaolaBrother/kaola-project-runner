@@ -125,14 +125,12 @@ the focused suite run (see `validation.md`).
 
 ## Supporting local evidence
 
-A read-only scan of the local ACP record root (`/tmp/kaola-501`) found 105
-`worker_event_delivered` records that carried a staged `cwd_repaired` and a
-`heartbeat_fingerprint`:
-
-- 104 were delivered by holder build `55072ca6c5e7` (pre-#388), with recorded
-  roles `worker`, `expert`, `elite` and `sideagent`;
-- 1 was delivered by holder build `db475e966dc8` (v0.9.23), and its recorded
-  role was `host`.
+A read-only scan of the local ACP record root (a mutable temporary directory)
+was used qualitatively. The carrier deliveries it contained were dominated by
+pre-#388 holder builds (`55072ca6c5e7`) across `worker`, `expert`, `elite` and
+`sideagent` roles; the current-build (`db475e966dc8`) carrier delivery it
+showed was a `host` role. The directory changes as sessions run, so no exact
+count is asserted here.
 
 This is local corroboration, not vrpai evidence: the vrpai worker's
 `runner_build` was not available in the issue. It matches the reproduction
@@ -148,8 +146,8 @@ above: the carrier route is reachable only from pre-#388 holder bytes.
 6. Direct Host holder as the positive control.
 7. The same direct worker route on the pre-#388 holder bytes (historical
    control; the only reproducing variant).
-8. Record and event scan of the local ACP sessions for pre-#388 vs current
-   carrier deliveries.
+8. Qualitative record and event scan of the local ACP sessions for pre-#388
+   vs current carrier deliveries.
 
 ## Host check before closing
 
