@@ -20,6 +20,12 @@ New file: `tests/contract/test-issue-393-cwd-carrier.py`.
 Inventory row: `test-issue-393-cwd-carrier.py` in `scripts/validate.sh`
 (`python_suites_all` and `python_suites_b`).
 
+Related regression check on the same candidate:
+`./scripts/validate.sh --suite test-issue-388-role-carrier.py` passed
+(`test-issue-388-role-carrier.py` elapsed 10.848 s; total wall 11.7289 s;
+`residual_pids: []`). That suite pins the existing role gate this route relies
+on.
+
 Standalone run:
 
 ```text
