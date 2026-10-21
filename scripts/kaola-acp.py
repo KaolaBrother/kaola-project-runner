@@ -7942,6 +7942,7 @@ DELEGATOR_WEBHOOK_REASONS = frozenset({
     "holder_lost",
     "exact_stop",
     "all-idle",
+    "host_turn_done",
     "test",
 })
 # Issue #317. The Host's explicit wake. Same three tokens as

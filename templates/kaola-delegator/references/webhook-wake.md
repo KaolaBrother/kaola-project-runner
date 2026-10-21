@@ -71,10 +71,9 @@ $HOOK remove --project "$PROJECT" --owner-agent "$LABEL"
    `error`, truncated `response_body`). A failed receipt carries `route` or
    `self_route`. Do not retry blindly.
 
-A Host holder sends this hook only after a seat restart on a build that has
-it. If `test` delivers but turns write no receipts, the holder is older than
-the hook. Restart needs its own authorization
-([host-platforms.md](host-platforms.md#kpr-updates)).
+A Host holder sends this hook only from a build that has it; `test` delivery
+without turn receipts means the holder is older. Restarting it needs its own
+authorization ([host-platforms.md](host-platforms.md#kpr-updates)).
 
 ## On a wake
 
@@ -83,15 +82,18 @@ Schema `kaola-delegator-wake/1`: `project`, `session`, `holder_instance_id`,
 `event_seq`, `state` (`end_turn`, `blocked`, `error`, `stopped`, `test`),
 `state_detail`, `reason`, `ts` (UTC). No transcript, prompt, diff, or secret.
 `reason` is `permission_required`, `turn_failed`, `agent_exited`,
-`boot_failure`, `exact_stop`, `holder_lost`, `all-idle`, `question_waiting`,
-`delivery_review`, `needs_decision`, `host_stopped_pending`, or `test`.
+`boot_failure`, `exact_stop`, `holder_lost`, `all-idle`, `host_turn_done`,
+`question_waiting`, `delivery_review`, `needs_decision`,
+`host_stopped_pending`, or `test`.
 That list is every wake. `state_detail` is `host_initiated` for an explicit
 Host wake, otherwise the stop reason or a fixed token such as `exact_stop`.
 
 Two rules are the core. (1) All-ended: Host idle, no follow-up, no active
 seat turn. One `all-idle` per episode. A carried latch and your turn do not
 suppress it. A live `send --wait` holds it until return. The same
-episode does not wake again. Your send does not open the next one. A working
+episode does not wake again. Your send does not open the next one. A
+`--no-wait` turn you sent ends with one `host_turn_done`, even after
+`all-idle`. A working
 non-exempt seat, a non-exempt worker stop, or a self turn with worker events
 does. (2) `kaola-acp.py $PLATFORM wake --repo "$PROJECT" --session "$SESSION"
 --reason REASON` fires then, even while a seat works. `REASON` is
@@ -114,13 +116,12 @@ working. A Sideagent is not a seat. A confirmed node stop or the last worker
 
 A dead holder with no signal gets one `error`/`holder_lost` wake per
 `holder_instance_id`, on a new `event_seq`. `start` or a dead-holder `stop`
-sends it; so does `status` when the record dir is wiped — `state_detail`
-`record_lost`, detected from the project's host record. The inquiry runs
+sends it; so does `status` when the record dir is wiped (`state_detail`
+`record_lost` from the project's host record). The inquiry runs
 `$HOOK status --project "$PROJECT"`; no Host start. `test` does not
-scan. `status` wakes a Host whose holder pid is dead, `state` not
+scan. `status` wakes a Host whose holder pid is dead and `state` not
 `stopped`, even if the agent lives. A live holder pid waits for `start` or
-`stop`. Nothing else polls. `status` does not read `cadence.interval_minutes`
-or schedule itself.
+`stop`. Nothing else polls.
 
 On each wake, re-read the Accepted line, locate, attest the session, and
 read `status`, `observe`, and `capture`. Then run the standard inquiry. If

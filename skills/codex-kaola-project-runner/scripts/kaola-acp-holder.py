@@ -413,6 +413,7 @@ DELEGATOR_WAKE_REASONS = frozenset({
     "holder_lost",
     "exact_stop",
     "all-idle",
+    "host_turn_done",
     "test",
 })
 # A length stop means the Host stopped with work still pending.
@@ -594,6 +595,7 @@ def delegator_turn_wake_reason(
         staged_undelivered: bool,
         live_seats: bool = True,
         all_idle_due: bool = True,
+        unconsumed: bool = False,
 ) -> str | None:
     """Issue #302: why a completed or canceled Host turn wakes the Delegator.
 
@@ -622,8 +624,12 @@ def delegator_turn_wake_reason(
       2026-10-13 for a registered decision. ``all_idle_due`` is true only when
       this idle episode has not yet sent ``all-idle`` (the latch is clear).
       A Delegator-admitted turn returns ``None`` unless that transition is
-      still due, so a later send or steer in the SAME episode does not wake
-      by itself (Issue #307). The holder clears the latch at the start of a
+      still due, so a later consumed send or steer in the SAME episode does
+      not wake by itself (Issue #307). When the transition is not due and
+      the turn is ``unconsumed`` (admitted without ``--wait``), that turn
+      end is ``host_turn_done``: nobody holds the result, so the Delegator
+      gets the one wake that says the turn is over (Issue #392). The episode
+      latch is not changed either way. The holder clears the latch at the start of a
       new all-ended episode before this call (Issue #317), so a carried latch
       does not suppress that one wake, including when the turn is the
       Delegator's. When the latch is clear, including a Delegator turn in
@@ -673,7 +679,7 @@ def delegator_turn_wake_reason(
         if attention is not None:
             return attention
         if (prompt_source or "delegator") == "delegator" and not all_idle_due:
-            return None
+            return "host_turn_done" if unconsumed else None
         return "all-idle"
     if (prompt_source or "delegator") == "delegator":
         return None
@@ -2832,6 +2838,9 @@ class Holder:
             # Issue #302: "delegator" (socket prompt or steer) or "self"
             # (worker-event delivery, compact reload, compact notice).
             "prompt_source": "delegator",
+            # Issue #392: a --wait caller takes this turn's result; --no-wait
+            # (and a steer's admission) leaves it unconsumed.
+            "wait": True,
         }
 
     def dispatcher_identity(self) -> dict[str, str]:
@@ -4592,6 +4601,10 @@ class Holder:
                 # Socket prompts cannot set this: handle_request strips it.
                 # Only holder-internal admissions pass "self".
                 "prompt_source": "self" if source == "self" else "delegator",
+                # Issue #392: is anyone taking this turn's result? A
+                # ``send --wait`` caller is; ``--no-wait`` and a steer
+                # admission are not.
+                "wait": bool(params.get("wait", True)),
             })
             # Issue #307: admitting a turn does not open an idle episode.
             # A Delegator send or steer is not a working-again fact. A self
@@ -4900,6 +4913,7 @@ class Holder:
             staged_undelivered=staged,
             live_seats=live_seats,
             all_idle_due=all_idle_due,
+            unconsumed=not bool(turn.get("wait", True)),
         )
 
     def _deregister_host_registry(self) -> None:

@@ -1193,7 +1193,8 @@ Delegator is not already there and the Host did not continue by itself:
 | no active seat turn, and an undelivered attention row or an open `state.decisions` row is pending | the attention reason below; not `all-idle` |
 | no active seat turn, that list is empty, and this all-ended episode has not yet sent `all-idle` | `all-idle` |
 | no active seat turn, that list is empty, real work has resumed since the last `all-idle`, and the Host is all-ended | `all-idle` once, even if the turn is the Delegator's and the previous latch was set |
-| no active seat turn, that list is empty, this all-ended episode already sent `all-idle`, and real work has not resumed | no wake |
+| no active seat turn, that list is empty, this all-ended episode already sent `all-idle`, real work has not resumed, and a Delegator turn admitted without `--wait` ends | `host_turn_done` once for that turn |
+| the same, but the turn is a self turn or was admitted with `--wait` (the caller already holds the result) | no wake |
 | prompt source `delegator` (this send or steer) and a seat still has an active turn | no wake |
 | undelivered host-view row `kind=decisions`, `why=host-decision` | `question_waiting` |
 | undelivered host-view row `kind=tasks` and `why` one of `awaiting-verdict`, `delivery-open`, `verdict-missing` | `delivery_review` |
@@ -1260,8 +1261,10 @@ Delegator's and including when that turn stops the last working seat. A live
 `send --wait` or `op_wait` caller who has not returned, timed out, or lost
 the reply write is not all-ended yet; the same one wake runs after that
 caller is gone. A later Delegator turn that ends still idle, with no real
-work in between, does not wake again. A self turn with no working seat still
-names `all-idle`; the episode latch sends it only when due, so a
+work in between, does not wake again when it was admitted with `--wait`; an
+unconsumed `--no-wait` Delegator turn still sends one `host_turn_done`
+(Issue #392), and the episode latch is unchanged. A self turn with no working
+seat still names `all-idle`; the episode latch sends it only when due, so a
 self-continuation that ends with no change after `all-idle` was already sent
 does not POST again. A self turn that delivers new worker events clears the
 latch, and the next all-idle transition wakes once. A `ps` failure looks like no seats and,

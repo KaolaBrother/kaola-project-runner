@@ -115,6 +115,27 @@ class Predicate(unittest.TestCase):
               "stop_reason": "refusal", "all_idle_due": False}, None),
             ({"live_seats": False, "prompt_source": "delegator",
               "all_idle_due": False}, None),
+            # Issue #392: the same latched Delegator turn wakes
+            # host_turn_done only when nobody consumed its result. Attention
+            # and registered decisions still win over that fallback, a self
+            # turn still names all-idle, and a live seat keeps the #302 rule.
+            ({"live_seats": False, "prompt_source": "delegator",
+              "all_idle_due": False, "unconsumed": True}, "host_turn_done"),
+            ({"live_seats": False, "prompt_source": "delegator",
+              "all_idle_due": False, "unconsumed": True,
+              "attention_rows": question}, "question_waiting"),
+            ({"live_seats": False, "prompt_source": "delegator",
+              "all_idle_due": False, "unconsumed": True,
+              "attention_rows": other}, "needs_decision"),
+            ({"live_seats": False, "prompt_source": "delegator",
+              "all_idle_due": False, "unconsumed": True,
+              "stop_reason": "max_tokens"}, "host_turn_done"),
+            ({"live_seats": False, "prompt_source": "delegator",
+              "all_idle_due": True, "unconsumed": True}, "all-idle"),
+            ({"live_seats": False, "prompt_source": "self",
+              "all_idle_due": False, "unconsumed": True}, "all-idle"),
+            ({"live_seats": True, "prompt_source": "delegator",
+              "unconsumed": True}, None),
             ({"live_seats": False, "attention_rows": question,
               "prompt_source": "delegator", "all_idle_due": False},
              "question_waiting"),
@@ -318,12 +339,19 @@ class WakeGate(issue299.WebhookCase):
         host._all_idle_woken = False
         return host
 
-    def end_turn_wake(self, host, prompt_source: str) -> str | None:
-        """The production turn-end wake branch, for one already-ended turn."""
+    def end_turn_wake(self, host, prompt_source: str, wait: bool = True,
+                      stop_reason: str = "end_turn") -> str | None:
+        """The production turn-end wake branch, for one already-ended turn.
+
+        ``wait`` is the admission flag Issue #392 records: a consumed
+        ``--wait`` turn stays silent; an unconsumed one names
+        ``host_turn_done`` in the latched no-seat branch.
+        """
         host.turn["active"] = False
         host.turn["outcome"] = "turn_completed"
-        host.turn["stop_reason"] = "end_turn"
+        host.turn["stop_reason"] = stop_reason
         host.turn["prompt_source"] = prompt_source
+        host.turn["wait"] = wait
         host._delegator_followups = 0
         reason = host._delegator_turn_end_reason(host.turn)
         host._finish_delegator_turn_wake(host.turn, reason)
@@ -1134,9 +1162,10 @@ class WakeGate(issue299.WebhookCase):
         self.assertEqual(len(self.posts_with_reason("all-idle")), 1)
 
     def test_latched_delegator_turn_and_quiet_self_turn_do_not_wake(self) -> None:
-        # After the episode has woken, a Delegator turn end is not a wake,
-        # and a self continuation with no new worker events does not POST
-        # a second all-idle. Admitting either turn does not clear the latch.
+        # After the episode has woken, a consumed (--wait) Delegator turn end
+        # is not a wake, and a self continuation with no new worker events does
+        # not POST a second all-idle. Admitting either turn does not clear the
+        # latch. Issue #392 covers the unconsumed (--no-wait) counterpart.
         self.endpoint = Endpoint()
         self.configure_endpoint()
         with self.webhook_process_env():
@@ -1151,14 +1180,14 @@ class WakeGate(issue299.WebhookCase):
             host.agent.pending_out = {}
             host.agent.send_request = lambda method, params: 1
             for params in (
-                    {"text": "delegator-again", "wait": False},
+                    {"text": "delegator-again", "wait": True},
                     {"text": "self-quiet", "wait": False, "_prompt_source": "self"},
             ):
                 receipt = host.op_prompt(params)
                 self.assertEqual(receipt.get("outcome"), "turn_failed", receipt)
                 self.assertTrue(host._all_idle_woken)
-            self.assertIsNone(self.end_turn_wake(host, "delegator"))
-            self.assertIsNone(self.end_turn_wake(host, "delegator"))
+            self.assertIsNone(self.end_turn_wake(host, "delegator", wait=True))
+            self.assertIsNone(self.end_turn_wake(host, "delegator", wait=True))
             # A self turn still names all-idle. The episode latch drops the POST.
             self.assertEqual(self.end_turn_wake(host, "self"), "all-idle")
             self.assertTrue(host._all_idle_woken)
