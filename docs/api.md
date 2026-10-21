@@ -2579,28 +2579,39 @@ A live holder advertises `client-message-id/1`. The CLI preflight reads the reco
 (`mutation_performed:false`) before any socket write, with the route "wait until idle, then
 drain-restart". A dead holder keeps its ordinary transport answer.
 
-Admission registers one entry only after the holder really wrote the prompt/steer (or queued an
-`after-turn` steer), inside the holder lock, keyed by the id, the op, the SHA-256 text fingerprint,
-and the ACP session id. The ledger is process-local, FIFO and capped at 64 entries: the 65th
-registration evicts the oldest id, which may then be admitted again as a new message. The same
-id/op/text/session replays the original admission receipt with `idempotent_replay:true`,
+The ledger is keyed by the id, the op, the SHA-256 text fingerprint and the ACP session id, and is
+process-local, FIFO and capped at 64 entries: the 65th registration evicts the oldest id, which may
+then be admitted again as a new message. A prompt performs its lookup, write and registration in
+one `self.lock` admission critical section. A steer reserves a provisional entry inside that same
+critical section immediately after its frame is written; a composite interrupt reserves one at
+entry, before any cancel or prompt. A reservation is not yet a successful admission: the final
+receipt replaces that same entry in place, so settlement never changes FIFO order, and a late final
+receipt whose reservation was evicted is dropped rather than overwriting a newer admission that
+reused the id. A concurrent same-id request sees the reservation in the admission critical section
+and does not write a second frame.
+
+The same id/op/text/session replays the original admission receipt with `idempotent_replay:true`,
 `replay_of_turn_request_id` (the turn the original admission bound to), the original
-`dispatch_event_cursor` when the admission carried one, and `holder_instance_id`; `mutation_performed` reports the original
-admission's actual effect (a prompt is true; a steer keeps its first true/false/null judgement).
-No second user row or turn is created. A different op, text or ACP session is
-`client-message-id-conflict` (`mutation_performed:false`) and nothing is written. A steer reserves
-its id as soon as its frame is written, and a composite interrupt reserves it at entry; a matching
-resend while either is in flight replays a conservative `steer_in_progress` or
-`steer_interrupt_in_progress` receipt with `mutation_performed:null`, and writes nothing. A clean
+`dispatch_event_cursor` when the admission carried one, and `holder_instance_id`;
+`mutation_performed` reports the original admission's actual effect (a prompt is true; a steer keeps
+its first true/false/null judgement). No second user row or turn is created. A different op, text
+or ACP session is `client-message-id-conflict` (`mutation_performed:false`) and nothing is written.
+A matching resend while a steer or interrupt is in flight replays a conservative `steer_in_progress`
+or `steer_interrupt_in_progress` receipt with `mutation_performed:null`, and writes nothing. A clean
 no-write (a busy refusal, an unsupported/rejected steer, an idle steer, or `promptRequired`)
-withdraws the reservation, so the same id stays retryable; `steer_interrupt` keeps it only when a
-cancel was sent or its prompt was written, replacing it with the final receipt.
+withdraws the reservation, so the same id stays retryable; if that reservation is still the newest
+entry and had displaced the oldest receipt at a full window, the receipt is restored at its
+original position, so a failed placeholder never shrinks the successful window. A later
+successful admission already owns the slot and is not displaced by the restore. `steer_interrupt` keeps its reservation only when
+a cancel was sent or its prompt was written, replacing it with the final receipt.
 
 The ledger is not persisted. After a holder restart, an id and text matching the recorded
 `last_prompt` (`last_prompt.client_message_id` and its fingerprint) are refused
 `client-message-id-restart-unknown` with `mutation_performed:false` and `previous_prompt`; the resend
-is not blindly admitted. A different id is a new message. Only the last prompt can be recognized
-this way, so an older id reused after a newer prompt is not detected. `view` echoes the value as
+is not blindly admitted. The composite checks this itself before reserving or cancelling, and its
+internal follow-up prompt is not the only guard. The restart guard is deliberately narrow: the same
+id with a different text, or an older id reused after a newer prompt, is a new admission. There is
+no cross-restart conflict protection over the full id set. `view` echoes the value as
 `clientMessageId` on that prompt's user row and turn (the key is omitted when no id was supplied),
 and `record.last_prompt.client_message_id` keeps it for restart detection. Without an id the
 receipt and view keep their previous shape, including `duplicate_warning` and the duplicate-turn

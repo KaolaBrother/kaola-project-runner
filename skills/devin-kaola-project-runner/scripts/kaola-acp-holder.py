@@ -8149,13 +8149,16 @@ class Holder:
     def _client_message_register_locked(
         self, client_message_id: str, op: str, fingerprint: str,
         receipt: dict[str, Any],
-    ) -> None:
-        """Register one successful admission; keep the newest 64 ids.
+    ) -> str:
+        """Append one admission/reservation in FIFO order; return its token.
 
-        Eviction is by admission order: the 65th registration drops the oldest
-        entry, which may then be reused as a new message.
+        The oldest entry is displaced when the window is full and remembered on
+        the new entry: a reservation that later proves a clean no-write can put
+        it back, so a failed operation never shrinks the successful window.
         """
+        token = secrets.token_hex(8)
         entry = {
+            "token": token,
             "client_message_id": client_message_id,
             "op": op,
             "fingerprint": fingerprint,
@@ -8163,27 +8166,43 @@ class Holder:
             "holder_instance_id": self.holder_instance_id,
             "registered_at": round(time.time(), 3),
             "receipt": copy.deepcopy(receipt),
+            "evicted": None,
         }
-        self.client_message_ledger[:] = [
-            old for old in self.client_message_ledger
-            if old.get("client_message_id") != client_message_id
-        ]
+        if len(self.client_message_ledger) >= CLIENT_MESSAGE_ID_LEDGER_MAX:
+            entry["evicted"] = copy.deepcopy(self.client_message_ledger.pop(0))
         self.client_message_ledger.append(entry)
-        if len(self.client_message_ledger) > CLIENT_MESSAGE_ID_LEDGER_MAX:
-            del self.client_message_ledger[
-                : len(self.client_message_ledger) - CLIENT_MESSAGE_ID_LEDGER_MAX
-            ]
+        return token
 
-    def _client_message_withdraw_locked(
-        self, client_message_id: str, op: str, fingerprint: str,
-    ) -> None:
-        """Drop a reservation whose operation proved a clean no-write."""
-        self.client_message_ledger[:] = [
-            entry for entry in self.client_message_ledger
-            if not (entry.get("client_message_id") == client_message_id
-                    and entry.get("op") == op
-                    and entry.get("fingerprint") == fingerprint)
-        ]
+    def _client_message_commit_locked(
+        self, token: str, receipt: dict[str, Any],
+    ) -> bool:
+        """Replace one still-held reservation in place; never reorder or re-add.
+
+        A late final receipt whose entry was evicted (or whose id was reused by
+        a newer admission) is dropped rather than overwriting that admission.
+        """
+        for entry in self.client_message_ledger:
+            if entry.get("token") != token:
+                continue
+            entry["receipt"] = copy.deepcopy(receipt)
+            entry["evicted"] = None
+            return True
+        return False
+
+    def _client_message_withdraw_locked(self, token: str) -> None:
+        """Drop a reservation whose operation proved a clean no-write.
+
+        If this was the newest entry and it displaced an older receipt, restore
+        that receipt at its original FIFO position.
+        """
+        for index, entry in enumerate(self.client_message_ledger):
+            if entry.get("token") != token:
+                continue
+            evicted = entry.get("evicted")
+            del self.client_message_ledger[index]
+            if evicted is not None and index == len(self.client_message_ledger):
+                self.client_message_ledger.insert(0, evicted)
+            return
 
     def _client_message_restart_unknown(
         self, client_message_id: str, fingerprint: str,
@@ -8291,6 +8310,7 @@ class Holder:
             return {**base, **id_refusal}
         if client_message_id is not None:
             base["client_message_id"] = client_message_id
+        client_message_token: str | None = None
         with self.lock:
             # Issue #380: bind the op to one holder even when the turn is idle;
             # a mismatch is a pre-write fact for this steer.
@@ -8398,12 +8418,28 @@ class Holder:
             if extra:
                 queued_receipt.update(extra)
             if client_message_id is not None:
-                # Caller holds self.lock on both queue paths.
-                self._client_message_register_locked(
-                    client_message_id, "steer", base["steer_fingerprint"], queued_receipt)
+                # Caller holds self.lock on both queue paths. The promptRequired
+                # fallback already reserved this id after its native write.
+                if client_message_token is not None:
+                    self._client_message_commit_locked(
+                        client_message_token, queued_receipt)
+                else:
+                    self._client_message_register_locked(
+                        client_message_id, "steer", base["steer_fingerprint"],
+                        queued_receipt)
             return queued_receipt
 
         with self.lock:
+            # Issue #380 / F1: the admission lock is the one that writes. Recheck
+            # the ledger here so a concurrent same-id steer cannot pass the early
+            # lookup and then write a second frame.
+            if client_message_id is not None:
+                replay, conflict = self._client_message_verdict_locked(
+                    client_message_id, "steer", base["steer_fingerprint"])
+                if replay is not None:
+                    return replay
+                if conflict is not None:
+                    return conflict
             if not self.turn["active"]:
                 # An idle steer is never written. Some agents answer an idle
                 # steering call by starting a detached turn this holder would not
@@ -8474,7 +8510,7 @@ class Holder:
                     "mutation_status": self.turn.get("mutation_status"),
                     "mutation_performed": None,
                 }
-                self._client_message_register_locked(
+                client_message_token = self._client_message_register_locked(
                     client_message_id, "steer", base["steer_fingerprint"],
                     provisional)
         base["steer_request_id"] = steer_request_id
@@ -8668,17 +8704,20 @@ class Holder:
                                 "steer_consumed": consumed,
                                 "turn_request_id_preserved": receipt["turn_request_id_preserved"]})
             if client_message_id is not None:
-                if receipt.get("mutation_performed") is not False:
-                    # Issue #380: replace the in-flight reservation with the
-                    # final receipt. True and unknown stay registered; a
-                    # possible write must not be repeated under the same id.
+                if client_message_token is not None:
+                    if receipt.get("mutation_performed") is not False:
+                        # Replace this reservation in place. A late final
+                        # receipt whose entry was evicted is dropped rather
+                        # than overwriting a newer admission that reused id.
+                        self._client_message_commit_locked(
+                            client_message_token, receipt)
+                    else:
+                        # A clean no-write steer withdraws its reservation and
+                        # restores any entry it displaced.
+                        self._client_message_withdraw_locked(client_message_token)
+                elif receipt.get("mutation_performed") is not False:
                     self._client_message_register_locked(
                         client_message_id, "steer", base["steer_fingerprint"], receipt)
-                else:
-                    # A clean no-write steer is not registered, so the same id
-                    # may be retried once the condition is fixed.
-                    self._client_message_withdraw_locked(
-                        client_message_id, "steer", base["steer_fingerprint"])
         return receipt
 
     def op_steer_interrupt(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -8717,6 +8756,14 @@ class Holder:
         client_message_id, id_refusal = self._client_message_id_param(params)
         if id_refusal is not None:
             return {**base, **id_refusal}
+        # Issue #380 / F5: the explicit holder binding is checked before any
+        # replay or conflict answer, so a stale successful receipt can never
+        # stand in for a mismatch.
+        expected = params.get("expected_holder_instance_id")
+        if expected is not None and expected != self.holder_instance_id:
+            return {**base,
+                    **self._holder_instance_mismatch("steer_interrupt", expected)}
+        client_message_token: str | None = None
         if client_message_id is not None:
             base["client_message_id"] = client_message_id
             with self.lock:
@@ -8726,24 +8773,33 @@ class Holder:
                     return replay
                 if conflict is not None:
                     return conflict
+                # F2: the composite must honor the restart guard itself; its
+                # internal follow-up prompt is marked already-registered and
+                # therefore cannot be the only check.
+                restart = self._client_message_restart_unknown(
+                    client_message_id, base["steer_fingerprint"])
+                if restart is not None:
+                    return restart
 
         def finish(receipt: dict[str, Any], *, cancel_sent: bool = False,
                    prompt_sent: bool = False) -> dict[str, Any]:
             """Issue #380: keep the reservation only at a mutation point.
 
             A clean no-write path is retryable, so it withdraws the placeholder
-            and leaves no ledger entry.
+            and restores the receipt it displaced.
             """
             if client_message_id is not None:
                 with self.lock:
                     if cancel_sent or prompt_sent:
-                        self._client_message_register_locked(
-                            client_message_id, "steer_interrupt",
-                            base["steer_fingerprint"], receipt)
-                    else:
-                        self._client_message_withdraw_locked(
-                            client_message_id, "steer_interrupt",
-                            base["steer_fingerprint"])
+                        if client_message_token is not None:
+                            self._client_message_commit_locked(
+                                client_message_token, receipt)
+                        else:
+                            self._client_message_register_locked(
+                                client_message_id, "steer_interrupt",
+                                base["steer_fingerprint"], receipt)
+                    elif client_message_token is not None:
+                        self._client_message_withdraw_locked(client_message_token)
             return receipt
 
         if not text.strip():
@@ -8784,6 +8840,10 @@ class Holder:
                     return replay
                 if conflict is not None:
                     return conflict
+                restart = self._client_message_restart_unknown(
+                    client_message_id, base["steer_fingerprint"])
+                if restart is not None:
+                    return restart
                 provisional = {
                     **base, "outcome": "steer_interrupt_in_progress",
                     "interrupted": None, "steer_outcome": "in_progress",
@@ -8791,7 +8851,7 @@ class Holder:
                     "turn_request_id": self.turn.get("request_id"),
                     "mutation_status": "in_progress", "mutation_performed": None,
                 }
-                self._client_message_register_locked(
+                client_message_token = self._client_message_register_locked(
                     client_message_id, "steer_interrupt",
                     base["steer_fingerprint"], provisional)
             # Hold the turn OBJECT, not just its id: `self.turn` is replaced when

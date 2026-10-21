@@ -32,12 +32,16 @@ Run: python3 tests/contract/test-issue-380-client-message-id.py -v
 
 from __future__ import annotations
 
+import argparse
 import hashlib
+import importlib.util
 import json
 import os
+import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -46,6 +50,12 @@ REPO = Path(__file__).resolve().parents[2]
 CLI = REPO / "scripts" / "kaola-acp.py"
 HOLDER = REPO / "scripts" / "kaola-acp-holder.py"
 MOCK = REPO / "tests" / "contract" / "mock-acp-agent.py"
+
+_holder_spec = importlib.util.spec_from_file_location(
+    "kaola_acp_holder_i380", HOLDER)
+holder_module = importlib.util.module_from_spec(_holder_spec)
+assert _holder_spec.loader is not None
+_holder_spec.loader.exec_module(holder_module)
 
 
 def wait_for(predicate, timeout: float, label: str, interval: float = 0.05):
@@ -372,6 +382,43 @@ class ClientMessageIdCase(unittest.TestCase):
         self.assertEqual(len(self.user_rows(view)), 1)
         self.assertEqual(self.user_rows(view)[0]["clientMessageId"], "r-2")
 
+    def test_restart_same_id_interrupt_is_refused(self) -> None:
+        self.start()
+        text = "a composite before the holder restarted"
+        self.cli("steer", "--steer-mode", "interrupt", "--text", text,
+                 "--timeout", "20", "--client-message-id", "ri-1")
+        self.wait_idle()
+        self.assertEqual(self.read_record()["last_prompt"]["client_message_id"],
+                         "ri-1")
+        self.cli("stop", "--force")
+        self.started = False
+        self.start()
+
+        _, refused = self.cli(
+            "steer", "--steer-mode", "interrupt", "--text", text,
+            "--timeout", "20", "--client-message-id", "ri-1", check=False)
+        self.assertEqual(refused["error"]["code"],
+                         "client-message-id-restart-unknown")
+        self.assertIs(refused["restart_unknown"], True)
+        self.assertIs(refused["mutation_performed"], False)
+        self.assertEqual(refused["mutation_status"], "not_started")
+        self.assertNotIn("idempotent_replay", refused)
+        view = self.view()
+        self.assertEqual(len(self.user_rows(view)), 0)
+        self.assertEqual(len(view.get("turns") or []), 0)
+
+        # The restart guard is deliberately narrow: the same id with different
+        # text is a new admission, not a cross-restart conflict.
+        _, admitted = self.cli(
+            "steer", "--steer-mode", "interrupt", "--text", "different text",
+            "--timeout", "20", "--client-message-id", "ri-1")
+        self.assertEqual(admitted["outcome"],
+                         "steer_resent_without_interrupt")
+        self.assertNotIn("idempotent_replay", admitted)
+        view = self.view()
+        self.assertEqual(len(self.user_rows(view)), 1)
+        self.assertEqual(self.user_rows(view)[0]["clientMessageId"], "ri-1")
+
     # -- steer: null retention and clean no-write ---------------------------
 
     def test_steer_replay_preserves_unknown_mutation(self) -> None:
@@ -597,6 +644,294 @@ class ClientMessageIdCase(unittest.TestCase):
         section = section.split("def cancel_turn", 1)[0]
         self.assertIn('"expected_holder_instance_id": self.holder_instance_id',
                       section)
+
+
+class _StubProc:
+    pid = 4242
+
+
+class _StubAgent:
+    """Just enough agent for in-process admission/ledger boundary tests."""
+
+    def __init__(self) -> None:
+        self.proc = _StubProc()
+        self.exited = threading.Event()
+        self.exit_code = None
+        self.exit_signal = None
+        self.stderr_pump = None
+        self.malformed_lines = 0
+        self.handler_errors = 0
+        self.pending_out: dict[int, str] = {}
+        self.sent: list[dict] = []
+        self.next_id = 0
+        self.wait_response = self._injected
+
+    def _injected(self, request_id, timeout):
+        return {"result": {"outcome": "injected"}}
+
+    def send_request(self, method: str, params: dict) -> int:
+        self.next_id += 1
+        self.pending_out[holder_module.normalize_id(self.next_id)] = method
+        self.sent.append({"method": method, "id": self.next_id, "params": params})
+        return self.next_id
+
+    def send_message(self, message: dict) -> None:
+        self.sent.append(message)
+
+    def frames(self, method: str) -> list[dict]:
+        return [message for message in self.sent
+                if message.get("method") == method]
+
+
+class LedgerBoundaryCase(unittest.TestCase):
+    """In-process Holder tests for the ledger's concurrency/FIFO boundaries."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory(prefix="kpr-i380-ledger-")
+        root = Path(self._tmp.name)
+        args = argparse.Namespace(
+            record_dir=str(root / "record"), socket=str(root / "h.sock"),
+            platform="grok", session="i380-ledger", repo=str(root),
+            init_meta="", command="stub",
+        )
+        self.holder = holder_module.Holder(args)
+        self.agent = _StubAgent()
+        self.holder.agent = self.agent
+        self.holder.acp_session_id = "ses-i380"
+        self.holder.state = "ready"
+        # Prompt turns settle explicitly; no background waiter thread needed.
+        self.holder._await_prompt = lambda request: None
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    # -- helpers -------------------------------------------------------------
+
+    def prompt(self, text: str, client_message_id: str | None = None,
+               settle: bool = True) -> dict:
+        params: dict = {"text": text, "wait": False}
+        if client_message_id is not None:
+            params["client_message_id"] = client_message_id
+        receipt = self.holder.op_prompt(params)
+        self.assertEqual(receipt.get("outcome"), "in_progress", receipt)
+        if settle:
+            self.settle(receipt["turn_request_id"])
+        return receipt
+
+    def start_turn(self, text: str) -> dict:
+        return self.prompt(text, settle=False)
+
+    def settle(self, request_id, stop_reason: str = "end_turn") -> None:
+        self.holder.on_prompt_response(
+            request_id, {"result": {"stopReason": stop_reason}})
+
+    def ids(self) -> list[str]:
+        return [entry["client_message_id"]
+                for entry in self.holder.client_message_ledger]
+
+    def wire(self, op: str, params: dict) -> dict:
+        client, server = socket.socketpair()
+        thread = threading.Thread(
+            target=self.holder.serve_connection, args=(server,))
+        thread.start()
+        try:
+            client.settimeout(10)
+            client.sendall(json.dumps({"op": op, "params": params}).encode()
+                           + b"\n")
+            data = b""
+            while b"\n" not in data:
+                data += client.recv(65536)
+            return json.loads(data)
+        finally:
+            client.close()
+            thread.join(10)
+
+    def concurrent_steer(self, texts: tuple[str, str]) -> list[dict]:
+        replies: list[dict | None] = [None, None]
+        errors: list[BaseException] = []
+        barrier = threading.Barrier(2)
+        original = self.holder._no_acp_session
+
+        def paused():
+            result = original()
+            barrier.wait(5)
+            return result
+
+        self.holder._no_acp_session = paused
+        try:
+            def call(index: int) -> None:
+                try:
+                    replies[index] = self.wire("steer", {
+                        "text": texts[index],
+                        "method": "_x.ai/interject",
+                        "client_message_id": "race-id",
+                    })
+                except BaseException as exc:  # noqa: BLE001 - reported below
+                    errors.append(exc)
+
+            threads = [threading.Thread(target=call, args=(index,))
+                       for index in range(2)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(15)
+        finally:
+            self.holder._no_acp_session = original
+        self.assertFalse(errors, errors)
+        self.assertTrue(all(reply is not None for reply in replies), replies)
+        return [reply for reply in replies if reply is not None]
+
+    # -- F1: one admission critical section ---------------------------------
+
+    def test_concurrent_same_id_steer_writes_once(self) -> None:
+        self.start_turn("base")
+        replies = self.concurrent_steer(("same message", "same message"))
+        frames = self.agent.frames("_x.ai/interject")
+        self.assertEqual(len(frames), 1, replies)
+        self.assertEqual(
+            sum(1 for reply in replies if reply.get("idempotent_replay")), 1,
+            replies)
+
+    def test_concurrent_same_id_different_text_conflicts(self) -> None:
+        self.start_turn("base")
+        replies = self.concurrent_steer(("message A", "message B"))
+        frames = self.agent.frames("_x.ai/interject")
+        self.assertEqual(len(frames), 1, replies)
+        conflicts = [reply for reply in replies
+                     if (reply.get("error") or {}).get("code")
+                     == "client-message-id-conflict"]
+        self.assertEqual(len(conflicts), 1, replies)
+        self.assertIs(conflicts[0]["mutation_performed"], False)
+
+    # -- F3: a failed reservation does not shrink the window ----------------
+
+    def test_failed_interrupt_reservation_restores_the_evicted_receipt(self):
+        for index in range(64):
+            self.prompt(f"text-{index}", f"id-{index}")
+        self.assertEqual(len(self.ids()), 64)
+        real_send = self.agent.send_request
+        self.agent.send_request = lambda method, params: "failed-request"
+        try:
+            failed = self.holder.op_steer_interrupt({
+                "text": "failed composite", "client_message_id": "failed-id"})
+        finally:
+            self.agent.send_request = real_send
+        self.assertEqual(failed.get("outcome"), "steer_send_failed", failed)
+        self.assertEqual(len(self.ids()), 64)
+        self.assertEqual(self.ids()[0], "id-0")
+        replay = self.holder.op_prompt({
+            "text": "text-0", "wait": False, "client_message_id": "id-0"})
+        self.assertIs(replay.get("idempotent_replay"), True, replay)
+        self.assertEqual(len(self.agent.frames("session/prompt")), 64)
+
+    # -- F4: in-place settlement and no overwrite of a reused id ------------
+
+    def test_final_receipt_does_not_reorder_fifo(self) -> None:
+        self.prompt("base", "base", settle=False)
+        waiting = threading.Event()
+        release = threading.Event()
+
+        def wait(*args):
+            waiting.set()
+            release.wait(10)
+            return {"result": {"outcome": "injected"}}
+
+        self.agent.wait_response = wait
+        errors: list[BaseException] = []
+
+        def steer() -> None:
+            try:
+                self.holder.op_steer({
+                    "text": "early", "method": "_x.ai/interject",
+                    "client_message_id": "early"})
+            except BaseException as exc:  # noqa: BLE001 - reported below
+                errors.append(exc)
+
+        thread = threading.Thread(target=steer)
+        thread.start()
+        try:
+            self.assertTrue(waiting.wait(5))
+            self.settle(self.holder.turn["request_id"])
+            for index in range(62):
+                self.prompt(f"p-{index}", f"p-{index}")
+            self.assertEqual(len(self.ids()), 64)
+            before = self.ids()
+            self.assertEqual(before[:2], ["base", "early"], before)
+        finally:
+            release.set()
+            thread.join(10)
+        self.assertFalse(errors, errors)
+        # The final receipt replaced the reservation in place; it did not move
+        # the steer to the end of the admission order.
+        self.assertEqual(self.ids(), before)
+        self.assertEqual(self.ids().index("early"), 1)
+
+        self.prompt("p-62", "p-62")
+        self.assertNotIn("base", self.ids())
+        self.assertIn("early", self.ids())
+        self.prompt("p-63", "p-63")
+        self.assertNotIn("early", self.ids())
+
+    def test_late_final_receipt_cannot_overwrite_a_reused_id(self) -> None:
+        self.prompt("base", "base", settle=False)
+        waiting = threading.Event()
+        release = threading.Event()
+
+        def wait(*args):
+            waiting.set()
+            release.wait(10)
+            return {"result": {"outcome": "injected"}}
+
+        self.agent.wait_response = wait
+        errors: list[BaseException] = []
+
+        def steer() -> None:
+            try:
+                self.holder.op_steer({
+                    "text": "old steer", "method": "_x.ai/interject",
+                    "client_message_id": "reused"})
+            except BaseException as exc:  # noqa: BLE001 - reported below
+                errors.append(exc)
+
+        thread = threading.Thread(target=steer)
+        thread.start()
+        try:
+            self.assertTrue(waiting.wait(5))
+            self.settle(self.holder.turn["request_id"])
+            for index in range(64):
+                self.prompt(f"q-{index}", f"q-{index}")
+            self.assertNotIn("reused", self.ids())
+            self.prompt("new content", "reused")
+        finally:
+            release.set()
+            thread.join(10)
+        self.assertFalse(errors, errors)
+        entry = next(entry for entry in self.holder.client_message_ledger
+                     if entry["client_message_id"] == "reused")
+        self.assertEqual(entry["op"], "prompt")
+        self.assertEqual(
+            entry["fingerprint"],
+            "sha256:" + hashlib.sha256(b"new content").hexdigest())
+        replay = self.holder.op_prompt({
+            "text": "new content", "wait": False,
+            "client_message_id": "reused"})
+        self.assertIs(replay.get("idempotent_replay"), True, replay)
+        self.assertEqual(replay.get("outcome"), "in_progress")
+
+    # -- F5: mismatch wins over a replay ------------------------------------
+
+    def test_interrupt_replay_still_honors_expected_holder(self) -> None:
+        first = self.holder.op_steer_interrupt({
+            "text": "hello", "client_message_id": "i-1"})
+        self.assertNotIn("error", first)
+        wrong = self.holder.op_steer_interrupt({
+            "text": "hello", "client_message_id": "i-1",
+            "expected_holder_instance_id": "wrong-holder"})
+        self.assertEqual(wrong["error"]["code"], "holder-instance-mismatch")
+        self.assertIs(wrong["mutation_performed"], False)
+        self.assertEqual(wrong["mutation_status"], "not_started")
+        self.assertNotIn("idempotent_replay", wrong)
+        self.assertEqual(len(self.agent.frames("session/prompt")), 1)
 
 
 if __name__ == "__main__":
