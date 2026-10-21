@@ -33,8 +33,10 @@ Run: python3 tests/contract/test-issue-383-holder-timeout.py -v
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import shutil
@@ -281,42 +283,46 @@ class ClientBoundTests(unittest.TestCase):
         cls.module = load_module(CLI, "kaola_acp_383_bounds")
 
     def bound(self, command: str, timeout=None, wait=None,
-              cancel_timeout=None) -> float | None:
+              cancel_timeout=None, op: str | None = None) -> float | None:
         args = argparse.Namespace(command=command, timeout=timeout,
                                   cancel_timeout=cancel_timeout)
-        return self.module.client_socket_timeout(args, wait)
+        return self.module.client_socket_timeout(args, wait, op=op)
 
     def test_admission_bound_matrix(self) -> None:
         rows = [
-            ("send", None, False, None, 30.0),
-            ("send", None, True, None, None),
-            ("send", 5.0, False, None, 35.0),
-            ("start", None, False, None, 30.0),
-            ("start", None, True, None, None),
-            ("steer", None, None, None, 60.0),
-            ("steer", 5.0, None, None, 35.0),
-            ("cancel", None, None, None, 35.0),
-            ("cancel", 5.0, None, None, 35.0),
-            ("steer_interrupt", None, None, None, 35.0),
-            ("steer_interrupt", None, None, 40.0, 70.0),
-            ("steer_interrupt", 10.0, None, None, 40.0),
-            ("steer_interrupt", 10.0, None, 60.0, 90.0),
-            ("wait", None, None, None, None),
-            ("wait", 5.0, None, None, 35.0),
-            ("wake", None, None, None, None),
+            # The CLI command is "steer" for both native and interrupt; the
+            # resolved holder op is what selects the formula.
+            ("send", None, False, None, "prompt", 30.0),
+            ("send", None, True, None, "prompt", None),
+            ("send", 5.0, False, None, "prompt", 35.0),
+            ("start", None, False, None, "prompt", 30.0),
+            ("start", None, True, None, "prompt", None),
+            ("steer", None, None, None, "steer", 60.0),
+            ("steer", 5.0, None, None, "steer", 35.0),
+            ("cancel", None, None, None, "cancel", 35.0),
+            ("cancel", 5.0, None, None, "cancel", 35.0),
+            ("steer", None, None, None, "steer_interrupt", 35.0),
+            ("steer", None, None, 40.0, "steer_interrupt", 70.0),
+            ("steer", 1.0, None, 80.0, "steer_interrupt", 110.0),
+            ("steer", 10.0, None, None, "steer_interrupt", 40.0),
+            ("steer", 10.0, None, 60.0, "steer_interrupt", 90.0),
+            ("wait", None, None, None, "wait", None),
+            ("wait", 5.0, None, None, "wait", 35.0),
+            ("wake", None, None, None, "wake_delegator", None),
         ]
-        for command, timeout, wait, cancel_timeout, expected in rows:
+        for command, timeout, wait, cancel_timeout, op, expected in rows:
             with self.subTest(command=command, timeout=timeout, wait=wait,
-                              cancel_timeout=cancel_timeout):
+                              cancel_timeout=cancel_timeout, op=op):
                 self.assertEqual(
-                    self.bound(command, timeout, wait, cancel_timeout), expected)
+                    self.bound(command, timeout, wait, cancel_timeout, op),
+                    expected)
 
     def test_steer_no_wait_is_a_noop(self) -> None:
         """Only send/start consume --wait; steer's bound is timeout + grace."""
-        self.assertEqual(self.bound("steer", None, False), 60.0)
-        self.assertEqual(self.bound("steer", None, True), 60.0)
-        self.assertEqual(self.bound("send", None, False), 30.0)
-        self.assertEqual(self.bound("send", None, True), None)
+        self.assertEqual(self.bound("steer", None, False, None, "steer"), 60.0)
+        self.assertEqual(self.bound("steer", None, True, None, "steer"), 60.0)
+        self.assertEqual(self.bound("send", None, False, None, "prompt"), 30.0)
+        self.assertEqual(self.bound("send", None, True, None, "prompt"), None)
 
     def test_shipped_constants(self) -> None:
         self.assertEqual(self.module.ADMISSION_BOUND, 30.0)
@@ -347,6 +353,62 @@ class ClientBoundTests(unittest.TestCase):
              patch.object(module, "op_or_holder_lost", side_effect=capture):
             module.deliver_start_brief(args, "/unused", {}, "brief")
         self.assertEqual(captured, [30.0])
+
+    def interrupt_bound_through_cli(self, extra: list[str]
+                                    ) -> tuple[list[tuple[str, float]], dict]:
+        """Run the real CLI steer --steer-mode interrupt dispatch.
+
+        The command stays ``steer``; the resolved holder op is
+        ``steer_interrupt``. Only this catches a command-keyed formula that the
+        real path can never select.
+        """
+        module = self.module
+        root = Path(tempfile.mkdtemp(prefix="kpr-i383-cli-interrupt-"))
+        sock = root / "holder.sock"
+        sock.write_text("", encoding="utf-8")
+        captured: list[tuple[str, float]] = []
+
+        def fake_socket_request(sock_path, op, params, timeout):
+            captured.append((op, timeout))
+            return {"error": {"code": "holder-timeout", "stage": "read",
+                              "timeout_s": timeout},
+                    "outcome": "unknown", "mutation_performed": None,
+                    "mutation_status": "unknown"}
+
+        argv = [str(CLI), "grok", "steer", "--repo", str(root),
+                "--session", "s-383", "--command", "true",
+                "--text", "interrupt probe", "--steer-mode", "interrupt",
+                *extra]
+        stdout = io.StringIO()
+        with patch.object(sys, "argv", argv), \
+             patch.object(module, "resolve_repo", return_value=str(root)), \
+             patch.object(module, "sock_path", return_value=sock), \
+             patch.object(module, "read_record",
+                          return_value={"holder_pid": os.getpid(),
+                                        "state": "ready"}), \
+             patch.object(module, "pid_alive", return_value=True), \
+             patch.object(module, "socket_request",
+                          side_effect=fake_socket_request), \
+             contextlib.redirect_stdout(stdout):
+            rc = module.main()
+        lines = [line for line in stdout.getvalue().splitlines() if line.strip()]
+        receipt = json.loads(lines[-1])
+        self.assertEqual(rc, 0, receipt)
+        return captured, receipt
+
+    def test_real_cli_interrupt_uses_the_cancel_formula(self) -> None:
+        captured, receipt = self.interrupt_bound_through_cli(
+            ["--cancel-timeout", "80", "--timeout", "1"])
+        self.assertEqual(captured, [("steer_interrupt", 110.0)])
+        self.assertEqual((receipt.get("error") or {}).get("timeout_s"), 110.0)
+        self.assertEqual(receipt["verify"]["match"], "last_prompt.fingerprint")
+        self.assertIn("status", receipt["verify"]["command"])
+
+    def test_real_cli_interrupt_default_is_35(self) -> None:
+        captured, receipt = self.interrupt_bound_through_cli([])
+        self.assertEqual(captured, [("steer_interrupt", 35.0)])
+        self.assertEqual((receipt.get("error") or {}).get("timeout_s"), 35.0)
+
 
 class ReceiptMutationTests(unittest.TestCase):
     """The #379 stamp now uses the #383 stage facts."""
@@ -450,6 +512,32 @@ class ReceiptMutationTests(unittest.TestCase):
         self.assertIn("status", stamped["verify"]["command"])
         self.assertIn("resend", stamped["verify"]["do_not"])
 
+        # Interrupt: the follow-up prompt carries this steer text, so status's
+        # last_prompt fingerprint is the real surface.
+        interrupt = {"error": {"code": "holder-timeout", "stage": "read",
+                               "timeout_s": 35.0}}
+        stamped = self.module._stamp_timeout_verification(
+            interrupt, args, "/tmp/repo", "steer_interrupt", {"text": text})
+        self.assertEqual(stamped["steer_fingerprint"], fingerprint(text))
+        self.assertIn("status", stamped["verify"]["command"])
+        self.assertEqual(stamped["verify"]["match"], "last_prompt.fingerprint")
+        self.assertIn("follow-up prompt", stamped["verify"]["note"])
+
+        # Native steer has no status field. The verify must name the existing
+        # capture events (steer_sent fingerprint -> steer_result request_id),
+        # and must not present a bare write as consumption.
+        native = {"error": {"code": "holder-timeout", "stage": "read",
+                            "timeout_s": 60.0}}
+        stamped = self.module._stamp_timeout_verification(
+            native, args, "/tmp/repo", "steer", {"text": text})
+        self.assertEqual(stamped["steer_fingerprint"], fingerprint(text))
+        self.assertIn("capture", stamped["verify"]["command"])
+        self.assertNotIn("status", stamped["verify"]["command"])
+        self.assertIn("steer_sent.fingerprint", stamped["verify"]["match"])
+        self.assertIn("steer_result", stamped["verify"]["match"])
+        self.assertIn("consumption", stamped["verify"]["note"])
+        self.assertNotEqual(stamped["verify"]["match"], "steer_fingerprint")
+
     def test_recovery_route_exists_and_is_honest(self) -> None:
         routes = load_module(ROUTES, "kaola_routes_383").ROUTES
         kind, text = routes["holder-timeout"]
@@ -532,6 +620,7 @@ class ReceiptIntegrationCase(unittest.TestCase):
         self.record_root = self.root / "records"
         self.record_root.mkdir()
         self.session = f"grok-w383-{self._testMethodName.replace('_', '-')[:42]}"
+        self.platform = "grok"
         self.started = False
         self.extra: list[subprocess.Popen] = []
         self.suspended: list[int] = []
@@ -595,11 +684,15 @@ class ReceiptIntegrationCase(unittest.TestCase):
     def cli(self, command: str, *args: str, check: bool = True,
             timeout: float = 60, scenario: str = "normal",
             mock_args: tuple[str, ...] = (),
-            stdin_text: str | None = None) -> tuple[int, dict]:
+            stdin_text: str | None = None,
+            platform: str | None = None,
+            agent_command: str | None = None) -> tuple[int, dict]:
+        target = platform or self.platform
         argv = [
-            sys.executable, str(CLI), "grok", command,
+            sys.executable, str(CLI), target, command,
             "--repo", str(self.repo), "--session", self.session,
-            "--command", self.mock_command(scenario, *mock_args), *args,
+            "--command", agent_command or self.mock_command(scenario, *mock_args),
+            *args,
         ]
         proc = subprocess.run(argv, capture_output=True, text=True,
                               env=self.env(), timeout=timeout,
@@ -617,15 +710,19 @@ class ReceiptIntegrationCase(unittest.TestCase):
         return proc.returncode, receipt
 
     def start(self, scenario: str = "normal", *args: str,
-              mock_args: tuple[str, ...] = ()) -> dict:
+              mock_args: tuple[str, ...] = (),
+              platform: str | None = None) -> dict:
+        target = platform or self.platform
+        self.platform = target
         _, receipt = self.cli("start", *args, scenario=scenario,
-                              mock_args=mock_args)
+                              mock_args=mock_args, platform=target)
         self.started = True
         return receipt
 
     def record_path(self) -> Path:
         digest = hashlib.sha256(self.project.encode("utf-8")).hexdigest()[:16]
-        return self.record_root / "grok" / self.session / digest / "record.json"
+        return (self.record_root / self.platform / self.session / digest
+                / "record.json")
 
     def read_record(self) -> dict:
         return json.loads(self.record_path().read_text(encoding="utf-8"))
@@ -744,6 +841,65 @@ class HolderTimeoutIntegrationTests(ReceiptIntegrationCase):
         self.assertEqual(last.get("fingerprint"), expected)
         self.assertEqual(last.get("mutation_status"), "completed")
 
+    def test_start_brief_timeout_keeps_fingerprint_and_verify(self) -> None:
+        """F2: the final start receipt must carry the timeout's verify handle.
+
+        A mock agent stops itself after two configuration replies, so the
+        holder's 2 MB brief write blocks while the start client still owns the
+        30 s admission bound.
+        """
+        wrapper = self.root / "mock-stop-after-config.py"
+        wrapper.write_text(
+            "import importlib.util, os, signal\n"
+            f"spec = importlib.util.spec_from_file_location('mock', {str(MOCK)!r})\n"
+            "m = importlib.util.module_from_spec(spec)\n"
+            "spec.loader.exec_module(m)\n"
+            "orig = m.MockAgent.on_set_config\n"
+            "count = [0]\n"
+            "def stop_after(self, request_id, params):\n"
+            "    orig(self, request_id, params)\n"
+            "    count[0] += 1\n"
+            "    if count[0] == 2:\n"
+            "        os.kill(os.getpid(), signal.SIGSTOP)\n"
+            "m.MockAgent.on_set_config = stop_after\n"
+            "raise SystemExit(m.main())\n",
+            encoding="utf-8")
+        text = "b" * 2_000_000
+        started = time.monotonic()
+        self.started = True
+        try:
+            rc, receipt = self.cli(
+                "start", "--stdin", "--no-wait", stdin_text=text,
+                timeout=45, check=False,
+                agent_command=f"{sys.executable} {wrapper}")
+            elapsed = time.monotonic() - started
+        finally:
+            try:
+                record = self.read_record()
+            except (OSError, ValueError):
+                record = {}
+            agent_pid = record.get("agent_pid")
+            if isinstance(agent_pid, int) and agent_pid > 0:
+                try:
+                    os.kill(agent_pid, signal.SIGCONT)
+                except ProcessLookupError:
+                    pass
+        self.assertEqual(rc, 1, receipt)
+        self.assertIs(receipt.get("brief_delivered"), False, receipt)
+        error = receipt.get("error") or {}
+        self.assertEqual(error.get("code"), "holder-timeout", receipt)
+        self.assertEqual(error.get("stage"), "read", receipt)
+        self.assertEqual(error.get("timeout_s"), 30.0, receipt)
+        self.assertIsNone(receipt.get("mutation_performed"), receipt)
+        self.assertEqual(receipt.get("mutation_status"), "unknown", receipt)
+        self.assertEqual(receipt.get("prompt_fingerprint"), fingerprint(text))
+        verify = receipt.get("verify") or {}
+        self.assertEqual(verify.get("match"), "last_prompt.fingerprint")
+        self.assertIn("status", verify.get("command", ""))
+        self.assertNotIn(text, json.dumps(receipt))
+        self.assertGreaterEqual(elapsed, 28.0, receipt)
+        self.assertLess(elapsed, 36.0, receipt)
+
     def test_send_wait_without_timeout_is_not_cut_at_admission(self) -> None:
         self.start("slow", mock_args=("--turn-ms", "1500"))
         started = time.monotonic()
@@ -756,6 +912,64 @@ class HolderTimeoutIntegrationTests(ReceiptIntegrationCase):
         self.assertLess(elapsed, 10.0)
         self.assertNotIn("holder-timeout",
                          json.dumps(receipt.get("error") or {}))
+
+    def test_interrupt_success_verify_surface_is_status_fingerprint(self) -> None:
+        """F3: an interrupt's follow-up prompt is the status-verifiable fact."""
+        self.start()
+        text = "interrupt verification text"
+        rc, steer = self.cli("steer", "--text", text,
+                             "--steer-mode", "interrupt")
+        self.assertEqual(rc, 0, steer)
+        self.assertEqual(steer.get("outcome"),
+                         "steer_resent_without_interrupt", steer)
+        self.assertIs(steer.get("steer_consumed"), True, steer)
+        fp = steer.get("steer_fingerprint")
+        self.assertTrue(fp, steer)
+        self.assertEqual(steer.get("new_prompt_fingerprint"), fp, steer)
+
+        def admitted():
+            _, status = self.cli("status", check=False)
+            last = status.get("last_prompt") or {}
+            return last if last.get("fingerprint") == fp else None
+
+        last = wait_for(admitted, 10, "interrupt follow-up prompt")
+        self.assertEqual(last.get("fingerprint"), fp)
+
+    def test_native_steer_verify_surface_is_capture_events(self) -> None:
+        """F3: native steer has no status field; capture has the real events."""
+        self.start("hang_until_cancel", mock_args=("--steering", "written"),
+                   platform="codex")
+        rc, sent = self.cli("send", "--text", "keep the turn open", "--no-wait")
+        self.assertEqual(rc, 0, sent)
+        wait_for(lambda: self.cli("observe", check=False)[1].get("turn_active"),
+                 10, "mock turn active")
+        text = "native steer capture probe"
+        rc, steer = self.cli("steer", "--text", text, "--steer-mode", "native",
+                             check=False)
+        self.assertEqual(rc, 0, steer)
+        self.assertEqual((steer.get("error") or {}).get("code"),
+                         "steer-write-only-confirmation", steer)
+        self.assertIs(steer.get("mutation_performed"), True, steer)
+        self.assertEqual(steer.get("steer_outcome"), "written", steer)
+        self.assertIsNone(steer.get("steer_consumed"), steer)
+        fp = steer.get("steer_fingerprint")
+        request_id = steer.get("steer_request_id")
+        self.assertTrue(fp, steer)
+        self.assertIsNotNone(request_id, steer)
+        _, capture = self.cli("capture", "--since", "0", check=False)
+        events = capture.get("events") or []
+        sent_events = [event for event in events
+                       if event.get("kind") == "steer_sent"
+                       and event.get("fingerprint") == fp]
+        self.assertTrue(sent_events, events)
+        result_events = [event for event in events
+                          if event.get("kind") == "steer_result"
+                          and event.get("request_id") == request_id]
+        self.assertTrue(result_events, events)
+        result = result_events[-1]
+        self.assertEqual(result.get("steer_outcome"), "written", result)
+        self.assertIsNone(result.get("steer_consumed"), result)
+        self.cli("cancel", "--timeout", "10", check=False)
 
     def test_force_stop_recovers_lock_wedged_holder(self) -> None:
         self.start()

@@ -3085,7 +3085,9 @@ nothing was written, or `steer_outcome: unknown` and `steer_consumed: null` when
 carries the same `mutation_performed`/`mutation_status` pair, while `status`/`observe`/`capture`/
 `wait` never grow those keys from a failed read. A `start --text`/`--stdin` failure receipt keeps
 this prompt request's mutation fact: a brief whose frame may have been written reports
-`null`/`unknown`, not `false`.
+`null`/`unknown`, not `false`, and that uncertain case also keeps the request's
+`prompt_fingerprint` and `verify` block so a late admission can be located. A clean no-write brief
+omits both, so neither can be read as a dispatch.
 
 ### Client transport bounds and timeouts (Issue #383)
 
@@ -3098,9 +3100,9 @@ thing that proves whether the complete request line was written.
 
 | Command / holder op | Holder-side wait | Client socket bound without `--timeout` | With `--timeout T` |
 |---|---|---|---|
-| `send --no-wait` (prompt) | admission only | **30 s** | `T + 30 s` |
-| `send --wait` (prompt) | until the turn ends | **unbounded** (a real turn may run for minutes) | `T + 30 s` |
-| `start --text/--stdin` brief | same admission as `send` | **30 s** when `--no-wait`; unbounded with `--wait` | `T + 30 s` |
+| `send` (resolved wait=false: `--no-wait` or owning-Host default) | admission only | **30 s** | `T + 30 s` |
+| `send` (resolved wait=true: `--wait` or standalone default) | until the turn ends | **unbounded** (a real turn may run for minutes) | `T + 30 s` |
+| `start --text/--stdin` brief (resolved wait=false) | same admission as `send` | **30 s**; unbounded when wait=true | `T + 30 s` |
 | `steer` (native) | `T` if given, else the holder's 30 s native-steer wait | **60 s** | `T + 30 s` |
 | `steer --steer-mode interrupt` | `cancel_timeout`, else `T`, else the 5 s cancel grace, then admission | **35 s** | `max(cancel_timeout, T, 5 s) + 30 s` |
 | `cancel` / `key escape` | `T` if given, else the 5 s cancel grace | **35 s** | `T + 30 s` |
@@ -3111,12 +3113,21 @@ thing that proves whether the complete request line was written.
 | `status` / `observe` | fixed (no admission lock) | 10 s | ignored |
 | `capture` / `view` | fixed (no admission lock) | 15 s | ignored |
 
+The 30 s condition is the **resolved wait**, not the flag: a Host-dispatched `send`/start whose
+`resolve_send_wait` returns `owning-host-default` is also wait=false and gets 30 s, while a
+standalone `start --text` defaults to wait=true and stays unbounded. The interrupt formula is
+selected by the resolved holder op (`steer_interrupt`), not by `args.command`; the CLI command
+remains `steer`, but `--cancel-timeout` is still honored. The start 30 s covers only the brief
+prompt socket's admission: `session/new`, model/config setup, resume waits, and the brief's
+follow-up `state` probe (up to 5 s) are outside that window, so it is not a start-total wall-clock
+SLA.
+
 `--timeout 0`, a negative value, or `--timeout 0.0` is refused as a typed `invalid-input` receipt
 (exit 1, `mutation_performed: false`, `mutation_status: not_started`) before any record or
 transport work; `0` no longer means "unbounded". `--timeout` is accepted for legacy compatibility
 on commands that ignore it (`stop`, `permit`, `status`, `observe`, `capture`, `view`), but it has
-no effect there. `start`'s `--timeout` covers only the first brief, never `session/new` or a
-resume wait.
+no effect there. `start`'s `--timeout` covers only the first brief prompt socket, never
+`session/new`, config/resume, or the follow-up state probe.
 
 `steer --no-wait` is a **no-op**: `--wait`/`--no-wait` is read only by `send` and `start`. A
 steer's wait is the holder's native steer timeout (30 s by default), so its client bound is 60 s
@@ -3137,7 +3148,12 @@ The failure shape is one of:
 
 and, for connect/send, the same error code with `"outcome": "not_sent"`,
 `"mutation_performed": false`, `"mutation_status": "not_started"`. The request text is never
-copied into a failure receipt.
+copied into a failure receipt. The `verify` surface is the real one: a prompt and an interrupt
+use `status`/`last_prompt.fingerprint` (an interrupt's follow-up prompt is this steer's text); a
+native steer uses `capture --since 0`, where the receipt's `steer_fingerprint` is on the
+`steer_sent` event and that event's `request_id` joins the `steer_result` event's
+`steer_outcome`/`steer_consumed`/`steer_confirmation`. A `steer_sent` or `written` event alone is
+not adoption.
 
 A read-stage timeout is genuinely uncertain. The request frame was written, and a holder that was
 merely stopped or slow can admit it after the client gave up; `SIGCONT` evidence for this issue

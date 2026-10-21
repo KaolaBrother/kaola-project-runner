@@ -1936,39 +1936,50 @@ STEER_ADMISSION_BOUND = 30.0
 CANCEL_GRACE = 5.0
 
 
-def client_socket_timeout(args: argparse.Namespace, wait: bool | None = None
-                          ) -> float | None:
+def client_socket_timeout(args: argparse.Namespace, wait: bool | None = None,
+                          op: str | None = None) -> float | None:
     """The client-side transport bound for one holder call (Issue #383).
 
-    ``send``/``start`` use ``wait`` (only they have a resolved wait selection).
+    ``op`` is the **resolved holder operation**, not the CLI command. The
+    interrupt path is still ``steer`` at the CLI layer, so dispatching on
+    ``args.command`` would select the 60 s native formula and ignore
+    ``--cancel-timeout``. Call sites pass ``op="prompt"``, ``"steer"``,
+    ``"steer_interrupt"``, ``"wait"``, ``"cancel"`` or ``"wake_delegator"``.
+    The command fallback exists only for a caller that has no resolved op.
+
     An explicit ``--timeout`` keeps the historical ``timeout + 30`` reply
-    window. Without it, a no-wait admission is bounded at 30 s, while
-    ``send --wait`` and ``wait`` remain unbounded. ``steer`` without a timeout
-    uses the holder's own 30 s native-steer wait plus the grace; ``cancel``
-    without one uses its 5 s grace; ``steer_interrupt`` uses the largest cancel
-    wait it may pass to the holder. ``wake`` is unchanged by this issue.
+    window. Without it, a no-wait prompt admission is bounded at 30 s, while a
+    turn-waiting prompt and ``wait`` remain unbounded. Native ``steer`` uses
+    the holder's own 30 s wait plus the grace; ``cancel`` uses its 5 s grace;
+    ``steer_interrupt`` uses the largest cancel wait it may pass to the holder.
     """
-    command = args.command
+    resolved = op or args.command
+    if resolved in ("send", "start"):
+        resolved = "prompt"
+    elif resolved == "key":
+        resolved = "cancel"
+    elif resolved == "wake":
+        resolved = "wake_delegator"
     timeout = args.timeout
-    if command in ("send", "start"):
+    if resolved == "prompt":
         if timeout is not None:
             return timeout + REPLY_GRACE
         return ADMISSION_BOUND if wait is False else None
-    if command == "steer":
+    if resolved == "steer":
         return ((timeout if timeout is not None else STEER_ADMISSION_BOUND)
                 + REPLY_GRACE)
-    if command == "steer_interrupt":
+    if resolved == "steer_interrupt":
         base = max(getattr(args, "cancel_timeout", None) or 0.0,
                    timeout or 0.0, CANCEL_GRACE)
         return base + REPLY_GRACE
-    if command in ("cancel", "key"):
+    if resolved == "cancel":
         return ((timeout if timeout is not None else CANCEL_GRACE)
                 + REPLY_GRACE)
-    if command == "wait":
+    if resolved == "wait":
         return None if timeout is None else timeout + REPLY_GRACE
-    if command == "wake":
+    if resolved == "wake_delegator":
         return None if timeout is None else timeout + REPLY_GRACE
-    raise ValueError(f"no client socket bound for {command}")
+    raise ValueError(f"no client socket bound for {resolved}")
 
 
 def socket_failure(code: str, stage: str, message: str,
@@ -3100,14 +3111,38 @@ def _stamp_timeout_verification(receipt: dict[str, Any],
         # Connect/send already prove nothing was written; only a read timeout
         # can be admitted late and needs a verify route.
         return receipt
+    if op == "steer":
+        # A native steer is not a prompt turn: status has no steer field. The
+        # existing event log has the write (steer_sent: request_id +
+        # fingerprint) and the answer (steer_result: request_id, outcome,
+        # consumed, confirmation). Match those, never a bare "sent".
+        receipt.setdefault("verify", {
+            "command": (f"kaola-acp {args.platform} capture --repo {repo} "
+                        f"--session {args.session} --since 0"),
+            "match": ("events[]: steer_sent.fingerprint == steer_fingerprint, "
+                      "then steer_result for that request_id "
+                      "(steer_outcome/steer_consumed/steer_confirmation)"),
+            "note": ("A read-stage steer timeout may still have been written. "
+                     "Find the steer_sent event by fingerprint, then its "
+                     "steer_result: an accepted write is not proof of "
+                     "consumption. Do not resend before reading capture."),
+            "do_not": ("resend, or treat steer_sent/written as consumed, "
+                       "before reading the event"),
+        })
+        return receipt
+    note = ("A read-stage timeout may still be admitted. Check status and "
+            "capture before deciding; turn_active:false while admission is "
+            "in progress is not proof of non-delivery.")
+    if op == "steer_interrupt":
+        note = ("An interrupt is a cancel followed by a prompt carrying this "
+                "steer text, so the follow-up prompt's fingerprint is this "
+                "steer's fingerprint. If no follow-up prompt appears, read "
+                "capture's steer_interrupt event; do not resend blindly.")
     receipt.setdefault("verify", {
         "command": (f"kaola-acp {args.platform} status --repo {repo} "
                     f"--session {args.session}"),
-        "match": ("last_prompt.fingerprint" if op == "prompt"
-                  else "steer_fingerprint"),
-        "note": ("A read-stage timeout may still be admitted. Check status and "
-                 "capture before deciding; turn_active:false while admission is "
-                 "in progress is not proof of non-delivery."),
+        "match": "last_prompt.fingerprint",
+        "note": note,
         "do_not": "resend before checking status/capture",
     })
     return receipt
@@ -6980,16 +7015,32 @@ def brief_empty_receipt(args: argparse.Namespace, repo: str) -> dict[str, Any]:
 def stamp_brief_undelivered(receipt: dict[str, Any], reason: str, *,
                             detail: str | None = None, admitted: bool = False,
                             turn_id: Any = None,
-                            request_mutation: dict[str, Any] | None = None
+                            request_mutation: dict[str, Any] | None = None,
+                            request_fingerprint: str | None = None,
+                            request_verify: dict[str, Any] | None = None
                             ) -> dict[str, Any]:
     """A requested brief was not verified as a dispatch.
 
-    Drop ``ready`` and ``prompt_fingerprint`` so neither can be read as one.
-    A turn that was admitted keeps its id and mutation. When the prompt request
-    itself returned a mutation fact, that fact wins: a frame that may have been
-    written stays ``null``/``unknown`` instead of being flattened to unsent.
+    Drop ``ready`` and, for a proven no-write, ``prompt_fingerprint`` so neither
+    can be read as a dispatch. A turn that was admitted keeps its id and
+    mutation. When the prompt request itself returned a mutation fact, that fact
+    wins: a frame that may have been written stays ``null``/``unknown`` instead
+    of being flattened to unsent. That uncertain case keeps the request's
+    fingerprint and ``verify`` block: they are the only way a start consumer can
+    locate a late admission, and neither claims the brief was delivered.
     """
-    receipt.pop("prompt_fingerprint", None)
+    uncertain = bool(
+        request_mutation
+        and "mutation_performed" in request_mutation
+        and request_mutation.get("mutation_performed") is None)
+    if uncertain and request_fingerprint:
+        receipt["prompt_fingerprint"] = request_fingerprint
+    else:
+        receipt.pop("prompt_fingerprint", None)
+    if uncertain and isinstance(request_verify, dict) and request_verify:
+        receipt["verify"] = request_verify
+    else:
+        receipt.pop("verify", None)
     if admitted and turn_id is not None:
         receipt["turn_request_id"] = turn_id
     else:
@@ -7045,7 +7096,8 @@ def deliver_start_brief(args: argparse.Namespace, repo: str, receipt: dict[str, 
     directory = record_dir(args, repo)
     wait_selection, bound_holder_id = resolve_send_wait(args, repo, directory)
     timeout = args.timeout
-    sock_timeout = client_socket_timeout(args, wait_selection["wait"])
+    sock_timeout = client_socket_timeout(args, wait_selection["wait"],
+                                         op="prompt")
     prompt_params: dict[str, Any] = {
         "text": text,
         "wait": wait_selection["wait"],
@@ -7113,8 +7165,15 @@ def deliver_start_brief(args: argparse.Namespace, repo: str, receipt: dict[str, 
         key: reply[key] for key in ("mutation_performed", "mutation_status")
         if key in reply
     }
-    stamp_brief_undelivered(receipt, reason, detail=detail, admitted=admitted,
-                            turn_id=turn_id, request_mutation=request_mutation)
+    request_fingerprint = reply.get("prompt_fingerprint")
+    request_verify = reply.get("verify")
+    stamp_brief_undelivered(
+        receipt, reason, detail=detail, admitted=admitted, turn_id=turn_id,
+        request_mutation=request_mutation,
+        request_fingerprint=(request_fingerprint
+                             if isinstance(request_fingerprint, str) else None),
+        request_verify=(request_verify
+                        if isinstance(request_verify, dict) else None))
     reply_error = reply.get("error")
     if isinstance(reply_error, dict) and "error" not in receipt:
         receipt["error"] = reply_error
@@ -9710,7 +9769,8 @@ def main() -> int:
         if not text:
             die("send requires --text or --stdin")
         wait_selection, bound_holder_id = resolve_send_wait(args, repo, directory)
-        sock_timeout = client_socket_timeout(args, wait_selection["wait"])
+        sock_timeout = client_socket_timeout(args, wait_selection["wait"],
+                                             op="prompt")
         prompt_params = {"text": text, "wait": wait_selection["wait"], "timeout": timeout,
                          "max_final_chars": args.max_final_chars}
         if args.client_message_id is not None:
@@ -9769,7 +9829,7 @@ def main() -> int:
             receipt = op_or_holder_lost(
                 args, repo, directory, "steer_interrupt",
                 interrupt_params,
-                client_socket_timeout(args),
+                client_socket_timeout(args, op="steer_interrupt"),
             )
             receipt.setdefault("native_steering", native_steering)
             receipt.setdefault("steer_mode", "interrupt")
@@ -9851,7 +9911,7 @@ def main() -> int:
             receipt = refusal if refusal is not None else op_or_holder_lost(
                 args, repo, directory, "steer",
                 steer_params,
-                client_socket_timeout(args),
+                client_socket_timeout(args, op="steer"),
             )
             receipt.setdefault("native_steering", native_steering)
             receipt.setdefault("steer_mode", "native")
@@ -9861,7 +9921,7 @@ def main() -> int:
     elif args.command == "wait":
         receipt = op_or_holder_lost(
             args, repo, directory, "wait", {"timeout": timeout},
-            client_socket_timeout(args)
+            client_socket_timeout(args, op="wait")
         )
     elif args.command in ("observe", "status"):
         receipt = op_or_holder_lost(args, repo, directory, "state", {}, 10.0)
@@ -9923,7 +9983,7 @@ def main() -> int:
             params["expected_holder_instance_id"] = args.expected_holder_instance_id
         receipt = op_or_holder_lost(
             args, repo, directory, "cancel", params,
-            client_socket_timeout(args)
+            client_socket_timeout(args, op="cancel")
         )
     elif args.command == "key":
         if args.key != "escape":
@@ -9936,7 +9996,7 @@ def main() -> int:
                 params["expected_holder_instance_id"] = args.expected_holder_instance_id
             receipt = op_or_holder_lost(
                 args, repo, directory, "cancel", params,
-                client_socket_timeout(args)
+                client_socket_timeout(args, op="cancel")
             )
     elif args.command == "answer":
         receipt = base_receipt(args, repo)
@@ -9956,7 +10016,7 @@ def main() -> int:
             params["expected_holder_instance_id"] = record["holder_instance_id"]
         receipt = op_or_holder_lost(
             args, repo, directory, "wake_delegator", params,
-            client_socket_timeout(args))
+            client_socket_timeout(args, op="wake_delegator"))
     elif args.command == "stop":
         # Issue #73: a stop is bound to the exact holder instance the Agent
         # verified, so a same-named session rebuilt by a later instance is
