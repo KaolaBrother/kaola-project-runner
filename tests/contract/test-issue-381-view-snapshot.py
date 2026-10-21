@@ -13,14 +13,18 @@ under the same lock.  ``view_lock`` is a leaf: nothing may acquire
 out or wake while holding it.  ``on_prompt_response`` therefore moves its
 fanout after the release.
 
-The suite covers the ten research 5.2 cases and pins invariants I1-I6:
+The suite covers the ten research 5.2 cases and pins invariants I1-I6.
+The independent review's F1-F4 races are cases 11-15: response x exit,
+synthetic finish x exit, admission x exit, provider evidence I/O outside
+the publish lock, and the no-write admission distinction.
 
 I1 terminal freshness   - a terminal view's cursor is strictly newer than the
                           last view that observed the turn active.
 I2 admission complete   - active=true implies a non-null started_at and a
                           mutation_status other than not_started.
-I3 terminal durability  - a terminal view has a turn_ended event at or before
-                          its cursor and the projection records that end.
+I3 terminal durability  - a started terminal view has its ending
+                          turn_ended/process_exited event at or before the
+                          cursor and the projection records that end.
 I4 cursor monotonicity  - successive views never report a lower cursor.
 I5 leaf discipline      - view_lock is never held across self.lock,
                           followers_lock, turn_cond.wait, write_record, fanout
@@ -104,6 +108,28 @@ class Gate:
 
     def open(self) -> None:
         self.release.set()
+
+
+class BeforeAcquire:
+    """Pause one named thread just before it acquires the wrapped lock."""
+
+    def __init__(self, real, thread_name: str) -> None:
+        self.real = real
+        self.thread_name = thread_name
+        self.entered = threading.Event()
+        self.release = threading.Event()
+
+    def __enter__(self):
+        if threading.current_thread().name == self.thread_name:
+            self.entered.set()
+            if not self.release.wait(10):
+                raise AssertionError("view_lock gate was never released")
+        self.real.acquire()
+        return self
+
+    def __exit__(self, *exc) -> bool:
+        self.real.release()
+        return False
 
 
 class ViewSnapshotCase(unittest.TestCase):
@@ -679,6 +705,165 @@ class ViewSnapshotCase(unittest.TestCase):
         self.join(ending)
         view = holder.op_view({})
         self.assertFalse(view["turn"]["active"])
+
+    # -- review F1-F4 races --------------------------------------------------
+
+    def test_case_11_response_vs_exit_recheck(self) -> None:
+        """A response that waited for view_lock must lose to a published exit."""
+        holder, stub = self.make_holder("response-exit")
+        stub.exit_code = 1
+        receipt = holder.op_prompt({"text": "normal", "wait": False})
+        gate = BeforeAcquire(holder.view_lock, "response")
+        holder.view_lock = gate
+        response = threading.Thread(
+            name="response",
+            target=lambda: holder.on_prompt_response(
+                receipt["turn_request_id"], {"result": {"stopReason": "end_turn"}}),
+            daemon=True)
+        response.start()
+        self.assertTrue(gate.entered.wait(3), "response did not reach view_lock")
+        holder.on_agent_exit(1)
+        gate.release.set()
+        self.join(response)
+        view = holder.op_view({})
+        exited = [row for row in self.read_events(holder)
+                  if row.get("kind") == "process_exited"]
+        self.assertTrue(exited)
+        self.assertFalse(view["turn"]["active"])
+        self.assertEqual(view["turn"]["outcome"], "process_exited")
+        self.assertEqual(view["turn"]["outcome"], view["turns"][-1]["outcome"])
+        self.assertEqual(view["turns"][-1]["end_cursor"], exited[-1]["cursor"])
+        self.assertFalse(any(row.get("kind") == "turn_ended"
+                             for row in self.read_events(holder)))
+
+    def test_case_12_synthetic_finish_vs_exit_recheck(self) -> None:
+        """The synthetic finisher rechecks ownership inside view_lock."""
+        holder, stub = self.make_holder("synthetic-exit")
+        stub.exit_code = 1
+        written_at = round(time.time(), 3)
+        holder.turn.update({
+            "active": False, "outcome": "turn_completed", "stop_reason": "end_turn",
+            "written_at": written_at, "fingerprint": "sha256:prior",
+        })
+        holder.last_prompt = {
+            "fingerprint": "sha256:prior", "written_at": written_at,
+            "transport": "acp", "mutation_status": "completed",
+            "stop_reason": "end_turn",
+        }
+        holder.on_session_update({
+            "sessionId": "mock-session-1",
+            "update": {"sessionUpdate": "agent_message_chunk",
+                       "content": {"type": "text", "text": "continuation"}},
+        })
+        target = holder.turn
+        self.assertTrue(target["active"])
+        gate = BeforeAcquire(holder.view_lock, "finisher")
+        holder.view_lock = gate
+        finisher = threading.Thread(
+            name="finisher",
+            target=lambda: holder._finish_agent_turn(target),
+            daemon=True)
+        finisher.start()
+        self.assertTrue(gate.entered.wait(3), "finisher did not reach view_lock")
+        holder.on_agent_exit(1)
+        gate.release.set()
+        self.join(finisher)
+        view = holder.op_view({})
+        exited = [row for row in self.read_events(holder)
+                  if row.get("kind") == "process_exited"]
+        self.assertTrue(exited)
+        self.assertFalse(view["turn"]["active"])
+        self.assertEqual(view["turn"]["outcome"], "process_exited")
+        self.assertEqual(view["turn"]["outcome"], view["turns"][-1]["outcome"])
+        self.assertEqual(view["turns"][-1]["end_cursor"], exited[-1]["cursor"])
+        self.assertFalse(any(row.get("kind") == "turn_ended"
+                             for row in self.read_events(holder)))
+
+    def test_case_13_admission_vs_exit_never_reactivates(self) -> None:
+        """A written admission after process_exited publishes exited, not active."""
+        holder, stub = self.make_holder("admission-exit")
+        stub.exit_code = 1
+        entered = threading.Event()
+        release = threading.Event()
+        original = stub.send_request
+
+        def sent_then_pause(method, params):
+            request_id = original(method, params)
+            entered.set()
+            if not release.wait(5):
+                raise AssertionError("admission gate timed out")
+            return request_id
+
+        stub.send_request = sent_then_pause
+        receipts: list[dict[str, object]] = []
+        admitting = threading.Thread(
+            name="admit",
+            target=lambda: receipts.append(
+                holder.op_prompt({"text": "sent before exit", "wait": False})),
+            daemon=True)
+        admitting.start()
+        self.assertTrue(entered.wait(3), "admission did not reach the write pause")
+        holder.on_agent_exit(1)
+        release.set()
+        self.join(admitting)
+        view = holder.op_view({})
+        receipt = receipts[0]
+        exited = [row for row in self.read_events(holder)
+                  if row.get("kind") == "process_exited"]
+        self.assertTrue(exited)
+        self.assertFalse(view["turn"]["active"])
+        self.assertEqual(view["turn"]["outcome"], "process_exited")
+        self.assertIsNotNone(view["turn"]["started_at"])
+        self.assertEqual(view["turns"][-1]["outcome"], "process_exited")
+        self.assertEqual(view["turns"][-1]["end_cursor"], exited[-1]["cursor"])
+        self.assertGreaterEqual(view["event_cursor"], exited[-1]["cursor"])
+        self.assertEqual(receipt["outcome"], "process_exited")
+        self.assertIs(receipt["mutation_performed"], True)
+        self.assertNotEqual(receipt["mutation_status"], "not_started")
+        self.assertEqual(receipt["error"]["code"], "agent-exited-after-write")
+        self.assertFalse(any(row.get("kind") == "turn_ended"
+                             for row in self.read_events(holder)))
+
+    def test_case_14_provider_summary_io_outside_view_lock(self) -> None:
+        """Kimi provider evidence is read before view_lock, not under it."""
+        holder, _stub = self.make_holder("provider-io")
+        holder.args.platform = "kimi-cli"
+        receipt = holder.op_prompt({"text": "provider failure", "wait": False})
+        wire = self.root / "wire.jsonl"
+        wire.write_text("{}\n", encoding="utf-8")
+        holder._kimi_wire_file = lambda: (wire, "")
+        observed: list[bool] = []
+        original = holder_module.read_latest_kimi_wire_error
+
+        def read(path):
+            observed.append(holder.view_lock.locked())
+            return original(path)
+
+        holder_module.read_latest_kimi_wire_error = read
+        try:
+            holder.on_prompt_response(receipt["turn_request_id"], {"error": {}})
+        finally:
+            holder_module.read_latest_kimi_wire_error = original
+        self.assertEqual(observed, [False],
+                         "provider evidence was read while view_lock was held")
+        self.assertEqual(holder.op_view({})["turn"]["outcome"], "turn_failed")
+
+    def test_case_15_no_write_admission_stays_not_started(self) -> None:
+        """A pending_out miss is a no-write failure with no ending event."""
+        holder, stub = self.make_holder("no-write")
+        stub.send_request = lambda method, params: 901
+        receipt = holder.op_prompt({"text": "no write", "wait": False})
+        view = holder.op_view({})
+        self.assertIs(receipt["mutation_performed"], False)
+        self.assertEqual(receipt["mutation_status"], "not_started")
+        self.assertEqual(receipt["error"]["code"], "acp-write-failed")
+        self.assertFalse(view["turn"]["active"])
+        self.assertIsNone(view["turn"]["started_at"])
+        self.assertEqual(view["turn"]["mutation_status"], "not_started")
+        self.assertEqual(view["turn"]["outcome"], "turn_failed")
+        self.assertEqual(view["event_cursor"], 0)
+        self.assertFalse(any(row.get("kind") == "turn_ended"
+                             for row in self.read_events(holder)))
 
 
 class LeafGuard:

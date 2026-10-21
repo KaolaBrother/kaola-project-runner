@@ -2689,6 +2689,12 @@ class Holder:
         self.record_lock = threading.Lock()
         self.last_activity = time.monotonic()
         self.agent_exited = threading.Event()
+        # Issue #381/F1: the exit publication's own timestamp and cursor, so an
+        # admission that was written just before the exit can publish the
+        # written request as an exited turn without inventing a second ending
+        # event or a newer cursor than process_exited.
+        self.agent_exit_at: float | None = None
+        self.agent_exit_cursor: int | None = None
         # Event-driven heartbeat carrier (Issue #62 phase 2): this holder's
         # pending worker events when it is a ZCode Host session, or the armed
         # notify target when it is a worker of one.
@@ -4274,18 +4280,18 @@ class Holder:
         except Exception:
             return scrub(unavailable_provider_summary("wire-unreadable"))
 
-    def _turn_failure_event(self, outcome: str, turn: dict[str, Any]) -> dict[str, Any] | None:
-        """Set ``turn_error`` for this terminal outcome. Return the event field.
+    def _turn_failure_summary(self, outcome: str,
+                              error: object) -> dict[str, Any] | None:
+        """Return the bounded provider summary for a failed terminal outcome.
 
-        Only a failed turn carries the summary. A later success or cancel
-        clears the record field; events already written stay.
+        This may read the platform's provider evidence (for kimi-cli, a wire
+        file). Callers compute it before taking ``view_lock`` and only assign
+        the result inside the publication lock, so no file I/O runs while a
+        view or a follower fanout waits on the leaf lock.
         """
         if outcome != "turn_failed":
-            self.turn_error = None
             return None
-        summary = self._provider_failure_summary(turn.get("error"))
-        self.turn_error = summary
-        return summary
+        return self._provider_failure_summary(error)
 
     def on_prompt_response(self, request_id: int, response: dict[str, Any] | None) -> None:
         turn = self.turn
@@ -4295,6 +4301,27 @@ class Holder:
             # A late answer to a turn that is already over must not settle the
             # turn running now (Issue #65: same attribution boundary).
             return
+        # Issue #381/F3: provider evidence may read the Kimi wire file. Read it
+        # before the publication lock; the locked block below only assigns the
+        # summary and publishes the terminal pair. The outcome and current
+        # error are recomputed under the lock so concurrent updates keep their
+        # own attribution.
+        if "error" in response:
+            pre_outcome = (
+                "turn_canceled" if (response["error"] or {}).get("code") == -32800
+                else "turn_failed"
+            )
+            pre_error = response["error"]
+        else:
+            pre_stop = (response.get("result") or {}).get("stopReason")
+            if pre_stop == "cancelled":
+                pre_outcome = "turn_canceled"
+            elif turn.get("error"):
+                pre_outcome = "turn_failed"
+            else:
+                pre_outcome = "turn_completed"
+            pre_error = turn.get("error")
+        pre_failure = self._turn_failure_summary(pre_outcome, pre_error)
         with self.view_lock:
             # The pre-lock checks above are advisory: a response for a turn
             # that already settled, or that was replaced, must not touch the
@@ -4304,10 +4331,11 @@ class Holder:
                 return
             if "error" in response:
                 turn["error"] = response["error"]
-                turn["outcome"] = (
+                outcome = (
                     "turn_canceled" if (response["error"] or {}).get("code") == -32800
                     else "turn_failed"
                 )
+                current_error = response["error"]
             else:
                 stop = (response.get("result") or {}).get("stopReason")
                 turn["stop_reason"] = stop
@@ -4317,15 +4345,16 @@ class Holder:
                 # stays verbatim - the log records what the agent sent (#113) - but
                 # the outcome is the failure this holder actually observed.
                 if stop == "cancelled":
-                    turn["outcome"] = "turn_canceled"
+                    outcome = "turn_canceled"
                 elif turn.get("error"):
-                    turn["outcome"] = "turn_failed"
+                    outcome = "turn_failed"
                 else:
-                    turn["outcome"] = "turn_completed"
+                    outcome = "turn_completed"
+                current_error = turn.get("error")
+            turn["outcome"] = outcome
             turn["mutation_status"] = "completed"
             turn["active"] = False
             self.projection.close_message()
-            outcome = turn["outcome"]
             # Issue #113: the turn's own stop reason, durable in the event log.
             # `record.json` only ever holds the LAST prompt, so a stop the next
             # prompt supersedes - an output-token maximum among them - would
@@ -4335,7 +4364,15 @@ class Holder:
             ended: dict[str, Any] = {"kind": "turn_ended", "outcome": outcome,
                                      "stop_reason": turn.get("stop_reason"),
                                      "prompt_fingerprint": turn.get("fingerprint")}
-            failure = self._turn_failure_event(outcome, turn)
+            if outcome != "turn_failed":
+                failure = None
+            elif pre_outcome == "turn_failed" and pre_error == current_error:
+                failure = pre_failure
+            else:
+                # The failure evidence changed after the pre-read. Keep this
+                # publication's own attribution and stay file-I/O free here.
+                failure = scrub(unavailable_provider_summary("evidence-raced"))
+            self.turn_error = failure
             if failure is not None:
                 ended["error"] = failure
             end_cursor = self.events.append(ended, ts=turn["ended_at"])
@@ -4404,6 +4441,11 @@ class Holder:
             exit_cursor = self.events.append(
                 {"kind": "process_exited", "code": self.agent.exit_code,
                  "signal": self.agent.exit_signal}, ts=exited_at)
+            # Issue #381/F1: an admission written just before this exit publishes
+            # the written request as an exited turn. It reuses this exact ending
+            # event instead of appending a second terminal row.
+            self.agent_exit_at = exited_at
+            self.agent_exit_cursor = exit_cursor
             turn = self.turn
             if turn["active"]:
                 turn["outcome"] = "process_exited"
@@ -4704,6 +4746,10 @@ class Holder:
                     "previous_mutation_status": previous.get("mutation_status"),
                     "previous_stop_reason": previous.get("stop_reason"),
                 }
+            # The timestamp belongs to this write attempt. It is stamped once
+            # and never rewritten; a failed write leaves it unset, preserving
+            # the written/not-written distinction in the view and receipt.
+            write_started_at = round(time.time(), 3)
             request_id = self.agent.send_request(
                 "session/prompt",
                 {
@@ -4733,10 +4779,11 @@ class Holder:
                     failed["client_message_id"] = client_message_id
                 return failed
             turn["request_id"] = request_id
-            # written_at is stamped once, after the frame was written, and is
-            # never rewritten: it is the view's turn.started_at and the
-            # turn-boundary key consumers bind to.
-            turn["written_at"] = round(time.time(), 3)
+            # written_at is stamped once for this write attempt and is never
+            # rewritten: it is the view's turn.started_at and the turn-boundary
+            # key consumers bind to. It is set only after the frame registered,
+            # so a missing pending_out still publishes no start time.
+            turn["written_at"] = write_started_at
             turn["mutation_status"] = "in_progress"
             if client_message_id is not None:
                 turn["client_message_id"] = client_message_id
@@ -4746,8 +4793,30 @@ class Holder:
                 # Issue #381: the complete turn and its cursor become visible
                 # in one critical section. No record write, fanout or wake is
                 # allowed here.
+                # Issue #381/F1: on_agent_exit does not take self.lock, so it
+                # can publish process_exited while send_request is in flight.
+                # The frame was written, but an exit that already published
+                # must not be followed by active=True. Reuse the exit's own
+                # cursor and publish this written request as an exited turn;
+                # the written/not-written distinction stays in the receipt.
+                exited = bool(self.agent_exited.is_set()
+                              or self.state == "agent_exited")
+                if exited:
+                    turn["active"] = False
+                    turn["outcome"] = "process_exited"
+                    turn["ended_at"] = (self.agent_exit_at
+                                        if self.agent_exit_at is not None
+                                        else round(time.time(), 3))
+                    published_cursor = self.events.cursor
+                    start_cursor = dispatch_cursor
+                    end_cursor = (self.agent_exit_cursor
+                                  if self.agent_exit_cursor is not None
+                                  else published_cursor)
+                else:
+                    published_cursor = self.events.cursor
+                    start_cursor = published_cursor
+                    end_cursor = None
                 self.turn = turn
-                published_cursor = self.events.cursor
                 self.last_prompt = {
                     "fingerprint": fingerprint,
                     "written_at": turn["written_at"],
@@ -4758,18 +4827,28 @@ class Holder:
                 if client_message_id is not None:
                     self.last_prompt["client_message_id"] = client_message_id
                 self.projection.add_user_from_prompt(
-                    text, published_cursor, turn["written_at"], client_message_id)
-            admission_receipt = {
-                "outcome": "in_progress", "mutation_status": "in_progress",
-                "mutation_performed": True, "prompt_fingerprint": fingerprint,
-                "duplicate_warning": duplicate, "acp_session_id": self.acp_session_id,
-                # Issue #65: this id comes from THIS call's admission, under
-                # the lock. Reading `self.turn` afterwards can pick up a turn
-                # someone else started.
-                "turn_request_id": request_id,
-                "dispatch_event_cursor": dispatch_cursor,
-                "event_cursor": published_cursor,
-            }
+                    text, start_cursor, turn["written_at"], client_message_id)
+                if end_cursor is not None:
+                    self.projection.end_turn(turn["ended_at"], end_cursor,
+                                             "process_exited", None)
+                admission_receipt = {
+                    "outcome": "process_exited" if exited else "in_progress",
+                    "mutation_status": "in_progress",
+                    "mutation_performed": True, "prompt_fingerprint": fingerprint,
+                    "duplicate_warning": duplicate, "acp_session_id": self.acp_session_id,
+                    # Issue #65: this id comes from THIS call's admission, under
+                    # the lock. Reading `self.turn` afterwards can pick up a turn
+                    # someone else started.
+                    "turn_request_id": request_id,
+                    "dispatch_event_cursor": dispatch_cursor,
+                    "event_cursor": published_cursor,
+                }
+                if exited:
+                    admission_receipt["error"] = {
+                        "code": "agent-exited-after-write",
+                        "message": "the agent exited after the prompt frame was written; "
+                                   "the turn did not start",
+                    }
             if client_message_id is not None:
                 admission_receipt["client_message_id"] = client_message_id
                 if not registered_elsewhere:
@@ -4861,7 +4940,18 @@ class Holder:
                 outcome = "turn_failed"
             else:
                 outcome = "agent_turn_completed"
+            # Issue #381/F3: provider evidence may read a file. Compute it
+            # before the publication lock; the locked block only assigns it.
+            failure = self._turn_failure_summary(outcome, turn.get("error"))
             with self.view_lock:
+                # Issue #381/F2: the check above is only advisory because
+                # on_agent_exit does not take self.lock. Revalidate the exact
+                # turn under the publication lock: if exit already won, that
+                # publication owns the terminal state and this finisher must
+                # not append a second, successful ending.
+                if (not turn["active"] or self.turn is not turn
+                        or not turn.get("agent_initiated")):
+                    return
                 # Issue #381: the synthetic turn's terminal state and its
                 # turn_ended cursor are one publication, so a view cannot see
                 # active=false with the previous live cursor.
@@ -4878,7 +4968,7 @@ class Holder:
                     "prompt_source": turn.get("prompt_source") or "self",
                     "agent_initiated": True,
                 }
-                failure = self._turn_failure_event(outcome, turn)
+                self.turn_error = failure
                 if failure is not None:
                     ended_event["error"] = failure
                 end_cursor = self.events.append(ended_event, ts=turn["ended_at"])
