@@ -1,7 +1,8 @@
 # Issue #393 focused validation
 
 Run branch: `workflow/issue-393`
-Candidate: `d959ab2b` (coverage commit) on `7b94ab81` (content-cycle unpin).
+Candidate: `e4d5567b` (suite cleanup) on `d959ab2b` (coverage commit) on
+`7b94ab81` (content-cycle unpin).
 
 ## Prerequisite: post-release content cycle
 
@@ -39,20 +40,17 @@ test_drain_restart_worker_keeps_role_and_compacts ... ok
 test_direct_worker_holder_with_legacy_entry_compacts ... ok
 test_direct_unknown_role_with_legacy_entry_compacts ... ok
 test_direct_host_holder_still_gets_the_carrier ... ok
-Ran 6 tests in 44.501s
-OK
-validate: elapsed test-issue-393-cwd-carrier.py                44.591 s
-validate: total wall: 46.1919 s
+validate: elapsed test-issue-393-cwd-carrier.py                43.105 s
+validate: total wall: 43.9712 s
 residual_pids: []
 ```
 
-This is the rerun at the clean candidate `d959ab2b`; the preceding run on the
-same bytes before the commit reported `Ran 6 tests in 44.088s`, `OK`, total
-wall 45.5397 s.
-
 The same run reported `render-skills: PASS`, all twelve
 `validate-skill.*` rows PASS, and `kaola-grok-bot-verify: PASS` at the content
-stage. The suite selection is a subset run; the full inventory remains for the
+stage. The final standalone rerun at `e4d5567b` reported `Ran 6 tests in
+43.153s` and `OK`. Earlier runs at the same test bytes reported `Ran 6 tests in
+44.501s` (candidate `d959ab2b`, total wall 46.1919 s) and `Ran 6 tests in
+44.088s` (pre-commit, total wall 45.5397 s). The suite selection is a subset run; the full inventory remains for the
 Host.
 
 ## Renderer
