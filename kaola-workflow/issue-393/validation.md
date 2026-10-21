@@ -1,8 +1,7 @@
 # Issue #393 focused validation
 
 Run branch: `workflow/issue-393`
-Candidate before the coverage commit: `7b94ab81` (content-cycle unpin) + the
-new suite and inventory row.
+Candidate: `d959ab2b` (coverage commit) on `7b94ab81` (content-cycle unpin).
 
 ## Prerequisite: post-release content cycle
 
@@ -40,12 +39,16 @@ test_drain_restart_worker_keeps_role_and_compacts ... ok
 test_direct_worker_holder_with_legacy_entry_compacts ... ok
 test_direct_unknown_role_with_legacy_entry_compacts ... ok
 test_direct_host_holder_still_gets_the_carrier ... ok
-Ran 6 tests in 44.088s
+Ran 6 tests in 44.501s
 OK
-validate: elapsed test-issue-393-cwd-carrier.py                44.197 s
-validate: total wall: 45.5397 s
+validate: elapsed test-issue-393-cwd-carrier.py                44.591 s
+validate: total wall: 46.1919 s
 residual_pids: []
 ```
+
+This is the rerun at the clean candidate `d959ab2b`; the preceding run on the
+same bytes before the commit reported `Ran 6 tests in 44.088s`, `OK`, total
+wall 45.5397 s.
 
 The same run reported `render-skills: PASS`, all twelve
 `validate-skill.*` rows PASS, and `kaola-grok-bot-verify: PASS` at the content
