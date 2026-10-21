@@ -2163,10 +2163,22 @@ class ViewProjection:
         # until a tool call, a new prompt, or turn end closes it.
         self._open_message: dict[str, Any] | None = None
 
+    def _reset_thinking_locked(self) -> None:
+        """KPR #382: thinking is a per-turn projection, never holder-lifetime.
+
+        The tail, its messageId and the per-turn character count belong to the
+        turn that is opening. Keeping them across a boundary made early polls
+        of the next turn report the previous turn's thought.
+        """
+        self.thinking_chars = 0
+        self.thinking_text = ""
+        self.thinking_message_id = None
+
     def add_user_from_prompt(self, text: str, cursor: int, started_at: float | None = None,
                              client_message_id: str | None = None) -> None:
         """The prompt opens a turn. Its message has no event-log line, so no ``received_at``."""
         with self.lock:
+            self._reset_thinking_locked()
             self._prompt_texts.append(text)
             self._open_message = None
             self._add_message_locked("user", text, None, cursor, None, client_message_id)
@@ -2190,6 +2202,7 @@ class ViewProjection:
     def start_agent_turn(self, cursor: int, started_at: float | None = None) -> None:
         """Issue #341: an agent-initiated continuation turn has no user prompt message."""
         with self.lock:
+            self._reset_thinking_locked()
             self._open_message = None
             self.turns.append({
                 "started_at": started_at,

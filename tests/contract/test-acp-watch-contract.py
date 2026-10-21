@@ -852,6 +852,83 @@ def load_holder_module():
     return module
 
 
+class ThinkingTurnResetTests(unittest.TestCase):
+    """KPR #382: the thinking projection is per turn, not holder-lifetime."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.holder_module = load_holder_module()
+
+    def setUp(self) -> None:
+        self.projection = self.holder_module.ViewProjection()
+
+    @staticmethod
+    def thought(text: str, message_id: str | None = None) -> dict:
+        update = {
+            "sessionUpdate": "agent_thought_chunk",
+            "content": {"type": "text", "text": text},
+        }
+        if message_id is not None:
+            update["messageId"] = message_id
+        return update
+
+    def test_prompt_turn_resets_tail_message_id_and_chars(self) -> None:
+        self.projection.add_user_from_prompt("first", 1, 100.0)
+        self.projection.apply(self.thought("TURN1-A ", "turn1-thought"), 2)
+        self.projection.apply(self.thought("TURN1-B", "turn1-thought"), 3)
+        before = self.projection.snapshot()
+        self.assertEqual(before["thinking_chars"], len("TURN1-A TURN1-B"))
+        self.assertEqual(before["thinking_message_id"], "turn1-thought")
+
+        self.projection.add_user_from_prompt("second", 4, 200.0)
+        after = self.projection.snapshot()
+        self.assertEqual(after["thinking_chars"], 0)
+        self.assertEqual(after["thinking_text"], "")
+        self.assertIsNone(after["thinking_message_id"])
+
+        self.projection.apply(self.thought("TURN2", "turn2-thought"), 5)
+        current = self.projection.snapshot()
+        self.assertEqual(current["thinking_chars"], len("TURN2"))
+        self.assertEqual(current["thinking_text"], "TURN2")
+        self.assertEqual(current["thinking_message_id"], "turn2-thought")
+
+    def test_agent_initiated_turn_also_resets(self) -> None:
+        self.projection.start_agent_turn(1, 100.0)
+        self.projection.apply(self.thought("AGENT-ONE", "agent-one"), 2)
+        self.projection.start_agent_turn(3, 200.0)
+        snapshot = self.projection.snapshot()
+        self.assertEqual(snapshot["thinking_chars"], 0)
+        self.assertEqual(snapshot["thinking_text"], "")
+        self.assertIsNone(snapshot["thinking_message_id"])
+
+    def test_turn_end_keeps_the_finished_turn_until_the_next_prompt(self) -> None:
+        for outcome in ("turn_completed", "turn_canceled", "turn_failed"):
+            with self.subTest(outcome=outcome):
+                projection = self.holder_module.ViewProjection()
+                projection.add_user_from_prompt("one", 1, 100.0)
+                projection.apply(self.thought("LAST-THOUGHT", "last-thought"), 2)
+                projection.end_turn(105.0, 3, outcome, "end_turn")
+                kept = projection.snapshot()
+                self.assertEqual(kept["thinking_text"], "LAST-THOUGHT")
+                self.assertEqual(kept["thinking_message_id"], "last-thought")
+                projection.add_user_from_prompt("two", 4, 200.0)
+                cleared = projection.snapshot()
+                self.assertEqual(
+                    (cleared["thinking_chars"], cleared["thinking_text"],
+                     cleared["thinking_message_id"]),
+                    (0, "", None),
+                )
+
+    def test_unnamed_thought_after_reset_does_not_recover_the_old_message_id(self) -> None:
+        self.projection.add_user_from_prompt("one", 1, 100.0)
+        self.projection.apply(self.thought("NAMED", "old-id"), 2)
+        self.projection.add_user_from_prompt("two", 3, 200.0)
+        self.projection.apply(self.thought("UNNAMED"), 4)
+        snapshot = self.projection.snapshot()
+        self.assertEqual(snapshot["thinking_text"], "UNNAMED")
+        self.assertIsNone(snapshot["thinking_message_id"])
+
+
 class AcpProjectionOfflineTests(unittest.TestCase):
     """Reduction facts that the mock stream cannot show: real agents (Grok)
     send no ``messageId`` and stream thousands of updates, so the caps in
