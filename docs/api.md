@@ -1741,7 +1741,9 @@ scripts/kaola-tmux.sh PLATFORM observe   --repo ABS_PATH --session NAME
 scripts/kaola-tmux.sh PLATFORM status    --repo ABS_PATH --session NAME
 scripts/kaola-tmux.sh PLATFORM capture   --repo ABS_PATH --session NAME [--lines N]
 scripts/kaola-tmux.sh PLATFORM send      --repo ABS_PATH --session NAME \
-  [--if-snapshot ID] [--text TEXT]
+  [--if-snapshot ID] [--text TEXT] [--wait | --no-wait] [--git-facts | --no-git-facts]
+scripts/kaola-tmux.sh PLATFORM steer     --repo ABS_PATH --session NAME --text TEXT \
+  [--steer-mode native|interrupt] [--git-facts | --no-git-facts]
 scripts/kaola-tmux.sh PLATFORM key       --repo ABS_PATH --session NAME \
   [--if-snapshot ID] --key NAME
 scripts/kaola-tmux.sh PLATFORM answer    --repo ABS_PATH --session NAME \
@@ -1815,7 +1817,9 @@ worker dispatcher/heartbeat binding. That default returns admission and pins the
 to the recorded worker holder with the existing expected-holder guard. It reads existing
 records and socket existence only; it does not probe the Host or read its heartbeat file.
 The receipt adds `wait_selection` with `wait`, `source` (`explicit`, `owning-host-default`,
-or `standalone-default`), and a `detail` for blocking fallback. The legacy role fallback
+or `standalone-default`), and a `detail` for blocking fallback. Issue #386 follows that same
+resolved wait for the receipt's Git facts: a blocking send keeps `git`, a `--no-wait` send
+omits it unless `--git-facts` is supplied. The legacy role fallback
 does not rewrite records or infer ownership from names: exact identity and bindings still
 must match. An explicit non-Host or unknown role, a missing dispatcher, missing sockets,
 and ambiguous or foreign evidence keep blocking;
@@ -2309,9 +2313,13 @@ a realistic platform `session_meta` — Devin's is ~70 KB — and the stored `re
 (~142 KB) stay whole, so `session_meta.configOptions` `currentValue` remains readable;
 only larger structures are summarised) (`record`, `initial_config_options`, `session_meta`, `capabilities`,
 `agent_info` summarised by size and sha256; `pending_permissions` keeps its newest entries).
-Only `capture --full` is unbounded. Every schema-3 receipt carries `platform`, `session`, `repo`,
-`transport` and Git reporting facts (`git`); these are evidence for the controlling agent and never
-semantic authority for `send`/`stop`.
+Only `capture --full` is unbounded. Every schema-3 receipt carries `platform`, `session`, `repo`
+and `transport`. Git reporting facts (`git`, `{branch, dirty}`) are command-scoped since Issue #386:
+`send --no-wait`, `steer` and `permit` omit `git` by default and do not run the Git probes; a `send`
+whose resolved wait is blocking (including explicit `--wait`) keeps it, as do `status`, `observe`,
+`start` and the other schema-3 receipts. `--git-facts` or `--no-git-facts` overrides the default for
+one invocation (the last flag wins; `kaola-tmux.sh` forwards both). These facts are evidence for the
+controlling agent and never semantic authority for `send`/`stop`.
 
 ACP receipts also report the notification binding in force (Issue #70). `start`, `observe`
 and `status` carry `heartbeat_host`: the target the running holder really adopted, or `null`

@@ -380,6 +380,7 @@ python_suites_all=(
   "test-issue-264-validate-lane-integrity.py"
   "test-ddd-pack.py"
   "test-issue-277-kw-readonly-index.py"
+  "test-issue-386-git-facts.py"
   "test-issue-275-core-contracts.py"
 )
 python_suites_a=(
@@ -538,6 +539,7 @@ python_suites_b=(
   "test-issue-381-view-snapshot.py"
   "test-issue-384-view-disclosure.py"
   "test-issue-385-view-echo-dedupe.py"
+  "test-issue-386-git-facts.py"
   "test-issue-359-record-loss.py")
 
 # Selectable shell contract suites: they run serially before the Python lanes.

@@ -2267,15 +2267,39 @@ def git_facts(repo: str) -> dict[str, Any]:
     }
 
 
-def base_receipt(args: argparse.Namespace, repo: str) -> dict[str, Any]:
+# Issue #386: high-frequency receipts (send --no-wait, steer, permit) omit Git
+# evidence by default. It costs two subprocesses per call (`rev-parse` and
+# `status --porcelain`) and no contract consumes it there. A waiting `send`,
+# `status` and every other schema-3 receipt keep the pre-existing shape.
+# Explicit --git-facts / --no-git-facts always win over the command default.
+def git_facts_requested(args: argparse.Namespace) -> bool:
+    explicit = getattr(args, "git_facts", None)
+    if explicit is not None:
+        return explicit
+    command = getattr(args, "command", None)
+    if command in ("steer", "permit"):
+        return False
+    if command == "send":
+        wait = getattr(args, "resolved_wait", None)
+        if wait is None:
+            wait = getattr(args, "wait", None)
+        return wait is True
+    return True
+
+
+def base_receipt(args: argparse.Namespace, repo: str,
+                 include_git: bool | None = None) -> dict[str, Any]:
     receipt: dict[str, Any] = {
         "schema_version": 3,
         "platform": args.platform,
         "session": args.session,
         "repo": repo,
         "transport": {"selected": "acp"},
-        "git": git_facts(repo),
     }
+    if include_git is None:
+        include_git = git_facts_requested(args)
+    if include_git:
+        receipt["git"] = git_facts(repo)
     # Issue #73: set by the shared entrypoint once its canonical-root binding
     # has accepted this dispatch. Its absence simply means the guard did not run.
     canonical = os.environ.get("KPR_CANONICAL_REPO")
@@ -3746,8 +3770,7 @@ def tier_refusal(args: argparse.Namespace, repo: str) -> dict[str, Any]:
     does not declare is named and rejected, never resolved to `default`."""
     tiers = declared_tiers(args.manifest)
     available = ", ".join(tiers[:-1]) + f", or {tiers[-1]}" if len(tiers) > 1 else "default only"
-    receipt = base_receipt(args, repo)
-    receipt.pop("git", None)
+    receipt = base_receipt(args, repo, include_git=False)
     receipt.update({
         "result": "refused",
         "reason": "tier-not-declared",
@@ -4447,8 +4470,7 @@ def command_rebind_host(args: argparse.Namespace, repo: str, directory: Path) ->
     proven by the same checks a dispatched start uses, so a Host can only
     re-anchor a seat to itself. The seat's agent and holder are unchanged."""
     def refused(detail: str) -> dict[str, Any]:
-        receipt = base_receipt(args, repo)
-        receipt.pop("git", None)
+        receipt = base_receipt(args, repo, include_git=False)
         receipt.update({"result": "refused", "reason": "rebind-host-unresolved",
                         "action": "rebind-host", "detail": detail,
                         "mutation_performed": False, "mutation_status": "not_started"})
@@ -4587,8 +4609,7 @@ def heartbeat_host_refusal(args: argparse.Namespace, repo: str,
                            resolution: dict[str, Any]) -> dict[str, Any]:
     """A typed pre-mutation refusal in the shape of the shell's canonical-root
     refusal: nothing was probed, written, or spawned."""
-    receipt = base_receipt(args, repo)
-    receipt.pop("git", None)
+    receipt = base_receipt(args, repo, include_git=False)
     receipt.update({
         "result": "refused",
         "reason": resolution["refusal"]["reason"],
@@ -5889,8 +5910,7 @@ def zcode_host_refusal(args: argparse.Namespace, repo: str,
                        problem: str) -> dict[str, Any]:
     """Issue #108 typed refusal — the Issue #105 shape: nothing was probed,
     written, or spawned."""
-    receipt = base_receipt(args, repo)
-    receipt.pop("git", None)
+    receipt = base_receipt(args, repo, include_git=False)
     receipt.update({
         "result": "refused",
         "reason": "host-model-mismatch",
@@ -6614,8 +6634,7 @@ def main_skill_skew_refusal(args: argparse.Namespace, repo: str,
             roots.setdefault(str(path.parent), [args.platform])
         else:
             unmanaged.append(entry["path"])
-    receipt = base_receipt(args, repo)
-    receipt.pop("git", None)
+    receipt = base_receipt(args, repo, include_git=False)
     receipt.update({
         "result": "refused",
         "reason": "main-skill-build-skew",
@@ -6641,8 +6660,7 @@ def worker_skill_root_refusal(args: argparse.Namespace, repo: str,
     pre-mutation refusal in the Issue #105 shape - the caller gets the root
     names, not a traceback, and nothing is created."""
     roots = alignment["unreadable_roots"]
-    receipt = base_receipt(args, repo)
-    receipt.pop("git", None)
+    receipt = base_receipt(args, repo, include_git=False)
     receipt.update({
         "result": "refused",
         "reason": "worker-skill-root-unreadable",
@@ -6680,8 +6698,7 @@ def worker_skill_skew_refusal(args: argparse.Namespace, repo: str,
                 platforms.append(platform)
         elif str(skill) not in unmanaged:
             unmanaged.append(str(skill))
-    receipt = base_receipt(args, repo)
-    receipt.pop("git", None)
+    receipt = base_receipt(args, repo, include_git=False)
     receipt.update({
         "result": "refused",
         "reason": "worker-skill-build-skew",
@@ -6769,8 +6786,7 @@ def host_exists_refusal(args: argparse.Namespace, repo: str,
                         hosts: list[dict[str, Any]]) -> dict[str, Any]:
     """One live Host per canonical root: attach ``existing_host``, never
     rename and retry. Nothing was written or spawned."""
-    receipt = base_receipt(args, repo)
-    receipt.pop("git", None)
+    receipt = base_receipt(args, repo, include_git=False)
     receipt.update({
         "result": "refused",
         "reason": "host-exists",
@@ -9615,6 +9631,14 @@ def main() -> int:
     parser.add_argument("--stdin", action="store_true")
     parser.add_argument("--wait", dest="wait", action="store_true", default=None)
     parser.add_argument("--no-wait", dest="wait", action="store_false")
+    # Issue #386: explicit receipt Git evidence. Omitted keeps the command's
+    # default: off for send --no-wait, steer and permit; on everywhere else.
+    parser.add_argument("--git-facts", dest="git_facts", action="store_true",
+                        default=None,
+                        help="include Git facts in this receipt")
+    parser.add_argument("--no-git-facts", dest="git_facts", action="store_false",
+                        default=None,
+                        help="omit Git facts from this receipt")
     parser.add_argument("--timeout", type=float)
     parser.add_argument("--max-final-chars", type=int, default=4000)
     parser.add_argument("--request-id")
@@ -9769,6 +9793,9 @@ def main() -> int:
         if not text:
             die("send requires --text or --stdin")
         wait_selection, bound_holder_id = resolve_send_wait(args, repo, directory)
+        # Issue #386: base_receipt follows the resolved wait mode, so an
+        # omitted selection that resolves to blocking keeps the L0 Git facts.
+        args.resolved_wait = wait_selection["wait"]
         sock_timeout = client_socket_timeout(args, wait_selection["wait"],
                                              op="prompt")
         prompt_params = {"text": text, "wait": wait_selection["wait"], "timeout": timeout,

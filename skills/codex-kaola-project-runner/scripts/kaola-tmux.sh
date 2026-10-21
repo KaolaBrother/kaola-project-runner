@@ -33,6 +33,8 @@ usage() {
   kaola-tmux.sh PLATFORM stop      --repo ABS_PATH --session NAME [--if-snapshot ID] [--force] [--preserve-dispatched-workers]
   kaola-tmux.sh PLATFORM drain-restart --repo ABS_PATH --session NAME (--continue | --resume ID) [--timeout SECONDS] [--preserve-dispatched-workers]
   kaola-tmux.sh PLATFORM rebind-host --repo ABS_PATH --session NAME [--expected-holder-instance-id ID]
+Receipt Git facts are opt-in/out with --git-facts | --no-git-facts; the default omits them for
+send --no-wait, steer and permit, and keeps them for send --wait and status (Issue #386).
 Transport is ACP only (Issue #130); a request for the pty transport is refused (transport-pty-retired).'
 }
 
@@ -98,7 +100,7 @@ if_snapshot="" require_empty_editor=false decision_id="" replace_editor=false mo
 model_given=false effort_given=false permission_mode_given=false key_name="" transport="" transport_given=false
 launch_backend="" launch_backend_given=false
 tier="" tier_given=false fast="off" fast_given=false role="" role_given=false
-acp_wait="" timeout="" request_id="" option="" capture_tools=false capture_since="" capture_full=false capture_inline=false
+acp_wait="" git_facts="" timeout="" request_id="" option="" capture_tools=false capture_since="" capture_full=false capture_inline=false
 expected_holder_instance_id="" expected_holder_instance_id_given=false steer_mode="" steer_delivery="" cancel_timeout=""
 preserve_dispatched=false
 while [[ $# -gt 0 ]]; do
@@ -119,6 +121,7 @@ while [[ $# -gt 0 ]]; do
     --transport) transport="$2"; transport_given=true; shift 2 ;; --key) key_name="$2"; shift 2 ;;
     --steer-mode) steer_mode="$2"; shift 2 ;; --delivery) steer_delivery="$2"; shift 2 ;; --cancel-timeout) cancel_timeout="$2"; shift 2 ;;
     --wait) acp_wait=true; shift ;; --no-wait) acp_wait=false; shift ;; --timeout) timeout="$2"; shift 2 ;;
+    --git-facts) git_facts=true; shift ;; --no-git-facts) git_facts=false; shift ;;
     --request-id) request_id="$2"; shift 2 ;; --option) option="$2"; shift 2 ;; --tools) capture_tools=true; shift ;;
     --expected-holder-instance-id) expected_holder_instance_id="$2"; expected_holder_instance_id_given=true; shift 2 ;;
     --launch-backend) launch_backend="$2"; launch_backend_given=true; shift 2 ;;
@@ -211,6 +214,8 @@ acp_args=("$PYTHON_BIN" "$ACP_CLI" "$platform" "$command_name" --repo "$repo")
 [[ ( "$command_name" == send || "$command_name" == steer ) && "$text_given" == false ]] && acp_args+=(--stdin)
 [[ "$acp_wait" == true ]] && acp_args+=(--wait)
 [[ "$acp_wait" == false ]] && acp_args+=(--no-wait)
+[[ "$git_facts" == true ]] && acp_args+=(--git-facts)
+[[ "$git_facts" == false ]] && acp_args+=(--no-git-facts)
 [[ -n "$timeout" ]] && acp_args+=(--timeout "$timeout")
 [[ -n "$steer_mode" ]] && acp_args+=(--steer-mode "$steer_mode")
 [[ -n "$steer_delivery" ]] && acp_args+=(--delivery "$steer_delivery")
