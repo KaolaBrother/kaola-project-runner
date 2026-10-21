@@ -15,14 +15,23 @@ The reproduced defect had two directions in one predicate
 
 The adjudicated repair keeps one prompt identity: the whitespace-normalized
 fingerprint of the *current* prompt. A ``messageId`` is not an exemption. A
-chunk that is a proper prefix of that prompt is held as a chunked-echo
-candidate; a following chunk either completes the echo (both dropped) or
-proves different text, in which case the candidate flushes as its own row at
-the next boundary. The prompt row itself is internally marked and can never
-be extended by a chunk. Prompt identity and chunk classification share the
-projection lock, so admission cannot re-key an in-flight classification.
-The holder passes the raw fingerprint of the turn the update arrived under;
-an old prompt's late echo is therefore not dropped against a newer prompt.
+logical user message is held while its accumulated normalized text is a proper
+prefix of that prompt or exactly equals it. A later chunk may keep the prefix,
+complete the echo, or prove it different; a whitespace tail on a complete
+match remains part of the echo. A diverged or extended message is published
+once with the entire accumulated text, and later chunks append to that row
+without another prompt comparison, so the split point cannot drop real text.
+A proper-prefix probe that meets a boundary without completing becomes its own
+row. The prompt row itself is internally marked and can never be extended by a
+chunk. Prompt identity and chunk classification share the projection lock, so
+admission cannot re-key an in-flight classification. The holder passes the raw
+fingerprint of the turn the update arrived under; an old prompt's late echo is
+therefore not dropped against a newer prompt.
+
+Review F1 (same-``messageId`` divergence followed by an exact prompt chunk, and
+a complete match followed by an extension) and F2 (a whitespace-only tail on a
+complete echo) are explicit regression families, including every cut of the
+same text.
 
 The raw ``events.jsonl`` ``session_update`` line is deliberately untouched
 (#384 replay constraint): dedupe is projection-only. ``messageId`` and
@@ -150,6 +159,16 @@ class CurrentPromptEchoTests(unittest.TestCase):
     def prompt(self, text: str, cursor: int) -> None:
         self.projection.add_user_from_prompt(text, cursor)
 
+    def texts_after(self, chunks: list[str], message_id: str | None = None,
+                    prompt: str = "alpha beta") -> list[str]:
+        """One logical user message fed as ``chunks``, closed by turn end."""
+        projection = holder_module.ViewProjection()
+        projection.add_user_from_prompt(prompt, 1)
+        for index, text in enumerate(chunks, start=2):
+            projection.apply(user_chunk(text, message_id), index, float(index))
+        projection.end_turn(99.0, 99, "turn_completed", "end_turn")
+        return [row["text"] for row in user_rows(projection)]
+
     def test_messageid_echo_is_dropped_not_exempted(self) -> None:
         self.prompt("message id echo prompt", 1)
         self.projection.apply(
@@ -242,6 +261,69 @@ class CurrentPromptEchoTests(unittest.TestCase):
         self.projection.apply(user_chunk("alpha beta "), 2)
         self.projection.apply(user_chunk("gamma   delta"), 3)
         self.assertEqual(len(user_rows(self.projection)), 1)
+
+    def test_same_message_diverged_then_exact_keeps_the_whole_message(self) -> None:
+        """Review F1: a flushed prefix must not let the tail be re-judged."""
+        for message_id in (None, "same-stream"):
+            with self.subTest(message_id=message_id):
+                self.assertEqual(
+                    self.texts_after(["alpha ", "alpha beta"], message_id),
+                    ["alpha beta", "alpha alpha beta"],
+                )
+
+    def test_already_non_echo_message_is_never_reclassified(self) -> None:
+        for message_id in (None, "same-stream"):
+            with self.subTest(message_id=message_id):
+                self.assertEqual(
+                    self.texts_after(["not echo: ", "alpha beta"], message_id),
+                    ["alpha beta", "not echo: alpha beta"],
+                )
+
+    def test_complete_match_then_extension_keeps_the_prefix(self) -> None:
+        for message_id in (None, "same-stream"):
+            with self.subTest(message_id=message_id):
+                self.assertEqual(
+                    self.texts_after(["alpha beta", " gamma"], message_id),
+                    ["alpha beta", "alpha beta gamma"],
+                )
+
+    def test_prefix_completion_then_extension_keeps_the_prefix(self) -> None:
+        for message_id in (None, "same-stream"):
+            with self.subTest(message_id=message_id):
+                self.assertEqual(
+                    self.texts_after(["alpha ", "beta", " gamma"], message_id),
+                    ["alpha beta", "alpha beta gamma"],
+                )
+
+    def test_complete_echo_trailing_whitespace_is_dropped(self) -> None:
+        """Review F2: a whitespace tail belongs to the matched echo."""
+        for message_id in (None, "same-stream"):
+            for tail in (" ", "\n", "\u00a0", "\u2003\n "):
+                with self.subTest(message_id=message_id, tail=repr(tail)):
+                    self.assertEqual(
+                        self.texts_after(["alpha ", "beta", tail], message_id),
+                        ["alpha beta"],
+                    )
+
+    def test_chunking_does_not_change_the_kept_text(self) -> None:
+        """Same messageId, any split: the kept text matches one unsplit chunk."""
+        cases = [
+            "alpha beta",
+            "alpha beta\u00a0",
+            "alpha alpha beta",
+            "not echo: alpha beta",
+            "alpha beta gamma",
+            "\u2003alpha\t\nbeta\u00a0",
+        ]
+        for message_id in (None, "same-stream"):
+            for text in cases:
+                expected = self.texts_after([text], message_id)
+                for cut in range(1, len(text)):
+                    with self.subTest(message_id=message_id, text=text, cut=cut):
+                        self.assertEqual(
+                            self.texts_after([text[:cut], text[cut:]], message_id),
+                            expected,
+                        )
 
     def test_prefix_candidate_flushes_at_turn_end(self) -> None:
         self.prompt("alpha beta", 1)

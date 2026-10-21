@@ -1866,13 +1866,17 @@ the current prompt participates; when a newer prompt is admitted, the previous p
 history and a chunk equal to it is no longer dropped. The former exact-or-substring test is gone, so
 a chunk that merely contains the prompt (or is a substring of it) is never consumed.
 
-An echo may arrive in chunks. A chunk whose normalized text is a proper prefix of the current
-prompt is held as a candidate instead of being emitted. A following chunk with the same
-`messageId` either completes the echo (both chunks are dropped) or proves different text (the
-candidate flushes as its own user row before that chunk is handled). A candidate also flushes at the
-next different `session/update`, a new prompt, `close_message`, or turn end, so it is never lost and
-never merged into the prompt row. The prompt's own `messages[]` row is internally marked and is
-never extended by a chunk; an unknown non-echo chunk opens or joins an ordinary non-prompt row. The
+A logical user message is judged as a whole, not chunk by chunk. While its accumulated normalized
+text is a proper prefix of the current prompt it is held; when it exactly equals the prompt it is
+held as a matched echo. A later chunk may keep it a prefix, complete it, extend it, or prove it
+different. A whitespace-only chunk after a complete match remains part of that echo (the normalized
+message is unchanged) and is dropped at its boundary. A chunk that extends or diverges publishes the
+**entire accumulated text** as one user row; later chunks for that message append to that row and are
+never compared with the prompt again, so changing the split point cannot drop real text. A
+proper-prefix probe that meets a boundary without completing becomes its own user row; a complete
+echo is dropped at that boundary. A later chunk after the boundary is handled under the existing
+chunk-continuity rules. The prompt's own `messages[]` row is internally marked and is never
+extended by a chunk; an unknown non-echo chunk opens or joins an ordinary non-prompt row. The
 `messageId`/`clientMessageId` identity on those rows is unchanged.
 
 The prompt identity and the chunk classification are read under the same projection lock that

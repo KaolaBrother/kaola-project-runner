@@ -267,7 +267,7 @@ Kaola Terminal 可直接读 list 行（本仓库不改 Terminal）：
 
 `user_message_chunk` 只在文本的空白规范化指纹等于**当前 prompt** 的空白规范化指纹时视为 echo；`messageId` 不再豁免。历史 prompt 不参与匹配：旧 prompt 的文本在新 prompt 成为当前后不再被吞掉；原先的“相等或子串”判断已删除，仅包含 prompt、或是 prompt 子串的 chunk 不会被消费。
 
-echo 可以分块到达：规范化后是当前 prompt 真前缀的 chunk 先作为候选保留，不单独成行；下一条同 `messageId` 的 chunk 若补全成完整 echo，则两条都丢弃，若证明是不同文本，则候选在边界处 flush 成自己的 user 行。候选也会在下一条不同 `session/update`、新 prompt、`close_message` 或回合结束时 flush，保证不丢失、也不会并入 prompt 行。prompt 行有内部不可拼接标记，未知非 echo chunk 只能开新行或并入非 prompt 行；`messageId` / `clientMessageId` 两层身份不变。
+echo 可以分块到达：按整条逻辑消息判断，而不是逐块判断。累计文本的空白规范化结果仍是当前 prompt 的真前缀时先保留；恰好等于 prompt 时作为已匹配 echo 保留。后续 chunk 可以继续前缀、补全、扩展或证明为不同文本；完整匹配后的纯空白尾块仍属于该 echo（规范化后未变），在边界丢弃。扩展或分歧时，把**整条已累计文本**作为一个 user 行发布；该消息的后续 chunk 只追加到该行，不再与 prompt 比较，因此切分点不会吞掉真实文本。未补全的真前缀在边界 flush 成自己的 user 行；完整 echo 在该边界丢弃，边界之后的 chunk 按现有 chunk 连续性规则处理。prompt 行有内部不可拼接标记，未知非 echo chunk 只能开新行或并入非 prompt 行；`messageId` / `clientMessageId` 两层身份不变。
 
 prompt 身份读取与 chunk 分类在同一 projection 锁窗口内完成；holder 还传入该 update 所属 turn 的原始 prompt 指纹，因此新 prompt 不会给迟到的旧 echo 重新定身份。`events.jsonl` 仍逐条保留 `session_update`（包括 echo），供 #384 的审计/replay 使用；去重只发生在 projection。
 

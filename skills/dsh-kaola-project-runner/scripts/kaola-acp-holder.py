@@ -2206,10 +2206,11 @@ class ViewProjection:
         # serialized: an unmatched user chunk must open its own row instead of
         # mutating the delivered prompt text.
         self._prompt_row: dict[str, Any] | None = None
-        # A chunk whose normalized text is a proper prefix of the current
-        # prompt is held until a following chunk completes the echo (drop) or
-        # a boundary proves it was not an echo (flush as its own row).
-        self._echo_candidate: dict[str, Any] | None = None
+        # A logical user message is held while it is still a proper prefix of
+        # the current prompt (state "prefix") or exactly equals it so far
+        # (state "matched"). A later chunk can complete it, extend it, or prove
+        # it different; the accumulated text is never reclassified in pieces.
+        self._echo_probe: dict[str, Any] | None = None
         # The last appended message; chunks without messageId append to it
         # until a tool call, a new prompt, or turn end closes it.
         self._open_message: dict[str, Any] | None = None
@@ -2236,9 +2237,9 @@ class ViewProjection:
         ``user_message_chunk`` in :meth:`apply`.
         """
         with self.lock:
-            # A prefix left from the previous prompt boundary cannot complete
-            # the new prompt; expose it as the row it actually was.
-            self._flush_echo_candidate_locked()
+            # A probe from the previous prompt cannot belong to this prompt:
+            # a prefix is exposed as its own row, a complete match is dropped.
+            self._flush_echo_probe_locked()
             self._reset_thinking_locked()
             self._prompt_fingerprint = (
                 prompt_fingerprint if isinstance(prompt_fingerprint, str)
@@ -2272,7 +2273,7 @@ class ViewProjection:
     def start_agent_turn(self, cursor: int, started_at: float | None = None) -> None:
         """Issue #341: an agent-initiated continuation turn has no user prompt message."""
         with self.lock:
-            self._flush_echo_candidate_locked()
+            self._flush_echo_probe_locked()
             self._reset_thinking_locked()
             self._open_message = None
             self.turns.append({
@@ -2291,7 +2292,7 @@ class ViewProjection:
 
     def end_turn(self, ended_at: float, cursor: int, outcome: Any, stop_reason: Any) -> None:
         with self.lock:
-            self._flush_echo_candidate_locked()
+            self._flush_echo_probe_locked()
             self._open_message = None
             if self.turns and self.turns[-1]["ended_at"] is None:
                 self.turns[-1].update({
@@ -2312,7 +2313,7 @@ class ViewProjection:
 
     def close_message(self) -> None:
         with self.lock:
-            self._flush_echo_candidate_locked()
+            self._flush_echo_probe_locked()
             self._open_message = None
 
     def apply(self, update: dict[str, Any], cursor: int,
@@ -2324,7 +2325,7 @@ class ViewProjection:
             # cannot become the prompt across it, so it becomes its own row
             # before this update so the view keeps wire order.
             if variant != "user_message_chunk":
-                self._flush_echo_candidate_locked()
+                self._flush_echo_probe_locked()
             if variant == "agent_message_chunk":
                 message_id = update.get("messageId")
                 if message_id is not None:
@@ -2414,52 +2415,102 @@ class ViewProjection:
         callers); ``""`` means no prompt turn (agent-initiated or foreign
         session) and is never an echo.
 
-        A proper prefix is held as a chunked-echo candidate instead of being
-        emitted; the next chunk either completes the echo (both dropped) or
-        proves it was different text (candidate flushed as its own row).
+        Echo judgement is per logical message, never per chunk. The probe
+        keeps the text received under one messageId (or the current no-id
+        continuation) until it completes the prompt, extends it, or diverges.
+        A complete match stays held until a boundary: a following chunk may
+        still extend it (review F1), and only a boundary proves the message
+        ended as the echo. A diverged/extended message is published once with
+        every byte received under that identity, so later chunks append to
+        that row and are never compared with the prompt again (review F1).
         """
         if prompt_identity is not None and prompt_identity != self._prompt_fingerprint:
-            self._flush_echo_candidate_locked()
+            self._flush_echo_probe_locked()
             return False
         if self._prompt_normalized is None:
             return False
-        normalized = _echo_normalize(text)
-        candidate = self._echo_candidate
-        if candidate is not None:
-            if candidate["message_id"] != message_id:
-                # A messageId boundary cannot be one chunked echo.
-                self._flush_echo_candidate_locked()
-            else:
-                combined = candidate["text"] + text
-                combined_normalized = _echo_normalize(combined)
-                if combined_normalized == self._prompt_normalized:
-                    self._echo_candidate = None
-                    return True
-                if _is_echo_prefix(combined_normalized, self._prompt_normalized):
-                    candidate["text"] = combined
-                    return True
-                self._flush_echo_candidate_locked()
-        if _echo_fingerprint(text) == self._prompt_echo_fingerprint:
+        probe = self._echo_probe
+        if probe is not None and probe["message_id"] != message_id:
+            # A different message identity cannot be one chunked echo.
+            self._flush_echo_probe_locked()
+            probe = None
+        if probe is not None:
+            combined = probe["text"] + text
+            combined_normalized = _echo_normalize(combined)
+            if combined_normalized == self._prompt_normalized:
+                # A complete echo, or a whitespace-only tail on it (F2).
+                probe["text"] = combined
+                probe["state"] = "matched"
+                return True
+            if (probe["state"] == "prefix"
+                    and _is_echo_prefix(combined_normalized, self._prompt_normalized)):
+                probe["text"] = combined
+                return True
+            # The same logical message diverged or grew past the prompt. It is
+            # one real message: publish the whole received text, not only the
+            # tail that proved it different.
+            self._echo_probe = None
+            self._add_message_locked("user", combined, message_id,
+                                     probe["cursor"], probe["received_at"])
             return True
-        if _is_echo_prefix(normalized, self._prompt_normalized):
-            self._echo_candidate = {
+        if self._user_row_exists_locked(message_id):
+            # An already materialized non-echo message keeps its continuity;
+            # a later chunk must not be re-judged against the prompt.
+            return False
+        if _echo_fingerprint(text) == self._prompt_echo_fingerprint:
+            self._echo_probe = {
                 "text": text,
                 "message_id": message_id,
+                "state": "matched",
+                "cursor": cursor,
+                "received_at": received_at,
+            }
+            return True
+        normalized = _echo_normalize(text)
+        if _is_echo_prefix(normalized, self._prompt_normalized):
+            self._echo_probe = {
+                "text": text,
+                "message_id": message_id,
+                "state": "prefix",
                 "cursor": cursor,
                 "received_at": received_at,
             }
             return True
         return False
 
-    def _flush_echo_candidate_locked(self) -> None:
-        """Emit a held prefix as the independent user row it turned out to be."""
-        candidate = self._echo_candidate
-        if candidate is None:
+    def _user_row_exists_locked(self, message_id: str | None) -> bool:
+        """True when this user chunk continues an already emitted row."""
+        if message_id is None:
+            open_message = self._open_message
+            return bool(
+                open_message is not None
+                and self.messages
+                and self.messages[-1] is open_message
+                and open_message["role"] == "user"
+                and open_message["messageId"] is None
+                and open_message is not self._prompt_row
+            )
+        return any(
+            message["role"] == "user" and message["messageId"] == message_id
+            for message in reversed(self.messages)
+        )
+
+    def _flush_echo_probe_locked(self) -> None:
+        """Close a held probe at a boundary.
+
+        A proper prefix was never a complete echo, so it becomes its own row.
+        A complete match is dropped: the boundary proves the message ended as
+        the echo, and a later chunk is a new message under the same chunk
+        continuity rules the projection already uses.
+        """
+        probe = self._echo_probe
+        if probe is None:
             return
-        self._echo_candidate = None
-        self._add_message_locked("user", candidate["text"],
-                                 candidate["message_id"],
-                                 candidate["cursor"], candidate["received_at"])
+        self._echo_probe = None
+        if probe["state"] == "matched":
+            return
+        self._add_message_locked("user", probe["text"], probe["message_id"],
+                                 probe["cursor"], probe["received_at"])
 
     def _add_message_locked(
         self, role: str, text: str, message_id: str | None, cursor: int,
