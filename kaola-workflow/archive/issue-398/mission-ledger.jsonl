@@ -1,0 +1,2 @@
+{"n":1,"name":"Map #381/#384 documented codes to recovery routes and add missing entries","details":"dispatched: self — output lands on workflow/issue-398 in .kw/worktrees/issue-398; done at 09045ab0 (scripts/kaola-recovery-routes.py, 12 rendered Skill copies, CHANGELOG)","status":"done"}
+{"n":2,"name":"Run #309 contract, adjacent suites, render --check and commit the candidate","details":"dispatched: self — done at 09045ab0: test-issue-309 / 381 / 384 / 372 / 286 / 362 / 395 and render-skills.py --check all PASS; candidate committed, no merge or finalize","status":"done"}
