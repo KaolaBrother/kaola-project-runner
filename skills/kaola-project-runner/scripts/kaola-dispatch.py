@@ -1604,6 +1604,14 @@ def evidence(receipt: dict[str, Any] | None, code: int | None, note: str = "") -
     }
     if isinstance(receipt, dict) and isinstance(receipt.get("error"), dict):
         body["error_code"] = receipt["error"].get("code")
+    if isinstance(receipt, dict):
+        # Issue #372: a collect taken while a later prompt is queued has no
+        # top-level outcome. Keep the turn facts the status read already
+        # carries so that read is visibly mid-queue, not just outcome null.
+        active, turn_outcome, stop = turn_facts(receipt)
+        body["turn_active"] = active
+        body["turn_outcome"] = turn_outcome
+        body["stop_reason"] = stop
     if note:
         body["note"] = note
     return body
@@ -6836,6 +6844,48 @@ def retire_command(args: argparse.Namespace, kind: str, ident: str, record: dict
     return shlex.join(parts)
 
 
+def retire_command_runnable(args: argparse.Namespace, kind: str, ident: str,
+                            record: dict[str, Any]) -> tuple[bool, list[str]]:
+    """Whether a retire command this check may print is one its route accepts.
+
+    The command and the refusal come from the same ``open_dispatch`` call, so
+    a check never advertises a retire that the route would refuse. Records
+    with no dispatch or seat have no closure input to re-check, and a
+    versionless record's next step is the migrate plan, not this gate.
+    """
+    if kind != "tasks" or not (record.get("dispatch") or task_seats(record)):
+        return True, []
+    if record_versionless(record):
+        return True, []
+    file_path = getattr(args, "file", None)
+    if not isinstance(file_path, str) or not file_path:
+        return False, ["no state file"]
+    probe = argparse.Namespace(
+        file=file_path, writer="host",
+        source=getattr(args, "source", None) or "ORIGINAL_SOURCE",
+        evidence=_handled_evidence(args, record), id=str(ident),
+        index=_index_arguments(args), live=getattr(args, "live", None))
+    try:
+        problems = open_dispatch(record, probe)
+    except StateRefusal as refusal:
+        return False, [str(refusal.payload.get("detail") or refusal.payload.get("reason")
+                          or "refused")]
+    except ValueError as exc:
+        return False, [str(exc)]
+    if not problems:
+        return True, []
+    shown = {retire_command(args, "tasks", ident, record),
+             retire_command(probe, "tasks", ident, record)}
+    cleaned = []
+    for problem in problems:
+        text = problem
+        for command in shown:
+            if command:
+                text = text.replace(command, "")
+        cleaned.append(text.strip().strip(".; "))
+    return False, cleaned
+
+
 def update_hint_command(args: argparse.Namespace, kind: str, ident: str, record: dict[str, Any]) -> str:
     if record_versionless(record):
         return migrate_command(args)
@@ -6878,7 +6928,12 @@ def diagnose_state_bloat(doc: dict[str, Any], args: argparse.Namespace | None
                                    + command),
                     })
                 continue
-            command = retire_command(args, kind, ident, record) if args is not None else ""
+            command = ""
+            blocked: list[str] = []
+            if args is not None:
+                runnable, blocked = retire_command_runnable(args, kind, ident, record)
+                if runnable:
+                    command = retire_command(args, kind, ident, record)
             item = {"kind": kind, "id": ident, "rev": record.get("rev"), "class": klass,
                     "bytes": nbytes, "command": command}
             if klass == "shell":
@@ -6889,11 +6944,16 @@ def diagnose_state_bloat(doc: dict[str, Any], args: argparse.Namespace | None
                 grouped["resolved"].append(item)
             else:
                 grouped["terminal"].append(item)
+            detail = (f"{kind}/{ident} rev {record.get('rev')} file revision {doc.get('revision')} "
+                      f"class {klass} ({nbytes} bytes).")
+            if blocked:
+                detail += " No runnable retire command: " + "; ".join(blocked) + "."
+            elif command:
+                detail += " " + command
             problems.append({
                 "code": "state-bloat", "level": "warn", "kind": kind, "id": ident,
                 "rev": record.get("rev"), "class": klass, "bytes": nbytes, "command": command,
-                "detail": (f"{kind}/{ident} rev {record.get('rev')} file revision {doc.get('revision')} "
-                           f"class {klass} ({nbytes} bytes). {command}"),
+                "detail": detail,
             })
         collections[kind] = {"count": count, "bytes": total}
     largest = sorted(sized, key=lambda row: (-row["bytes"], row["kind"], str(row["id"])))[:_BLOAT_LARGEST]
@@ -6934,9 +6994,9 @@ def stale_collect_session_gone(ref: str, row: dict[str, Any], task: dict[str, An
         return None
     if collected.get("outcome") is not None:
         return None
-    status_evidence = evidence_rows.get("status") if isinstance(evidence_rows.get("status"), dict) else {}
-    if status_evidence.get("error_code") != "no-session":
-        return None
+    # Issue #372: the old no-session gate dropped every row whose status read
+    # predates that error shape (i241). The collected proof and the live row
+    # below decide this route; the status error code is not a requirement.
     verdict = task.get("verdict") if isinstance(task.get("verdict"), dict) else {}
     accepted = task.get("stage") == "done" and verdict.get("value") == "accepted"
     cancelled = verdict.get("value") == "cancelled"
@@ -6962,14 +7022,27 @@ def stale_collect_session_gone(ref: str, row: dict[str, Any], task: dict[str, An
         return _stale_refusal(ref, task, args, "collected repo differs from the index row")
     if isinstance(row.get("repo"), str) and row.get("repo") and not same_repo(row.get("repo"), repo):
         return _stale_refusal(ref, task, args, "the index row repo is not this project")
-    if any(item.get("session") == session for item in live):
+    # Issue #372: a stopped row under the recorded holder is a gone session,
+    # not a listed one. Strict version of the dead-holder check: every row for
+    # this session must be stopped and, when a holder was recorded, every one
+    # must name it. One foreign or missing holder still refuses.
+    matches = [item for item in live if item.get("session") == session]
+    if any(item.get("state") != "stopped" for item in matches):
         return _stale_refusal(
             ref, task, args,
-            f"{session} is still listed; this route retires only when --live has no row for that session")
+            f"{session} is still live; this route retires only when every --live row for that "
+            "session is stopped")
+    if matches and holder and any(item.get("holder_instance_id") != holder for item in matches):
+        other = next((item.get("holder_instance_id") for item in matches
+                      if item.get("holder_instance_id") != holder), None)
+        return _stale_refusal(
+            ref, task, args,
+            f"{session} is stopped under holder {other}, not the recorded {holder}; foreign holder")
     entry: dict[str, Any] = {
         "item_id": ref, "session": session, "collect_status": "unknown",
         "reason": "fingerprint-differs", "disposition": "accepted" if accepted else "cancelled",
-        "evidence": evidence, "live": "absent", "route": _STALE_COLLECT_ROUTE_KEY,
+        "evidence": evidence, "live": "stopped" if matches else "absent",
+        "route": _STALE_COLLECT_ROUTE_KEY,
     }
     if holder:
         entry["holder_instance_id"] = holder
@@ -6979,7 +7052,8 @@ def stale_collect_session_gone(ref: str, row: dict[str, Any], task: dict[str, An
 # Issue #333: a holder that died before collect captured last_prompt leaves the
 # index row unknown. These reasons are that close. A fingerprint-differs row
 # that already carries collected continuation evidence stays on the older route.
-_DEAD_HOLDER_UNKNOWN_REASONS = ("event-range-unavailable", "no-last-prompt", "fingerprint-differs")
+_DEAD_HOLDER_UNKNOWN_REASONS = ("event-range-unavailable", "no-last-prompt",
+                                "fingerprint-differs", "session-gone")
 _DEAD_HOLDER_RETIRE_ROUTE = (
     "dead-holder unknown route: an accepted task retires this unknown row when --live "
     "shows that session stopped or absent (the session is gone) and --evidence carries "
@@ -8443,9 +8517,18 @@ def state_problems(doc: dict[str, Any], path: Path, index: dict[str, Any] | None
                 if isinstance(maintenance, dict):
                     handled = maintenance.get("handled_host_revision")
                 level = "warn" if terminal and _revision_covered(handled, task.get("host_revision")) else "watch"
-                command = retire_command(args, "tasks", ident, task) if args is not None else ""
+                command = ""
+                blocked: list[str] = []
+                if args is not None:
+                    runnable, blocked = retire_command_runnable(args, "tasks", ident, task)
+                    if runnable:
+                        command = retire_command(args, "tasks", ident, task)
                 detail = (f"tasks/{ident} rev {task.get('rev')} file revision {doc.get('revision')}: "
-                          "done; retire it with its evidence once close-out is verified. " + command).strip()
+                          "done; retire it with its evidence once close-out is verified.")
+                if blocked:
+                    detail += " No runnable retire command: " + "; ".join(blocked) + "."
+                elif command:
+                    detail += " " + command
                 problems.append({"code": "done-not-retired", "level": level, "detail": detail,
                                  "kind": "tasks", "id": ident, "rev": task.get("rev"),
                                  **({"command": command} if command else {})})

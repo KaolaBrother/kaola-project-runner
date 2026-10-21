@@ -279,22 +279,6 @@ class StateBloat(unittest.TestCase):
         self.assertEqual(self.index.read_bytes(), before_index)
         self.assertNotIn(ROUTE, json.dumps(out))
 
-    def test_guard_collect_without_no_session_stays_unknown(self) -> None:
-        def drop_code(row: dict) -> None:
-            row["evidence"]["status"].pop("error_code", None)
-        task, before_index = self.install_i338(drop_code)
-        before = self.file.read_bytes()
-        self.write_live([])
-        code, out = run(["state", "retire", "--file", str(self.file), "--writer", "host",
-                         "--source", "evt", "--kind", "tasks", "--id", "i338",
-                         "--expect-rev", str(task["rev"]), "--evidence", task["source"],
-                         "--cite", json.dumps(CITE), "--index", str(self.index), "--live", str(self.live)])
-        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
-        self.assertIn("i338-effort-max is unknown", out["detail"])
-        self.assertNotIn(ROUTE, out["detail"])
-        self.assertEqual(self.file.read_bytes(), before)
-        self.assertEqual(self.index.read_bytes(), before_index)
-
     def test_regression_done_not_retired_is_watch_until_the_handled_batch(self) -> None:
         code, out = self.update("tasks", "t-done", {"stage": "done", "goal": "accepted", "next": "leave",
                                                     "verdict": {"value": "accepted"}})

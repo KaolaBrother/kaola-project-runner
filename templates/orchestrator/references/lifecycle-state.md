@@ -47,9 +47,10 @@ The Host gets outcomes, capacity and pending decisions.
   lists accepted-done and cancelled tasks, settled decisions, alerts whose
   `inputs` is empty, and shell tasks (evidence is only `retired:tasks/ID`,
   duty fields empty). Each names kind, id, rev, and a `state retire`
-  command. A large row is a hint in `diagnosis`, not a gate. `done-not-retired`
-  stays watch until `maintenance.handled_host_revision` covers it, then
-  warns without refusing writes. `carrier-unproven` names `state migrate
+  command when runnable. A large row is a hint in `diagnosis`, not a
+  gate. `done-not-retired` stays watch until
+  `maintenance.handled_host_revision` covers it, then warns without refusing
+  writes. `carrier-unproven` names `state migrate
   --live`. A row lacking `rev` is `record-versionless` and names the
   `migrate` plan; `--write` assigns `rev 1`. Check stores nothing.
 - `$S migrate [--index I] [--live L] [--repo R] [--write]`; `$S timer`
@@ -127,9 +128,9 @@ an open duty to fit. No field length cap and no truncation. A row over 1536
 bytes is only a check hint: rewrite that same id. The Host view is bounded at
 64 KiB (`host-view-too-large`). The file may reach 1 MiB only with a recorded
 `carrier` advertising `heartbeat-state/2`, else 64 KiB (`carrier-limit`). An
-unknown row whose collected outcome is absent, whose status evidence is
-`no-session`, and whose live session is absent, retires on the stale-collect
-session-gone route and writes no index bytes.
+unknown row whose collected outcome is absent and whose live session is absent
+or stopped under the recorded holder retires on the stale-collect route and
+writes no index bytes.
 
 ## Migration
 
