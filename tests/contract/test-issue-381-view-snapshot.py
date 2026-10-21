@@ -257,13 +257,13 @@ class ViewSnapshotCase(unittest.TestCase):
     def gate_projection_add(self, holder, gate: Gate) -> None:
         original = holder.projection.add_user_from_prompt
 
-        def gated(text, cursor, started_at=None, client_message_id=None):
+        def gated(text, cursor, started_at=None, client_message_id=None, **kwargs):
             gate.calls += 1
             gate.cursor = cursor
             gate.entered.set()
             if not gate.release.wait(15):
                 raise AssertionError("admission publication gate was never released")
-            return original(text, cursor, started_at, client_message_id)
+            return original(text, cursor, started_at, client_message_id, **kwargs)
 
         holder.projection.add_user_from_prompt = gated
 

@@ -142,7 +142,7 @@ Kaola Terminal 可直接读 list 行（本仓库不改 Terminal）：
 | `messages_dropped` | int；`messages[]` 中因 timeline/字节 cap 省略的消息行数；重启丢失为未知数，不计入该值，见 `truncation.rows.messages.restart` |
 | `earliest_cursor` | int \| null；返回的 `messages[]` 最早 cursor；空数组为 `null` |
 | `truncation` | 对象；`event_log: {gap, reason, oldest_cursor}` 与 `rows: {missing, reason, messages, tools, turns, answered_permissions}`；`messages` 含 `{kept, timeline: {dropped, reason}, bytes: {dropped, reason}, restart: {dropped, reason, boundary_cursor}}` |
-| `messages` | **数组**，按时间序：`{role: "user"\|"assistant", text: string, messageId: string\|null, cursor: int, received_at: float\|null}`；同 `messageId` 的 chunk 已拼接成一条。`received_at` 是首个 chunk 的 holder 收到时间（Unix 秒，毫秒精度），与该 chunk 在 `events.jsonl` 的 `ts` 相同；holder 自己写出的 `prompt` 消息没有事件日志行，为 `null`（其时间见所属回合的 `started_at`） |
+| `messages` | **数组**，按时间序：`{role: "user"\|"assistant", text: string, messageId: string\|null, cursor: int, received_at: float\|null}`；同 `messageId` 的 chunk 已拼接成一条。`received_at` 是首个 chunk 的 holder 收到时间（Unix 秒，毫秒精度），与该 chunk 在 `events.jsonl` 的 `ts` 相同；holder 自己写出的 `prompt` 消息没有事件日志行，为 `null`（其时间见所属回合的 `started_at`）。`user_message_chunk` 若是当前 prompt 的 echo（空白规范化指纹相同，带不带 `messageId` 都一样）不产生行；prompt 行不会被任何 chunk 拼接（Issue #385） |
 | `thinking` | `{chars: int, text_tail: string, messageId: string\|null}`；L0 仍只见 `thinking_chars` |
 | `tools` | **数组**，按首次出现序，`toolCallId` 唯一：`{toolCallId: string, title: string\|null, kind: string\|null, status: string\|null, locations: [{path: string, line: int\|null}], content: [ContentItem], truncated: bool}` |
 | `plan` | `{entries: [{content: string, priority: string\|null, status: string\|null}]}` \| `null`；每次 `sessionUpdate: plan` **整表替换**，禁止合并；从未发过 plan 则 `null` |
@@ -261,7 +261,15 @@ Kaola Terminal 可直接读 list 行（本仓库不改 Terminal）：
 
 该样例以文件形式冻结在 `tests/contract/fixtures/kaola-acp-view-1.sample.json`，合同测试必须断言真实 `view` 输出与样例**键集合与类型**一致；Kaola Terminal 把同一文件拷进测试 bundle 作为解码 fixture。
 
-上限（超限置 `truncated=true` 并**实际裁剪**，不报错）：thinking 只保留 8KiB 尾巴；单工具 content 裁到 32KiB（整项保留，首个溢出项截断 text/newText）——这两类内容截短仍只由旧 `truncated` 表达，两个新 bool 不覆盖；timeline、`turns`、`answered_permissions` 各只保留最近 200 条；整 view 超过 256KiB 时依次丢最旧的工具卡、消息、许可应答、回合。每次裁剪按类记入 `truncation`：`messages.timeline` / `messages.bytes` / `messages.restart`，以及 `tools` / `turns` / `answered_permissions` 的 `dropped`；`messages_dropped` 为消息两类实际丢失数之和。时间字段只来自 holder 自己的时钟（ACP 不带时间戳），投影只存在于 holder 进程内存，holder 重启后从空开始；`truncation.rows.messages.restart.boundary_cursor` 记录重启时恢复的事件 cursor。新 holder 无历史时 `restart.dropped=0` 且 `boundary_cursor=null`；只有构造时恢复到正的历史 cursor 才为 `null`：prompt admission 没有完整 prompt 文本或统一的 prompt-turn-start 重建证据（部分 agent-initiated 回合确有 `turn_started`），精确丢失行数不可知，且本次不做 replay。没有 `messageId` 的 chunk（Grok 实测全部如此）按同角色连续拼接，直到 tool_call、新 prompt 或回合结束为止。
+上限（超限置 `truncated=true` 并**实际裁剪**，不报错）：thinking 只保留 8KiB 尾巴；单工具 content 裁到 32KiB（整项保留，首个溢出项截断 text/newText）——这两类内容截短仍只由旧 `truncated` 表达，两个新 bool 不覆盖；timeline、`turns`、`answered_permissions` 各只保留最近 200 条；整 view 超过 256KiB 时依次丢最旧的工具卡、消息、许可应答、回合。每次裁剪按类记入 `truncation`：`messages.timeline` / `messages.bytes` / `messages.restart`，以及 `tools` / `turns` / `answered_permissions` 的 `dropped`；`messages_dropped` 为消息两类实际丢失数之和。时间字段只来自 holder 自己的时钟（ACP 不带时间戳），投影只存在于 holder 进程内存，holder 重启后从空开始；`truncation.rows.messages.restart.boundary_cursor` 记录重启时恢复的事件 cursor。新 holder 无历史时 `restart.dropped=0` 且 `boundary_cursor=null`；只有构造时恢复到正的历史 cursor 才为 `null`：prompt admission 没有完整 prompt 文本或统一的 prompt-turn-start 重建证据（部分 agent-initiated 回合确有 `turn_started`），精确丢失行数不可知，且本次不做 replay。没有 `messageId` 的 chunk（Grok 实测全部如此）按同角色连续拼接，直到 tool_call、新 prompt 或回合结束为止；prompt 自己那一行是唯一例外，见下节。
+
+### 用户 echo 去重（Issue #385）
+
+`user_message_chunk` 只在文本的空白规范化指纹等于**当前 prompt** 的空白规范化指纹时视为 echo；`messageId` 不再豁免。历史 prompt 不参与匹配：旧 prompt 的文本在新 prompt 成为当前后不再被吞掉；原先的“相等或子串”判断已删除，仅包含 prompt、或是 prompt 子串的 chunk 不会被消费。
+
+echo 可以分块到达：规范化后是当前 prompt 真前缀的 chunk 先作为候选保留，不单独成行；下一条同 `messageId` 的 chunk 若补全成完整 echo，则两条都丢弃，若证明是不同文本，则候选在边界处 flush 成自己的 user 行。候选也会在下一条不同 `session/update`、新 prompt、`close_message` 或回合结束时 flush，保证不丢失、也不会并入 prompt 行。prompt 行有内部不可拼接标记，未知非 echo chunk 只能开新行或并入非 prompt 行；`messageId` / `clientMessageId` 两层身份不变。
+
+prompt 身份读取与 chunk 分类在同一 projection 锁窗口内完成；holder 还传入该 update 所属 turn 的原始 prompt 指纹，因此新 prompt 不会给迟到的旧 echo 重新定身份。`events.jsonl` 仍逐条保留 `session_update`（包括 echo），供 #384 的审计/replay 使用；去重只发生在 projection。
 
 ### `--since` 语义
 

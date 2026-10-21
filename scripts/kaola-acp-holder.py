@@ -2016,6 +2016,34 @@ def _as_text(value: Any) -> str:
     return ""
 
 
+def _echo_normalize(text: str) -> str:
+    """Issue #385: the only text normalization used for user-echo identity.
+
+    Platforms may replay a prompt with different line breaks or spacing (the
+    reproduced Grok shape collapsed ``"alpha beta\\n\\ngamma delta"`` to
+    ``"alpha beta gamma delta"``).  Collapsing every whitespace run keeps the
+    comparison about the delivered words, not formatting, while leaving case
+    and punctuation alone so unrelated text is not absorbed.
+    """
+    return " ".join(text.split())
+
+
+def _echo_fingerprint(text: str) -> str:
+    """Whitespace-normalized fingerprint of one user chunk or prompt."""
+    normalized = _echo_normalize(text)
+    return "sha256:" + hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _is_echo_prefix(prefix: str, prompt: str) -> bool:
+    """True when ``prefix`` can still grow into ``prompt``.
+
+    A complete echo is handled by fingerprint equality first; this predicate
+    keeps only a proper prefix (including whitespace-only chunks that normalize
+    to ``""``) as a chunked-echo candidate.
+    """
+    return bool(prompt) and prompt.startswith(prefix) and prefix != prompt
+
+
 def _content_text(value: Any, depth: int = 0) -> str:
     """Issue #369 tier B: every text a tool_call ``content`` carries.
 
@@ -2167,7 +2195,21 @@ class ViewProjection:
         self.answered_permissions: list[dict[str, Any]] = []
         self.answered_dropped = False
         self.answered_dropped_count = 0
-        self._prompt_texts: list[str] = []
+        # Issue #385: only the current prompt can be echoed. The raw
+        # fingerprint identifies the prompt a session update belongs to; the
+        # normalized text/fingerprint decide the echo without a messageId
+        # exemption and without matching prompt history.
+        self._prompt_fingerprint: str | None = None
+        self._prompt_normalized: str | None = None
+        self._prompt_echo_fingerprint: str | None = None
+        # The prompt's own row. This reference is internal and never
+        # serialized: an unmatched user chunk must open its own row instead of
+        # mutating the delivered prompt text.
+        self._prompt_row: dict[str, Any] | None = None
+        # A chunk whose normalized text is a proper prefix of the current
+        # prompt is held until a following chunk completes the echo (drop) or
+        # a boundary proves it was not an echo (flush as its own row).
+        self._echo_candidate: dict[str, Any] | None = None
         # The last appended message; chunks without messageId append to it
         # until a tool call, a new prompt, or turn end closes it.
         self._open_message: dict[str, Any] | None = None
@@ -2184,13 +2226,30 @@ class ViewProjection:
         self.thinking_message_id = None
 
     def add_user_from_prompt(self, text: str, cursor: int, started_at: float | None = None,
-                             client_message_id: str | None = None) -> None:
-        """The prompt opens a turn. Its message has no event-log line, so no ``received_at``."""
+                             client_message_id: str | None = None,
+                             prompt_fingerprint: str | None = None) -> None:
+        """The prompt opens a turn. Its message has no event-log line, so no ``received_at``.
+
+        Issue #385: this is the only place the echo identity changes. The raw
+        fingerprint (the one the send receipt publishes) and the normalized
+        fingerprint are written under the same lock that classifies a
+        ``user_message_chunk`` in :meth:`apply`.
+        """
         with self.lock:
+            # A prefix left from the previous prompt boundary cannot complete
+            # the new prompt; expose it as the row it actually was.
+            self._flush_echo_candidate_locked()
             self._reset_thinking_locked()
-            self._prompt_texts.append(text)
+            self._prompt_fingerprint = (
+                prompt_fingerprint if isinstance(prompt_fingerprint, str)
+                and prompt_fingerprint
+                else "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+            )
+            self._prompt_normalized = _echo_normalize(text)
+            self._prompt_echo_fingerprint = _echo_fingerprint(text)
             self._open_message = None
-            self._add_message_locked("user", text, None, cursor, None, client_message_id)
+            self._add_message_locked("user", text, None, cursor, None,
+                                     client_message_id, from_prompt=True)
             turn: dict[str, Any] = {
                 "started_at": started_at,
                 "ended_at": None,
@@ -2213,6 +2272,7 @@ class ViewProjection:
     def start_agent_turn(self, cursor: int, started_at: float | None = None) -> None:
         """Issue #341: an agent-initiated continuation turn has no user prompt message."""
         with self.lock:
+            self._flush_echo_candidate_locked()
             self._reset_thinking_locked()
             self._open_message = None
             self.turns.append({
@@ -2231,6 +2291,7 @@ class ViewProjection:
 
     def end_turn(self, ended_at: float, cursor: int, outcome: Any, stop_reason: Any) -> None:
         with self.lock:
+            self._flush_echo_candidate_locked()
             self._open_message = None
             if self.turns and self.turns[-1]["ended_at"] is None:
                 self.turns[-1].update({
@@ -2251,11 +2312,19 @@ class ViewProjection:
 
     def close_message(self) -> None:
         with self.lock:
+            self._flush_echo_candidate_locked()
             self._open_message = None
 
-    def apply(self, update: dict[str, Any], cursor: int, received_at: float | None = None) -> None:
+    def apply(self, update: dict[str, Any], cursor: int,
+              received_at: float | None = None,
+              prompt_identity: str | None = None) -> None:
         variant = update.get("sessionUpdate", "unknown")
         with self.lock:
+            # Issue #385: any different update is a boundary. A held prefix
+            # cannot become the prompt across it, so it becomes its own row
+            # before this update so the view keeps wire order.
+            if variant != "user_message_chunk":
+                self._flush_echo_candidate_locked()
             if variant == "agent_message_chunk":
                 message_id = update.get("messageId")
                 if message_id is not None:
@@ -2269,13 +2338,9 @@ class ViewProjection:
                 message_id = update.get("messageId")
                 if message_id is not None:
                     message_id = str(message_id)
-                if message_id is None and any(
-                    text == previous or text in previous or previous in text
-                    for previous in self._prompt_texts
-                    if previous
-                ):
-                    return
-                self._add_message_locked("user", text, message_id, cursor, received_at)
+                if not self._classify_user_chunk_locked(
+                        text, message_id, cursor, received_at, prompt_identity):
+                    self._add_message_locked("user", text, message_id, cursor, received_at)
             elif variant == "agent_thought_chunk":
                 text = _as_text(update.get("content"))
                 self.thinking_chars += len(text)
@@ -2334,9 +2399,72 @@ class ViewProjection:
                 except (TypeError, ValueError):
                     pass
 
+    def _classify_user_chunk_locked(
+        self, text: str, message_id: str | None, cursor: int,
+        received_at: float | None, prompt_identity: str | None,
+    ) -> bool:
+        """Issue #385: True when this chunk is the current prompt's echo.
+
+        The prompt identity and this classification are read under the same
+        projection lock that admits a new prompt. ``prompt_identity`` is the
+        raw fingerprint of the turn THIS update arrived under; an explicit
+        identity only matches the prompt admitted under it, so a delayed echo
+        of a previous prompt is not dropped when a newer prompt is current.
+        ``None`` means the caller did not supply an identity (in-process
+        callers); ``""`` means no prompt turn (agent-initiated or foreign
+        session) and is never an echo.
+
+        A proper prefix is held as a chunked-echo candidate instead of being
+        emitted; the next chunk either completes the echo (both dropped) or
+        proves it was different text (candidate flushed as its own row).
+        """
+        if prompt_identity is not None and prompt_identity != self._prompt_fingerprint:
+            self._flush_echo_candidate_locked()
+            return False
+        if self._prompt_normalized is None:
+            return False
+        normalized = _echo_normalize(text)
+        candidate = self._echo_candidate
+        if candidate is not None:
+            if candidate["message_id"] != message_id:
+                # A messageId boundary cannot be one chunked echo.
+                self._flush_echo_candidate_locked()
+            else:
+                combined = candidate["text"] + text
+                combined_normalized = _echo_normalize(combined)
+                if combined_normalized == self._prompt_normalized:
+                    self._echo_candidate = None
+                    return True
+                if _is_echo_prefix(combined_normalized, self._prompt_normalized):
+                    candidate["text"] = combined
+                    return True
+                self._flush_echo_candidate_locked()
+        if _echo_fingerprint(text) == self._prompt_echo_fingerprint:
+            return True
+        if _is_echo_prefix(normalized, self._prompt_normalized):
+            self._echo_candidate = {
+                "text": text,
+                "message_id": message_id,
+                "cursor": cursor,
+                "received_at": received_at,
+            }
+            return True
+        return False
+
+    def _flush_echo_candidate_locked(self) -> None:
+        """Emit a held prefix as the independent user row it turned out to be."""
+        candidate = self._echo_candidate
+        if candidate is None:
+            return
+        self._echo_candidate = None
+        self._add_message_locked("user", candidate["text"],
+                                 candidate["message_id"],
+                                 candidate["cursor"], candidate["received_at"])
+
     def _add_message_locked(
         self, role: str, text: str, message_id: str | None, cursor: int,
         received_at: float | None, client_message_id: str | None = None,
+        *, from_prompt: bool = False,
     ) -> None:
         if message_id is not None:
             for message in reversed(self.messages):
@@ -2351,6 +2479,9 @@ class ViewProjection:
                 and self.messages[-1] is open_message
                 and open_message["role"] == role
                 and open_message["messageId"] is None
+                # Issue #385: the delivered prompt is immutable. An unmatched
+                # chunk opens its own row instead of extending this one.
+                and open_message is not self._prompt_row
             ):
                 open_message["text"] += text
                 return
@@ -2365,9 +2496,16 @@ class ViewProjection:
             message["clientMessageId"] = client_message_id
         self.messages.append(message)
         self._open_message = message
+        if from_prompt:
+            self._prompt_row = message
         if len(self.messages) > TIMELINE_MAX:
             removed = len(self.messages) - TIMELINE_MAX
+            dropped = self.messages[:removed]
             del self.messages[:removed]
+            if any(row is self._prompt_row for row in dropped):
+                self._prompt_row = None
+            if any(row is self._open_message for row in dropped):
+                self._open_message = None
             self.messages_dropped = True
             self.messages_timeline_dropped += removed
 
@@ -4115,10 +4253,15 @@ class Holder:
     def on_session_update(self, params: dict[str, Any]) -> None:
         update = params.get("update") or {}
         variant = update.get("sessionUpdate", "unknown")
-        same_session = params.get("sessionId") in (None, self.acp_session_id)
         received_at = round(time.time(), 3)
         opened_agent_turn: dict[str, Any] | None = None
         with self.lock:
+            # Issue #385: the session identity and the prompt identity this
+            # update belongs to are read under the same admission lock that
+            # starts a prompt turn. The projection then classifies the chunk
+            # under that identity, so a prompt admitted between receipt and
+            # projection cannot re-key this echo.
+            same_session = params.get("sessionId") in (None, self.acp_session_id)
             if (
                 not self.turn["active"]
                 # Only after a turn this holder saw complete: the incident
@@ -4179,6 +4322,9 @@ class Holder:
                     self.projection.start_agent_turn(start_cursor, received_at)
                 opened_agent_turn = turn
             turn = self.turn
+            # An empty identity means no prompt turn (agent-initiated or a
+            # foreign session); only a real same-session prompt can be echoed.
+            prompt_identity = ((turn.get("fingerprint") or "") if same_session else "")
             if turn["active"] and turn.get("agent_initiated") and same_session:
                 if is_agent_work_update(update):
                     turn["last_update_mono"] = time.monotonic()
@@ -4246,7 +4392,13 @@ class Holder:
                         if thread_status.get("type") == "systemError" else None
                     )
         if variant != "usage_update" or same_session:
-            self.projection.apply(update, self.events.cursor + 1, received_at)
+            # Issue #385: the projection's current-prompt read and the echo
+            # classification share this admission window. The event log below
+            # still keeps the raw session_update, echo included (#384 replay
+            # constraint); dedupe is projection-only.
+            with self.lock:
+                self.projection.apply(update, self.events.cursor + 1, received_at,
+                                      prompt_identity=prompt_identity)
         cursor = self.events.append({"kind": "session_update", "sessionId": params.get("sessionId"),
                                      "update": update}, ts=received_at)
         self.write_record()
@@ -4875,7 +5027,8 @@ class Holder:
                 if client_message_id is not None:
                     self.last_prompt["client_message_id"] = client_message_id
                 self.projection.add_user_from_prompt(
-                    text, start_cursor, turn["written_at"], client_message_id)
+                    text, start_cursor, turn["written_at"], client_message_id,
+                    prompt_fingerprint=fingerprint)
                 if end_cursor is not None:
                     self.projection.end_turn(turn["ended_at"], end_cursor,
                                              "process_exited", None)

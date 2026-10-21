@@ -222,7 +222,7 @@ for name in $(compgen -e); do
   fi
 done
 # Mock holders need their fixture environment (MOCK_ACP_*). Production broker
-# filtering stays unchanged; the explicit 266 suites exercise auto/broker below.
+# filtering stays unchanged; the explicit 155 suites exercise auto/broker below.
 export KAOLA_LAUNCH_BACKEND=direct
 export KAOLA_ACP_RECORD_ROOT="$validate_tmp/records"
 
@@ -322,6 +322,7 @@ python_suites_all=(
   "test-issue-380-client-message-id.py"
   "test-issue-381-view-snapshot.py"
   "test-issue-384-view-disclosure.py"
+  "test-issue-385-view-echo-dedupe.py"
   "test-issue-267-rejection-count.py"
   "test-issue-268-selection-continuity.py"
   "test-issue-273-list-identity.py"
@@ -534,6 +535,7 @@ python_suites_b=(
   "test-issue-380-client-message-id.py"
   "test-issue-381-view-snapshot.py"
   "test-issue-384-view-disclosure.py"
+  "test-issue-385-view-echo-dedupe.py"
   "test-issue-359-record-loss.py")
 
 # Selectable shell contract suites: they run serially before the Python lanes.
