@@ -239,6 +239,28 @@ class AuthorizationShape(unittest.TestCase):
                     self.assertEqual(out.get("candidates"), [])
                     self.assertEqual(out.get("withheld"), [])
 
+    def test_empty_delegator_authorization_is_empty_host_authorization(self) -> None:
+        self.delegator_file.unlink()
+        self.split_file.write_text(json.dumps({
+            "schema": "kaola-delegator-heartbeat/1",
+            "revision": 1,
+            "authorization": {},
+        }), encoding="utf-8")
+        for extra in ((), ("--seats",)):
+            with self.subTest(extra=extra):
+                code, out = run_dispatch([
+                    "project", *extra, "--repo", str(self.repo),
+                    "--authorization", str(self.split_file), "--live", str(self.live),
+                    "--platforms", str(PLATFORMS),
+                ])
+                self.assertEqual(code, 0, out)
+                self.assertNotIn("error", out.get("result", ""))
+                if extra:
+                    self.assertEqual(out["summary"].get("groups"), [])
+                else:
+                    self.assertEqual(out.get("candidates"), [])
+                    self.assertEqual(out.get("withheld"), [])
+
     def test_delegator_view_conversion_is_unchanged(self) -> None:
         state_code, state_out = run_dispatch([
             "state", "view", "--role", "delegator", "--file", str(self.host_file),
@@ -299,7 +321,12 @@ class AuthorizationShape(unittest.TestCase):
         self.assertEqual(template.encode("utf-8"), generated.read_bytes())
         self.assertLessEqual(len(template.encode("utf-8")), 8192)
         self.assertIn(".kaola/delegator-heartbeat.json", docs)
-        self.assertIn("Delegator heartbeat", " ".join(docs.split()))
+        flat_docs = " ".join(docs.split())
+        self.assertIn("Delegator heartbeat", flat_docs)
+        self.assertIn("split-grant shape", flat_docs)
+        self.assertIn("empty Delegator authorization", flat_docs)
+        self.assertIn("shape-based, not filename-based", flat_docs)
+        self.assertNotIn("It never accepts `.kaola/delegator-heartbeat.json`", docs)
         for text in (docs, template, generated.read_text(encoding="utf-8")):
             flat = " ".join(text.split())
             self.assertIn("--authorization", flat)
@@ -310,9 +337,15 @@ class AuthorizationShape(unittest.TestCase):
             self.assertIn("grants", flat)
         self.assertIn("exit 2", docs)
         self.assertIn("empty grant list", docs)
+        flat_template = " ".join(template.split())
+        self.assertIn("source pointers", flat_template)
+        self.assertIn(("Outcome/permissions/failures/cursor survive the 480-char "
+                       "excerpt; missing ranges are uncertainty."),
+                      flat_template)
+        self.assertIn("split-grant `--authorization` exits 2", flat_template)
         self.assertIn(("The Delegator file is the ceiling and the index is "
-                       "correlation, not a ledger; read it from `--repo`, never "
-                       "`--authorization`"),
+                       "correlation, not a ledger; read it from `--repo`; "
+                       "split-grant `--authorization` exits 2"),
                       template)
 
 

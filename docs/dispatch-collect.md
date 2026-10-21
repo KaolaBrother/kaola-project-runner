@@ -45,14 +45,17 @@ reason as `not-run`. The Host removes a finished task grant; exact-stopping an
 Expert session releases the seat and keeps a standing grant.
 Do not keep a second durable copy such as `.kaola/dispatch-auth.json`.
 `--authorization` accepts the Host heartbeat or that authorization object
-directly. It never accepts `.kaola/delegator-heartbeat.json`: that Delegator
-heartbeat file is only the delegation ceiling, read separately from `--repo`
-(see section 2).
+directly. It does not accept the Delegator heartbeat's split-grant shape
+(`elite_grants`, `expert_task_grants`, or `worker_grants`): that is only the
+delegation ceiling, read separately from `--repo` (see section 2). An empty
+Delegator authorization has no split keys and is read as an empty Host
+authorization, not as a ceiling.
 A readable authorization object with `elite_grants`,
 `expert_task_grants`, or `worker_grants` but no `grants` is refused as
 invalid input (exit 2) instead of being normalized to an empty grant list;
 the same object with both shapes is also refused rather than silently
-choosing one. Delegator seats are read with `state view --role delegator`
+choosing one. That refusal is shape-based, not filename-based. Delegator
+seats are read with `state view --role delegator`
 or `delegator view`. An unreadable body is an error, not an empty grant
 list. `$AVAIL` lists
 `present` and `absent` preset ids from a read-only survey. Every other id
