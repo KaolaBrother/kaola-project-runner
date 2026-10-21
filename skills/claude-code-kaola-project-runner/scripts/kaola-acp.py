@@ -2228,6 +2228,78 @@ def holder_lost_receipt(args: argparse.Namespace, repo: str,
     return _stamp_recovery(receipt)
 
 
+PROMPT_STEER_OPS = frozenset({"prompt", "steer", "steer_interrupt"})
+# Issue #379: these answers prove this request wrote nothing. ``holder-lost`` is
+# in this set only when it carries no stage or the connect stage; a send/read
+# loss may have happened after the frame was written.
+UNSENT_RECEIPT_CODES = frozenset({
+    "no-session", "record-lost", "holder-socket-missing", "holder-lost",
+})
+UNCERTAIN_ERROR_STAGES = frozenset({"send", "read"})
+
+
+def _stamp_request_mutation(receipt: dict[str, Any], op: str) -> dict[str, Any]:
+    """Issue #379: state mutation for THIS request on a prompt/steer error.
+
+    ``holder_lost_receipt`` describes the previous prompt because ``status``
+    and ``observe`` need that historical fact. A send or steer must not inherit
+    it. A connect failure proves nothing was written. ``holder-closed``, a
+    send/read failure, and a ``holder-unreachable`` without a stage may have
+    happened after the frame was written, so ``null``/``unknown`` is the only
+    honest claim. Issue #383 adds ``error.stage``; when it is present this
+    classification uses it, and when it is absent the conservative answer is
+    kept.
+    """
+    if op not in PROMPT_STEER_OPS or not isinstance(receipt, dict):
+        return receipt
+    error = receipt.get("error")
+    if not isinstance(error, dict):
+        return receipt
+    code = error.get("code")
+    stage = error.get("stage")
+    holder_lost = code == "holder-lost"
+    if code == "holder-closed":
+        uncertain = True
+    elif code == "holder-unreachable":
+        # No stage predates #383 and cannot prove the connect step failed.
+        uncertain = stage != "connect"
+    elif holder_lost:
+        # A missing stage predates #383 and means the holder was already dead
+        # before this request (the pre-check); send/read lose the write.
+        uncertain = stage in UNCERTAIN_ERROR_STAGES
+    else:
+        uncertain = False
+    unsent = (
+        code in UNSENT_RECEIPT_CODES
+        or (code == "holder-unreachable" and stage == "connect")
+    )
+    # A holder that answers with its own mutation fact owns it. holder-lost is
+    # the exception: its value came from the previous prompt.
+    explicit = not holder_lost and (
+        "mutation_performed" in receipt or "mutation_status" in receipt)
+    if uncertain and not explicit:
+        receipt["mutation_performed"] = None
+        receipt["mutation_status"] = "unknown"
+    elif unsent and not explicit:
+        receipt["mutation_performed"] = False
+        receipt["mutation_status"] = "not_started"
+        if holder_lost:
+            last = (receipt.get("record") or {}).get("last_prompt")
+            if isinstance(last, dict) and last:
+                receipt.setdefault("previous_prompt", last)
+    if op in ("steer", "steer_interrupt"):
+        performed = receipt.get("mutation_performed")
+        if performed is False:
+            receipt.setdefault("steer_outcome", "not_consumed")
+            receipt.setdefault("steer_consumed", False)
+            receipt.setdefault("steer_confirmation", "none")
+        elif performed is None and "mutation_performed" in receipt:
+            receipt.setdefault("steer_outcome", "unknown")
+            receipt.setdefault("steer_consumed", None)
+            receipt.setdefault("steer_confirmation", "none")
+    return receipt
+
+
 def _holder_event_log(path: Path):
     """The holder's ``EventLog``, so a refused stop writes its event."""
     module = getattr(_holder_event_log, "module", None)
@@ -2771,9 +2843,9 @@ def _record_loss_scan(project_root: str,
     return {"scan": "complete", "lost": result["lost"]}
 
 
-def op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
-                      op: str, params: dict[str, Any],
-                      timeout: float | None) -> dict[str, Any]:
+def _op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
+                       op: str, params: dict[str, Any],
+                       timeout: float | None) -> dict[str, Any]:
     sock = sock_path(args, repo)
     record = read_record(directory)
     if record and not pid_alive(record.get("holder_pid")):
@@ -2829,7 +2901,14 @@ def op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
                 if refused is not None:
                     return refused
                 return force_kill_from_record(args, repo, record)
-            return holder_lost_receipt(args, repo, record)
+            lost = holder_lost_receipt(args, repo, record)
+            # Issue #383 puts connect/send/read on the wire error; keep it so
+            # a read-stage holder death is not misread as definitely unsent.
+            stage = (response.get("error") or {}).get("stage")
+            error = lost.get("error")
+            if isinstance(error, dict) and isinstance(stage, str) and stage:
+                error["stage"] = stage
+            return lost
         if record and op == "stop" and params.get("force"):
             return force_stop_unreachable(args, repo, directory, record, params)
     receipt = base_receipt(args, repo)
@@ -2842,6 +2921,14 @@ def op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
             receipt["record_lost"] = _record_loss_recovery(
                 row, pid_alive(row.get("holder_pid")))
     return receipt
+
+
+def op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
+                      op: str, params: dict[str, Any],
+                      timeout: float | None) -> dict[str, Any]:
+    """Issue #379: only prompt/steer answers are stamped for this request."""
+    return _stamp_request_mutation(
+        _op_or_holder_lost(args, repo, directory, op, params, timeout), op)
 
 
 SPAWN_RECORD_TOLERANCE = 5.0

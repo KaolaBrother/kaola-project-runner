@@ -4583,7 +4583,7 @@ class Holder:
                                   "message": "a prompt turn is already active; steer this turn "
                                              "(steer --delivery after-turn queues for the next "
                                              "turn) or retry send after turn_ended"},
-                        "outcome": "in_progress", "mutation_performed": False,
+                        "outcome": "refused_busy", "mutation_performed": False,
                         "active_turn_request_id": self.turn.get("request_id"),
                         "mutation_status": self.turn["mutation_status"]}
             text = params.get("text") or ""

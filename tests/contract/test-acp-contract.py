@@ -586,9 +586,16 @@ class AcpContractTests(AcpSessionFixture, unittest.TestCase):
 
     def test_send_during_active_turn_is_prompt_in_progress(self) -> None:
         self.start(scenario="hang_until_cancel")
-        self.cli("send", "--text", "first", "--no-wait")
+        first = self.cli("send", "--text", "first", "--no-wait")
+        self.assertEqual(first.get("outcome"), "in_progress")
+        self.assertIs(first.get("mutation_performed"), True)
         second = self.cli("send", "--text", "second", "--no-wait", check=False)
         self.assertIn("prompt-in-progress", json.dumps(second))
+        # Issue #379: the refusal must not reuse the successful --no-wait word.
+        self.assertEqual(second.get("error", {}).get("code"), "prompt-in-progress")
+        self.assertEqual(second.get("outcome"), "refused_busy")
+        self.assertIs(second.get("mutation_performed"), False)
+        self.assertIsNotNone(second.get("active_turn_request_id"))
         cancel = self.cli("cancel", "--timeout", "10", check=False)
         self.assertIn(cancel.get("outcome"), ("turn_canceled", None))
         receipt = self.cli("wait", "--timeout", "10", check=False)

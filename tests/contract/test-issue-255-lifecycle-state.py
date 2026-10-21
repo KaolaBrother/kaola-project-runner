@@ -1348,7 +1348,7 @@ class FakeSideagent:
                         pass
                     continue
                 if self.busy:
-                    reply = {"error": {"code": "prompt-in-progress"}, "outcome": "in_progress"}
+                    reply = {"error": {"code": "prompt-in-progress"}, "outcome": "refused_busy"}
                 else:
                     reply = {"outcome": "in_progress", "prompt_fingerprint": f"sha256:{len(self.prompts)}"}
                     if self.cursor_step is not None:

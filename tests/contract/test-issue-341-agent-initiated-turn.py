@@ -401,6 +401,7 @@ class AgentInitiatedTurnTest(unittest.TestCase):
             agent_cmd=cmd, check=False,
         )
         self.assertEqual((refused_send.get("error") or {}).get("code"), "prompt-in-progress")
+        self.assertEqual(refused_send.get("outcome"), "refused_busy")
         self.assertIs(refused_send.get("mutation_performed"), False)
 
         # 2. `steer --delivery after-turn` queues cleanly for the end of the

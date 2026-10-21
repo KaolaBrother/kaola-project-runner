@@ -273,6 +273,8 @@ class Mapping(unittest.TestCase):
             'result': {'outcome': 'promptRequired', 'reason': 'noRunningTurn'}}
         busy = self.holder.op_prompt({'text': 'concurrent send', 'wait': False})
         self.assertEqual(busy['error']['code'], 'prompt-in-progress')
+        self.assertEqual(busy['outcome'], 'refused_busy')
+        self.assertIs(busy['mutation_performed'], False)
         self.assertIn('steer --delivery after-turn', busy['error']['message'])
         self.assertIn('turn_ended', busy['error']['message'])
         result = self.holder.op_steer({'method': '_session/steering', 'text': 'DECISION-326'})

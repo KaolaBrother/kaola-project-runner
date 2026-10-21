@@ -246,6 +246,8 @@ class SteeringContract(unittest.TestCase):
         busy_send = self.cli(SUPPORTED_PLATFORM, "send", "--no-wait", "--text", "busy",
                              steering="promptRequired", turn_ms=9000, check=False)
         self.assertEqual(busy_send["error"]["code"], "prompt-in-progress")
+        self.assertEqual(busy_send.get("outcome"), "refused_busy")
+        self.assertIs(busy_send.get("mutation_performed"), False)
         self.assertIn("steer --delivery after-turn", busy_send["error"]["message"])
         self.assertIn("turn_ended", busy_send["error"]["message"])
         self.assertIn("steer --delivery after-turn", busy_send.get("self_route", ""))
