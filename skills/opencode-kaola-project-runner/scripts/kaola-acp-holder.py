@@ -2618,6 +2618,15 @@ class Holder:
         self.agent = AgentConnection(self)
         self.listener: socket.socket | None = None
         self.lock = threading.Lock()
+        # Issue #381: a leaf lock that makes one (turn, event_cursor) pair
+        # observable at a time. Publication points take it only for the
+        # in-memory transition plus the turn-boundary append; they release it
+        # before write_record, fanout, wake, or any wait. Because it is a leaf,
+        # op_view may hold it while reading the snapshot, but nothing may take
+        # self.lock or followers_lock while holding it: fanout already holds
+        # followers_lock when it calls op_view, so the reverse order would
+        # deadlock the non-reentrant locks (Issue #302/#381).
+        self.view_lock = threading.Lock()
         self.turn_cond = threading.Condition()
         self.state = "starting"
         self.stop_requested = False
@@ -4097,7 +4106,6 @@ class Holder:
                     "last_update_mono": now_mono,
                     "idle_signaled": False,
                 })
-                self.turn = turn
                 self.last_prompt = {
                     "fingerprint": previous.get("fingerprint"),
                     "written_at": received_at,
@@ -4110,11 +4118,18 @@ class Holder:
                 if previous.get("client_message_id") is not None:
                     self.last_prompt["client_message_id"] = previous["client_message_id"]
                 self._note_delegator_working_again()
-                start_cursor = self.events.append(
-                    {"kind": "turn_started", "prompt_source": "self", "agent_initiated": True},
-                    ts=received_at,
-                )
-                self.projection.start_agent_turn(start_cursor, received_at)
+                with self.view_lock:
+                    # Issue #381: the synthetic turn becomes current only in
+                    # the same publication as its turn_started cursor. A view
+                    # can therefore never see active=true with a null start
+                    # time or a cursor that predates the turn_started row.
+                    self.turn = turn
+                    start_cursor = self.events.append(
+                        {"kind": "turn_started", "prompt_source": "self",
+                         "agent_initiated": True},
+                        ts=received_at,
+                    )
+                    self.projection.start_agent_turn(start_cursor, received_at)
                 opened_agent_turn = turn
             turn = self.turn
             if turn["active"] and turn.get("agent_initiated") and same_session:
@@ -4280,44 +4295,66 @@ class Holder:
             # A late answer to a turn that is already over must not settle the
             # turn running now (Issue #65: same attribution boundary).
             return
-        if "error" in response:
-            turn["error"] = response["error"]
-            turn["outcome"] = (
-                "turn_canceled" if (response["error"] or {}).get("code") == -32800
-                else "turn_failed"
-            )
-        else:
-            stop = (response.get("result") or {}).get("stopReason")
-            turn["stop_reason"] = stop
-            # Issue #173: the agent answered `end_turn` even though the stream
-            # carried a systemError (codex-acp maps a failed turn onto end_turn
-            # when the AIR typed-failure capability is absent). `stop_reason`
-            # stays verbatim - the log records what the agent sent (#113) - but
-            # the outcome is the failure this holder actually observed.
-            if stop == "cancelled":
-                turn["outcome"] = "turn_canceled"
-            elif turn.get("error"):
-                turn["outcome"] = "turn_failed"
+        with self.view_lock:
+            # The pre-lock checks above are advisory: a response for a turn
+            # that already settled, or that was replaced, must not touch the
+            # current turn. Revalidate under the publication lock so the
+            # terminal state and its event cursor become visible together.
+            if self.turn is not turn or not turn["active"]:
+                return
+            if "error" in response:
+                turn["error"] = response["error"]
+                turn["outcome"] = (
+                    "turn_canceled" if (response["error"] or {}).get("code") == -32800
+                    else "turn_failed"
+                )
             else:
-                turn["outcome"] = "turn_completed"
-        turn["mutation_status"] = "completed"
-        turn["active"] = False
-        self.projection.close_message()
-        outcome = turn["outcome"]
-        # Issue #113: the turn's own stop reason, durable in the event log.
-        # `record.json` only ever holds the LAST prompt, so a stop the next
-        # prompt supersedes - an output-token maximum among them - would
-        # otherwise leave nothing behind to count afterwards. Written verbatim:
-        # whatever stopReason the agent reported is what the log says.
-        turn["ended_at"] = round(time.time(), 3)
-        ended: dict[str, Any] = {"kind": "turn_ended", "outcome": outcome,
-                                 "stop_reason": turn.get("stop_reason"),
-                                 "prompt_fingerprint": turn.get("fingerprint")}
-        failure = self._turn_failure_event(outcome, turn)
-        if failure is not None:
-            ended["error"] = failure
-        end_cursor = self.events.append(ended, ts=turn["ended_at"])
-        self.projection.end_turn(turn["ended_at"], end_cursor, outcome, turn.get("stop_reason"))
+                stop = (response.get("result") or {}).get("stopReason")
+                turn["stop_reason"] = stop
+                # Issue #173: the agent answered `end_turn` even though the stream
+                # carried a systemError (codex-acp maps a failed turn onto end_turn
+                # when the AIR typed-failure capability is absent). `stop_reason`
+                # stays verbatim - the log records what the agent sent (#113) - but
+                # the outcome is the failure this holder actually observed.
+                if stop == "cancelled":
+                    turn["outcome"] = "turn_canceled"
+                elif turn.get("error"):
+                    turn["outcome"] = "turn_failed"
+                else:
+                    turn["outcome"] = "turn_completed"
+            turn["mutation_status"] = "completed"
+            turn["active"] = False
+            self.projection.close_message()
+            outcome = turn["outcome"]
+            # Issue #113: the turn's own stop reason, durable in the event log.
+            # `record.json` only ever holds the LAST prompt, so a stop the next
+            # prompt supersedes - an output-token maximum among them - would
+            # otherwise leave nothing behind to count afterwards. Written verbatim:
+            # whatever stopReason the agent reported is what the log says.
+            turn["ended_at"] = round(time.time(), 3)
+            ended: dict[str, Any] = {"kind": "turn_ended", "outcome": outcome,
+                                     "stop_reason": turn.get("stop_reason"),
+                                     "prompt_fingerprint": turn.get("fingerprint")}
+            failure = self._turn_failure_event(outcome, turn)
+            if failure is not None:
+                ended["error"] = failure
+            end_cursor = self.events.append(ended, ts=turn["ended_at"])
+            self.projection.end_turn(turn["ended_at"], end_cursor, outcome,
+                                     turn.get("stop_reason"))
+            self.last_prompt = {
+                "fingerprint": turn["fingerprint"],
+                "written_at": turn["written_at"],
+                "transport": "acp",
+                "mutation_status": turn["mutation_status"],
+                "stop_reason": turn["stop_reason"],
+            }
+            # Issue #380: the client id belongs to this prompt's lifetime; keep it
+            # on the record so a post-restart resend can be recognized.
+            if turn.get("client_message_id") is not None:
+                self.last_prompt["client_message_id"] = turn["client_message_id"]
+        # Issue #381: view_lock is released here. Fanout, the record write, the
+        # condition wake and the carrier wake all acquire other locks or wait,
+        # and must never run while the leaf publication lock is held.
         sideagent = self.session_role in SIDEAGENT_ROLES
         if ((outcome in ("turn_completed", "turn_failed") or (sideagent and outcome == "turn_canceled"))
                 and not self.agent.exited.is_set()):
@@ -4335,17 +4372,6 @@ class Holder:
                      if sideagent else None)
             self._notify_heartbeat_host_now(
                 "idle", f"outcome={outcome} stop_reason={turn.get('stop_reason')}", extra)
-        self.last_prompt = {
-            "fingerprint": turn["fingerprint"],
-            "written_at": turn["written_at"],
-            "transport": "acp",
-            "mutation_status": turn["mutation_status"],
-            "stop_reason": turn["stop_reason"],
-        }
-        # Issue #380: the client id belongs to this prompt's lifetime; keep it
-        # on the record so a post-restart resend can be recognized.
-        if turn.get("client_message_id") is not None:
-            self.last_prompt["client_message_id"] = turn["client_message_id"]
         self.write_record()
         self.fanout_follow_delta()
         with self.turn_cond:
@@ -4368,36 +4394,44 @@ class Holder:
         # Before agent_exited: op_stop waits out the notify lock, so an exact
         # stop never kills a half-delivered worker-event notification.
         self._notify_heartbeat_host_now("terminated", reason)
-        self.agent_exited.set()
-        exited_at = round(time.time(), 3)
-        exit_cursor = self.events.append({"kind": "process_exited", "code": self.agent.exit_code,
-                                          "signal": self.agent.exit_signal}, ts=exited_at)
-        turn = self.turn
-        if turn["active"]:
-            turn["outcome"] = "process_exited"
-            turn["active"] = False
-            turn["ended_at"] = exited_at
-            self.projection.end_turn(exited_at, exit_cursor, "process_exited", None)
-            self.last_prompt = {
-                "fingerprint": turn["fingerprint"],
-                "written_at": turn["written_at"],
-                "transport": "acp",
-                "mutation_status": turn["mutation_status"],
-                "stop_reason": None,
-            }
-            if turn.get("client_message_id") is not None:
-                self.last_prompt["client_message_id"] = turn["client_message_id"]
+        with self.view_lock:
+            # Issue #381: the exit facts, the process_exited cursor and the
+            # terminal turn state are one publication. A view either sees the
+            # live turn with the pre-exit cursor or the ended turn with the
+            # process_exited cursor, never a half-updated pair.
+            self.agent_exited.set()
+            exited_at = round(time.time(), 3)
+            exit_cursor = self.events.append(
+                {"kind": "process_exited", "code": self.agent.exit_code,
+                 "signal": self.agent.exit_signal}, ts=exited_at)
+            turn = self.turn
+            if turn["active"]:
+                turn["outcome"] = "process_exited"
+                turn["active"] = False
+                turn["ended_at"] = exited_at
+                self.projection.end_turn(exited_at, exit_cursor, "process_exited", None)
+                self.last_prompt = {
+                    "fingerprint": turn["fingerprint"],
+                    "written_at": turn["written_at"],
+                    "transport": "acp",
+                    "mutation_status": turn["mutation_status"],
+                    "stop_reason": None,
+                }
+                if turn.get("client_message_id") is not None:
+                    self.last_prompt["client_message_id"] = turn["client_message_id"]
+            self.projection.close_message()
+            # Issue #174: an exit during the boot is not a verdict. While the boot
+            # has not produced one ("starting"), run() is about to publish the real
+            # one, and once it has ("error") that verdict is final: either way,
+            # rewriting it to "agent_exited" here let a start's terminal-state
+            # wait read the intermediate or clobbered state instead of the
+            # failure code. After the boot, an exit still becomes "agent_exited".
+            if self.state not in ("stopping", "stopped", "starting", "error"):
+                self.state = "agent_exited"
+        # Issue #381: view_lock is released before the pending-permission sweep,
+        # the record write, the follower EOF and the wake below.
         for key, entry in list(self.pending_permissions.items()):
             self.pending_permissions.pop(key, None)
-        self.projection.close_message()
-        # Issue #174: an exit during the boot is not a verdict. While the boot
-        # has not produced one ("starting"), run() is about to publish the real
-        # one, and once it has ("error") that verdict is final: either way,
-        # rewriting it to "agent_exited" here let a start's terminal-state
-        # wait read the intermediate or clobbered state instead of the
-        # failure code. After the boot, an exit still becomes "agent_exited".
-        if self.state not in ("stopping", "stopped", "starting", "error"):
-            self.state = "agent_exited"
         # Issue #174: resolve the still-pending requests in place. Every slot
         # is popped by its own single waiter, and the reader thread is gone
         # with the agent, so clearing the dict could only race that waiter's
@@ -4639,10 +4673,14 @@ class Holder:
             # has a cursor strictly greater than this one.
             dispatch_cursor = self.events.cursor
             previous = self.last_prompt or {}
-            self.turn = self._empty_turn()
             source = params.get("_prompt_source")
-            self.turn.update({
-                "active": True,
+            # Issue #381: build the whole turn locally, write the frame, and
+            # only then publish it with active=True. A view can therefore never
+            # see active=true with written_at/started_at still unset. The
+            # reader thread's session/update path also takes self.lock, so it
+            # cannot observe or mutate the half-built turn before publication.
+            turn = self._empty_turn()
+            turn.update({
                 "fingerprint": fingerprint,
                 "started_at": time.monotonic(),
                 # Socket prompts cannot set this: handle_request strips it.
@@ -4674,16 +4712,18 @@ class Holder:
                 },
             )
             if normalize_id(request_id) not in self.agent.pending_out:
-                self.turn["active"] = False
-                self.turn["mutation_status"] = "not_started"
-                self.turn["outcome"] = "turn_failed"
-                self.last_prompt = {
-                    "fingerprint": fingerprint,
-                    "written_at": None,
-                    "transport": "acp",
-                    "mutation_status": "not_started",
-                    "stop_reason": None,
-                }
+                turn["active"] = False
+                turn["mutation_status"] = "not_started"
+                turn["outcome"] = "turn_failed"
+                with self.view_lock:
+                    self.turn = turn
+                    self.last_prompt = {
+                        "fingerprint": fingerprint,
+                        "written_at": None,
+                        "transport": "acp",
+                        "mutation_status": "not_started",
+                        "stop_reason": None,
+                    }
                 self.write_record()
                 failed = {"outcome": "turn_failed", "mutation_status": "not_started",
                           "mutation_performed": False,
@@ -4692,18 +4732,33 @@ class Holder:
                 if client_message_id is not None:
                     failed["client_message_id"] = client_message_id
                 return failed
-            self.turn["request_id"] = request_id
-            self.turn["written_at"] = round(time.time(), 3)
-            self.turn["mutation_status"] = "in_progress"
+            turn["request_id"] = request_id
+            # written_at is stamped once, after the frame was written, and is
+            # never rewritten: it is the view's turn.started_at and the
+            # turn-boundary key consumers bind to.
+            turn["written_at"] = round(time.time(), 3)
+            turn["mutation_status"] = "in_progress"
             if client_message_id is not None:
-                self.turn["client_message_id"] = client_message_id
-            self.last_prompt = {
-                "fingerprint": fingerprint,
-                "written_at": self.turn["written_at"],
-                "transport": "acp",
-                "mutation_status": "in_progress",
-                "stop_reason": None,
-            }
+                turn["client_message_id"] = client_message_id
+            # The complete turn is ready; only now does it become active.
+            turn["active"] = True
+            with self.view_lock:
+                # Issue #381: the complete turn and its cursor become visible
+                # in one critical section. No record write, fanout or wake is
+                # allowed here.
+                self.turn = turn
+                published_cursor = self.events.cursor
+                self.last_prompt = {
+                    "fingerprint": fingerprint,
+                    "written_at": turn["written_at"],
+                    "transport": "acp",
+                    "mutation_status": "in_progress",
+                    "stop_reason": None,
+                }
+                if client_message_id is not None:
+                    self.last_prompt["client_message_id"] = client_message_id
+                self.projection.add_user_from_prompt(
+                    text, published_cursor, turn["written_at"], client_message_id)
             admission_receipt = {
                 "outcome": "in_progress", "mutation_status": "in_progress",
                 "mutation_performed": True, "prompt_fingerprint": fingerprint,
@@ -4713,16 +4768,13 @@ class Holder:
                 # someone else started.
                 "turn_request_id": request_id,
                 "dispatch_event_cursor": dispatch_cursor,
-                "event_cursor": self.events.cursor,
+                "event_cursor": published_cursor,
             }
             if client_message_id is not None:
-                self.last_prompt["client_message_id"] = client_message_id
                 admission_receipt["client_message_id"] = client_message_id
                 if not registered_elsewhere:
                     self._client_message_register_locked(
                         client_message_id, "prompt", fingerprint, admission_receipt)
-            self.projection.add_user_from_prompt(
-                text, self.events.cursor, self.turn["written_at"], client_message_id)
             self.write_record()
 
         threading.Thread(
@@ -4809,34 +4861,40 @@ class Holder:
                 outcome = "turn_failed"
             else:
                 outcome = "agent_turn_completed"
-            turn["outcome"] = outcome
-            turn["mutation_status"] = "completed"
-            turn["active"] = False
-            turn["ended_at"] = round(time.time(), 3)
-            self.projection.close_message()
-            ended_event: dict[str, Any] = {
-                "kind": "turn_ended",
-                "outcome": outcome,
-                "stop_reason": stop,
-                "prompt_fingerprint": turn.get("fingerprint"),
-                "prompt_source": turn.get("prompt_source") or "self",
-                "agent_initiated": True,
-            }
-            failure = self._turn_failure_event(outcome, turn)
-            if failure is not None:
-                ended_event["error"] = failure
-            end_cursor = self.events.append(ended_event, ts=turn["ended_at"])
-            self.projection.end_turn(turn["ended_at"], end_cursor, outcome, stop)
-            previous = self.last_prompt if isinstance(self.last_prompt, dict) else {}
-            self.last_prompt = {
-                "fingerprint": previous.get("fingerprint"),
-                "written_at": turn["written_at"],
-                "transport": "acp",
-                "mutation_status": "completed",
-                "stop_reason": stop,
-            }
-            if previous.get("client_message_id") is not None:
-                self.last_prompt["client_message_id"] = previous["client_message_id"]
+            with self.view_lock:
+                # Issue #381: the synthetic turn's terminal state and its
+                # turn_ended cursor are one publication, so a view cannot see
+                # active=false with the previous live cursor.
+                turn["outcome"] = outcome
+                turn["mutation_status"] = "completed"
+                turn["active"] = False
+                turn["ended_at"] = round(time.time(), 3)
+                self.projection.close_message()
+                ended_event: dict[str, Any] = {
+                    "kind": "turn_ended",
+                    "outcome": outcome,
+                    "stop_reason": stop,
+                    "prompt_fingerprint": turn.get("fingerprint"),
+                    "prompt_source": turn.get("prompt_source") or "self",
+                    "agent_initiated": True,
+                }
+                failure = self._turn_failure_event(outcome, turn)
+                if failure is not None:
+                    ended_event["error"] = failure
+                end_cursor = self.events.append(ended_event, ts=turn["ended_at"])
+                self.projection.end_turn(turn["ended_at"], end_cursor, outcome, stop)
+                previous = self.last_prompt if isinstance(self.last_prompt, dict) else {}
+                self.last_prompt = {
+                    "fingerprint": previous.get("fingerprint"),
+                    "written_at": turn["written_at"],
+                    "transport": "acp",
+                    "mutation_status": "completed",
+                    "stop_reason": stop,
+                }
+                if previous.get("client_message_id") is not None:
+                    self.last_prompt["client_message_id"] = previous["client_message_id"]
+            # Issue #381: the record write and everything below stay outside
+            # the leaf publication lock.
             self.write_record()
         self.fanout_follow_delta()
         with self.turn_cond:
@@ -9134,7 +9192,32 @@ class Holder:
                 since = int(since)
             except (TypeError, ValueError):
                 since = None
-        proj = self.projection.snapshot()
+        # Issue #381: the snapshot path holds the leaf view lock only while it
+        # copies the facts that must agree: the projection, the turn state and
+        # the event cursor. It must not take self.lock, followers_lock, wait on
+        # the turn condition, write a record, fan out or wake while holding it
+        # (fanout already holds followers_lock when it calls op_view).
+        with self.view_lock:
+            proj = self.projection.snapshot()
+            cursor = self.events.cursor
+            turn = self.turn
+            turn_snapshot = {
+                "mutation_status": turn.get("mutation_status") or "not_started",
+                "outcome": turn.get("outcome"),
+                "stop_reason": turn.get("stop_reason"),
+                "active": bool(turn.get("active")),
+                "started_at": turn.get("written_at"),
+                "ended_at": turn.get("ended_at"),
+            }
+            state = self.state
+            agent_alive = bool(self.agent.proc and not self.agent.exited.is_set())
+            unknown_updates = self.agent.unknown_updates
+            # Defensive snapshot: pending_permissions is mutated by the agent
+            # reader thread (on_agent_request) and by on_agent_exit without
+            # self.lock. Copy the mapping and each entry once, so this view
+            # never iterates the live dict while it changes.
+            pending_entries = [dict(entry)
+                               for entry in list(self.pending_permissions.values())]
         thinking_truncated = proj["thinking_chars"] > THINKING_TAIL_CHARS
         thinking = {
             "chars": proj["thinking_chars"],
@@ -9150,7 +9233,7 @@ class Holder:
             oldest = self.events.oldest_cursor()
             cursor_gap = oldest is not None and since < oldest
         pending = []
-        for entry in self.pending_permissions.values():
+        for entry in pending_entries:
             pending.append({
                 "request_id": "" if entry.get("request_id") is None else str(entry.get("request_id")),
                 "title": entry.get("title"),
@@ -9167,11 +9250,11 @@ class Holder:
             "session": self.args.session,
             "session_role": self.session_role,
             "repo": self.args.repo,
-            "state": self.state,
+            "state": state,
             "holder_pid": os.getpid(),
             "holder_instance_id": self.holder_instance_id,
-            "agent_alive": bool(self.agent.proc and not self.agent.exited.is_set()),
-            "event_cursor": self.events.cursor,
+            "agent_alive": agent_alive,
+            "event_cursor": cursor,
             "truncated": truncated,
             "cursor_gap": cursor_gap,
             "messages": messages,
@@ -9183,16 +9266,9 @@ class Holder:
             "mode": proj["mode"],
             "commands": proj["commands"],
             "usage": proj["usage"],
-            "turn": {
-                "mutation_status": self.turn.get("mutation_status") or "not_started",
-                "outcome": self.turn.get("outcome"),
-                "stop_reason": self.turn.get("stop_reason"),
-                "active": bool(self.turn.get("active")),
-                "started_at": self.turn.get("written_at"),
-                "ended_at": self.turn.get("ended_at"),
-            },
+            "turn": turn_snapshot,
             "turns": proj["turns"],
-            "unparsed_update_count": self.agent.unknown_updates,
+            "unparsed_update_count": unknown_updates,
         }
         models = self._quota_models()
         if models is not None:

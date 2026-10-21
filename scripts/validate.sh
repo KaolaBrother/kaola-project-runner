@@ -320,6 +320,7 @@ python_suites_all=(
   "test-issue-395-alert-direct-retire.py"
   "test-issue-379-receipt-mutation.py"
   "test-issue-380-client-message-id.py"
+  "test-issue-381-view-snapshot.py"
   "test-issue-267-rejection-count.py"
   "test-issue-268-selection-continuity.py"
   "test-issue-273-list-identity.py"
@@ -530,6 +531,7 @@ python_suites_b=(
   "test-issue-395-alert-direct-retire.py"
   "test-issue-379-receipt-mutation.py"
   "test-issue-380-client-message-id.py"
+  "test-issue-381-view-snapshot.py"
   "test-issue-359-record-loss.py")
 
 # Selectable shell contract suites: they run serially before the Python lanes.
