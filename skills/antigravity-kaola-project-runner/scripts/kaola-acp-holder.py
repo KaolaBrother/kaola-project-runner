@@ -2149,6 +2149,10 @@ class ViewProjection:
         self.thinking_message_id: str | None = None
         self.tools: dict[str, dict[str, Any]] = {}
         self.tool_order: list[str] = []
+        # Issue #384: a tool card has no public cursor, but its first
+        # observation cursor is the internal boundary a byte-cap drop needs.
+        # This map is never serialized into a view row.
+        self.tool_cursors: dict[str, int] = {}
         self.plan: dict[str, Any] | None = None
         self.mode: dict[str, Any] | None = None
         self.commands: list[dict[str, Any]] | None = None
@@ -2280,7 +2284,7 @@ class ViewProjection:
                 if message_id is not None:
                     self.thinking_message_id = str(message_id)
             elif variant in ("tool_call", "tool_call_update"):
-                self._upsert_tool_locked(update)
+                self._upsert_tool_locked(update, cursor)
             elif variant == "plan":
                 entries = []
                 for entry in update.get("entries") or []:
@@ -2367,7 +2371,7 @@ class ViewProjection:
             self.messages_dropped = True
             self.messages_timeline_dropped += removed
 
-    def _upsert_tool_locked(self, update: dict[str, Any]) -> None:
+    def _upsert_tool_locked(self, update: dict[str, Any], cursor: int) -> None:
         tool_id = update.get("toolCallId")
         if not tool_id:
             tool_id = f"anon-{len(self.tool_order)}"
@@ -2385,6 +2389,7 @@ class ViewProjection:
             }
             self.tools[tool_id] = tool
             self.tool_order.append(tool_id)
+            self.tool_cursors[tool_id] = cursor
             self._open_message = None
         for field in ("title", "kind", "status"):
             if update.get(field) is not None:
@@ -2406,6 +2411,7 @@ class ViewProjection:
                 "thinking_text": self.thinking_text,
                 "thinking_message_id": self.thinking_message_id,
                 "tools": [self.tools[tid] for tid in self.tool_order],
+                "tool_cursors": self.tool_cursors,
                 "plan": self.plan,
                 "mode": self.mode,
                 "commands": self.commands,
@@ -9415,7 +9421,7 @@ class Holder:
         # bytes participate in the fit; recompute after any message drop.
         dropped = {"tools": 0, "messages": 0,
                    "answered_permissions": 0, "turns": 0}
-        disclosure = self._view_truncation(proj, messages, dropped, since)
+        disclosure = self._view_truncation(proj, payload, dropped, since)
         payload.update(disclosure)
         payload["truncated"] = bool(
             thinking_truncated or tools_truncated
@@ -9426,7 +9432,7 @@ class Holder:
                 dropped = {key: dropped.get(key, 0) + extra.get(key, 0)
                            for key in set(dropped) | set(extra)}
                 disclosure = self._view_truncation(
-                    proj, payload["messages"], dropped, since)
+                    proj, payload, dropped, since)
                 payload.update(disclosure)
                 payload["truncated"] = bool(
                     payload.get("truncated") or thinking_truncated or tools_truncated
@@ -9544,7 +9550,7 @@ class Holder:
                 return dropped
         return dropped
 
-    def _view_truncation(self, proj: dict[str, Any], messages: list[dict[str, Any]],
+    def _view_truncation(self, proj: dict[str, Any], payload: dict[str, Any],
                          dropped: dict[str, int], since: int | None) -> dict[str, Any]:
         """Issue #384: disclose what this view cannot carry, by class.
 
@@ -9554,6 +9560,10 @@ class Holder:
         byte-cap or holder restart), without inferring either from
         ``truncated`` alone.
         """
+        messages = payload["messages"]
+        tools = payload["tools"]
+        turns = payload["turns"]
+        answered = payload["answered_permissions"]
         timeline_dropped = int(proj.get("messages_timeline_dropped") or 0)
         bytes_dropped = int(dropped.get("messages") or 0)
         messages_dropped = timeline_dropped + bytes_dropped
@@ -9569,15 +9579,51 @@ class Holder:
         oldest_event = self.events.oldest_cursor()
         event_gap = bool(isinstance(since, int) and oldest_event is not None
                          and since < oldest_event)
-        # The earliest cursor this payload can describe completely: a restart
-        # boundary when this process began with an earlier event log, raised
-        # to the oldest surviving row when a cap actually removed rows.
-        projection_floor = restart_boundary
+        # The earliest cursor this payload can describe completely. Every row
+        # class that actually lost rows contributes its oldest surviving
+        # boundary; the highest one wins, so a gap in any class is visible.
+        # A class whose rows were all dropped falls back to the current event
+        # cursor. A class with no loss contributes nothing, so historic loss
+        # does not make every later --since report a gap.
+        floors: list[int] = []
+
+        def add_floor(value: Any) -> None:
+            if isinstance(value, int) and not isinstance(value, bool):
+                floors.append(value)
+
+        if restart_boundary is not None:
+            add_floor(restart_boundary)
+        event_cursor = self.events.cursor
         if timeline_dropped or bytes_dropped:
-            if earliest is not None:
-                projection_floor = max(projection_floor or 0, int(earliest))
-            elif self.events.cursor > 0:
-                projection_floor = max(projection_floor or 0, self.events.cursor)
+            if messages:
+                add_floor(messages[0].get("cursor"))
+            elif event_cursor > 0:
+                add_floor(event_cursor)
+        if turns_dropped:
+            if turns:
+                add_floor(turns[0].get("start_cursor"))
+            elif event_cursor > 0:
+                add_floor(event_cursor)
+        if answered_dropped:
+            if answered:
+                add_floor(answered[0].get("cursor"))
+            elif event_cursor > 0:
+                add_floor(event_cursor)
+        if tools_dropped:
+            cursors = proj.get("tool_cursors")
+            if not isinstance(cursors, dict):
+                cursors = {}
+            retained = [
+                cursors.get(str(tool.get("toolCallId")))
+                for tool in tools
+            ]
+            retained = [cursor for cursor in retained if isinstance(cursor, int)
+                        and not isinstance(cursor, bool)]
+            if retained:
+                add_floor(min(retained))
+            elif event_cursor > 0:
+                add_floor(event_cursor)
+        projection_floor = max(floors) if floors else None
         rows_gap = bool(isinstance(since, int) and projection_floor is not None
                         and since < projection_floor)
         reasons: list[str] = []

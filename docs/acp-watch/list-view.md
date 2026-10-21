@@ -134,7 +134,7 @@ Kaola Terminal 可直接读 list 行（本仓库不改 Terminal）：
 | `holder_instance_id` | string；本 holder 进程实例身份（#39），比 PID 更强的绑定，`permit`/`cancel` 可用 `--expected-holder-instance-id` 钉住 |
 | `agent_alive` | bool |
 | `event_cursor` | int，单调 |
-| `truncated` | bool；旧字段，仍为任一类裁剪/缺口的并集；新消费者用下面两个拆分字段区分事件缺口与行缺失 |
+| `truncated` | bool；旧字段，保留全部原有 cap 信号（thinking tail、单卡 content 截短、timeline/字节/回合/许可/工具行裁剪）并并入事件缺口与行缺失；它不等于 `truncated_event_log` 与 `truncated_rows` 的 OR |
 | `truncated_event_log` | bool；`--since` 低于仍保留的最老事件 cursor（事件日志缺口） |
 | `truncated_rows` | bool；投影行缺失/被裁：消息 timeline/字节 cap、holder 重启，或工具卡/回合/许可应答被列裁剪 |
 | `cursor_gap` | bool；`--since` 低于最老保留事件 cursor，或低于本载荷能完整描述的最早 cursor |
@@ -261,11 +261,11 @@ Kaola Terminal 可直接读 list 行（本仓库不改 Terminal）：
 
 该样例以文件形式冻结在 `tests/contract/fixtures/kaola-acp-view-1.sample.json`，合同测试必须断言真实 `view` 输出与样例**键集合与类型**一致；Kaola Terminal 把同一文件拷进测试 bundle 作为解码 fixture。
 
-上限（超限置 `truncated=true` 并**实际裁剪**，不报错）：thinking 只保留 8KiB 尾巴；单工具 content 裁到 32KiB（整项保留，首个溢出项截断 text/newText）；timeline、`turns`、`answered_permissions` 各只保留最近 200 条；整 view 超过 256KiB 时依次丢最旧的工具卡、消息、许可应答、回合。每次裁剪按类记入 `truncation`：`messages.timeline` / `messages.bytes` / `messages.restart`，以及 `tools` / `turns` / `answered_permissions` 的 `dropped`；`messages_dropped` 为消息两类实际丢失数之和。时间字段只来自 holder 自己的时钟（ACP 不带时间戳），投影只存在于 holder 进程内存，holder 重启后从空开始；`truncation.rows.messages.restart.boundary_cursor` 记录重启时恢复的事件 cursor，`dropped` 为 `null`，因为事件日志没有 prompt 文本与 `turn_started`，不能精确计数。没有 `messageId` 的 chunk（Grok 实测全部如此）按同角色连续拼接，直到 tool_call、新 prompt 或回合结束为止。
+上限（超限置 `truncated=true` 并**实际裁剪**，不报错）：thinking 只保留 8KiB 尾巴；单工具 content 裁到 32KiB（整项保留，首个溢出项截断 text/newText）——这两类内容截短仍只由旧 `truncated` 表达，两个新 bool 不覆盖；timeline、`turns`、`answered_permissions` 各只保留最近 200 条；整 view 超过 256KiB 时依次丢最旧的工具卡、消息、许可应答、回合。每次裁剪按类记入 `truncation`：`messages.timeline` / `messages.bytes` / `messages.restart`，以及 `tools` / `turns` / `answered_permissions` 的 `dropped`；`messages_dropped` 为消息两类实际丢失数之和。时间字段只来自 holder 自己的时钟（ACP 不带时间戳），投影只存在于 holder 进程内存，holder 重启后从空开始；`truncation.rows.messages.restart.boundary_cursor` 记录重启时恢复的事件 cursor。新 holder 无历史时 `restart.dropped=0` 且 `boundary_cursor=null`；只有构造时恢复到正的历史 cursor 才为 `null`：prompt admission 没有完整 prompt 文本或统一的 prompt-turn-start 重建证据（部分 agent-initiated 回合确有 `turn_started`），精确丢失行数不可知，且本次不做 replay。没有 `messageId` 的 chunk（Grok 实测全部如此）按同角色连续拼接，直到 tool_call、新 prompt 或回合结束为止。
 
 ### `--since` 语义
 
-`view` 返回的**永远是当前压实态**，不是增量，也不是残缺历史。`--since C` 只影响 `cursor_gap` / `cursor_gap_reasons`，投影本身照常返回。C 低于仍保留的最老事件 cursor 时为事件日志缺口（`event-log`）；C 低于本载荷能完整描述的最早 cursor 时为行缺失（`rows`），包括 timeline/字节 cap 与 holder 重启边界。两者可同时置位。`truncated` 仍为并集，`truncated_event_log` / `truncated_rows` 分开表达。不带 `--since` 时 `cursor_gap=false`，但 `messages_dropped`、`earliest_cursor`、`truncated_rows` 和 `truncation` 仍披露行损失。消费者只靠轮询快照的情况下可以**不传** `--since`。
+`view` 返回的**永远是当前压实态**，不是增量，也不是残缺历史。`--since C` 只影响 `cursor_gap` / `cursor_gap_reasons`，投影本身照常返回。C 低于仍保留的最老事件 cursor 时为事件日志缺口（`event-log`）；C 低于本载荷能完整描述的最早 cursor 时为行缺失（`rows`），包括 timeline/字节 cap 与 holder 重启边界。两者可同时置位。`truncated` 仍为并集：它保留 thinking tail、单卡 content 截短等旧内容 cap（两个新 bool 不覆盖这些剩余类），再并入事件缺口与行缺失，因此不能用两个新 bool 的 OR 还原。不带 `--since` 时 `cursor_gap=false`，但 `messages_dropped`、`earliest_cursor`、`truncated_rows` 和 `truncation` 仍披露行损失。消费者只靠轮询快照的情况下可以**不传** `--since`。
 
 ### EventLog 重载（本单必做，不是加固）
 

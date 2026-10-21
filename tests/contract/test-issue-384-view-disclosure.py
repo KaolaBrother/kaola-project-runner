@@ -8,11 +8,18 @@ This suite pins the additive disclosure that makes its losses unambiguous:
   and byte caps;
 * ``truncation.rows.messages.timeline`` / ``.bytes`` / ``.restart`` name each
   drop class and its reason, with a restart boundary instead of an invented
-  count the event log cannot supply (no prompt text, no turn-start event);
+  count: prompt admission has no complete prompt text or uniform
+  prompt-turn-start rebuild evidence (some agent-initiated turns do record
+  ``turn_started``), and this change adds no replay;
+* the same gap floor covers row losses outside ``messages[]``: dropped tool
+  cards use their internal first-seen cursor, and dropped turns and answered
+  permissions use their own cursors;
 * ``earliest_cursor`` is the first cursor present in the returned messages;
 * ``cursor_gap`` covers both an event-log gap and missing projection rows;
 * ``truncated_event_log`` and ``truncated_rows`` split the former single
-  ``truncated`` signal while the legacy boolean remains the union.
+  ``truncated`` signal; the legacy boolean remains the union of all previous
+  signals, including thinking-tail and tool-content caps, which the two new
+  booleans do not cover.
 
 The first timeline case is the pre-fix counter-proof: before this change the
 payload had no count/earliest fields and reported ``cursor_gap=false`` for a
@@ -225,6 +232,81 @@ class ViewDisclosureTests(unittest.TestCase):
         holder = holder_module.Holder(args)
         holder.state = "ready"
         return holder
+
+    def test_turn_only_timeline_drop_contributes_its_boundary(self) -> None:
+        holder = self.make_holder("turn-boundary")
+        for index in range(211):
+            holder.projection.start_agent_turn(
+                holder.events.append({"kind": "turn_started"}), float(index))
+        view = holder.op_view({"since": 1})
+        self.assertEqual(view["messages_dropped"], 0)
+        self.assertEqual(view["truncation"]["rows"]["turns"]["dropped"], 11)
+        self.assertEqual(view["turns"][0]["start_cursor"], 12)
+        self.assertTrue(view["truncated_rows"])
+        self.assertFalse(view["truncated_event_log"])
+        self.assertTrue(view["cursor_gap"])
+        self.assertEqual(view["cursor_gap_reasons"], ["rows"])
+        # The floor is the oldest surviving turn cursor: inside it gaps, at
+        # and after it the complete new-row window starts.
+        self.assertTrue(holder.op_view({"since": 11})["cursor_gap"])
+        self.assertFalse(holder.op_view({"since": 12})["cursor_gap"])
+        self.assertFalse(holder.op_view({"since": 13})["cursor_gap"])
+
+    def test_answer_only_timeline_drop_contributes_its_boundary(self) -> None:
+        holder = self.make_holder("answer-boundary")
+        for index in range(211):
+            holder.projection.add_answered_permission({
+                "request_id": str(index),
+                "cursor": holder.events.append({"kind": "permission_answered"}),
+                "answered_at": float(index),
+                "title": "fixture",
+                "tool_call_id": None,
+                "options": [],
+                "chosen_option": None,
+                "outcome": "cancelled",
+            })
+        view = holder.op_view({"since": 1})
+        self.assertEqual(view["messages_dropped"], 0)
+        self.assertEqual(
+            view["truncation"]["rows"]["answered_permissions"]["dropped"], 11)
+        self.assertEqual(view["answered_permissions"][0]["cursor"], 12)
+        self.assertTrue(view["truncated_rows"])
+        self.assertFalse(view["truncated_event_log"])
+        self.assertTrue(view["cursor_gap"])
+        self.assertEqual(view["cursor_gap_reasons"], ["rows"])
+        self.assertTrue(holder.op_view({"since": 11})["cursor_gap"])
+        self.assertFalse(holder.op_view({"since": 12})["cursor_gap"])
+        self.assertFalse(holder.op_view({"since": 13})["cursor_gap"])
+
+    def test_tool_only_bytes_drop_uses_internal_cursor_boundary(self) -> None:
+        holder = self.make_holder("tool-boundary")
+        for index in range(12):
+            holder.projection.apply({
+                "sessionUpdate": "tool_call",
+                "toolCallId": str(index),
+                "content": [{"type": "text", "text": "x" * 30000}],
+            }, holder.events.append({"kind": "session_update"}))
+        view = holder.op_view({"since": 1})
+        dropped = view["truncation"]["rows"]["tools"]["dropped"]
+        self.assertGreater(dropped, 1)
+        self.assertEqual(dropped + len(view["tools"]), 12)
+        self.assertEqual(view["messages_dropped"], 0)
+        self.assertTrue(view["truncated_rows"])
+        self.assertFalse(view["truncated_event_log"])
+        self.assertTrue(view["cursor_gap"])
+        self.assertEqual(view["cursor_gap_reasons"], ["rows"])
+        self.assertLessEqual(
+            len(json.dumps(view, ensure_ascii=False).encode("utf-8")),
+            holder_module.VIEW_BYTES,
+        )
+        # Tool cards have no public cursor; the projection keeps the internal
+        # first-seen boundary the public gap is derived from.
+        first_retained = str(view["tools"][0]["toolCallId"])
+        floor = holder.projection.tool_cursors[first_retained]
+        self.assertEqual(floor, 5)
+        self.assertTrue(holder.op_view({"since": floor - 1})["cursor_gap"])
+        self.assertFalse(holder.op_view({"since": floor})["cursor_gap"])
+        self.assertFalse(holder.op_view({"since": floor + 1})["cursor_gap"])
 
     def test_event_log_gap_and_row_gap_are_separate_classes(self) -> None:
         holder = self.make_holder("classes")
