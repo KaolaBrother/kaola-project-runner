@@ -1,7 +1,7 @@
 # Dispatch and collect
 
 `scripts/kaola-dispatch.py` executes an adopted plan; it does not choose workers,
-grant, accept or stop seats. Host allocates within authorization. The Delegator file is the ceiling and the index is correlation, not a ledger.
+grant, accept or stop seats. Host allocates within authorization. The Delegator file is the ceiling and the index is correlation, not a ledger; read it from `--repo`, never `--authorization` (Delegator seats: `state view --role delegator` / `delegator view`).
 
 Gathering, research, counterexamples or critique, edge exploration,
 verification: spread useful parallel items as evenly as reasonably possible across
@@ -11,7 +11,7 @@ Fit, authority and real limits first; no invented work or fixed quota
 
 ## Routine context
 
-Keep current goals and source pointers. Derive Class/defaults from matched
+Keep current goals and sources. Derive Class/defaults from matched
 catalog/templates. Fetch decision-relevant fresh facts; reuse current-turn
 reads and receipts. Update changed duties without read-back.
 
@@ -51,7 +51,6 @@ grants, count/shared occupancy and unknown reasons. No authority verdict.
 [--availability "$AVAIL"] [--prior-index "$PRIOR"] [--index "$INDEX"] [--live "$LIVE"]`.
 - `collect --index "$INDEX" --skills-root "$SKILLS"`: update correlation.
 - Add `--item <exact item_id>` to `collect` for a read-only turn view.
-Outcome, permissions/failures and cursor survive the 480-char excerpt; missing ranges are uncertainty.
 - `snapshot --state "$STATE" --out "$PROJECT/.kaola/heartbeat-prompt.json"`: atomically replaces
 `--out` with only `body`; a v2 `--out` is `state-managed`: use `state`.
 

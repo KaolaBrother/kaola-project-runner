@@ -359,7 +359,36 @@ def as_id_list(value: Any) -> list[str]:
     return list(value)
 
 
+DELEGATOR_SPLIT_GRANT_KEYS = ("elite_grants", "expert_task_grants", "worker_grants")
+
+
+def delegator_split_grants_error(auth: dict[str, Any]) -> str | None:
+    """Refuse an off-contract Delegator heartbeat where Host grants are read.
+
+    A readable object with split keys and no ``grants`` is the Delegator's
+    authorization, not the Host's. Normalizing it to an empty list would turn
+    a whole Delegator ceiling into a false ``host-grant-missing`` projection.
+    """
+    split = [key for key in DELEGATOR_SPLIT_GRANT_KEYS if key in auth]
+    if not split:
+        return None
+    named = ", ".join("authorization." + key for key in split)
+    hint = ("--authorization takes the Host heartbeat/authorization object "
+            "(for example .kaola/heartbeat-prompt.json), not a Delegator heartbeat. "
+            "The Delegator heartbeat is only the dispatch ceiling and is read from "
+            "--repo. For Delegator seats use `state view --role delegator` or "
+            "`delegator view`.")
+    if "grants" in auth:
+        return (f"authorization has both Host grants and Delegator split key(s) "
+                f"({named}); refusing to choose one shape silently. {hint}")
+    return (f"authorization has Delegator split key(s) ({named}) but no grants; "
+            f"refusing to normalize this Delegator heartbeat to an empty grant list. {hint}")
+
+
 def normalize_grants(auth: dict[str, Any]) -> list[dict[str, Any]]:
+    split_error = delegator_split_grants_error(auth)
+    if split_error:
+        raise ValueError(split_error)
     limits = RECORD.aggregate_limit_blockers(auth)
     if limits:
         raise ValueError(limits[0]["path"] + ": " + limits[0]["recovery"])
@@ -1120,6 +1149,55 @@ def seat_summary(projection: dict[str, Any], args: argparse.Namespace, auth: dic
             "source": projection["source"]}
 
 
+def flatten_delegator_grants(source: dict[str, Any]) -> dict[str, Any]:
+    """The Delegator heartbeat's split grants in the flat Host grant shape.
+
+    This is the Delegator seat view's one conversion. It does not grant the
+    ceiling to Host dispatch: ``normalize_grants`` still reads only the Host's
+    flat ``grants``.
+    """
+    problems = RECORD.delegator_authorization_blockers(source)
+    legal_overlap = (_listed_once(source.get("elite_grants"))
+                     & _listed_once(source.get("expert_task_grants")))
+    problems = [problem for problem in problems if not (
+        problem.get("path", "").startswith("authorization.grants")
+        and any(f"duplicate preset {ident}" in (problem.get("recovery") or "")
+                for ident in legal_overlap))]
+    if problems:
+        raise ValueError(problems[0]["detail"])
+    auth = {key: source[key] for key in ("exclusions", "account_token_quotas") if key in source}
+    auth["grants"] = []
+    # An Expert choice named in an elite_grants row and with its own
+    # expert_task_grants row is one legal overlap, not a duplicate grant. The
+    # Expert permission is read from the ceiling file.
+    elite_listed = {ident for grant in source.get("elite_grants") or []
+                    if isinstance(grant, dict) for ident in _grant_ident_list(grant)}
+    for key in ("elite_grants", "expert_task_grants"):
+        for grant in source.get(key) or []:
+            if key == "expert_task_grants" and isinstance(grant, dict):
+                if isinstance(grant.get("preset_id"), str) and grant["preset_id"] in elite_listed:
+                    continue
+                ids = grant.get("preset_ids")
+                if isinstance(ids, list):
+                    kept = [ident for ident in ids if ident not in elite_listed]
+                    if ids and not kept:
+                        continue
+                    grant = {**grant, "preset_ids": kept}
+                    RECORD.retain_extra_seats(grant, kept)
+            row = {field: grant[field] for field in ("preset_ids", "count", "state", "lifetime", "expires") if field in grant}
+            if isinstance(grant.get("extra_seats"), dict) and grant["extra_seats"]:
+                row["extra_seats"] = grant["extra_seats"]
+            if isinstance(grant.get("special_requirements"), dict):
+                row["special_requirements"] = grant["special_requirements"]
+            if grant.get("preset_id"):
+                row["id"] = grant["preset_id"]
+            row.setdefault("state", "granted")
+            if "switch_authorization" in grant:
+                row["model_switch"] = grant["switch_authorization"]
+            auth["grants"].append(row)
+    return auth
+
+
 def delegator_seats(args: argparse.Namespace, document: dict[str, Any], path: Path) -> dict[str, Any]:
     repo = Path(args.repo).resolve() if getattr(args, "repo", None) else repo_of_state_file(path)
     options = argparse.Namespace(repo=str(repo), authorization=str(path),
@@ -1130,46 +1208,7 @@ def delegator_seats(args: argparse.Namespace, document: dict[str, Any], path: Pa
     try:
         catalog = catalog_from_files(platform_paths(Path(__file__), getattr(args, "platforms", None)))
         if document.get("schema") == RECORD.DELEGATOR_SCHEMA:
-            source = document.get("authorization") or {}
-            problems = RECORD.delegator_authorization_blockers(source)
-            legal_overlap = (_listed_once(source.get("elite_grants"))
-                             & _listed_once(source.get("expert_task_grants")))
-            problems = [problem for problem in problems if not (
-                problem.get("path", "").startswith("authorization.grants")
-                and any(f"duplicate preset {ident}" in (problem.get("recovery") or "")
-                        for ident in legal_overlap))]
-            if problems:
-                raise ValueError(problems[0]["detail"])
-            auth = {key: source[key] for key in ("exclusions", "account_token_quotas") if key in source}
-            auth["grants"] = []
-            # An Expert choice named in an elite_grants row and with its own
-            # expert_task_grants row is one legal overlap, not a duplicate
-            # grant. The Expert permission is read from the ceiling file.
-            elite_listed = {ident for grant in source.get("elite_grants") or []
-                            if isinstance(grant, dict) for ident in _grant_ident_list(grant)}
-            for key in ("elite_grants", "expert_task_grants"):
-                for grant in source.get(key) or []:
-                    if key == "expert_task_grants" and isinstance(grant, dict):
-                        if isinstance(grant.get("preset_id"), str) and grant["preset_id"] in elite_listed:
-                            continue
-                        ids = grant.get("preset_ids")
-                        if isinstance(ids, list):
-                            kept = [ident for ident in ids if ident not in elite_listed]
-                            if ids and not kept:
-                                continue
-                            grant = {**grant, "preset_ids": kept}
-                            RECORD.retain_extra_seats(grant, kept)
-                    row = {field: grant[field] for field in ("preset_ids", "count", "state", "lifetime", "expires") if field in grant}
-                    if isinstance(grant.get("extra_seats"), dict) and grant["extra_seats"]:
-                        row["extra_seats"] = grant["extra_seats"]
-                    if isinstance(grant.get("special_requirements"), dict):
-                        row["special_requirements"] = grant["special_requirements"]
-                    if grant.get("preset_id"):
-                        row["id"] = grant["preset_id"]
-                    row.setdefault("state", "granted")
-                    if "switch_authorization" in grant:
-                        row["model_switch"] = grant["switch_authorization"]
-                    auth["grants"].append(row)
+            auth = flatten_delegator_grants(document.get("authorization") or {})
             document = None
         else:
             auth = authorization_object(document)
