@@ -1,7 +1,7 @@
 # Document docking of issue #405
 - format: kpm.workflow-doc-docking/1.0
 - issue: 405
-- candidate: 42fe48ff1f9d368b687ad8848861805abd48e418
+- candidate: 86a42506967753bdebee74d61cc32e766bbd1dde
 - checked_by: host (independent review pending)
 - checked_at: <pending>
 - verdict: pending
