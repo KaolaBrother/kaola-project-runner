@@ -102,6 +102,41 @@ def wait_observed(check, probe, what: str, timeout: float) -> None:
         time.sleep(0.05)
 
 
+def _fixture_processes(tmp_str: str, repo_realpath: str) -> tuple:
+    """(pid, cputime) for the fixture's live producer processes — a spawned
+    node runner (the fixture tmp path in the command position) or a child
+    rooted at the fixture repo (``cwd``), since its argv may carry no
+    fixture path. The test's own short-lived CLIs carry fixture paths only
+    as deep arguments and run from the tests directory, so neither match
+    admits them. CPU is the mid-flight progress surface: a working chain
+    advances it, a wedged one stays flat, a dead one disappears
+    (Issue #405)."""
+    try:
+        out = subprocess.run(["ps", "-eo", "pid=,time=,args="],
+                             capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ()
+    found = []
+    for line in out.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) < 3 or not parts[0].isdigit():
+            continue
+        head = parts[2].split(None, 2)
+        if any(tmp_str in token for token in head[:2]):
+            found.append((int(parts[0]), parts[1]))
+            continue
+        if tmp_str not in parts[2]:
+            continue
+        try:
+            cwd = subprocess.run(["lsof", "-a", "-p", parts[0], "-d", "cwd", "-Fn"],
+                                 capture_output=True, text=True, timeout=5).stdout
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if f"n{repo_realpath}" in cwd:
+            found.append((int(parts[0]), parts[1]))
+    return tuple(sorted(found))
+
+
 def run(args: list[str], env: dict[str, str] | None = None) -> tuple[int, dict]:
     proc = subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True,
                           env=env or {k: v for k, v in os.environ.items() if k not in CALLER_ENV})
@@ -1531,7 +1566,22 @@ class HolderFixture(unittest.TestCase):
             len(self.fake.prompts) if self.fake is not None else -1,
             len(getattr(self.fake, "stops", [])) if self.fake is not None else -1,
             len(self.agent.sent) if getattr(self, "agent", None) is not None else -1,
+            self._producer_processes(),
         ))
+
+    def _producer_processes(self) -> tuple:
+        """(pid, cputime) of this fixture's live producer processes — the
+        spawned node runner and repo-rooted children — sampled at most once
+        a second (Issue #405): a spawned node writes nothing while its
+        interpreter boots under load, and its (pid, CPU) pair is the only
+        mid-flight progress surface; a working one advances CPU, a wedged
+        one stays flat, a dead one disappears."""
+        now = time.monotonic()
+        if now - getattr(self, "_probe_ps_at", 0.0) >= 1.0:
+            self._probe_ps_at = now
+            self._probe_ps = _fixture_processes(
+                str(self.tmp.name), os.path.realpath(str(self.repo)))
+        return getattr(self, "_probe_ps", ())
 
     def wait_still(self, seconds: float) -> None:
         """The event-driven form of a settle sleep for 'nothing more
