@@ -270,9 +270,13 @@ This is a release/update requirement. For the lifecycle state of
   already a task stage. A schema-2 record predating record revisions keeps every gate but
   gains `rev 1`, named `<kind>.<id>.rev assigned 1`; that assignment is the repair the
   `record-versionless` refusal names, after which `retire`/`update` apply normally. One
-  narrow exception (#395): an `alerts` row whose `inputs` is an empty object (resolved)
-  retires directly with explicit `--expect-rev 0 --evidence` and needs no migration; every
-  other versionless record keeps the migrate repair. A write that still sees an unknown legacy key is refused with `path`,
+  direct exit covers every versionless row already in its closed shape (#395, generalized
+  for #406): an `alerts` row whose `inputs` is an empty object (resolved), a `decisions`
+  row whose `status` is `settled` — including a settled row whose stored evidence is
+  missing, empty, or a leafless container, which `migrate` still refuses to judge — or a
+  `tasks` row cancelled or accepted at stage `done`. Such a row retires directly with
+  explicit `--expect-rev 0 --evidence` and needs no migration; every other versionless
+  record keeps the migrate repair. A write that still sees an unknown legacy key is refused with `path`,
   `allowed`, and `recovery` that names `state migrate`. A failed write removes `<file>.tmp`.
   The original file stays. A clean repeat stays `current`.
   An accepted-task `--cite` stores a retrievable path. A path is enough when that file exists

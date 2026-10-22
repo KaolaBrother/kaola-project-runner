@@ -5782,21 +5782,47 @@ def migrate_command(args: argparse.Namespace) -> str:
                        "--file", str(args.file)])
 
 
-def direct_retire_candidate(kind: Any, record: Any) -> bool:
-    """Issue #395's narrow shape: a resolved alert before record revisions.
+def closed_shape(kind: Any, record: Any) -> str | None:
+    """The closed shape a pre-revision record already proves, or None.
 
-    ``inputs`` is an empty object, so the alert has no outstanding input. Only
-    this shape may retire with ``--expect-rev 0``; a missing, null, non-object,
-    or non-empty ``inputs`` stays on the migrate route.
+    A record written before record revisions can never be named by
+    ``--expect-rev``, but one whose stored shape already ends its duty may
+    retire without a migration (#395, generalized for #406):
+
+    - ``alerts``: ``inputs`` is an empty object — no outstanding input
+      remains, so the alert is resolved.
+    - ``decisions``: ``status`` is ``settled`` — the owner's answer is
+      closed even when the stored evidence is missing, empty, or a leafless
+      container (the row ``state migrate`` still refuses to judge, #404).
+    - ``tasks``: the verdict is ``cancelled``, or ``accepted`` at stage
+      ``done`` — the same terminal test the retire gate applies.
+
+    Only these shapes may retire with ``--expect-rev 0``; a row still open
+    (a non-empty or absent ``inputs``, a pending decision, a live task, a
+    hold) stays on the migrate route. Unknown is not resolved.
     """
-    return (kind == "alerts" and isinstance(record, dict)
-            and record_versionless(record)
-            and isinstance(record.get("inputs"), dict)
-            and not record.get("inputs"))
+    if not (isinstance(record, dict) and record_versionless(record)):
+        return None
+    if kind == "alerts" and isinstance(record.get("inputs"), dict) and not record.get("inputs"):
+        return "resolved alert (inputs is an empty object)"
+    if kind == "decisions" and record.get("status") == "settled":
+        return "settled decision"
+    if kind == "tasks":
+        verdict = record.get("verdict") if isinstance(record.get("verdict"), dict) else {}
+        if verdict.get("value") == "cancelled":
+            return "cancelled task"
+        if record.get("stage") == "done" and verdict.get("value") == "accepted":
+            return "accepted task at stage done"
+    return None
+
+
+def direct_retire_candidate(kind: Any, record: Any) -> bool:
+    """A versionless record in its closed shape may retire with ``--expect-rev 0``."""
+    return closed_shape(kind, record) is not None
 
 
 def direct_retire_requested(args: argparse.Namespace, kind: Any, record: Any) -> bool:
-    """The narrow path is explicit: ``--expect-rev 0`` and non-empty evidence."""
+    """The direct path is explicit: ``--expect-rev 0`` and non-empty evidence."""
     evidence = getattr(args, "evidence", None)
     return (direct_retire_candidate(kind, record)
             and getattr(args, "expect_rev", None) == 0
@@ -5806,20 +5832,20 @@ def direct_retire_requested(args: argparse.Namespace, kind: Any, record: Any) ->
 def versionless_recovery(args: argparse.Namespace, record: Any = None) -> str:
     """The documented repair for a record that predates record revisions (#362).
 
-    Issue #395 adds one direct exit: a resolved alert (empty ``inputs``) retires
-    with ``--expect-rev 0`` and evidence without a migration. Every other
-    versionless record still needs the migrate plan.
+    Issues #395/#406 add one direct exit: a versionless record already in its
+    closed shape retires with ``--expect-rev 0`` and evidence without a
+    migration. Every other versionless record still needs the migrate plan.
     """
     migrate = (f"{migrate_command(args)} is the read-only plan whose removed list names each "
                "record assigned rev 1; rerun it with --write, then `state check` shows the "
                "record's rev and the normal command applies")
     kind = getattr(args, "kind", None)
     ident = getattr(args, "id", None)
-    if (direct_retire_candidate(kind, record) and isinstance(ident, str) and ident):
+    shape = closed_shape(kind, record)
+    if shape is not None and isinstance(ident, str) and ident:
         direct = retire_command(args, kind, ident, record)
-        return (f"This alert is resolved (inputs is an empty object) but predates record "
-                f"revisions, so it can retire directly with: {direct}. For any other write, "
-                f"{migrate}.")
+        return (f"This {shape} predates record revisions, so it can retire directly "
+                f"with: {direct}. For any other write, {migrate}.")
     return migrate
 
 
@@ -6832,16 +6858,24 @@ def _bloat_class(kind: str, record: dict[str, Any]) -> str | None:
     return None
 
 
-def _handled_evidence(args: argparse.Namespace, record: dict[str, Any]) -> str:
-    supplied = getattr(args, "evidence", None)
-    if isinstance(supplied, str) and supplied.strip():
-        return supplied
+def _stored_evidence(record: dict[str, Any]) -> str | None:
+    """The stored evidence a retire command may carry verbatim, or None."""
     evidence = record.get("evidence")
     if isinstance(evidence, str) and evidence.strip():
         return evidence
     if (isinstance(evidence, list) and len(evidence) == 1 and isinstance(evidence[0], str)
             and evidence[0].strip()):
         return evidence[0]
+    return None
+
+
+def _handled_evidence(args: argparse.Namespace, record: dict[str, Any]) -> str:
+    supplied = getattr(args, "evidence", None)
+    if isinstance(supplied, str) and supplied.strip():
+        return supplied
+    stored = _stored_evidence(record)
+    if stored is not None:
+        return stored
     source = record.get("source")
     if isinstance(source, str) and source.strip():
         return source
@@ -6872,20 +6906,32 @@ def _index_arguments(args: argparse.Namespace) -> list[str]:
 
 def retire_command(args: argparse.Namespace, kind: str, ident: str, record: dict[str, Any]) -> str:
     """One host retire the operator can run. It rewrites nothing by being built."""
-    if direct_retire_candidate(kind, record):
-        # Issue #395: a resolved alert's empty inputs are the structural proof,
-        # so --expect-rev 0 names it without a migration.
+    direct = direct_retire_candidate(kind, record)
+    if direct:
+        # Issues #395/#406: the stored shape already proves the duty closed,
+        # so --expect-rev 0 names it without a migration. Supplied or stored
+        # evidence is carried; an unusable stored value names the placeholder
+        # the operator replaces with the original evidence — the record's
+        # `source` is a writer fact, never the evidence that ends the duty.
         expected = 0
+        supplied = getattr(args, "evidence", None)
+        if isinstance(supplied, str) and supplied.strip():
+            evidence = supplied
+        else:
+            evidence = (_stored_evidence(record)
+                        or ("ORIGINAL_OWNER_EVIDENCE" if kind == "decisions"
+                            else "ORIGINAL_HANDLED_EVIDENCE"))
     elif record_versionless(record):
         # Issue #362: the assigned rev follows `state migrate --write`; the
         # read-only plan is the next runnable step.
         return migrate_command(args)
     else:
         expected = record.get("rev")
+        evidence = _handled_evidence(args, record)
     parts = [sys.executable, str(Path(__file__).resolve()), "state", "retire",
              "--file", str(args.file), "--writer", "host", "--source", "ORIGINAL_SOURCE",
              "--kind", kind, "--id", str(ident), "--expect-rev", str(expected),
-             "--evidence", _handled_evidence(args, record)]
+             "--evidence", evidence]
     cite = _cite_argument(args, kind, record)
     if cite:
         parts.extend(("--cite", cite))
@@ -6905,11 +6951,12 @@ def retire_command_runnable(args: argparse.Namespace, kind: str, ident: str,
     The command and the refusal come from the same ``open_dispatch`` call, so
     a check never advertises a retire that the route would refuse. Records
     with no dispatch or seat have no closure input to re-check, and a
-    versionless record's next step is the migrate plan, not this gate.
+    versionless record outside its closed shape has the migrate plan as its
+    next step, not this gate.
     """
     if kind != "tasks" or not (record.get("dispatch") or task_seats(record)):
         return True, []
-    if record_versionless(record):
+    if record_versionless(record) and not direct_retire_candidate(kind, record):
         return True, []
     file_path = getattr(args, "file", None)
     if not isinstance(file_path, str) or not file_path:
@@ -7553,8 +7600,9 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
     if not direct and record_versionless(current):
         detail = (f"{kind}/{record_id} predates record revisions (rev "
                   f"{current.get('rev')!r})")
-        detail += ("; a resolved alert retires directly with --expect-rev 0 and --evidence"
-                   if direct_retire_candidate(kind, current)
+        shape = closed_shape(kind, current)
+        detail += (f"; this {shape} retires directly with --expect-rev 0 and --evidence"
+                   if shape is not None
                    else "; no --expect-rev value can name it")
         raise StateRefusal("record-versionless", detail,
                            recovery=versionless_recovery(args, current))

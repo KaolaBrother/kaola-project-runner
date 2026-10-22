@@ -1675,8 +1675,11 @@ def cleanup_current(state: dict[str, Any]) -> tuple[list[dict[str, str]], dict[s
         # only through a nonblank string leaf — a container of nulls, blanks
         # or empty members is no answer — and a row that holds one is removed
         # exactly like the string case. Missing, null or empty evidence and
-        # a leafless container still block (Unknown is not resolved).
-        # The write path stays closed-shape; this tolerance is migrate-only.
+        # a leafless container still block (Unknown is not resolved);
+        # migration never decides them, but #406 keeps the refusal honest:
+        # the owner decision route it names now retires the pre-revision
+        # row directly. The write path stays closed-shape; this tolerance
+        # is migrate-only.
         if (record_type_problem("decisions", decision)
                 or decision.get("owner") not in ("host", "delegator", "user")
                 or not (isinstance(evidence, str) and evidence
@@ -1684,8 +1687,12 @@ def cleanup_current(state: dict[str, Any]) -> tuple[list[dict[str, str]], dict[s
                         or isinstance(evidence, (list, dict))
                         and _legacy_answer_text(evidence))):
             blockers.append(refusal(f"decisions.{ident}.evidence", "original owner answer evidence",
-                                    "keep the row visible; resolve it through the current owner decision route. "
-                                    "Unknown is not resolved; the file was not written"))
+                                    "keep the row visible; a settled row still leaves through the "
+                                    "current owner decision route: `state retire --kind decisions "
+                                    f"--id {ident} --expect-rev 0 --evidence ORIGINAL_OWNER_EVIDENCE` "
+                                    "names the pre-revision row with the explicit zero and the "
+                                    "original answer evidence. Unknown is not resolved; the file "
+                                    "was not written"))
         elif isinstance(decision.get("transcribed"), dict):
             decision["status"] = "pending"
             removed.append(f"decisions.{ident}.status settled -> pending Host adoption")

@@ -10,10 +10,11 @@ documented repair is ``state migrate`` (read-only plan, then ``--write``):
 it assigns ``rev 1`` to each pre-revision record, and every normal gate
 then applies unchanged. Unresolved records stay refused.
 
-Issue #395 narrows this: an ``alerts`` row whose ``inputs`` is an empty
-object (structurally resolved) retires directly with explicit
-``--expect-rev 0`` and non-empty ``--evidence``; every other versionless
-record still takes the migration.
+Issues #395 and #406 narrow this: a versionless record already in a closed
+shape — an ``alerts`` row whose ``inputs`` is an empty object, a settled
+decision, or a cancelled / accepted-done task — retires directly with
+explicit ``--expect-rev 0`` and non-empty ``--evidence``; every other
+versionless record still takes the migration.
 """
 from __future__ import annotations
 
@@ -205,15 +206,15 @@ class VersionlessRecords(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertFalse(any(ident in self.bloat_rows(out) for ident in ALERT_IDS), out)
 
-    def test_guard_non_alert_versionless_kind_still_refuses_zero(self) -> None:
-        # Issue #395's direct path is alerts-only. This decision has the same
-        # empty inputs, missing rev, explicit zero, and evidence as an alert;
-        # only kind differs, so removing the kind guard must turn this red.
+    def test_guard_pending_versionless_decision_still_refuses_zero(self) -> None:
+        # Issue #406 widened #395's alerts-only direct path to every closed
+        # shape; a pending decision has none, so the same explicit zero and
+        # evidence still refuse and name the migrate repair. Changing the
+        # closed-shape rule to admit pending rows must turn this red.
         doc = self.doc()
         doc["state"]["decisions"]["legacy-decision"] = {
-            "owner": "user", "question": "ship?", "status": "settled",
-            "inputs": {},
-            "evidence": "owner said yes", "created_at": "2026-09-01T00:00:00Z",
+            "owner": "user", "question": "ship?", "status": "pending",
+            "created_at": "2026-09-01T00:00:00Z",
             "updated_at": "2026-09-02T00:00:00Z", "source": "legacy", "writer": "host"}
         self.write_doc(doc)
         before = self.file.read_bytes()
