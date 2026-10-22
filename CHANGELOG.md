@@ -4,6 +4,18 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## 0.9.26 — 2026-10-22 (contract tests realigned with the #380/#387 holder surfaces and the dated #349 release section)
+
+Fixes #401 (`tests/contract/test-issue-94-zcode-native-skill-entry.py` failed with 1 failure and 8 errors on v0.9.25: its fake holder predated the #380 client-message-id helper and its payload-order anchor predated the #387 `HOST_NOTIFY_SCHEMA` constant) and #402 (`tests/contract/test-issue-349-checkpoint-verb.py` required a `## Unreleased` heading that the v0.9.25 release notes replaced).
+
+Seats: restart not required
+
+- **The ZCode native entry suite follows the current holder surfaces (#401).** `test_interrupt_resend_is_verbatim_with_no_host_marker` now gives its in-memory holder the #380 legacy no-id answer `(None, None)` for `_client_message_id_param` and a `holder_instance_id`, which `op_steer_interrupt` reads when it builds the follow-up prompt, and its `op_prompt` assertion names that holder binding. `test_entry_is_the_first_payload_line` anchors the order on the `f"{HOST_NOTIFY_SCHEMA}: ..."` carrier header in the payload assembly instead of the constant's definition. The suite's contract is unchanged (the caller text is sent verbatim exactly once with no host marker, and the payload opens with `self.host_entry`); the client-message-id paths stay covered by `test-issue-380-client-message-id.py`. No product code, docs or generated output changed.
+
+- **The #349 CHANGELOG assertion is anchored to its dated release section (#402).** `test_prompts_name_the_host_decision_verb_once` now locates the #349 entry itself, requires exactly one carrying section (`## 0.9.19 — 2026-10-18 …`) and reads `Seats: restart required` inside that section, so a new dated or `## Unreleased` section above it no longer breaks the suite. Every other assertion is unchanged.
+
+  Restart judgment: only tests changed; the operator test (`git diff v0.9.25 v0.9.26 -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`) is empty. This change does not install.
+
 ## 0.9.25 — 2026-10-22 (settled Host decisions are not attention and a Delegator turn end consumes its batch; vanished cwd placeholders released and reported once)
 
 Fixes #399 (vrpai: `question_waiting` woke at every Host turn end with no open question, from settled/host-owned `state.decisions` rows).
