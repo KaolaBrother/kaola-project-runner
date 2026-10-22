@@ -2348,6 +2348,11 @@ def ceiling_block(ceiling: dict[str, Any], preset: str, class_name: str,
         if preset in expert_problems:
             return expert_problems[preset]
         if preset in (ceiling.get("expert_ids") or {}) and preset not in ceiling["blocked"]:
+            # The Expert row owns this choice, not suppression of a defect
+            # recorded for the preset. A Host/Delegator special_requirements
+            # conflict lands in "problems"; Elite reads that same map below.
+            if preset in (ceiling.get("problems") or {}):
+                return ceiling["problems"][preset]
             return None
         if ceiling.get("expert_problem") is not None and preset not in (ceiling.get("elite_ids") or {}):
             return "ceiling-unreadable"
