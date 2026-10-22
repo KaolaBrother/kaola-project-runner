@@ -5585,14 +5585,16 @@ def delegator_view(doc: dict[str, Any], path: Path, repo: Path) -> dict[str, Any
     }
 
 
-def render_state(doc: dict[str, Any], path: Path, *, unchecked_live: bool = False) -> tuple[str, dict[str, int]]:
+def render_state(doc: dict[str, Any], path: Path, *, owner_stop: bool = False) -> tuple[str, dict[str, int]]:
     """Serialize with the projected Host view as `body`; enforce the carrier
     bounds instead of truncating any responsibility.
 
-    ``unchecked_live`` is a migration that was not given ``--live``. Missing
-    live rows are not an old holder, so the current file bound applies.
-    ``carrier-limit`` remains when a supplied live holder does not prove
-    ``heartbeat-state/2``."""
+    ``owner_stop`` is the one project-stop update allowed to use the current
+    (1 MiB) file bound without a recorded capable carrier. Every other write,
+    including every migration write, uses the recorded carrier or the legacy
+    reader bound, so a migration cannot create a file the next ordinary write
+    refuses. ``carrier-limit`` names the live-holder migration that records a
+    capable carrier as its executable exit."""
     blockers = RECORD.maintenance_blockers(doc["state"].get("maintenance"))
     if blockers:
         raise StateRefusal("invalid-maintenance", "repair the current duty from original receipts", blocked=blockers)
@@ -5608,24 +5610,29 @@ def render_state(doc: dict[str, Any], path: Path, *, unchecked_live: bool = Fals
     carrier = doc.get("carrier") if isinstance(doc.get("carrier"), dict) else {}
     capable = (carrier.get("capability") == STATE_CAPABILITY
                and not carrier_replaced_by_older(carrier, path))
-    file_limit = STATE_FILE_MAX_BYTES if capable or unchecked_live else LEGACY_READER_MAX_BYTES
+    file_limit = STATE_FILE_MAX_BYTES if capable or owner_stop else LEGACY_READER_MAX_BYTES
     sizes["file_limit"] = file_limit
     if sizes["body_bytes"] > HOST_VIEW_MAX_BYTES:
         raise StateRefusal("host-view-too-large",
                            "the projected Host view exceeds the carrier's injection bound; retire "
                            "finished records or move detail into evidence references", sizes=sizes)
     if sizes["file_bytes"] > file_limit:
-        stop_recovery = (
-            "Record an owner stop with state update --section project --set "
-            "{\"stop\":\"...\"}; that write uses the current file bound. "
-            "Other writes need a holder that advertises heartbeat-state/2, or retire finished records."
+        carrier_recovery = (
+            "Record the live Host holder that advertises heartbeat-state/2, then run "
+            + shlex.join([sys.executable, str(Path(__file__).resolve()), "state", "migrate",
+                          "--file", str(path), "--live"])
+            + " LIVE_JSON --write. LIVE_JSON is `kaola-acp.py list --repo "
+            + str(repo_of_state_file(path))
+            + " --include-dead` output; when no live row advertises that capability, restart the "
+            "Host holder on this build at a safe point first. An owner stop still uses the 1 MiB "
+            "bound. Then retire finished records."
         )
         raise StateRefusal(
             "carrier-limit" if file_limit == LEGACY_READER_MAX_BYTES else "state-too-large",
-            "the whole file exceeds what the recorded Host holder can read. " + stop_recovery
+            "the whole file exceeds what the recorded Host holder can read. " + carrier_recovery
             if file_limit == LEGACY_READER_MAX_BYTES else
             "the whole file exceeds the state bound; retire finished records",
-            recovery=stop_recovery if file_limit == LEGACY_READER_MAX_BYTES else
+            recovery=carrier_recovery if file_limit == LEGACY_READER_MAX_BYTES else
             "retire finished records",
             sizes=sizes,
         )
@@ -6768,6 +6775,8 @@ _SHELL_DUTY_FIELDS = ("goal", "scope", "acceptance", "next", "wait", "dispatch",
                       "sessions", "assignments", "session")
 _STALE_COLLECT_ROUTE = "stale-collect session-gone route"
 _STALE_COLLECT_ROUTE_KEY = "stale-collect-session-gone"
+_STOPPED_COLLECT_ROUTE = "stopped-collect incomplete-turn route"
+_STOPPED_COLLECT_ROUTE_KEY = "stopped-collect-incomplete-turn"
 
 
 def _blank(value: Any) -> bool:
@@ -7011,14 +7020,19 @@ def diagnose_state_bloat(doc: dict[str, Any], args: argparse.Namespace | None
     return problems, diagnosis
 
 
-def _stale_refusal(ref: str, task: dict[str, Any], args: argparse.Namespace, why: str) -> str:
+def _route_refusal(ref: str, task: dict[str, Any], args: argparse.Namespace, why: str,
+                   route: str) -> str:
     ident = str(getattr(args, "id", "") or "")
     file_rev = getattr(args, "_file_revision", None)
     where = f"tasks/{ident} rev {task.get('rev')}"
     if file_rev is not None:
         where += f" file revision {file_rev}"
     command = retire_command(args, "tasks", ident, task) if ident else ""
-    return f"{ref} is unknown; {where}: {why}. {_STALE_COLLECT_ROUTE}. {command}".strip()
+    return f"{ref} is unknown; {where}: {why}. {route}. {command}".strip()
+
+
+def _stale_refusal(ref: str, task: dict[str, Any], args: argparse.Namespace, why: str) -> str:
+    return _route_refusal(ref, task, args, why, _STALE_COLLECT_ROUTE)
 
 
 def stale_collect_session_gone(ref: str, row: dict[str, Any], task: dict[str, Any],
@@ -7092,6 +7106,109 @@ def stale_collect_session_gone(ref: str, row: dict[str, Any], task: dict[str, An
     if holder:
         entry["holder_instance_id"] = holder
     return entry
+
+
+def stopped_collect_incomplete(ref: str, row: dict[str, Any], task: dict[str, Any],
+                               live: list[dict[str, Any]], evidence: Any,
+                               args: argparse.Namespace, repo: str) -> dict[str, Any] | str | None:
+    """Reconcile a collected proof that stopped the seat but left its last
+    mutation unknown (Issue #397, copied from the i398-fix row).
+
+    This is the quota/rate-limit shape: ``collect`` wrote ``outcome: stopped``
+    and ``mutation_status: unknown`` because the seat's follow-up turn was
+    killed (429), so the strict continuation route wants ``completed`` and the
+    stale-collect route wants an absent outcome. The dead-holder route leaves
+    any row with collected proof alone. None means this row is not that shape;
+    a string is a refusal that names this route; a dict is the reconciliation.
+    The index row is not rewritten.
+
+    The evidence is the existing Host judgement plus exact custody: the task
+    is accepted-done with an accepted per-item disposition, the row, collected
+    proof and project all name the same repo, the collected holder is the row
+    holder, and every ``--live`` row for that session is stopped under it.
+    """
+    if row.get("status") != "unknown" or row.get("reason") != "fingerprint-differs":
+        return None
+    evidence_rows = row.get("evidence") if isinstance(row.get("evidence"), dict) else {}
+    collected = evidence_rows.get("collect_status") if isinstance(evidence_rows, dict) else None
+    if not isinstance(collected, dict) or not collected:
+        return None
+    if collected.get("outcome") != "stopped" or collected.get("mutation_status") != "unknown":
+        return None
+    verdict = task.get("verdict") if isinstance(task.get("verdict"), dict) else {}
+    if task.get("stage") != "done" or verdict.get("value") != "accepted":
+        return _route_refusal(ref, task, args, "the task is not accepted-done",
+                              _STOPPED_COLLECT_ROUTE)
+    dispositions = task.get("dispositions") if isinstance(task.get("dispositions"), dict) else None
+    if not isinstance(dispositions, dict) or dispositions.get(ref) != "accepted":
+        return _route_refusal(ref, task, args, "its per-item disposition is not accepted",
+                              _STOPPED_COLLECT_ROUTE)
+    ident = getattr(args, "id", None)
+    if not ident or row.get("task_id") != ident:
+        return _route_refusal(ref, task, args, "the index row names another task",
+                              _STOPPED_COLLECT_ROUTE)
+    session = session_name(row.get("session"))
+    if session is None:
+        return _route_refusal(ref, task, args, "missing session link", _STOPPED_COLLECT_ROUTE)
+    collected_session = collected.get("session")
+    if isinstance(collected_session, str) and collected_session and collected_session != session:
+        return _route_refusal(ref, task, args,
+                              "the collected session differs from the index row",
+                              _STOPPED_COLLECT_ROUTE)
+    holder = row.get("holder_instance_id")
+    if not isinstance(holder, str) or not holder:
+        return _route_refusal(ref, task, args, "missing recorded holder", _STOPPED_COLLECT_ROUTE)
+    collected_holder = collected.get("holder_instance_id")
+    if not isinstance(collected_holder, str) or collected_holder != holder:
+        return _route_refusal(ref, task, args,
+                              "the collected holder does not match the recorded holder",
+                              _STOPPED_COLLECT_ROUTE)
+    collected_repo = collected.get("repo")
+    row_repo = row.get("repo")
+    if (not isinstance(collected_repo, str) or not collected_repo
+            or not isinstance(row_repo, str) or not row_repo
+            or not same_repo(collected_repo, row_repo)):
+        return _route_refusal(ref, task, args, "the collected repo differs from the index row",
+                              _STOPPED_COLLECT_ROUTE)
+    if not same_repo(row_repo, repo):
+        return _route_refusal(ref, task, args, "the index row repo is not this project",
+                              _STOPPED_COLLECT_ROUTE)
+    turn_outcome = collected.get("turn_outcome")
+    if turn_outcome not in (None, "stopped"):
+        return _route_refusal(ref, task, args,
+                              f"the collected turn outcome is {turn_outcome!r}, not stopped",
+                              _STOPPED_COLLECT_ROUTE)
+    matches = [item for item in live if item.get("session") == session]
+    if not matches:
+        return _route_refusal(
+            ref, task, args,
+            f"{session} has no stopped --live row; this route needs the stopped seat recorded",
+            _STOPPED_COLLECT_ROUTE)
+    if any(not isinstance(item.get("repo"), str) or not item.get("repo")
+           or not same_repo(item.get("repo"), row_repo) for item in matches):
+        return _route_refusal(
+            ref, task, args,
+            f"a --live row for {session} names another repo", _STOPPED_COLLECT_ROUTE)
+    if any(item.get("state") != "stopped" for item in matches):
+        return _route_refusal(
+            ref, task, args,
+            f"{session} is still live; this route retires only when every --live row for that "
+            "session is stopped", _STOPPED_COLLECT_ROUTE)
+    if any(item.get("holder_instance_id") != holder for item in matches):
+        other = next((item.get("holder_instance_id") for item in matches
+                      if item.get("holder_instance_id") != holder), None)
+        return _route_refusal(
+            ref, task, args,
+            f"{session} is stopped under holder {other}, not the recorded {holder}; foreign holder",
+            _STOPPED_COLLECT_ROUTE)
+    return {
+        "item_id": ref, "session": session, "collect_status": "unknown",
+        "reason": "fingerprint-differs", "disposition": "accepted",
+        "evidence": evidence, "live": "stopped",
+        "route": _STOPPED_COLLECT_ROUTE_KEY,
+        "holder_instance_id": holder,
+        "collected": {"outcome": "stopped", "mutation_status": "unknown"},
+    }
 
 
 # Issue #333: a holder that died before collect captured last_prompt leaves the
@@ -7280,6 +7397,14 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
                 # leaves a row that already has collected proof).
                 settlement = stale_collect_session_gone(
                     ref, row, task, live, getattr(args, "evidence", None), args, repo)
+                if settlement is None:
+                    # Issue #397: collected proof already shows the seat stopped but
+                    # the last mutation is unknown (the follow-up turn was killed by
+                    # quota/rate limiting). The strict route needs completed and the
+                    # stale route needs an absent outcome, so this exact shape has
+                    # its own reconciliation.
+                    settlement = stopped_collect_incomplete(
+                        ref, row, task, live, getattr(args, "evidence", None), args, repo)
                 if settlement is None:
                     # Issue #333: the continuation proof above does not cover a holder
                     # that died before last_prompt. The dead-holder route reports the
@@ -7546,10 +7671,10 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
     return stone
 
 
-def write_state(path: Path, doc: dict[str, Any], *, unchecked_live: bool = False) -> dict[str, int]:
+def write_state(path: Path, doc: dict[str, Any], *, owner_stop: bool = False) -> dict[str, int]:
     doc["revision"] = int(doc.get("revision") or 0) + 1
     doc["updated_at"] = observed_at()
-    text, sizes = render_state(doc, path, unchecked_live=unchecked_live)
+    text, sizes = render_state(doc, path, owner_stop=owner_stop)
     atomic_write(path, text)
     return sizes
 
@@ -7589,7 +7714,7 @@ def state_mutation(args: argparse.Namespace, change, limit_removal: dict[str, An
                 doc["host_revision"] = int(doc.get("host_revision") or 0) + 1
                 args._host_revision = doc["host_revision"]
             changed = change(doc, caller)
-            sizes = write_state(path, doc, unchecked_live=_owner_stop(args))
+            sizes = write_state(path, doc, owner_stop=_owner_stop(args))
             mirrored = mirror_dispositions(args, doc, path)
     except StateRefusal as refusal:
         code = STATE_EXIT_CONFLICT if refusal.payload["reason"] == "conflict" else 2
@@ -8705,6 +8830,7 @@ V1_ACTIVE_FIELDS = ("ref", "session", "platform", "preset", "holder", "holder_in
                     "wait", "resume_when")
 V1_PENDING_FIELDS = ("duty", "scope", "owner", "evidence", "boundary", "next", "wait",
                      "resume_when", "holder", "platform", "session", "stage")
+V1_ALERT_FIELDS = tuple(sorted(RECORD.ALERT_KEYS)) + ("id",)
 
 
 def unmapped_fields(state: dict[str, Any], locator: str, entry: dict[str, Any],
@@ -8775,6 +8901,64 @@ def legacy_tasks(body: dict[str, Any], state: dict[str, Any]) -> None:
         state["tasks"][ident] = task
 
 
+def legacy_alerts(body: dict[str, Any], state: dict[str, Any]) -> None:
+    """v1 `body.alerts` rows as current alerts, one per nameable id.
+
+    v1 allowed a dict keyed by alert id or a list of rows. The old migration
+    collapsed the whole field into one `legacy-alerts` summary, so no later
+    `state retire` could name a row. Every readable row becomes
+    `state.alerts[<id>]` with `rev 1` and its known alert fields; an unknown
+    field is listed by locator in `unverified`, never silently reinterpreted.
+    """
+    raw = body.get("alerts")
+    if raw is None:
+        return
+    if isinstance(raw, dict):
+        entries = list(raw.items())
+    elif isinstance(raw, list):
+        entries = [(None, item) for item in raw]
+    else:
+        state["unverified"]["legacy-alerts"] = {
+            "summary": "unreadable legacy alerts value; it is kept as a locator",
+            "locator": "alerts",
+        }
+        return
+    used: set[str] = set()
+    for number, (key, entry) in enumerate(entries):
+        locator = f"alerts[{key}]" if isinstance(key, str) else f"alerts[{number}]"
+        if not isinstance(entry, dict):
+            state["unverified"][f"alert-{number}"] = {
+                "summary": "unreadable legacy alert entry", "locator": locator}
+            continue
+        raw_id = key if isinstance(key, str) else entry.get("id")
+        original = raw_id if isinstance(raw_id, str) and _TASK_IDENT.fullmatch(raw_id) else None
+        ident = original if original and original not in used else f"alert-{number + 1}"
+        suffix = 1
+        while ident in used:
+            suffix += 1
+            ident = f"alert-{number + 1}-{suffix}"
+        used.add(ident)
+        row = {field: entry[field] for field in RECORD.ALERT_KEYS if field in entry}
+        row["level"] = row.get("level") if isinstance(row.get("level"), str) else "watch"
+        row["summary"] = (row.get("summary") if isinstance(row.get("summary"), str)
+                          else f"legacy alert {ident}")
+        row["rev"] = 1
+        row["created_at"] = (entry.get("created_at")
+                             if isinstance(entry.get("created_at"), str) else observed_at())
+        row["updated_at"] = (entry.get("updated_at")
+                             if isinstance(entry.get("updated_at"), str) else row["created_at"])
+        row["source"] = (entry.get("source") if isinstance(entry.get("source"), str)
+                         and entry.get("source") else f"migrated:{locator}")
+        row["writer"] = "migration"
+        state["alerts"][ident] = row
+        unmapped_fields(state, locator, entry, V1_ALERT_FIELDS)
+        if isinstance(raw_id, str) and raw_id and raw_id != ident:
+            state["unverified"][f"{ident}-legacy-id"] = {
+                "summary": f"legacy alert id {raw_id!r} is kept as alerts/{ident}",
+                "locator": locator,
+            }
+
+
 def migrate_document(doc: dict[str, Any], raw: bytes, path: Path, index: dict[str, Any] | None,
                      rows: list[dict[str, Any]] | None, repo: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     body_text = doc.get("body")
@@ -8814,7 +8998,9 @@ def migrate_document(doc: dict[str, Any], raw: bytes, path: Path, index: dict[st
         dropped.append("host")
         RECORD.note_unmapped(state, "host", sorted(body["host"]))
     legacy_tasks(body, state)
-    known = {"project", "authorization", "active", "pending", "recovery", "host", "sideagent"}
+    legacy_alerts(body, state)
+    known = {"project", "authorization", "active", "pending", "recovery", "host", "sideagent",
+             "alerts"}
     for key in sorted(set(body) - known):
         dropped.append(key)
         state["unverified"][f"legacy-{key}"] = {
@@ -8948,7 +9134,7 @@ def command_state_migrate(args: argparse.Namespace) -> int:
                     report["result"] = "migrated"
                     report["cleanup"] = True
                 if changed or report["result"] == "carrier-recorded":
-                    report.update(write_state(path, doc, unchecked_live=rows is None))
+                    report.update(write_state(path, doc))
                 report["carrier"] = doc.get("carrier") or {"capability": None, "why": why}
                 return emit(report)
             if doc.get("schema") not in (None, LEGACY_STATE_SCHEMA):
@@ -8965,12 +9151,12 @@ def command_state_migrate(args: argparse.Namespace) -> int:
                              "detail": "unresolved critical mapping; the file was not written"}, 2)
             preview = json.loads(json.dumps(new_doc))
             preview["revision"] = 1
-            _text, sizes = render_state(preview, path, unchecked_live=rows is None)
+            _text, sizes = render_state(preview, path)
             report.update(sizes)
             if not args.write:
                 return emit({"result": "planned", "writes": False, "unchecked": unchecked,
                              "report": report, "state": new_doc["state"]})
-            sizes = write_state(path, new_doc, unchecked_live=rows is None)
+            sizes = write_state(path, new_doc)
     except StateRefusal as refusal:
         return emit(refusal.payload, 2)
     except (OSError, ValueError) as exc:

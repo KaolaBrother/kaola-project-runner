@@ -1166,20 +1166,22 @@ class Migration(StateProject):
             else:
                 os.environ["KAOLA_ACP_RECORD_ROOT"] = previous
 
-    def test_old_holder_bound_keeps_the_file_small_without_a_capable_host(self) -> None:
+    def test_legacy_bound_refuses_large_migration_until_a_capable_host_is_live(self) -> None:
+        # #397: migration uses the same whole-file bound as every later
+        # ordinary write. It may not create a carrier-less file that retire
+        # then refuses, so the refusal names the live-holder migration.
         body = dict(LEGACY_BODY)
         body["active"] = [{"ref": f"#{n}", "session": f"codex-KT-i{n}-x", "evidence": "e" * 900}
                           for n in range(80)]
         raw = self.write_legacy(body)
         code, out = self.state("migrate", "--file", str(self.file))
-        self.assertEqual(out["result"], "planned", out)
-        self.assertGreater(out["report"]["file_bytes"], 65536)
-        self.assertEqual(self.file.read_bytes(), raw, "a plan does not write")
+        self.assertEqual((code, out["reason"]), (2, "carrier-limit"), out)
+        self.assertEqual(self.file.read_bytes(), raw, "a refused plan does not write")
+        self.assertIn("state migrate", out["recovery"])
+        self.assertIn("--live", out["recovery"])
         code, out = self.state("migrate", "--file", str(self.file), "--write")
-        self.assertEqual((code, out["result"]), (0, "migrated"), out)
-        self.assertGreater(out["file_bytes"], 65536)
-        self.assertIsNone(self.doc().get("carrier"))
-        raw = self.write_legacy(body)
+        self.assertEqual((code, out["reason"]), (2, "carrier-limit"), out)
+        self.assertEqual(self.file.read_bytes(), raw)
         live = self.repo / "live.json"
         live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": [{
             "platform": "zcode", "session": "zcode-KT-orchestrator-main", "session_role": "host",
@@ -1188,6 +1190,14 @@ class Migration(StateProject):
         code, out = self.state("migrate", "--file", str(self.file), "--write", "--live", str(live))
         self.assertEqual(out["reason"], "carrier-limit", out)
         self.assertEqual(self.file.read_bytes(), raw)
+        live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": [{
+            "platform": "zcode", "session": "zcode-KT-orchestrator-main", "session_role": "host",
+            "repo": str(self.repo), "state": "ready", "holder_instance_id": "host-new",
+            "holder_features": ["heartbeat-state/2"]}]}), encoding="utf-8")
+        code, out = self.state("migrate", "--file", str(self.file), "--write", "--live", str(live))
+        self.assertEqual((code, out["result"]), (0, "migrated"), out)
+        self.assertGreater(out["file_bytes"], 65536)
+        self.assertEqual(self.doc()["carrier"]["capability"], "heartbeat-state/2")
 
 
 class ExecuteSeats(StateProject):

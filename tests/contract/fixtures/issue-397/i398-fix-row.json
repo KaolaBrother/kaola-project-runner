@@ -1,0 +1,127 @@
+{
+ "acceptance": "pending",
+ "dispatch_event_cursor": 3,
+ "dispatcher": {
+  "holder_instance_id": "523f2e4f514fac80ad71e57f50e0883e",
+  "platform": "zcode",
+  "session": "zcode-KPR-orchestrator-issues"
+ },
+ "evidence": {
+  "collect_status": {
+   "acp_session_id": "008d58d8-ef29-4acf-9a79-c2698bddb238",
+   "dispatch_event_cursor": null,
+   "exit_code": 0,
+   "holder_instance_id": "c85edab0274a2e707c208cf257a3092e",
+   "mutation_status": "unknown",
+   "outcome": "stopped",
+   "prompt_fingerprint": "sha256:df2a7b3eabc157275186cf107a94897dee19b162108dba0a5c8a0936a0e54fc3",
+   "repo": "/Users/ylpromax5/Workspace/kaola-project-runner-issues",
+   "result": null,
+   "stop_reason": null,
+   "turn_active": null,
+   "turn_outcome": "stopped"
+  },
+  "runner": {
+   "attempts": 0,
+   "path": "/Users/ylpromax5/.zcode/skills/dsh-kaola-project-runner/scripts/runtime-tmux.sh",
+   "platform": "dsh",
+   "source": "skills-root"
+  },
+  "send": {
+   "acp_session_id": "008d58d8-ef29-4acf-9a79-c2698bddb238",
+   "dispatch_event_cursor": 3,
+   "exit_code": 0,
+   "holder_instance_id": null,
+   "mutation_status": "in_progress",
+   "outcome": "in_progress",
+   "prompt_fingerprint": "sha256:17e728e99ca5536169be3b6e7e1c61ba690717f3cb3d57d4a7132c0bc6e86e87",
+   "repo": "/Users/ylpromax5/Workspace/kaola-project-runner-issues",
+   "result": null,
+   "stop_reason": null,
+   "turn_active": null,
+   "turn_outcome": "in_progress"
+  },
+  "start": {
+   "acp_session_id": "008d58d8-ef29-4acf-9a79-c2698bddb238",
+   "dispatch_event_cursor": null,
+   "exit_code": 0,
+   "holder_instance_id": "c85edab0274a2e707c208cf257a3092e",
+   "mutation_status": null,
+   "outcome": null,
+   "prompt_fingerprint": null,
+   "repo": "/Users/ylpromax5/Workspace/kaola-project-runner-issues",
+   "result": null,
+   "stop_reason": null,
+   "turn_active": null,
+   "turn_outcome": null
+  },
+  "status": {
+   "acp_session_id": null,
+   "dispatch_event_cursor": null,
+   "error_code": "no-session",
+   "exit_code": 0,
+   "holder_instance_id": null,
+   "mutation_status": null,
+   "outcome": null,
+   "prompt_fingerprint": null,
+   "repo": "/Users/ylpromax5/Workspace/kaola-project-runner-issues",
+   "result": null,
+   "stop_reason": null,
+   "turn_active": null,
+   "turn_outcome": null
+  }
+ },
+ "holder_instance_id": "c85edab0274a2e707c208cf257a3092e",
+ "issue": 398,
+ "item_id": "i398-fix",
+ "notify_target": {
+  "platform": "zcode",
+  "session": "zcode-KPR-orchestrator-issues"
+ },
+ "platform": "dsh",
+ "preset": "dsh/default",
+ "prompt_fingerprint": "sha256:df2a7b3eabc157275186cf107a94897dee19b162108dba0a5c8a0936a0e54fc3",
+ "prompt_sha256": "sha256:17e728e99ca5536169be3b6e7e1c61ba690717f3cb3d57d4a7132c0bc6e86e87",
+ "prompt_source": {
+  "kind": "full",
+  "prompt_sha256": "sha256:17e728e99ca5536169be3b6e7e1c61ba690717f3cb3d57d4a7132c0bc6e86e87"
+ },
+ "reason": "fingerprint-differs",
+ "repo": "/Users/ylpromax5/Workspace/kaola-project-runner-issues",
+ "selection": {
+  "advertised": {
+   "effort": "max",
+   "model_id": "[\"opencode-go\",\"deepseek-v4.1-flash\"]"
+  },
+  "advertised_source": "effective_selection",
+  "applied": {
+   "effort": "max",
+   "model_id": "opencode-go/deepseek-v4.1-flash"
+  },
+  "applied_state": {
+   "effort": "applied",
+   "model_id": "applied"
+  },
+  "comparison": "match",
+  "fields": {
+   "effort": {
+    "advertised": "match",
+    "applied": "match"
+   },
+   "model_id": {
+    "advertised": "unknown",
+    "applied": "match"
+   }
+  },
+  "requested": {
+   "effort": "max",
+   "model_id": "opencode-go/deepseek-v4.1-flash",
+   "preset": "dsh/default",
+   "tier": "default"
+  },
+  "source": "config_application"
+ },
+ "session": "dsh-KPR-i398-routes",
+ "status": "unknown",
+ "task_id": "i398"
+}

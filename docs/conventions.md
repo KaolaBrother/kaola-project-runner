@@ -281,12 +281,14 @@ This is a release/update requirement. For the lifecycle state of
   `special_requirements`, watch `summary`, `detail`, and `evidence`, and a string
   `project.user_language` when that key is present. A missing key stays missing.
   An unmapped non-empty watch key blocks the write and names the path.
-- Holder: the v2 file may exceed 64 KiB after migration records a live Host holder that
-  advertises `heartbeat-state/2` as `carrier`. `state migrate` without `--live` uses the
-  1 MiB bound and does not treat the missing list as an old holder. An older holder named by
-  `--live` keeps the 64 KiB whole-file limit (`carrier-limit`). Adoption path: restart the
-  Host holder on the new build at a safe point, then run `state migrate --write --live <list>`
-  to record the carrier.
+- Holder: the v2 file may exceed 64 KiB only after a write records a live Host holder that
+  advertises `heartbeat-state/2` as `carrier`. Every write, including
+  `state migrate --write`, uses that same whole-file bound; only the owner stop uses the current bound
+  without a recorded carrier. A migration whose result would exceed the 64 KiB legacy
+  bound without a capable holder is refused `carrier-limit` instead of creating a file the
+  next ordinary write refuses. Adoption path: restart the Host holder on the new build at a
+  safe point when no live row advertises the capability, then run `state migrate --write
+  --live <list>` to record the carrier; the refusal's recovery names that command.
   Healthy workers are not restarted for migration; they get the new holder behavior at
   their next normal start.
 - Host replacement: the new Host runs `rebind-host` on each existing seat from its own session;

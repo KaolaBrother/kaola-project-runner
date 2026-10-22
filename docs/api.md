@@ -901,9 +901,15 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
 
 The Host view is bounded at 64 KiB (`host-view-too-large`). The whole file is bounded at
 1 MiB when `carrier.capability` is `heartbeat-state/2`, else at the 64 KiB legacy reader
-limit (`carrier-limit`). `state migrate` without `--live` uses the 1 MiB bound: missing
-live rows are not an old holder. `carrier-limit` applies when `--live` is supplied and that
-holder does not advertise `heartbeat-state/2`. The tool refuses rather than truncating a record.
+limit (`carrier-limit`). Every write, including `state migrate --write`, uses that same
+whole-file bound; the one exception is a project update whose patch has a non-empty `stop`
+(the owner stop), which uses the current bound without a recorded carrier. A migration
+therefore refuses to create a carrier-less file that the next ordinary write would refuse.
+The `carrier-limit` recovery names the executable local exit: when no live Host row
+advertises `heartbeat-state/2`, restart the Host holder on this build at a safe point, then
+run `state migrate --file FILE --live LIVE --write` with the output of
+`kaola-acp.py list --repo ROOT --include-dead`; that records `carrier` and later writes use
+1 MiB. The tool refuses rather than truncating a record.
 
 #### Backstop sweep (`kaola-dispatch.py sweep`, Issue #348)
 

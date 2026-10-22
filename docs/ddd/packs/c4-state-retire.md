@@ -100,6 +100,11 @@ All citations are at `8b3779c9`. That commit changed only the design document re
   session stopped or absent (the session is gone), and `--evidence` carries the original
   close. A missing session link, a foreign holder, and a live session still refuse, and
   the refusal names the dead-holder unknown route. The continuation exception is unchanged.
+  Issue #397 adds a third route for the same collected proof shape when the receipt says
+  `outcome: stopped` and `mutation_status: unknown` (the follow-up turn died on a quota
+  refusal): the accepted-done task, its per-item accepted disposition, the row/collected
+  holder and repo, and every stopped `--live` row for that session must all match. It
+  reports `stopped-collect-incomplete-turn` and leaves the unknown index bytes alone.
 - **I7 — An accepted outcome stays findable.** Boundary: task record → repository. An accepted
   task needs a `--cite` that can be retrieved (`D:5036-5065`).
 - **I8 — Owner questions stay with their owner.** Boundary: the decision record. A Sideagent

@@ -122,26 +122,26 @@ only. `unknown-op`: `drain-restart` the seat at idle.
 
 ## Size
 
-Repeats update the same id; do not append a second row. A settled record leaves
-the file in that same write. An old revision gets `record-retired`. Never drop
-an open duty to fit. No field length cap and no truncation. A row over 1536
-bytes is only a check hint: rewrite that same id. The Host view is bounded at
-64 KiB (`host-view-too-large`). The file may reach 1 MiB only with a recorded
-`carrier` advertising `heartbeat-state/2`, else 64 KiB (`carrier-limit`). An
-unknown row whose collected outcome is absent and whose live session is absent
-or stopped under the recorded holder retires on the stale-collect route and
-writes no index bytes.
+Rewriting an id replaces it; settled records leave in that write; an old
+revision is `record-retired`. Never drop a duty to fit. Host view max 64 KiB
+(`host-view-too-large`). 1 MiB needs a recorded `carrier` advertising
+`heartbeat-state/2`, else 64 KiB (`carrier-limit`); every write, `migrate
+--write` included, uses it; only an owner stop uses the current bound. A
+refusal names `$S migrate --live LIVE --write`. An unknown row with no
+collected outcome retires on the stale-collect route (session absent or
+stopped under the holder); `outcome: stopped` with `mutation_status: unknown`
+retires on `stopped-collect-incomplete-turn` (accepted task, disposition,
+holder, repo and stopped `--live` rows must match). Neither writes index bytes.
 
 ## Migration
 
-After a Skill update, at a safe point, run `$S migrate --index I --live L`;
-without `--write` it only plans. With `--write`, each v1 `active` row becomes
-a `doing` task, `pending` keeps its stated stage or stays `todo`, and
-`recovery.protected_untracked` stays for a list of strings. Other
-legacy names leave. Unknown keys become `unverified`
-locators. A critical mapping writes nothing. Do not write
-`heartbeat-prompt.v1-<sha12>.json`. `state-overwritten` is not raised from
-those copies. Hash-named copies are not deleted or trusted. An unknown schema
-is refused. A clean repeat reports `current`. Migration grants nothing.
+After a Skill update, run `$S migrate --index I --live L` at a safe point;
+without `--write` it plans only. `--write` migrates `active`/`pending` rows,
+maps `body.alerts` (dict/list) per nameable id, and keeps
+`recovery.protected_untracked`. Other legacy names leave as `unverified`
+locators; a critical mapping writes nothing. Migration uses that bound;
+`--live` with a capable Host records `carrier`. Never write
+`heartbeat-prompt.v1-<sha12>.json`. An unknown schema is refused. Repeats
+report `current`. Migration grants nothing.
 
 Live: Codex and ZCode, `rebind-host`.

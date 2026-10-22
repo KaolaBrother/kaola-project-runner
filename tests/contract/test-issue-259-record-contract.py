@@ -1972,7 +1972,7 @@ class RecordContract(unittest.TestCase):
                                    "dispositions": {"initial": "accepted"}}))
         self.assertEqual(code, 0, out)
         baseline = self.file.read_bytes()
-        for change in ("no-disposition", "in-flight", "unknown-effect", "foreign-holder",
+        for change in ("no-disposition", "in-flight", "in-progress-effect", "foreign-holder",
                        "foreign-repo", "wrong-task", "unrelated-unknown", "missing-stop", "live",
                        "missing-repo", "foreign-collected-holder", "sideagent"):
             with self.subTest(change=change):
@@ -1984,8 +1984,11 @@ class RecordContract(unittest.TestCase):
                     doc["state"]["tasks"]["continued"].pop("dispositions")
                 elif change == "in-flight":
                     candidate["status"] = "in-flight"
-                elif change == "unknown-effect":
-                    candidate["evidence"]["collect_status"]["mutation_status"] = "unknown"
+                elif change == "in-progress-effect":
+                    # #397: only a stopped outcome with an unknown last
+                    # mutation has its own route; an in-progress mutation
+                    # still proves no settled effect.
+                    candidate["evidence"]["collect_status"]["mutation_status"] = "in_progress"
                 elif change == "foreign-holder":
                     current_live["holder_instance_id"] = "foreign"
                 elif change == "foreign-repo":
@@ -2532,20 +2535,16 @@ class RecordContract(unittest.TestCase):
         self.assertFalse(target.with_name("atomic.json.tmp").exists())
         self.assertEqual(target.read_text(encoding="utf-8"), "original\n")
 
-    def test_an_oversized_migrated_record_still_accepts_an_owner_stop(self) -> None:
-        body = {
-            "project": {"code": "KT", "goal": "keep the open duty"},
-            "authorization": {"grants": []},
-            "active": [
-                {"ref": f"row-{n}", "session": f"codex-KT-i{n}-x", "evidence": "e" * 900}
-                for n in range(80)
-            ],
+    def test_an_oversized_state_still_accepts_an_owner_stop(self) -> None:
+        # #397: migration may no longer create this file (see the #397 suite),
+        # but an installation already carrying an oversized carrier-less file
+        # keeps the owner-stop escape hatch.
+        self.init()
+        doc = self.doc()
+        doc["state"]["tasks"]["pad"] = {
+            "stage": "todo", "goal": "x" * 70000, "rev": 1, "writer": "host", "source": "s",
         }
-        self.file.write_text(json.dumps({
-            "schema": "kaola-heartbeat-prompt/1", "body": json.dumps(body),
-        }), encoding="utf-8")
-        code, out = self.state("migrate", "--file", str(self.file), "--write")
-        self.assertEqual(code, 0, out)
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
         self.assertGreater(self.file.stat().st_size, 65536)
         self.assertIsNone(self.doc().get("carrier"))
         revision = str(self.doc()["revision"])
@@ -2555,10 +2554,9 @@ class RecordContract(unittest.TestCase):
             "--set", json.dumps({"stop": "stop at the owner boundary"}))
         self.assertEqual(code, 0, stopped)
         self.assertEqual(self.doc()["state"]["project"]["stop"], "stop at the owner boundary")
-        task_id = next(iter(self.doc()["state"]["tasks"]))
         code, ordinary = self.state(
             "update", "--file", str(self.file), "--writer", "host", "--source", "s",
-            "--kind", "tasks", "--id", task_id, "--expect-rev", "1",
+            "--kind", "tasks", "--id", "pad", "--expect-rev", "1",
             "--set", json.dumps({"next": "continue"}))
         self.assertEqual(ordinary["reason"], "carrier-limit", ordinary)
         self.assertIn("owner stop", ordinary["recovery"])
