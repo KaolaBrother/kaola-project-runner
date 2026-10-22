@@ -3948,15 +3948,21 @@ class Holder:
         placeholder for another) both stay visible in status."""
         entry = {"code": code, "path": path, "message": message, "route": route}
         new = True
+        changed = True
         with self.tool_cwd_lock:
             for index, item in enumerate(self.tool_cwd_errors):
                 if item.get("code") == code and item.get("path") == path:
+                    # Issue #400: a repeated unchanged duty is a no-op, so a
+                    # cleanup that still sees the same condition neither
+                    # re-appends its event nor rewrites the record.
+                    changed = item != entry
                     self.tool_cwd_errors[index] = entry
                     new = False
                     break
             else:
                 self.tool_cwd_errors.append(entry)
-        self.write_record()
+        if changed:
+            self.write_record()
         return new
 
     def _cwd_error_clear(self, code: str | None = None, path: str | None = None,
@@ -4205,7 +4211,11 @@ class Holder:
         """R4: remove an empty placeholder once the shell reports elsewhere.
 
         N-1: every tracked placeholder is handled on its own, so a second
-        removed worktree does not overwrite the first claim."""
+        removed worktree does not overwrite the first claim. Issue #400: a
+        placeholder directory that is already gone releases its claim
+        silently; "left" only describes a directory that is still there. A
+        still non-empty placeholder keeps its claim and reports the same
+        (code, path) state once, not on every cleanup."""
         guard = self._cwd_guard()
         with self.tool_cwd_lock:
             placeholders = list(self.tool_cwd.get("placeholder") or [])
@@ -4213,6 +4223,15 @@ class Holder:
         for placeholder in placeholders:
             if not stopping and guard is not None and isinstance(last, str) and last \
                     and guard.within(placeholder, last):
+                continue
+            if not os.path.isdir(placeholder):
+                # Issue #400: the placeholder directory has already vanished
+                # (the reported vrpai case: its worktree was deleted out of
+                # band). This is the resume-reconcile outcome, not a "left"
+                # condition: release the claim and any duty, emit nothing.
+                self._cwd_placeholder_drop(placeholder)
+                self._cwd_forget_placeholder_path(placeholder, last)
+                self.write_record()
                 continue
             registered = self._cwd_registered_worktree(placeholder)
             if registered is None:
@@ -4229,13 +4248,22 @@ class Holder:
             try:
                 os.rmdir(placeholder)
             except OSError as exc:
-                reason = "not-empty" if os.path.isdir(placeholder) else str(exc)
-                self._cwd_error_set(
+                if not os.path.isdir(placeholder):
+                    # Issue #400: rmdir lost a race with another remover. The
+                    # directory is gone, so release the claim exactly as in the
+                    # pre-check above instead of reporting a phantom "left".
+                    self._cwd_placeholder_drop(placeholder)
+                    self._cwd_forget_placeholder_path(placeholder, last)
+                    self.write_record()
+                    continue
+                reason = "not-empty"
+                new = self._cwd_error_set(
                     "cwd-placeholder-not-empty", placeholder, reason,
                     self._cwd_route("cwd-placeholder-not-empty", placeholder))
-                self.events.append({"kind": "tool_cwd_placeholder_left",
-                                    "path": placeholder, "reason": reason})
-                self.write_record()
+                if new:
+                    self.events.append({"kind": "tool_cwd_placeholder_left",
+                                        "path": placeholder, "reason": reason})
+                    self.write_record()
                 continue
             self._cwd_placeholder_drop(placeholder)
             self._cwd_forget_placeholder_path(placeholder, last)
