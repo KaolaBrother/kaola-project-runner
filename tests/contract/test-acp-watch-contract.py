@@ -109,6 +109,20 @@ def sample_before_answers(sample: dict) -> dict:
     return {key: value for key, value in sample.items() if key != "answered_permissions"}
 
 
+def sample_without_row_provenance(sample: dict) -> dict:
+    """Issue #387: prompt_source/carrier are optional per-message facts.
+
+    They describe only a prompt's own user row, so the whole-view shape walk
+    compares the common message shape; the prompt row and its turn row are
+    asserted explicitly in the #387 suite and below.
+    """
+    trimmed = json.loads(json.dumps(sample))
+    for row in trimmed.get("messages") or []:
+        row.pop("prompt_source", None)
+        row.pop("carrier", None)
+    return trimmed
+
+
 def flag_value(tokens: list[str], flag: str) -> str | None:
     for index in range(len(tokens) - 1):
         if tokens[index] == flag:
@@ -403,12 +417,22 @@ class AcpWatchContractTests(unittest.TestCase):
         self.assertEqual(view.get("schema"), "kaola-acp-view/1")
         # No permission is answered yet in this stream; the answered entry's
         # shape is pinned by test_view_turn_timing_and_answered_permissions.
-        assert_shape(self, sample_before_answers(self.sample), view, "view")
+        assert_shape(
+            self,
+            sample_without_row_provenance(sample_before_answers(self.sample)),
+            view,
+            "view",
+        )
         self.assertEqual(view["answered_permissions"], [])
 
         roles = {message["role"] for message in view["messages"]}
         self.assertIn("user", roles)
         self.assertIn("assistant", roles)
+        prompt = next(message for message in view["messages"]
+                      if message["role"] == "user")
+        self.assertEqual(prompt["prompt_source"], "delegator")
+        self.assertNotIn("carrier", prompt)
+        self.assertEqual(view["turns"][0]["source"], "delegator")
         assistant = " ".join(
             message["text"] for message in view["messages"] if message["role"] == "assistant"
         )
@@ -1006,7 +1030,8 @@ class AcpProjectionOfflineTests(unittest.TestCase):
         self.assertEqual(
             first,
             {"started_at": 100.0, "ended_at": 105.25, "outcome": "process_exited",
-             "stop_reason": None, "start_cursor": 1, "end_cursor": 4},
+             "stop_reason": None, "start_cursor": 1, "end_cursor": 4,
+             "source": "delegator"},
         )
         for index in range(mod.TIMELINE_MAX + 5):
             projection.add_user_from_prompt(f"p{index}", 10 + index, 200.0 + index)

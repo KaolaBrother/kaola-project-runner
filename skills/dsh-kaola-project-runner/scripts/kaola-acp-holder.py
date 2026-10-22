@@ -342,6 +342,29 @@ CWD_REPAIR_FAILED_FALLBACK = (
     "the placeholder on its own once the shell leaves.")
 WORKER_EVENT_SCHEMA = "kaola-worker-event/1"
 WORKER_EVENT_KINDS = ("terminated", "idle", "permission_required", "cwd_repaired")
+# Issue #387: the two holder-written carrier prompts name their schema on the
+# first line. A view stores that id beside the prompt it wrote so a client can
+# tell the heartbeat carrier from a Delegator send without reading the text.
+HOST_NOTIFY_SCHEMA = "kaola-host-notify/1"
+WORKER_NOTIFY_SCHEMA = "kaola-worker-notify/1"
+PROMPT_CARRIER_PATTERN = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._/-]{0,127}\Z")
+
+
+def normalize_prompt_source(value: Any) -> str:
+    """The closed view vocabulary: only the exact internal "self" is self."""
+    return "self" if value == "self" else "delegator"
+
+
+def normalize_prompt_carrier(value: Any) -> str | None:
+    """A carrier schema id, or None when the caller supplied no usable id."""
+    if not isinstance(value, str):
+        return None
+    carrier = value.strip()
+    if not carrier or not PROMPT_CARRIER_PATTERN.match(carrier):
+        return None
+    return carrier
+
+
 HEARTBEAT_DEFECT_CHARS = 200
 # Injection bound for the Host-maintained prompt file. Not a second Skill
 # budget: one read of at most this many bytes plus one, so an oversized file
@@ -2228,14 +2251,24 @@ class ViewProjection:
 
     def add_user_from_prompt(self, text: str, cursor: int, started_at: float | None = None,
                              client_message_id: str | None = None,
-                             prompt_fingerprint: str | None = None) -> None:
+                             prompt_fingerprint: str | None = None,
+                             source: str = "delegator",
+                             carrier: str | None = None) -> None:
         """The prompt opens a turn. Its message has no event-log line, so no ``received_at``.
+
+        Issue #387: ``source`` ("delegator" or "self") and the optional carrier
+        schema id are stored on the prompt row and its turn row as internal
+        facts. :meth:`snapshot` publishes them as ``prompt_source``/``carrier``
+        on that user row and ``source``/``carrier`` on that turn row; no other
+        row gains them.
 
         Issue #385: this is the only place the echo identity changes. The raw
         fingerprint (the one the send receipt publishes) and the normalized
         fingerprint are written under the same lock that classifies a
         ``user_message_chunk`` in :meth:`apply`.
         """
+        source = normalize_prompt_source(source)
+        carrier = normalize_prompt_carrier(carrier)
         with self.lock:
             # A probe from the previous prompt cannot belong to this prompt:
             # a prefix is exposed as its own row, a complete match is dropped.
@@ -2250,7 +2283,9 @@ class ViewProjection:
             self._prompt_echo_fingerprint = _echo_fingerprint(text)
             self._open_message = None
             self._add_message_locked("user", text, None, cursor, None,
-                                     client_message_id, from_prompt=True)
+                                     client_message_id, from_prompt=True,
+                                     prompt_source=source,
+                                     prompt_carrier=carrier)
             turn: dict[str, Any] = {
                 "started_at": started_at,
                 "ended_at": None,
@@ -2258,7 +2293,12 @@ class ViewProjection:
                 "stop_reason": None,
                 "start_cursor": cursor,
                 "end_cursor": None,
+                # Issue #387: internal until :meth:`snapshot` maps it to
+                # ``source``; an agent-initiated turn is also "self".
+                "_prompt_source": source,
             }
+            if carrier is not None:
+                turn["_prompt_carrier"] = carrier
             # Issue #380: a client-supplied id is echoed only when one was
             # supplied; an older client's view keeps its exact previous shape.
             if client_message_id is not None:
@@ -2283,6 +2323,9 @@ class ViewProjection:
                 "stop_reason": None,
                 "start_cursor": cursor,
                 "end_cursor": None,
+                # Issue #387: a continuation is holder-internal work, so its
+                # turn row is "self"; it has no carrier schema of its own.
+                "_prompt_source": "self",
             })
             if len(self.turns) > TIMELINE_MAX:
                 removed = len(self.turns) - TIMELINE_MAX
@@ -2516,6 +2559,8 @@ class ViewProjection:
         self, role: str, text: str, message_id: str | None, cursor: int,
         received_at: float | None, client_message_id: str | None = None,
         *, from_prompt: bool = False,
+        prompt_source: str | None = None,
+        prompt_carrier: str | None = None,
     ) -> None:
         if message_id is not None:
             for message in reversed(self.messages):
@@ -2545,6 +2590,12 @@ class ViewProjection:
         }
         if client_message_id is not None:
             message["clientMessageId"] = client_message_id
+        if from_prompt:
+            # Issue #387: internal on the row; :meth:`snapshot` publishes the
+            # snake_case view fields conditionally.
+            message["_prompt_source"] = prompt_source or "delegator"
+            if prompt_carrier is not None:
+                message["_prompt_carrier"] = prompt_carrier
         self.messages.append(message)
         self._open_message = message
         if from_prompt:
@@ -2592,26 +2643,46 @@ class ViewProjection:
 
     def snapshot(self) -> dict[str, Any]:
         with self.lock:
-            return copy.deepcopy({
-                "messages": self.messages,
+            # Issue #387: source and carrier are internal row facts. The public
+            # snapshot publishes ``prompt_source``/``carrier`` on a prompt user
+            # row and ``source``/``carrier`` on a turn row, and never the
+            # underscore keys. Other rows omit them, so the old shape stays.
+            messages = copy.deepcopy(self.messages)
+            for row in messages:
+                source = row.pop("_prompt_source", None)
+                carrier = row.pop("_prompt_carrier", None)
+                if source is not None:
+                    row["prompt_source"] = source
+                if carrier is not None:
+                    row["carrier"] = carrier
+            turns = copy.deepcopy(self.turns)
+            for row in turns:
+                source = row.pop("_prompt_source", None)
+                carrier = row.pop("_prompt_carrier", None)
+                if source is not None:
+                    row["source"] = source
+                if carrier is not None:
+                    row["carrier"] = carrier
+            return {
+                "messages": messages,
                 "messages_dropped": self.messages_dropped,
                 "messages_timeline_dropped": self.messages_timeline_dropped,
                 "thinking_chars": self.thinking_chars,
                 "thinking_text": self.thinking_text,
                 "thinking_message_id": self.thinking_message_id,
-                "tools": [self.tools[tid] for tid in self.tool_order],
-                "tool_cursors": self.tool_cursors,
-                "plan": self.plan,
-                "mode": self.mode,
-                "commands": self.commands,
-                "usage": self.usage,
-                "turns": self.turns,
+                "tools": copy.deepcopy([self.tools[tid] for tid in self.tool_order]),
+                "tool_cursors": copy.deepcopy(self.tool_cursors),
+                "plan": copy.deepcopy(self.plan),
+                "mode": copy.deepcopy(self.mode),
+                "commands": copy.deepcopy(self.commands),
+                "usage": copy.deepcopy(self.usage),
+                "turns": turns,
                 "turns_dropped": self.turns_dropped,
                 "turns_dropped_count": self.turns_dropped_count,
-                "answered_permissions": self.answered_permissions,
+                "answered_permissions": copy.deepcopy(self.answered_permissions),
                 "answered_dropped": self.answered_dropped,
                 "answered_dropped_count": self.answered_dropped_count,
-            })
+            }
 
 
 def follow_error_event(code: str, message: str) -> dict[str, Any]:
@@ -4353,6 +4424,8 @@ class Holder:
                     "transport": "acp",
                     "mutation_status": "in_progress",
                     "stop_reason": None,
+                    # Issue #387: this continuation is holder-internal work.
+                    "source": "self",
                 }
                 # A continuation is still that same last prompt for the restart
                 # check; it adds no new client id of its own.
@@ -4614,7 +4687,13 @@ class Holder:
             turn["ended_at"] = round(time.time(), 3)
             ended: dict[str, Any] = {"kind": "turn_ended", "outcome": outcome,
                                      "stop_reason": turn.get("stop_reason"),
-                                     "prompt_fingerprint": turn.get("fingerprint")}
+                                     "prompt_fingerprint": turn.get("fingerprint"),
+                                     # Issue #387: every turn names the source
+                                     # its admission recorded, matching the
+                                     # agent-initiated precedent (#341). The
+                                     # carrier schema stays on the view row.
+                                     "prompt_source": normalize_prompt_source(
+                                         turn.get("prompt_source"))}
             if outcome != "turn_failed":
                 failure = None
             elif pre_outcome == "turn_failed" and pre_error == current_error:
@@ -4635,6 +4714,9 @@ class Holder:
                 "transport": "acp",
                 "mutation_status": turn["mutation_status"],
                 "stop_reason": turn["stop_reason"],
+                # Issue #387: survives a holder reconnect even when the
+                # in-memory view projection starts empty.
+                "source": normalize_prompt_source(turn.get("prompt_source")),
             }
             # Issue #380: the client id belongs to this prompt's lifetime; keep it
             # on the record so a post-restart resend can be recognized.
@@ -4709,6 +4791,7 @@ class Holder:
                     "transport": "acp",
                     "mutation_status": turn["mutation_status"],
                     "stop_reason": None,
+                    "source": normalize_prompt_source(turn.get("prompt_source")),
                 }
                 if turn.get("client_message_id") is not None:
                     self.last_prompt["client_message_id"] = turn["client_message_id"]
@@ -4966,7 +5049,8 @@ class Holder:
             # has a cursor strictly greater than this one.
             dispatch_cursor = self.events.cursor
             previous = self.last_prompt or {}
-            source = params.get("_prompt_source")
+            source = normalize_prompt_source(params.get("_prompt_source"))
+            carrier = normalize_prompt_carrier(params.get("_prompt_carrier"))
             # Issue #381: build the whole turn locally, write the frame, and
             # only then publish it with active=True. A view can therefore never
             # see active=true with written_at/started_at still unset. The
@@ -4976,9 +5060,10 @@ class Holder:
             turn.update({
                 "fingerprint": fingerprint,
                 "started_at": time.monotonic(),
-                # Socket prompts cannot set this: handle_request strips it.
-                # Only holder-internal admissions pass "self".
-                "prompt_source": "self" if source == "self" else "delegator",
+                # Socket prompts cannot set this: handle_request strips both
+                # internal keys. Only holder-internal admissions pass "self"
+                # and a carrier schema id.
+                "prompt_source": source,
                 # Issue #392: is anyone taking this turn's result? A
                 # ``send --wait`` caller is; ``--no-wait`` and a steer
                 # admission are not.
@@ -5020,6 +5105,10 @@ class Holder:
                         "transport": "acp",
                         "mutation_status": "not_started",
                         "stop_reason": None,
+                        # Issue #387: the attempted prompt still names its owner;
+                        # an unwritten frame leaves the turn unstarted, not the
+                        # source unknown.
+                        "source": source,
                     }
                 self.write_record()
                 failed = {"outcome": "turn_failed", "mutation_status": "not_started",
@@ -5074,12 +5163,15 @@ class Holder:
                     "transport": "acp",
                     "mutation_status": "in_progress",
                     "stop_reason": None,
+                    # Issue #387: one durable line survives a reconnect even
+                    # though the in-memory projection does not.
+                    "source": source,
                 }
                 if client_message_id is not None:
                     self.last_prompt["client_message_id"] = client_message_id
                 self.projection.add_user_from_prompt(
                     text, start_cursor, turn["written_at"], client_message_id,
-                    prompt_fingerprint=fingerprint)
+                    prompt_fingerprint=fingerprint, source=source, carrier=carrier)
                 if end_cursor is not None:
                     self.projection.end_turn(turn["ended_at"], end_cursor,
                                              "process_exited", None)
@@ -5248,6 +5340,8 @@ class Holder:
                     "transport": "acp",
                     "mutation_status": "completed",
                     "stop_reason": stop,
+                    # Issue #387: the synthetic turn end keeps its source.
+                    "source": "self",
                 }
                 if previous.get("client_message_id") is not None:
                     self.last_prompt["client_message_id"] = previous["client_message_id"]
@@ -6010,7 +6104,7 @@ class Holder:
                         "then run one full pass.")
         lines = [
             self.host_entry,
-            f"kaola-host-notify/1: event-driven heartbeat carrier ({self.host_name} Host)",
+            f"{HOST_NOTIFY_SCHEMA}: event-driven heartbeat carrier ({self.host_name} Host)",
             "worker events (structured, one JSON object per line):",
         ]
         for event in events:
@@ -6069,7 +6163,7 @@ class Holder:
         payload, even when an older start armed it with a Host entry. The
         staged event lines are the whole prompt; no Host heartbeat body or
         one-pass Project Runner instruction is appended."""
-        lines = [f"kaola-worker-notify/1: {self.args.platform} session {self.args.session}",
+        lines = [f"{WORKER_NOTIFY_SCHEMA}: {self.args.platform} session {self.args.session}",
                  "worker events (structured, one JSON object per line):"]
         for event in events:
             lines.append(json.dumps(
@@ -8050,9 +8144,14 @@ class Holder:
             # handed it an entry; the staged lines are the whole prompt and no
             # heartbeat body or one-pass Project Runner instruction rides them.
             carrier = self.host_entry and self.session_role == "host"
+            # Issue #387: the payload's own first-line schema is the carrier id
+            # the view stores beside this self prompt.
+            carrier_schema = HOST_NOTIFY_SCHEMA if carrier else WORKER_NOTIFY_SCHEMA
             text, meta = (self._heartbeat_payload(staged, overflow_ready) if carrier
                           else self._worker_notice_payload(staged, overflow_ready))
-            prompt = self.op_prompt({"text": text, "wait": False, "_prompt_source": "self"})
+            prompt = self.op_prompt({"text": text, "wait": False,
+                                     "_prompt_source": "self",
+                                     "_prompt_carrier": carrier_schema})
             error = prompt.get("error")
             if error or prompt.get("outcome") != "in_progress":
                 # Nothing was marked, so there is nothing to undo: the events
@@ -8635,7 +8734,7 @@ class Holder:
             return None
         previous = {key: last.get(key) for key in
                     ("fingerprint", "written_at", "transport", "mutation_status",
-                     "stop_reason") if key in last}
+                     "stop_reason", "source") if key in last}
         previous["client_message_id"] = client_message_id
         return {
             "outcome": "client_message_id_restart_unknown",
@@ -9376,6 +9475,11 @@ class Holder:
         # Agent's text verbatim. This send opens a NEW turn; the composite
         # path is not a Host recovery entry (Issue #94) and adds no native
         # Skill entry line - the caller supplies it when wanted.
+        #
+        # Issue #387: the resend is the Delegator's next prompt, whatever the
+        # cancelled turn's source was. Never copy the target turn's
+        # prompt_source or carrier id into this follow-up: interrupting a self
+        # carrier turn must not relabel the Agent's text as holder-internal.
         follow: dict[str, Any] = {
             "text": text, "wait": False,
             "expected_holder_instance_id": self.holder_instance_id,
@@ -10266,9 +10370,12 @@ class Holder:
             # A socket client must not claim the prompt was holder-internal.
             # That claim is what suppresses a Delegator wake. Issue #380: the
             # same applies to the internal "already registered" marker.
+            # Issue #387: a socket client cannot attach a carrier schema to
+            # what it sends, so both prompt provenance internals are stripped.
             if isinstance(params, dict):
                 params = dict(params)
                 params.pop("_prompt_source", None)
+                params.pop("_prompt_carrier", None)
                 params.pop("_client_message_id_registered", None)
             return self.op_prompt(params)
         if op == "steer":
@@ -10276,10 +10383,16 @@ class Holder:
             if isinstance(params, dict):
                 params = dict(params)
                 params.pop("_steer_source", None)
+                params.pop("_prompt_source", None)
+                params.pop("_prompt_carrier", None)
             return self.op_steer(params)
         if op == "steer_interrupt":
+            # Issue #380/#387: the composite accepts no internal ownership or
+            # carrier marker from a socket caller either.
             if isinstance(params, dict):
                 params = dict(params)
+                params.pop("_prompt_source", None)
+                params.pop("_prompt_carrier", None)
                 params.pop("_client_message_id_registered", None)
             return self.op_steer_interrupt(params)
         if op == "wait":

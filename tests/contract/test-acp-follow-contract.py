@@ -102,6 +102,20 @@ def assert_shape(test: unittest.TestCase, sample: Any, actual: Any, path: str) -
                 assert_shape(test, sample[0], item, f"{path}[{index}]")
 
 
+def sample_without_row_provenance(sample: dict) -> dict:
+    """Issue #387: prompt_source/carrier are optional per-message facts.
+
+    A snapshot/delta reuses the same view payload, so the whole-view shape walk
+    keeps the common message shape and the prompt row's own fields are pinned
+    by test-acp-watch-contract and test-issue-387-prompt-source.
+    """
+    trimmed = json.loads(json.dumps(sample))
+    for row in trimmed.get("messages") or []:
+        row.pop("prompt_source", None)
+        row.pop("carrier", None)
+    return trimmed
+
+
 def follow_view_payload(event: dict) -> dict:
     if event.get("schema") == "kaola-acp-view/1":
         return event
@@ -594,7 +608,8 @@ class AcpFollowContractTests(unittest.TestCase):
             self.assertEqual(payload.get("schema"), "kaola-acp-view/1", payload)
             # Nothing is answered yet; test-acp-watch-contract pins that entry's shape.
             sample = {k: v for k, v in self.sample.items() if k != "answered_permissions"}
-            assert_shape(self, sample, payload, "follow.view")
+            assert_shape(self, sample_without_row_provenance(sample), payload,
+                         "follow.view")
             self.assertEqual(payload.get("answered_permissions"), [], payload)
 
     def test_follow_fd_prompt_permit_is_error_without_agent_stdin(self) -> None:

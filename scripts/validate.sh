@@ -324,6 +324,7 @@ python_suites_all=(
   "test-issue-381-view-snapshot.py"
   "test-issue-384-view-disclosure.py"
   "test-issue-385-view-echo-dedupe.py"
+  "test-issue-387-prompt-source.py"
   "test-issue-267-rejection-count.py"
   "test-issue-268-selection-continuity.py"
   "test-issue-273-list-identity.py"
@@ -539,6 +540,7 @@ python_suites_b=(
   "test-issue-381-view-snapshot.py"
   "test-issue-384-view-disclosure.py"
   "test-issue-385-view-echo-dedupe.py"
+  "test-issue-387-prompt-source.py"
   "test-issue-386-git-facts.py"
   "test-issue-359-record-loss.py")
 

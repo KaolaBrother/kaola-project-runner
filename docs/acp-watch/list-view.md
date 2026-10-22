@@ -142,7 +142,7 @@ Kaola Terminal 可直接读 list 行（本仓库不改 Terminal）：
 | `messages_dropped` | int；`messages[]` 中因 timeline/字节 cap 省略的消息行数；重启丢失为未知数，不计入该值，见 `truncation.rows.messages.restart` |
 | `earliest_cursor` | int \| null；返回的 `messages[]` 最早 cursor；空数组为 `null` |
 | `truncation` | 对象；`event_log: {gap, reason, oldest_cursor}` 与 `rows: {missing, reason, messages, tools, turns, answered_permissions}`；`messages` 含 `{kept, timeline: {dropped, reason}, bytes: {dropped, reason}, restart: {dropped, reason, boundary_cursor}}` |
-| `messages` | **数组**，按时间序：`{role: "user"\|"assistant", text: string, messageId: string\|null, cursor: int, received_at: float\|null}`；同 `messageId` 的 chunk 已拼接成一条。`received_at` 是首个 chunk 的 holder 收到时间（Unix 秒，毫秒精度），与该 chunk 在 `events.jsonl` 的 `ts` 相同；holder 自己写出的 `prompt` 消息没有事件日志行，为 `null`（其时间见所属回合的 `started_at`）。`user_message_chunk` 若是当前 prompt 的 echo（空白规范化指纹相同，带不带 `messageId` 都一样）不产生行；prompt 行不会被任何 chunk 拼接（Issue #385） |
+| `messages` | **数组**，按时间序：`{role: "user"\|"assistant", text: string, messageId: string\|null, cursor: int, received_at: float\|null}`；同 `messageId` 的 chunk 已拼接成一条。`received_at` 是首个 chunk 的 holder 收到时间（Unix 秒，毫秒精度），与该 chunk 在 `events.jsonl` 的 `ts` 相同；holder 自己写出的 `prompt` 消息没有事件日志行，为 `null`（其时间见所属回合的 `started_at`）。`user_message_chunk` 若是当前 prompt 的 echo（空白规范化指纹相同，带不带 `messageId` 都一样）不产生行；prompt 行不会被任何 chunk 拼接（Issue #385）。Issue #387：只有 prompt 自己的 user 行带 `prompt_source: "delegator"\|"self"`；carrier prompt 另有 `carrier: string`（schema id，如 `kaola-host-notify/1`），未知名则省略。其它行两者都不出现；内部下划线键永不序列化 |
 | `thinking` | `{chars: int, text_tail: string, messageId: string\|null}`；L0 仍只见 `thinking_chars` |
 | `tools` | **数组**，按首次出现序，`toolCallId` 唯一：`{toolCallId: string, title: string\|null, kind: string\|null, status: string\|null, locations: [{path: string, line: int\|null}], content: [ContentItem], truncated: bool}` |
 | `plan` | `{entries: [{content: string, priority: string\|null, status: string\|null}]}` \| `null`；每次 `sessionUpdate: plan` **整表替换**，禁止合并；从未发过 plan 则 `null` |
@@ -152,7 +152,7 @@ Kaola Terminal 可直接读 list 行（本仓库不改 Terminal）：
 | `commands` | `[{name: string, description: string\|null}]` \| `null` |
 | `usage` | `{used: int, size: int}` \| `null`（Grok 常不报） |
 | `turn` | `{mutation_status: string, outcome: string\|null, stop_reason: string\|null, active: bool, started_at: float\|null, ended_at: float\|null}`；`started_at` 是 holder 写出 `session/prompt` 帧的时间（record 的 `last_prompt.written_at`），`ended_at` 是 `turn_ended`（或 agent 退出时的 `process_exited`）事件的 `ts`；进行中为 `null` |
-| `turns` | 数组，按开始序，最多 200 条：本 holder 进程内每个已写出的 prompt 回合 `{started_at: float, ended_at: float\|null, outcome: string\|null, stop_reason: string\|null, start_cursor: int, end_cursor: int\|null}`。时间同 `turn`；`start_cursor` 等于该回合 prompt 消息的 `cursor`，`end_cursor` 是结束事件的 cursor。`cursor` 落在 `[start_cursor, end_cursor]` 内的消息属于该回合，客户端可据此显示每回合耗时 |
+| `turns` | 数组，按开始序，最多 200 条：本 holder 进程内每个已写出的 prompt 回合 `{started_at: float, ended_at: float\|null, outcome: string\|null, stop_reason: string\|null, start_cursor: int, end_cursor: int\|null, source: "delegator"\|"self"}`。Issue #387：`source` 是该回合 prompt 的来源；carrier 回合另有可选 `carrier: string`（schema id），未知则省略。时间同 `turn`；`start_cursor` 等于该回合 prompt 消息的 `cursor`，`end_cursor` 是结束事件的 cursor。`cursor` 落在 `[start_cursor, end_cursor]` 内的消息属于该回合，客户端可据此显示每回合耗时 |
 | `unparsed_update_count` | int；未知 `session/update` 变体计数，不当控件 |
 
 `ContentItem` 三选一：
@@ -201,7 +201,7 @@ Kaola Terminal 可直接读 list 行（本仓库不改 Terminal）：
     }
   },
   "messages": [
-    {"role": "user", "text": "Fix the login redirect loop.", "messageId": null, "cursor": 12, "received_at": null},
+    {"role": "user", "text": "Fix the login redirect loop.", "messageId": null, "cursor": 12, "received_at": null, "prompt_source": "delegator"},
     {"role": "assistant", "text": "I'll start by reading the auth middleware.", "messageId": "m1", "cursor": 40, "received_at": 1759630930.204}
   ],
   "thinking": {"chars": 1532, "text_tail": "…the cookie is cleared before redirect.", "messageId": "m1"},
@@ -253,15 +253,26 @@ Kaola Terminal 可直接读 list 行（本仓库不改 Terminal）：
   "usage": {"used": 38211, "size": 262144},
   "turn": {"mutation_status": "clean", "outcome": null, "stop_reason": null, "active": true, "started_at": 1759630905.117, "ended_at": null},
   "turns": [
-    {"started_at": 1759630905.117, "ended_at": null, "outcome": null, "stop_reason": null, "start_cursor": 12, "end_cursor": null}
+    {"started_at": 1759630905.117, "ended_at": null, "outcome": null, "stop_reason": null, "start_cursor": 12, "end_cursor": null, "source": "delegator"}
   ],
   "unparsed_update_count": 0
 }
 ```
 
-该样例以文件形式冻结在 `tests/contract/fixtures/kaola-acp-view-1.sample.json`，合同测试必须断言真实 `view` 输出与样例**键集合与类型**一致；Kaola Terminal 把同一文件拷进测试 bundle 作为解码 fixture。
+该样例以文件形式冻结在 `tests/contract/fixtures/kaola-acp-view-1.sample.json`，合同测试必须断言真实 `view` 输出与样例**键集合与类型**一致；Issue #387 的 `prompt_source`/`carrier` 只是 prompt 行与 turn 行的可选字段，整体 shape 先比较公共键，prompt 行与其 turn 行另行断言。Kaola Terminal 把同一文件拷进测试 bundle 作为解码 fixture。
 
 上限（超限置 `truncated=true` 并**实际裁剪**，不报错）：thinking 只保留 8KiB 尾巴；单工具 content 裁到 32KiB（整项保留，首个溢出项截断 text/newText）——这两类内容截短仍只由旧 `truncated` 表达，两个新 bool 不覆盖；timeline、`turns`、`answered_permissions` 各只保留最近 200 条；整 view 超过 256KiB 时依次丢最旧的工具卡、消息、许可应答、回合。每次裁剪按类记入 `truncation`：`messages.timeline` / `messages.bytes` / `messages.restart`，以及 `tools` / `turns` / `answered_permissions` 的 `dropped`；`messages_dropped` 为消息两类实际丢失数之和。时间字段只来自 holder 自己的时钟（ACP 不带时间戳），投影只存在于 holder 进程内存，holder 重启后从空开始；`truncation.rows.messages.restart.boundary_cursor` 记录重启时恢复的事件 cursor。新 holder 无历史时 `restart.dropped=0` 且 `boundary_cursor=null`；只有构造时恢复到正的历史 cursor 才为 `null`：prompt admission 没有完整 prompt 文本或统一的 prompt-turn-start 重建证据（部分 agent-initiated 回合确有 `turn_started`），精确丢失行数不可知，且本次不做 replay。没有 `messageId` 的 chunk（Grok 实测全部如此）按同角色连续拼接，直到 tool_call、新 prompt 或回合结束为止；prompt 自己那一行是唯一例外，见下节。
+
+### Prompt 来源（Issue #387）
+
+`messages[]` 的 prompt user 行和对应 `turns[]` 行保留 prompt 的来源，客户端无需读文本前缀即可区分 Delegator 与 holder 自己写出的 prompt：
+
+- `messages[].prompt_source` / `turns[].source` ∈ `delegator` | `self`。Delegator 的 `send`、socket `prompt`/`steer` 默认 `delegator`；holder 内部的 worker-event carrier、compact reload/notice 以及 agent-initiated 续回合为 `self`。非 prompt 的 user/assistant 行不带该键。
+- carrier prompt（`kaola-host-notify/1` / `kaola-worker-notify/1`）在 user 行与 turn 行额外带 `carrier`（schema id）；没有已知 carrier 时该键省略。
+- `turn_ended` 事件带同一 `prompt_source`，与 #341 agent-initiated 事件的既有字段一致。
+- `record.json` 的 `last_prompt.source` 保存最近一次 admission 的来源；holder 重启后 projection 为空，重连客户端读该行仍可判断。旧记录没有该键时为未知，不推断。
+- socket 入口剥掉内部 `_prompt_source` / `_prompt_carrier`，客户端不能伪造 holder 内部来源；`steer_interrupt` 的 follow-up 永远按 Delegator 的新 prompt 记录，不继承被取消 turn 的来源或 carrier。
+- schema 名仍为 `kaola-acp-view/1`；这些都是 additive optional 字段。
 
 ### 用户 echo 去重（Issue #385）
 
