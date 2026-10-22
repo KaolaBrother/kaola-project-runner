@@ -441,10 +441,16 @@ class PromptVerb(unittest.TestCase):
         api = (REPO / "docs" / "api.md").read_text(encoding="utf-8")
         self.assertEqual(api.count(DECISION_SENTENCE), 1)
         changelog = (REPO / "CHANGELOG.md").read_text(encoding="utf-8")
-        unreleased, _, _ = changelog.partition("## 0.9.18")
-        self.assertIn("## Unreleased", unreleased)
-        self.assertIn("#349", unreleased)
-        self.assertIn("Seats: restart required", unreleased)
+        # #349 is shipped history: anchor on the entry itself and the dated release
+        # section that carries it, never on whatever heading is current, so a later
+        # release-notes cycle cannot re-break this assertion (#402).
+        entry = ("- **A wrong verb on an unchanged Host-owned checkpoint input "
+                 "settles as retained (#349).**")
+        carrying = [part for part in changelog.split("\n## ") if entry in part]
+        self.assertEqual(len(carrying), 1, "the #349 entry has one release section")
+        heading, _, section = carrying[0].partition("\n")
+        self.assertRegex(heading, r"^\d+\.\d+\.\d+\b", heading)
+        self.assertIn("Seats: restart required", section)
 
 
 if __name__ == "__main__":
