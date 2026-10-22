@@ -2,9 +2,9 @@
 - format: kpm.workflow-doc-docking/1.0
 - issue: 405
 - candidate: 86a42506967753bdebee74d61cc32e766bbd1dde
-- checked_by: host (independent review pending)
-- checked_at: <pending>
-- verdict: pending
+- checked_by: host
+- checked_at: 2026-10-23T07:45:00Z
+- verdict: docked
 
 ## Impact
 - CHANGELOG.md | `## Unreleased` gains a `Fixes #405` clause in the fixes line and one bullet recording the wait-decoupling across the holder-timing suites and the gate recovery route
@@ -13,4 +13,7 @@
 - README.md / docs/api.md | no change: no command surface, schema or architecture fact moved
 
 ## Docking
-<pending acceptor>
+- CHANGELOG.md | updated — `Fixes #405` clause and bullet present in `## Unreleased`; Host review repair corrected the wording (watchdog scope is the probed surfaces only, socket traffic is not probed)
+- docs/conventions.md | updated — recovery-route paragraph present; corrected watchdog scope wording applied in the repair round
+- scripts/validate.sh | updated — `--help` usage carries the recovery route
+- README.md / docs/api.md | no-impact — no command surface, schema or architecture fact moved; confirmed by the repair round's scope
