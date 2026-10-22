@@ -225,31 +225,38 @@ wait_for = issue302.wait_for
 host_view = issue302.host_view
 
 
-def _deliver_children(repo_realpath: str) -> tuple:
-    """(pid, cputime) for live ``delegator-webhook deliver`` children whose
-    cwd is this fixture's repo — the wake delivery's mid-flight observable
-    (Issue #405). Other suites' children share the argv but not the cwd."""
+def _fixture_processes(root_strs: tuple, repo_realpath: str) -> tuple:
+    """(pid, cputime) for the live producer processes of this fixture —
+    the holder (argv carries ``kaola-acp-holder`` plus the record-dir/repo
+    path under root in either symlink form; the test's own ``acp`` CLIs are
+    excluded), and the mock agent plus the wake ``deliver`` child, matched
+    by ``cwd`` because their argv carries no fixture path. CPU is the
+    mid-flight progress surface: a working chain advances it, a wedged one
+    stays flat, a dead one disappears (Issue #405). Other runs' holders
+    share the argv shape but neither the record-dir path nor the cwd."""
     try:
         out = subprocess.run(["ps", "-eo", "pid=,time=,args="],
                              capture_output=True, text=True, timeout=5).stdout
     except (OSError, subprocess.SubprocessError):
         return ()
-    children = []
+    found = []
     for line in out.splitlines():
-        if "delegator-webhook deliver" not in line:
-            continue
         parts = line.split(None, 2)
         if len(parts) < 2 or not parts[0].isdigit():
+            continue
+        if "kaola-acp-holder" in line and any(root in line for root in root_strs):
+            found.append((int(parts[0]), parts[1]))
+            continue
+        if "delegator-webhook deliver" not in line and "--mock-agent" not in line:
             continue
         try:
             cwd = subprocess.run(["lsof", "-a", "-p", parts[0], "-d", "cwd", "-Fn"],
                                  capture_output=True, text=True, timeout=5).stdout
         except (OSError, subprocess.SubprocessError):
             continue
-        if f"n{repo_realpath}" not in cwd:
-            continue
-        children.append((int(parts[0]), parts[1]))
-    return tuple(sorted(children))
+        if f"n{repo_realpath}" in cwd:
+            found.append((int(parts[0]), parts[1]))
+    return tuple(sorted(found))
 
 
 class AgentInitiatedTurnTest(unittest.TestCase):
@@ -284,14 +291,15 @@ class AgentInitiatedTurnTest(unittest.TestCase):
         under the sandbox root (holder ``record.json``/``events.jsonl``,
         webhook receipts, the heartbeat prompt, endpoint-facing state) plus
         the in-process endpoint post count — and, at most once a second, the
-        live wake ``deliver`` children for this fixture's repo.
+        fixture's live producer processes.
 
-        The deliver child is a spawned ``kaola-acp.py delegator-webhook
-        deliver`` whose only fixture-visible writes (the POST, the receipt)
-        appear at completion; under load its interpreter boot and module
-        init can exceed the stall budget while it writes nothing. Its (pid,
-        CPU) pair is the only mid-flight progress surface — a working child
-        advances CPU, a hung one does not, a dead one disappears."""
+        The chain's hops are separate processes — the mock agent, the holder
+        and the spawned ``delegator-webhook deliver`` child — whose only
+        fixture-visible writes (record.json rewrites, the POST, the receipt)
+        appear at hop ends; under load an interpreter boot or a slow relay
+        can exceed the stall budget while it writes nothing. Their (pid,
+        CPU) pairs are the mid-flight progress surface — a working chain
+        advances CPU, a wedged one does not, a dead one disappears."""
         signature: list = [len(self.endpoint.posts) if self.endpoint else 0]
         if self.root.is_dir():
             for path in sorted(self.root.rglob("*")):
@@ -303,7 +311,8 @@ class AgentInitiatedTurnTest(unittest.TestCase):
         now = time.monotonic()
         if now - getattr(self, "_probe_ps_at", 0.0) >= 1.0:
             self._probe_ps_at = now
-            self._probe_ps = _deliver_children(self.project)
+            self._probe_ps = _fixture_processes(
+                (str(self.root), str(Path(self.project).parent)), self.project)
         signature.append(getattr(self, "_probe_ps", ()))
         return tuple(signature)
 
