@@ -545,6 +545,8 @@ def test_terminated_event_delivers_full_body_and_confirms() -> None:
         def sandbox_signature() -> tuple:
             seen = []
             for path in sorted(sandbox.dir.rglob("*")):
+                if ".git" in path.parts:
+                    continue
                 try:
                     st = path.stat()
                 except OSError:

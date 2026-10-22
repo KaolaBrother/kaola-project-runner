@@ -78,10 +78,12 @@ standalone rerun through the same controlled entry —
 `./scripts/validate.sh --suite <inventory-basename>` — on the same tree. Keep both
 receipts: the gate log line and the standalone result. The rerun is a receipt for a
 load flake, not a substitute for the gate; a suite that also fails standalone is a real
-failure. Timing waits inside the holder suites synchronize on observable conditions and
-their numeric budgets are stall watchdogs reset by observable progress (file/event/socket
-surfaces), not wall-clock windows the event must fit inside; the per-suite watchdog
-semantics are unchanged.
+failure. Timing waits inside the holder suites synchronize on observable conditions;
+where a progress probe exists its numeric budget is a stall watchdog reset by changes
+on the probed surfaces — fixture file writes outside `.git`, in-process counters, and
+the fixture's live producer processes (long-lived ones by pid, short-lived spawns by
+pid+CPU) — not a wall-clock window the event must fit inside; socket traffic is not a
+probed surface. The per-suite watchdog semantics are unchanged.
 
 ## Progressive disclosure
 

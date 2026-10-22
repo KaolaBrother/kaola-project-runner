@@ -326,9 +326,13 @@ class Sandbox:
         """The sandbox's observable signature for stall detection (Issue
         #405): every file under this sandbox — record dirs' ``record.json``
         / ``events.jsonl``, the fake app-server rpc logs and records, the
-        repo's ``.kaola`` — by path, size and mtime."""
+        repo's ``.kaola`` — by path, size and mtime. The ``.git`` subtree is
+        excluded: fixture commands refresh its index continuously, so it
+        would report ambient churn as progress (Issue #405 repair)."""
         signature: list = []
         for path in sorted(self.dir.rglob("*")):
+            if ".git" in path.parts:
+                continue
             try:
                 st = path.stat()
             except OSError:

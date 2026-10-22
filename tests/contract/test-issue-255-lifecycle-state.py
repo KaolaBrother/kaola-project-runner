@@ -58,6 +58,8 @@ def _wait_signature(root: Path, extra: tuple = ()) -> tuple:
     signature: list = []
     if root.is_dir():
         for path in sorted(root.rglob("*")):
+            if ".git" in path.parts:
+                continue
             try:
                 st = path.stat()
             except OSError:

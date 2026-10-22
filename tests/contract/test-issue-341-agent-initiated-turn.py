@@ -225,37 +225,41 @@ wait_for = issue302.wait_for
 host_view = issue302.host_view
 
 
-def _fixture_processes(root_strs: tuple, repo_realpath: str) -> tuple:
-    """(pid, cputime) for the live producer processes of this fixture —
-    the holder (argv carries ``kaola-acp-holder`` plus the record-dir/repo
-    path under root in either symlink form; the test's own ``acp`` CLIs are
-    excluded), and the mock agent plus the wake ``deliver`` child, matched
-    by ``cwd`` because their argv carries no fixture path. CPU is the
-    mid-flight progress surface: a working chain advances it, a wedged one
-    stays flat, a dead one disappears (Issue #405). Other runs' holders
-    share the argv shape but neither the record-dir path nor the cwd."""
+def _fixture_processes(root_strs: tuple) -> tuple:
+    """The live producer processes of this fixture, as a progress surface.
+
+    The holder is matched by argv (``kaola-acp-holder`` plus a fixture-root
+    path in either symlink form; the test's own ``acp`` CLIs are excluded).
+    Everything the holder spawns — its long-lived mock agent, the
+    short-lived ``delegator-webhook deliver`` child, and its ``run_ps``
+    scan children — shares ``ppid == holder pid``. Long-lived processes
+    (holder, mock agent) contribute only their ``pid``: their poll loops
+    tick CPU slowly forever, so pid+CPU would report liveness as progress;
+    a dead or respawned one still changes the pid. Short-lived children
+    keep ``(pid, cputime)``: each exists only while a hop is in flight —
+    the wake decision's ``holders_dispatched_by`` ps scan included — and
+    its CPU is the mid-flight progress surface: a working child advances
+    it, a wedged one stays flat, a dead one disappears (Issue #405
+    repair)."""
     try:
-        out = subprocess.run(["ps", "-eo", "pid=,time=,args="],
+        out = subprocess.run(["ps", "-eo", "pid=,ppid=,time=,args="],
                              capture_output=True, text=True, timeout=5).stdout
     except (OSError, subprocess.SubprocessError):
         return ()
-    found = []
+    rows = []
     for line in out.splitlines():
-        parts = line.split(None, 2)
-        if len(parts) < 2 or not parts[0].isdigit():
+        parts = line.split(None, 3)
+        if len(parts) < 4 or not parts[0].isdigit() or not parts[1].isdigit():
             continue
-        if "kaola-acp-holder" in line and any(root in line for root in root_strs):
-            found.append((int(parts[0]), parts[1]))
+        rows.append((int(parts[0]), int(parts[1]), parts[2], parts[3]))
+    holder_pids = {pid for pid, _ppid, _time, args in rows
+                   if "kaola-acp-holder" in args
+                   and any(root in args for root in root_strs)}
+    found = [(pid,) for pid in sorted(holder_pids)]
+    for pid, ppid, cputime, args in rows:
+        if ppid not in holder_pids:
             continue
-        if "delegator-webhook deliver" not in line and "--mock-agent" not in line:
-            continue
-        try:
-            cwd = subprocess.run(["lsof", "-a", "-p", parts[0], "-d", "cwd", "-Fn"],
-                                 capture_output=True, text=True, timeout=5).stdout
-        except (OSError, subprocess.SubprocessError):
-            continue
-        if f"n{repo_realpath}" in cwd:
-            found.append((int(parts[0]), parts[1]))
+        found.append((pid,) if "--mock-agent" in args else (pid, cputime))
     return tuple(sorted(found))
 
 
@@ -297,12 +301,18 @@ class AgentInitiatedTurnTest(unittest.TestCase):
         and the spawned ``delegator-webhook deliver`` child — whose only
         fixture-visible writes (record.json rewrites, the POST, the receipt)
         appear at hop ends; under load an interpreter boot or a slow relay
-        can exceed the stall budget while it writes nothing. Their (pid,
-        CPU) pairs are the mid-flight progress surface — a working chain
-        advances CPU, a wedged one does not, a dead one disappears."""
+        can exceed the stall budget while it writes nothing. Long-lived
+        hops contribute only their pid (their idle CPU would fake progress);
+        the short-lived deliver child's (pid, CPU) pair is the mid-flight
+        progress surface — a working child advances CPU, a wedged one does
+        not, a dead one disappears. The ``.git`` subtree is excluded from
+        the file walk: fixture commands refresh its index continuously, so
+        it would report ambient churn as progress (Issue #405 repair)."""
         signature: list = [len(self.endpoint.posts) if self.endpoint else 0]
         if self.root.is_dir():
             for path in sorted(self.root.rglob("*")):
+                if ".git" in path.parts:
+                    continue
                 try:
                     st = path.stat()
                 except OSError:
@@ -312,7 +322,7 @@ class AgentInitiatedTurnTest(unittest.TestCase):
         if now - getattr(self, "_probe_ps_at", 0.0) >= 1.0:
             self._probe_ps_at = now
             self._probe_ps = _fixture_processes(
-                (str(self.root), str(Path(self.project).parent)), self.project)
+                (str(self.root), str(Path(self.project).parent)))
         signature.append(getattr(self, "_probe_ps", ()))
         return tuple(signature)
 
