@@ -192,6 +192,12 @@ class LegacyDecisionEvidence(unittest.TestCase):
             ("empty-string", ""),
             ("empty-list", []),
             ("empty-object", {}),
+            # Leafless containers: a legacy object or array names an answer
+            # only through a nonblank string leaf (review finding 1).
+            ("list-of-null", [None]),
+            ("list-of-empty-object", [{}]),
+            ("object-null-value", {"k": None}),
+            ("object-empty-string-value", {"k": ""}),
         )
         for label, evidence in variants:
             with self.subTest(evidence=label):
