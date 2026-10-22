@@ -20,6 +20,13 @@ resolved), but its blocker now names the working retire command. A pending
 decision, an alert with returned inputs, a live task, and a hold have no
 closed shape and stay on the migrate plan, and the #404 migrate-only
 tolerance for a usable legacy freeform evidence container is unchanged.
+
+Review repair: the evidence a retire supplies for a settled decision whose
+stored evidence is unusable attests the owner's original answer, so only the
+Host runs it — other writers are ``host-only`` and the refusal names the
+exact Host command. The migrate blocker also names the row's recorded
+revision when it carries one (``--expect-rev <rev>``), not always the
+explicit zero.
 """
 from __future__ import annotations
 
@@ -237,6 +244,114 @@ class VersionlessDecisionRetire(unittest.TestCase):
                 self.assertEqual(ran, 0, receipt)
                 self.assertEqual(receipt["value"]["evidence"], SUPPLIED)
                 self.assertNotIn(ident, self.doc()["state"].get("decisions") or {})
+
+    def test_decision_retire_with_unusable_stored_evidence_is_host_only(self) -> None:
+        # Review: the supplied evidence attests the owner's original answer,
+        # so only the Host may run this retire; the refusal names the exact
+        # Host command. A rev-bearing settled row in the same shape is the
+        # same gate.
+        idents = []
+        for label, evidence in EVIDENCE_VARIANTS:
+            ident = f"legacy-seat-plan-{label}"
+            self.plant(legacy_decision(evidence=evidence), ident)
+            idents.append(ident)
+        versioned = legacy_decision(evidence=None)
+        versioned["rev"] = 1
+        self.plant(versioned, "versioned-settled")
+        idents.append("versioned-settled")
+
+        for ident in idents:
+            with self.subTest(ident=ident):
+                expect = "1" if ident == "versioned-settled" else "0"
+                before = self.file.read_bytes()
+                code, out = run(["state", "retire", "--file", str(self.file),
+                                 "--writer", "sideagent", "--source", "evt",
+                                 "--kind", "decisions", "--id", ident,
+                                 "--expect-rev", expect, "--evidence", SUPPLIED])
+                self.assertEqual((code, out.get("reason")), (2, "host-only"), out)
+                recovery = out.get("recovery") or ""
+                self.assertIn("the Host runs", recovery)
+                self.assertIn("--writer host", recovery)
+                self.assertIn(f"--kind decisions --id {ident}", recovery)
+                self.assertIn(f"--expect-rev {expect}", recovery)
+                self.assertIn("--evidence ORIGINAL_OWNER_EVIDENCE", recovery)
+                self.assertIn(ident, self.doc()["state"]["decisions"])
+                self.assertEqual(self.file.read_bytes(), before)
+
+                # The named Host route completes with the real evidence.
+                code, out = self.retire("--expect-rev", expect, ident=ident)
+                self.assertEqual((code, out.get("result")), (0, "written"), out)
+                self.assertNotIn(ident, self.doc()["state"]["decisions"])
+
+        # A settled row with usable stored evidence keeps the existing writer
+        # rules: the stored value already carries the owner answer.
+        self.plant(legacy_decision(evidence="owner said plan B"), "usable-settled")
+        code, out = run(["state", "retire", "--file", str(self.file),
+                         "--writer", "sideagent", "--source", "evt",
+                         "--kind", "decisions", "--id", "usable-settled",
+                         "--expect-rev", "0", "--evidence", SUPPLIED])
+        self.assertNotEqual(out.get("reason"), "host-only", out)
+
+        # The literal placeholder the emitted command carries is not evidence.
+        self.plant(legacy_decision(evidence=ABSENT), "placeholder-row")
+        code, out = self.retire("--expect-rev", "0", ident="placeholder-row",
+                                evidence="ORIGINAL_OWNER_EVIDENCE")
+        self.assertEqual((code, out.get("reason")), (2, "invalid-input"), out)
+        self.assertIn("placeholder-row", self.doc()["state"]["decisions"])
+
+    def test_blocker_names_the_recorded_revision_when_the_row_has_one(self) -> None:
+        # #259 exactness: a settled row that already carries a revision names
+        # that revision in the retire command its blocker prints.
+        row = legacy_decision(evidence=ABSENT)
+        row["rev"] = 1
+        self.plant(row, "versioned-settled")
+        for extra in ([], ["--write"]):
+            with self.subTest(extra=extra):
+                before = self.file.read_bytes()
+                code, out = self.migrate(*extra)
+                self.assertEqual((code, out.get("result")), (2, "blocked"), out)
+                blockers = self.blockers_for(out, "versioned-settled")
+                self.assertTrue(blockers, out)
+                text = blockers[0]["detail"]
+                self.assertIn("--id versioned-settled --expect-rev 1", text)
+                self.assertIn("--evidence ORIGINAL_OWNER_EVIDENCE", text)
+                self.assertEqual(self.file.read_bytes(), before)
+        # The named route works at that revision — for the Host only.
+        code, out = run(["state", "retire", "--file", str(self.file),
+                         "--writer", "sideagent", "--source", "evt",
+                         "--kind", "decisions", "--id", "versioned-settled",
+                         "--expect-rev", "1", "--evidence", SUPPLIED])
+        self.assertEqual((code, out.get("reason")), (2, "host-only"), out)
+        code, out = self.retire("--expect-rev", "1", ident="versioned-settled")
+        self.assertEqual((code, out.get("result")), (0, "written"), out)
+
+    def test_migrate_write_succeeds_after_the_dead_end_rows_retire(self) -> None:
+        # The original symptom end to end: while the dead-end rows stay, the
+        # file cannot be written at all; once each named route retires its
+        # row, migrate --write completes and revises what remains.
+        idents = []
+        for label, evidence in EVIDENCE_VARIANTS:
+            ident = f"legacy-seat-plan-{label}"
+            self.plant(legacy_decision(evidence=evidence), ident)
+            idents.append(ident)
+        self.plant(legacy_decision(evidence=ABSENT, status="pending"), "open-question")
+
+        code, out = self.migrate("--write")
+        self.assertEqual((code, out.get("result")), (2, "blocked"), out)
+        self.assertFalse(out.get("writes"), out)
+        for ident in idents:
+            self.assertTrue(self.blockers_for(out, ident), out)
+
+        for ident in idents:
+            with self.subTest(ident=ident):
+                code, out = self.retire("--expect-rev", "0", ident=ident)
+                self.assertEqual((code, out.get("result")), (0, "written"), out)
+
+        code, out = self.migrate("--write")
+        self.assertEqual((code, out.get("result")), (0, "migrated"), out)
+        decisions = self.doc()["state"]["decisions"]
+        self.assertEqual(list(decisions), ["open-question"])
+        self.assertEqual(decisions["open-question"]["rev"], 1)
 
     def test_usable_stored_evidence_is_carried_into_the_command(self) -> None:
         ident = "legacy-seat-plan-usable"

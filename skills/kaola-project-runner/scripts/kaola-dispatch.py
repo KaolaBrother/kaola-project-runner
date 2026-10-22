@@ -7615,6 +7615,25 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
     if not args.evidence:
         raise StateRefusal("evidence-required", "retirement names the evidence that ends the duty",
                            recovery=record_recovery(args, doc, current))
+    if (direct and args.evidence.strip()
+            in ("ORIGINAL_OWNER_EVIDENCE", "ORIGINAL_HANDLED_EVIDENCE")):
+        # The emitted command carries a placeholder the operator replaces;
+        # the literal marker is not the evidence that ends the duty.
+        raise StateRefusal("invalid-input", "pass the actual original evidence, not the "
+                           "ORIGINAL_* placeholder the named command carries", current=current)
+    if (kind == "decisions" and args.writer != "host"
+            and current.get("status") == "settled"
+            and _stored_evidence(current) is None):
+        # #406 review: when the settled row cannot carry it, the evidence a
+        # retire supplies attests the owner's original answer, and only the
+        # Host makes that attestation. Alerts and tasks keep their rules.
+        probe = argparse.Namespace(file=args.file, evidence="ORIGINAL_OWNER_EVIDENCE")
+        raise StateRefusal(
+            "host-only",
+            "only the Host retires a settled decision whose stored evidence is "
+            "unusable — the evidence it names is the owner's original answer",
+            current=current,
+            recovery=f"the Host runs {retire_command(probe, 'decisions', record_id, current)}")
     recovery = (state.get("maintenance") or {}).get("recovery_input") or {}
     if kind == "alerts" and f"recovery#{recovery.get('seq')}" in (current.get("inputs") or {}):
         raise StateRefusal("retire-unmet", "this alert still names the current pending recovery input; "

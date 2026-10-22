@@ -276,7 +276,9 @@ This is a release/update requirement. For the lifecycle state of
   missing, empty, or a leafless container, which `migrate` still refuses to judge — or a
   `tasks` row cancelled or accepted at stage `done`. Such a row retires directly with
   explicit `--expect-rev 0 --evidence` and needs no migration; every other versionless
-  record keeps the migrate repair. A write that still sees an unknown legacy key is refused with `path`,
+  record keeps the migrate repair. When a settled decision's stored evidence is
+  unusable only the Host runs that retire — the supplied evidence attests the
+  owner's original answer — and another writer is `host-only`. A write that still sees an unknown legacy key is refused with `path`,
   `allowed`, and `recovery` that names `state migrate`. A failed write removes `<file>.tmp`.
   The original file stays. A clean repeat stays `current`.
   An accepted-task `--cite` stores a retrievable path. A path is enough when that file exists

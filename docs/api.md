@@ -660,7 +660,10 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   `host` is `writer-mismatch`. `retire` needs `--evidence` and a done or cancelled task, a
   settled decision, or any hold or alert. The record leaves the file. An update
   with its old revision is `record-retired`; a new sourced record uses the normal
-  creation path. No settled tombstone is stored.
+  creation path. No settled tombstone is stored. A settled decision whose stored
+  evidence is unusable retires only by the Host — the supplied evidence attests
+  the owner's original answer; another writer is `host-only` and the refusal names
+  that Host command.
   `retire --kind decisions --id ID --absent --evidence E [--outcome R]` is Host-only, and only
   for a decision id with no current row (an owner closure that was never written as a row).
   The result is a receipt `{kind, id, outcome, absent_at_retire: true, evidence, at, host_revision}`
