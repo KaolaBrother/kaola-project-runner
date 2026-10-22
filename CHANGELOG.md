@@ -4,7 +4,7 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.9.27 — 2026-10-23 (settled decisions with legacy freeform evidence migrate; shared-seat split rows consolidate)
 
 Fixes #404 (vrpai: `state update --section authorization` was refused `authorization.grants: one authoritative row per shared group` while stored grants kept a shared seat group split across rows, and the sanctioned `state migrate` repair then blocked the whole file on `decisions.<id>.evidence` for settled rows carrying legacy freeform evidence).
 
