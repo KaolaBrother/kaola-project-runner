@@ -351,6 +351,16 @@ def _string_list_ok(value: Any) -> bool:
     return isinstance(value, list) and all(isinstance(item, str) for item in value)
 
 
+def _legacy_answer_text(value: Any) -> bool:
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, list):
+        return any(_legacy_answer_text(item) for item in value)
+    if isinstance(value, dict):
+        return any(_legacy_answer_text(item) for item in value.values())
+    return False
+
+
 # A partial checkpoint names each unsettled input with one of these. A longer
 # checkpoint reason is `other`; the detailed text stays on returned_to_host.
 MISSING_SOURCE_REASONS = frozenset({
@@ -1660,10 +1670,19 @@ def cleanup_current(state: dict[str, Any]) -> tuple[list[dict[str, str]], dict[s
         if not isinstance(decision, dict) or decision.get("status") != "settled":
             continue
         evidence = decision.get("evidence")
+        # Issue #404: a pre-tightening row may carry the owner answer as a
+        # legacy freeform object or array. A legacy container names an answer
+        # only through a nonblank string leaf — a container of nulls, blanks
+        # or empty members is no answer — and a row that holds one is removed
+        # exactly like the string case. Missing, null or empty evidence and
+        # a leafless container still block (Unknown is not resolved).
+        # The write path stays closed-shape; this tolerance is migrate-only.
         if (record_type_problem("decisions", decision)
                 or decision.get("owner") not in ("host", "delegator", "user")
                 or not (isinstance(evidence, str) and evidence
-                        or _string_list_ok(evidence) and evidence)):
+                        or _string_list_ok(evidence) and evidence
+                        or isinstance(evidence, (list, dict))
+                        and _legacy_answer_text(evidence))):
             blockers.append(refusal(f"decisions.{ident}.evidence", "original owner answer evidence",
                                     "keep the row visible; resolve it through the current owner decision route. "
                                     "Unknown is not resolved; the file was not written"))
