@@ -387,6 +387,7 @@ python_suites_all=(
   "test-issue-277-kw-readonly-index.py"
   "test-issue-386-git-facts.py"
   "test-issue-275-core-contracts.py"
+  "test-issue-404-legacy-decision-evidence.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -550,7 +551,8 @@ python_suites_b=(
   "test-issue-385-view-echo-dedupe.py"
   "test-issue-387-prompt-source.py"
   "test-issue-386-git-facts.py"
-  "test-issue-359-record-loss.py")
+  "test-issue-359-record-loss.py"
+  "test-issue-404-legacy-decision-evidence.py")
 
 # Selectable shell contract suites: they run serially before the Python lanes.
 shell_suites=(

@@ -1660,10 +1660,15 @@ def cleanup_current(state: dict[str, Any]) -> tuple[list[dict[str, str]], dict[s
         if not isinstance(decision, dict) or decision.get("status") != "settled":
             continue
         evidence = decision.get("evidence")
+        # Issue #404: a pre-tightening row may carry the owner answer as a
+        # legacy freeform object or array. A present, nonempty value is still
+        # original answer evidence for migration, so the settled row is
+        # removed exactly like the string case. Missing, null or empty
+        # evidence is no answer and still blocks (Unknown is not resolved).
+        # The write path stays closed-shape; this tolerance is migrate-only.
         if (record_type_problem("decisions", decision)
                 or decision.get("owner") not in ("host", "delegator", "user")
-                or not (isinstance(evidence, str) and evidence
-                        or _string_list_ok(evidence) and evidence)):
+                or not (isinstance(evidence, (str, list, dict)) and evidence)):
             blockers.append(refusal(f"decisions.{ident}.evidence", "original owner answer evidence",
                                     "keep the row visible; resolve it through the current owner decision route. "
                                     "Unknown is not resolved; the file was not written"))
