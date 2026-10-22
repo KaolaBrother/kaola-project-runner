@@ -156,7 +156,7 @@ def wait_until(predicate, timeout: float, label: str, probe=None) -> None:
     while True:
         value = predicate()
         if value:
-            return
+            return value
         now = time.monotonic()
         if probe is not None:
             current = (probe(), repr(value) if isinstance(
@@ -342,7 +342,7 @@ class Sandbox:
         holders are separate processes whose chain (prompt → permission →
         carrier event → stage/deliver → rpc send) stretches under load but
         keeps writing; a real hang writes nothing."""
-        wait_until(predicate, timeout, label, probe=self.progress)
+        return wait_until(predicate, timeout, label, probe=self.progress)
 
     def record_dir(self, session: str, platform: str = "zcode") -> Path:
         real_repo = os.path.realpath(str(self.repo))
@@ -526,7 +526,12 @@ def test_permission_required_wakes_idle_host_while_turn_active() -> None:
         check(len(rpc_sends(sandbox.rpcs[host])) == 2,
               "exactly one prompt per worker event, still no periodic carrier")
 
-        carrier = carrier_entries(sandbox.record_dir(worker))
+        # The worker holder writes its own heartbeat_carrier_sent receipt;
+        # host-side delivery does not order it — observe it (Issue #405).
+        carrier = sandbox.wait_until(
+            lambda: (lambda c: c if len(c) == 2 else None)(
+                carrier_entries(sandbox.record_dir(worker))),
+            15, "the worker's two carrier receipts are logged")
         kinds = [entry["event_kind"] for entry in carrier]
         check(kinds == ["permission_required", "idle"],
               f"worker carrier sent one permission wake then the idle ({kinds})")
@@ -571,8 +576,12 @@ def test_permission_event_stages_on_busy_host_then_flushes() -> None:
         staged = worker_event_entries(host_dir)
         check(len(staged) == 1 and staged[0]["kind"] == "permission_required",
               f"the staged event is the permission wake ({staged})")
-        carrier = carrier_entries(sandbox.record_dir(worker), "permission_required")
-        check(carrier and carrier[0]["receipt"].get("staged") is True
+        # The worker's own carrier receipt lags the host-side staged event —
+        # observe it instead of reading bare (Issue #405).
+        carrier = sandbox.wait_until(
+            lambda: carrier_entries(sandbox.record_dir(worker), "permission_required"),
+            15, "the worker's carrier receipt is logged")
+        check(carrier[0]["receipt"].get("staged") is True
               and carrier[0]["receipt"].get("delivered") is not True,
               f"the carrier receipt reports staging, not delivery ({carrier[:1]})")
         check(not events_of_kind(host_dir, "worker_event_delivered"),
@@ -657,10 +666,16 @@ def test_droid_worker_wake_is_metadata_only_and_idempotent() -> None:
               "the worker's own bounded receipt keeps the request detail")
 
         worker_dir = sandbox.record_dir(worker, platform="droid")
-        requests = [entry for entry in read_events(worker_dir)
-                    if entry.get("kind") == "request_permission"]
-        check(len(requests) == 2, "the agent's re-sent request is on record")
-        carrier = carrier_entries(worker_dir, "permission_required")
+        # The re-sent request and the worker's carrier receipt are the
+        # worker holder's own writes — observe them (Issue #405).
+        requests = sandbox.wait_until(
+            lambda: (lambda r: r if len(r) == 2 else None)(
+                [entry for entry in read_events(worker_dir)
+                 if entry.get("kind") == "request_permission"]),
+            15, "the agent's re-sent request on the worker record")
+        carrier = sandbox.wait_until(
+            lambda: carrier_entries(worker_dir, "permission_required"),
+            15, "the worker's carrier receipt is logged")
         check(len(carrier) == 1,
               f"a re-sent request id stays ONE permission wake ({len(carrier)})")
         check(len(sandbox.cli("status", session=worker, platform="droid")

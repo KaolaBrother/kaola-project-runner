@@ -136,8 +136,9 @@ def wait_until(predicate, timeout: float, label: str, probe=None) -> None:
     deadline = time.monotonic() + max(6 * timeout, 60.0)
     signature = probe() if probe is not None else None
     while True:
-        if predicate():
-            return
+        value = predicate()
+        if value:
+            return value
         now = time.monotonic()
         if probe is not None:
             current = probe()
