@@ -26,7 +26,12 @@ usage() {
     'A run (no argument or --suite) keeps the controlled HOME/TMPDIR, the' \
     'inherited KAOLA_* scrub, the required render/Skill checks, the per-suite' \
     'watchdog and the exact sweep. A selected run prints that it is a subset' \
-    'and never claims full coverage. --list and --help run no check.'
+    'and never claims full coverage. --list and --help run no check.' \
+    '' \
+    'Recovery route for a suspected load flake: rerun the one failed suite' \
+    'standalone through this same entry (--suite NAME) on the same tree and' \
+    'keep both receipts — the gate log line and the standalone result.' \
+    'Do not answer a flake with more full-gate copies.'
 }
 
 requested_suites=()

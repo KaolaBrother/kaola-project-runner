@@ -67,14 +67,50 @@ MISSED_WAKE_INQUIRY = (
 FINAL_RECEIPT_TEXT = "do not retry a final receipt"
 
 
-def wait_for(predicate, timeout: float, label: str, interval: float = 0.05):
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
+_SNAPSHOT_TYPES = (str, bytes, int, float, bool, list, tuple, dict, set,
+                   frozenset, type(None))
+
+
+def wait_for(predicate, timeout: float, label: str, interval: float = 0.05,
+             probe=None):
+    """Wait until ``predicate()`` is truthy.
+
+    ``probe=None`` keeps the original semantics exactly: ``timeout`` is a
+    plain wall deadline. With a probe — a callable returning a signature of
+    the fixture's observable state — ``timeout`` becomes a *stall* budget
+    (Issue #405): the wait fails only when neither the predicate's value nor
+    the probe signature has changed for ``timeout`` seconds. Machine load
+    slows the producer chain but keeps it emitting (events.jsonl rows, record
+    rewrites, receipts, socket traffic); a real hang emits nothing. An
+    absolute ceiling of ``max(6 * timeout, 60)`` seconds remains as the hang
+    watchdog backstop for progress that never converges — a wall bound used
+    only as the watchdog, never as the synchronization.
+    """
+    stall_at = time.monotonic() + timeout
+    deadline = time.monotonic() + max(6 * timeout, 60.0)
+    signature = (probe(), None) if probe is not None else None
+    while True:
         value = predicate()
         if value:
             return value
+        now = time.monotonic()
+        if probe is not None:
+            snap = repr(value) if isinstance(value, _SNAPSHOT_TYPES) else type(value).__name__
+            current = (probe(), snap)
+            if current != signature:
+                signature = current
+                stall_at = now + timeout
+            elif now >= stall_at:
+                raise AssertionError(
+                    f"timeout: {label} "
+                    f"(no observable progress for {timeout:g}s)")
+        elif now >= stall_at:
+            raise AssertionError(f"timeout: {label}")
+        if now >= deadline:
+            raise AssertionError(
+                f"timeout: {label} "
+                f"(progress but no convergence in {max(6 * timeout, 60.0):g}s)")
         time.sleep(interval)
-    raise AssertionError(f"timeout: {label}")
 
 
 class Endpoint:

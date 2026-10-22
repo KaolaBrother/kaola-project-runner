@@ -72,6 +72,17 @@ allowed integration or release boundary. Do not only raise a timeout or run more
 the full gate; the hang watchdog is not a normal feedback budget, and no universal
 elapsed-time gate or new monitor is added.
 
+Recovery route for a suspected load flake (Issue #405): when a suite fails inside a gate
+run and its subtests are green standalone, the gate's accepted recovery is a single-suite
+standalone rerun through the same controlled entry —
+`./scripts/validate.sh --suite <inventory-basename>` — on the same tree. Keep both
+receipts: the gate log line and the standalone result. The rerun is a receipt for a
+load flake, not a substitute for the gate; a suite that also fails standalone is a real
+failure. Timing waits inside the holder suites synchronize on observable conditions and
+their numeric budgets are stall watchdogs reset by observable progress (file/event/socket
+surfaces), not wall-clock windows the event must fit inside; the per-suite watchdog
+semantics are unchanged.
+
 ## Progressive disclosure
 
 **Progressive disclosure.** Discovery exposes only a stable name and a short description.

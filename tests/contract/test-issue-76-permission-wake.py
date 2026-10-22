@@ -140,13 +140,42 @@ def pid_alive(pid: int | None) -> bool:
     return True
 
 
-def wait_until(predicate, timeout: float, label: str) -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if predicate():
+def wait_until(predicate, timeout: float, label: str, probe=None) -> None:
+    # ``probe=None`` keeps the original semantics exactly: ``timeout`` is a
+    # plain wall deadline. With a probe — a callable returning a signature of
+    # the fixture's observable state — ``timeout`` becomes a stall budget
+    # (Issue #405): the wait fails only when neither the predicate's value nor
+    # the signature has changed for that long. Load slows the holder/agent
+    # subprocess chain but keeps it writing; a real hang writes nothing. An
+    # absolute ceiling of ``max(6 * timeout, 60)`` remains as the hang
+    # watchdog backstop for progress that never converges — a wall bound used
+    # only as the watchdog, never as the synchronization.
+    stall_at = time.monotonic() + timeout
+    deadline = time.monotonic() + max(6 * timeout, 60.0)
+    signature = (probe(), None) if probe is not None else None
+    while True:
+        value = predicate()
+        if value:
             return
+        now = time.monotonic()
+        if probe is not None:
+            current = (probe(), repr(value) if isinstance(
+                value, (str, bytes, int, float, bool, list, tuple, dict, set,
+                        frozenset, type(None))) else type(value).__name__)
+            if current != signature:
+                signature = current
+                stall_at = now + timeout
+            elif now >= stall_at:
+                raise AssertionError(
+                    f"timeout: {label} "
+                    f"(no observable progress for {timeout:g}s)")
+        elif now >= stall_at:
+            raise AssertionError(f"timeout: {label}")
+        if now >= deadline:
+            raise AssertionError(
+                f"timeout: {label} "
+                f"(progress but no convergence in {max(6 * timeout, 60.0):g}s)")
         time.sleep(0.05)
-    raise AssertionError(f"timeout: {label}")
 
 
 def holder_socket(record_dir: Path) -> Path:
@@ -293,6 +322,28 @@ class Sandbox:
             return f"zcode-KPR-orchestrator-{uuid.uuid4().hex[:8]}"
         return f"zcode-pw-{uuid.uuid4().hex[:8]}"
 
+    def progress(self) -> tuple:
+        """The sandbox's observable signature for stall detection (Issue
+        #405): every file under this sandbox — record dirs' ``record.json``
+        / ``events.jsonl``, the fake app-server rpc logs and records, the
+        repo's ``.kaola`` — by path, size and mtime."""
+        signature: list = []
+        for path in sorted(self.dir.rglob("*")):
+            try:
+                st = path.stat()
+            except OSError:
+                continue
+            signature.append((str(path), st.st_size, st.st_mtime_ns))
+        return tuple(signature)
+
+    def wait_until(self, predicate, timeout: float, label: str) -> None:
+        """Wait on the observable condition, not a wall window (Issue #405):
+        the budget is a stall watchdog on ``progress`` — worker and host
+        holders are separate processes whose chain (prompt → permission →
+        carrier event → stage/deliver → rpc send) stretches under load but
+        keeps writing; a real hang writes nothing."""
+        wait_until(predicate, timeout, label, probe=self.progress)
+
     def record_dir(self, session: str, platform: str = "zcode") -> Path:
         real_repo = os.path.realpath(str(self.repo))
         digest = hashlib.sha256(real_repo.encode("utf-8")).hexdigest()[:16]
@@ -420,7 +471,7 @@ def test_permission_required_wakes_idle_host_while_turn_active() -> None:
 
         # The worker's turn is still active, blocked on the permission — this
         # is the deadlock shape the issue describes: no turn end, no idle.
-        wait_until(lambda: (sandbox.cli("status", session=worker).get("pending_permissions")
+        sandbox.wait_until(lambda: (sandbox.cli("status", session=worker).get("pending_permissions")
                             or []), 15, "worker is waiting on a permission")
         status = sandbox.cli("status", session=worker)
         check(status.get("turn_active") is True, "worker turn still active while pending")
@@ -430,7 +481,7 @@ def test_permission_required_wakes_idle_host_while_turn_active() -> None:
         request_id = pending[0].get("request_id")
 
         host_dir = sandbox.record_dir(host)
-        wait_until(lambda: events_of_kind(host_dir, "worker_event_delivered"), 15,
+        sandbox.wait_until(lambda: events_of_kind(host_dir, "worker_event_delivered"), 15,
                    "permission_required event reaches the idle host and delivers")
         staged = worker_event_entries(host_dir)
         check(len(staged) == 1, f"exactly one worker event staged ({len(staged)})")
@@ -463,14 +514,14 @@ def test_permission_required_wakes_idle_host_while_turn_active() -> None:
         permit = sandbox.cli("permit", "--option", "allow", session=worker)
         check(permit.get("permitted") is not None,
               f"permit settles the pending request ({permit.get('error')})")
-        wait_until(lambda: len(worker_event_entries(host_dir)) == 2, 15,
+        sandbox.wait_until(lambda: len(worker_event_entries(host_dir)) == 2, 15,
                    "the ordinary turn-end idle still arrives after the permission wake")
         second = worker_event_entries(host_dir)[1]
         check(second["kind"] == "idle" and second["session"] == worker,
               f"the second event is the real turn-end idle ({second})")
         check(second["event_cursor"] > event["event_cursor"],
               "the permission wake precedes the turn-end idle in worker event order")
-        wait_until(lambda: len(events_of_kind(host_dir, "worker_event_delivered")) == 2, 15,
+        sandbox.wait_until(lambda: len(events_of_kind(host_dir, "worker_event_delivered")) == 2, 15,
                    "the idle episode also delivers")
         check(len(rpc_sends(sandbox.rpcs[host])) == 2,
               "exactly one prompt per worker event, still no periodic carrier")
@@ -504,7 +555,7 @@ def test_permission_event_stages_on_busy_host_then_flushes() -> None:
 
         # The host is itself mid-turn on a permission: the wake must stage.
         sandbox.cli("send", "--no-wait", "--text", "host busy turn", session=host)
-        wait_until(lambda: (sandbox.cli("status", session=host).get("pending_permissions")
+        sandbox.wait_until(lambda: (sandbox.cli("status", session=host).get("pending_permissions")
                             or []), 15, "host turn is busy waiting on a permission")
 
         admitted = sandbox.cli("send", "--text", "worker work", session=worker,
@@ -512,10 +563,10 @@ def test_permission_event_stages_on_busy_host_then_flushes() -> None:
         check(admitted.get("outcome") == "in_progress"
               and admitted.get("wait_selection") == {"wait": False, "source": "owning-host-default"},
               "owning Host omission returns admission before its turn boundary")
-        wait_until(lambda: (sandbox.cli("status", session=worker).get("pending_permissions")
+        sandbox.wait_until(lambda: (sandbox.cli("status", session=worker).get("pending_permissions")
                             or []), 15, "worker turn is waiting on a permission")
         host_dir = sandbox.record_dir(host)
-        wait_until(lambda: events_of_kind(host_dir, "worker_event"), 15,
+        sandbox.wait_until(lambda: events_of_kind(host_dir, "worker_event"), 15,
                    "the permission wake stages on the busy host")
         staged = worker_event_entries(host_dir)
         check(len(staged) == 1 and staged[0]["kind"] == "permission_required",
@@ -531,7 +582,7 @@ def test_permission_event_stages_on_busy_host_then_flushes() -> None:
 
         # The host's own turn ends; the staged wake flushes at that boundary.
         sandbox.cli("permit", "--option", "allow", session=host)
-        wait_until(lambda: events_of_kind(host_dir, "worker_event_delivered"), 15,
+        sandbox.wait_until(lambda: events_of_kind(host_dir, "worker_event_delivered"), 15,
                    "the staged wake flushes at the completed turn boundary")
         sends = rpc_sends(sandbox.rpcs[host])
         check(len(sends) == 2, f"the wake flushed as the next host prompt ({len(sends)})")
@@ -541,15 +592,15 @@ def test_permission_event_stages_on_busy_host_then_flushes() -> None:
 
         # This notification turn also asks a permission (scenario); answering
         # it completes the pass and confirms the event.
-        wait_until(lambda: (sandbox.cli("status", session=host).get("pending_permissions")
+        sandbox.wait_until(lambda: (sandbox.cli("status", session=host).get("pending_permissions")
                             or []), 15, "notification turn asks its permission")
         sandbox.cli("permit", "--option", "allow", session=host)
-        wait_until(lambda: events_of_kind(host_dir, "worker_event_confirmed"), 15,
+        sandbox.wait_until(lambda: events_of_kind(host_dir, "worker_event_confirmed"), 15,
                    "the completed notification turn confirms the wake")
 
         # The worker's own permission then resolves and its idle still comes.
         sandbox.cli("permit", "--option", "allow", session=worker)
-        wait_until(lambda: len(worker_event_entries(host_dir)) == 2, 15,
+        sandbox.wait_until(lambda: len(worker_event_entries(host_dir)) == 2, 15,
                    "the worker's ordinary idle still arrives afterwards")
         check(worker_event_entries(host_dir)[1]["kind"] == "idle",
               "the second event is the worker's turn-end idle")
@@ -595,7 +646,7 @@ def test_droid_worker_wake_is_metadata_only_and_idempotent() -> None:
         send = sandbox.cli("send", "--no-wait", "--text", "do work", session=worker,
                            platform="droid")
         check(send.get("outcome") == "in_progress", "droid worker prompt admitted")
-        wait_until(lambda: (sandbox.cli("status", session=worker, platform="droid")
+        sandbox.wait_until(lambda: (sandbox.cli("status", session=worker, platform="droid")
                             .get("pending_permissions") or []),
                    15, "droid worker waits on its permission")
         status = sandbox.cli("status", session=worker, platform="droid")
@@ -617,7 +668,7 @@ def test_droid_worker_wake_is_metadata_only_and_idempotent() -> None:
               "the pending list holds the single request")
 
         host_dir = sandbox.record_dir(host)
-        wait_until(lambda: events_of_kind(host_dir, "worker_event_delivered"), 15,
+        sandbox.wait_until(lambda: events_of_kind(host_dir, "worker_event_delivered"), 15,
                    "the droid wake reaches the idle host and delivers")
         staged = worker_event_entries(host_dir)
         check(len(staged) == 1 and staged[0]["kind"] == "permission_required"
@@ -649,7 +700,7 @@ def test_droid_worker_wake_is_metadata_only_and_idempotent() -> None:
                                "--option", "allow", session=worker, platform="droid")[1] or {}
         check((again.get("error") or {}).get("code") == "no-pending-permission",
               f"an already-settled request is an idempotent error ({again.get('error')})")
-        wait_until(lambda: len(worker_event_entries(host_dir)) == 2, 15,
+        sandbox.wait_until(lambda: len(worker_event_entries(host_dir)) == 2, 15,
                    "the ordinary idle still arrives after the wake")
         check(worker_event_entries(host_dir)[1]["kind"] == "idle",
               "the second event is the real turn-end idle")
@@ -668,7 +719,7 @@ def test_unbound_worker_permission_is_unchanged() -> None:
         sandbox.start(worker, "permission")
         send = sandbox.cli("send", "--no-wait", "--text", "do work", session=worker)
         check(send.get("outcome") == "in_progress", "unbound worker prompt admitted")
-        wait_until(lambda: (sandbox.cli("status", session=worker).get("pending_permissions")
+        sandbox.wait_until(lambda: (sandbox.cli("status", session=worker).get("pending_permissions")
                             or []), 15, "unbound worker waits on its permission")
         status = sandbox.cli("status", session=worker)
         check(status.get("turn_active") is True and status.get("activity_hint") == "waiting",
@@ -719,7 +770,7 @@ def test_worker_event_validation_accepts_permission_required() -> None:
               f"an unknown kind is still rejected ({receipt})")
 
         # The host is idle: each staged event delivers its own prompt at once.
-        wait_until(lambda: len(events_of_kind(host_dir, "worker_event_delivered")) == 2
+        sandbox.wait_until(lambda: len(events_of_kind(host_dir, "worker_event_delivered")) == 2
                    and len(rpc_sends(sandbox.rpcs[host])) == 2, 15,
                    "each staged permission event delivers on the idle host")
         sends = rpc_sends(sandbox.rpcs[host])

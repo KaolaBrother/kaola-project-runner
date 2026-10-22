@@ -32,6 +32,7 @@ import argparse
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -224,8 +225,51 @@ wait_for = issue302.wait_for
 host_view = issue302.host_view
 
 
+def _deliver_children(repo_realpath: str) -> tuple:
+    """(pid, cputime) for live ``delegator-webhook deliver`` children whose
+    cwd is this fixture's repo — the wake delivery's mid-flight observable
+    (Issue #405). Other suites' children share the argv but not the cwd."""
+    try:
+        out = subprocess.run(["ps", "-eo", "pid=,time=,args="],
+                             capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ()
+    children = []
+    for line in out.splitlines():
+        if "delegator-webhook deliver" not in line:
+            continue
+        parts = line.split(None, 2)
+        if len(parts) < 2 or not parts[0].isdigit():
+            continue
+        try:
+            cwd = subprocess.run(["lsof", "-a", "-p", parts[0], "-d", "cwd", "-Fn"],
+                                 capture_output=True, text=True, timeout=5).stdout
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if f"n{repo_realpath}" not in cwd:
+            continue
+        children.append((int(parts[0]), parts[1]))
+    return tuple(sorted(children))
+
+
 class AgentInitiatedTurnTest(unittest.TestCase):
-    """End-to-end and unit coverage for Issue #341 agent-initiated turns."""
+    """End-to-end and unit coverage for Issue #341 agent-initiated turns.
+
+    Unique coverage (Issue #405): a synthetic turn on agent-initiated
+    session/update activity while idle, its quiet-window or explicit
+    idle-signal close, and exactly-one Delegator wake per episode.
+
+    Load sensitivity: every producer hop is a separate process — the mock
+    ACP agent, the out-of-process holder, its deliver child, and the
+    ``kaola-acp`` CLI calls inside predicates — so machine load stretches
+    the chain to seconds per hop while it keeps making progress. The waits
+    therefore synchronize on observable conditions (``wait_for`` below):
+    their numeric budget is a stall watchdog reset by any change in
+    ``_wait_probe``, not a wall-clock window the event must fit inside;
+    a wall bound remains only as the hang backstop. ``wait_stable`` is the
+    event-driven form of a settle sleep for negative assertions: it ends
+    on real quiet, not a guessed window.
+    """
 
     setUp = issue302.issue299.WebhookCase.setUp
     env = issue302.issue299.WebhookCase.env
@@ -234,6 +278,60 @@ class AgentInitiatedTurnTest(unittest.TestCase):
     posts_for = issue302.WakeGate.posts_for
     write_heartbeat = issue302.WakeGate.write_heartbeat
     configure_endpoint = issue302.WakeGate.configure_endpoint
+
+    def _wait_probe(self) -> tuple:
+        """The fixture's observable signature for stall detection: every file
+        under the sandbox root (holder ``record.json``/``events.jsonl``,
+        webhook receipts, the heartbeat prompt, endpoint-facing state) plus
+        the in-process endpoint post count — and, at most once a second, the
+        live wake ``deliver`` children for this fixture's repo.
+
+        The deliver child is a spawned ``kaola-acp.py delegator-webhook
+        deliver`` whose only fixture-visible writes (the POST, the receipt)
+        appear at completion; under load its interpreter boot and module
+        init can exceed the stall budget while it writes nothing. Its (pid,
+        CPU) pair is the only mid-flight progress surface — a working child
+        advances CPU, a hung one does not, a dead one disappears."""
+        signature: list = [len(self.endpoint.posts) if self.endpoint else 0]
+        if self.root.is_dir():
+            for path in sorted(self.root.rglob("*")):
+                try:
+                    st = path.stat()
+                except OSError:
+                    continue
+                signature.append((str(path), st.st_size, st.st_mtime_ns))
+        now = time.monotonic()
+        if now - getattr(self, "_probe_ps_at", 0.0) >= 1.0:
+            self._probe_ps_at = now
+            self._probe_ps = _deliver_children(self.project)
+        signature.append(getattr(self, "_probe_ps", ()))
+        return tuple(signature)
+
+    def wait_for(self, predicate, timeout: float, label: str,
+                 interval: float = 0.05):
+        """Wait on the observable condition, not a wall window (Issue #405)."""
+        return wait_for(predicate, timeout, label, interval,
+                        probe=self._wait_probe)
+
+    def wait_stable(self, seconds: float) -> None:
+        """Wait until nothing observable has changed for ``seconds`` — the
+        event-driven form of a settle sleep for 'nothing more arrives'
+        assertions: a late event extends the window instead of passing it.
+        An absolute ceiling of ``max(6 * seconds, 10)`` stays as the hang
+        watchdog for a fixture that never goes quiet."""
+        signature = self._wait_probe()
+        quiet_since = time.monotonic()
+        deadline = quiet_since + max(6 * seconds, 10.0)
+        while time.monotonic() - quiet_since < seconds:
+            if time.monotonic() >= deadline:
+                raise AssertionError(
+                    f"no observable quiet for {seconds:g}s "
+                    f"within {max(6 * seconds, 10.0):g}s")
+            time.sleep(0.05)
+            current = self._wait_probe()
+            if current != signature:
+                signature = current
+                quiet_since = time.monotonic()
 
     def tearDown(self) -> None:
         current = getattr(self, "session", None)
@@ -304,7 +402,7 @@ class AgentInitiatedTurnTest(unittest.TestCase):
         # Prompt 1 finishes normally and emits the first all-idle wake.
         _, send_receipt = self.acp_custom("send", "--text", "kickoff", "--wait", agent_cmd=cmd)
         self.assertEqual(send_receipt.get("outcome"), "turn_completed")
-        wait_for(lambda: len(self.endpoint.posts) >= 1, 10, "first prompt turn wake")
+        self.wait_for(lambda: len(self.endpoint.posts) >= 1, 10, "first prompt turn wake")
         self.assertEqual(len(self.endpoint.posts), 1, self.endpoint.posts)
         first_post = self.endpoint.posts[0]["body"]
         self.assertEqual(first_post.get("reason"), "all-idle")
@@ -319,7 +417,7 @@ class AgentInitiatedTurnTest(unittest.TestCase):
                 return record
             return None
 
-        busy_record = wait_for(observe_busy, 5, "synthetic turn busy record")
+        busy_record = self.wait_for(observe_busy, 5, "synthetic turn busy record")
         self.assertTrue(
             holder.seat_turn_blocks_all_idle(busy_record),
             f"seat_turn_blocks_all_idle must be True during continuation: {busy_record}",
@@ -335,7 +433,7 @@ class AgentInitiatedTurnTest(unittest.TestCase):
             ended = [e for e in cap.get("events", []) if e.get("kind") == "turn_ended"]
             return ended if len(ended) >= 2 else None
 
-        ended_events = wait_for(second_turn_ended, 10, "second turn_ended after continuation")
+        ended_events = self.wait_for(second_turn_ended, 10, "second turn_ended after continuation")
         assert ended_events is not None
         self.assertEqual(len(ended_events), 2, ended_events)
         self.assertEqual(ended_events[0].get("outcome"), "turn_completed")
@@ -359,8 +457,8 @@ class AgentInitiatedTurnTest(unittest.TestCase):
         )
 
         # Exactly ONE additional wake POST must arrive for the entire burst.
-        wait_for(lambda: len(self.endpoint.posts) >= 2, 10, "second wake POST after continuation")
-        time.sleep(0.4)
+        self.wait_for(lambda: len(self.endpoint.posts) >= 2, 10, "second wake POST after continuation")
+        self.wait_stable(0.4)
         self.assertEqual(len(self.endpoint.posts), 2, self.endpoint.posts)
         second_post = self.endpoint.posts[1]["body"]
         self.assertEqual(second_post.get("holder_instance_id"), holder_id)
@@ -385,14 +483,14 @@ class AgentInitiatedTurnTest(unittest.TestCase):
 
         _, send1 = self.acp_custom("send", "--text", "first prompt", "--wait", agent_cmd=cmd)
         self.assertEqual(send1.get("outcome"), "turn_completed")
-        wait_for(lambda: len(self.endpoint.posts) >= 1, 10, "wake #1")
+        self.wait_for(lambda: len(self.endpoint.posts) >= 1, 10, "wake #1")
 
         # Wait until the synthetic continuation turn is active.
         def continuation_active() -> dict[str, Any] | None:
             record = self.holder_record()
             return record if holder.seat_turn_blocks_all_idle(record) else None
 
-        wait_for(continuation_active, 5, "continuation turn active")
+        self.wait_for(continuation_active, 5, "continuation turn active")
 
         # 1. A concurrent `send` mid-continuation refuses with prompt-in-progress
         # just like an active prompt turn.
@@ -421,9 +519,9 @@ class AgentInitiatedTurnTest(unittest.TestCase):
             ended = [e for e in cap.get("events", []) if e.get("kind") == "turn_ended"]
             return ended if len(ended) >= 3 else None
 
-        ended = wait_for(both_finished, 12, "continuation + queued follow-up completion")
+        ended = self.wait_for(both_finished, 12, "continuation + queued follow-up completion")
         assert ended is not None
-        time.sleep(0.5)
+        self.wait_stable(0.5)
         _, cap_final = self.acp_custom("capture", "--since", "0", agent_cmd=cmd)
         ended_final = [e for e in cap_final.get("events", []) if e.get("kind") == "turn_ended"]
         # Exactly 3 turns total:
@@ -455,18 +553,18 @@ class AgentInitiatedTurnTest(unittest.TestCase):
         self.extra_sessions.append(self.session)
         _, _ = self.acp_custom("start", agent_cmd=cmd)
         _, _ = self.acp_custom("send", "--text", "start worker", "--wait", agent_cmd=cmd)
-        wait_for(continuation_active, 5, "worker continuation active")
+        self.wait_for(continuation_active, 5, "worker continuation active")
         _, int_receipt = self.acp_custom(
             "steer", "--text", "interrupt continuation",
             "--steer-mode", "interrupt", agent_cmd=cmd,
         )
         self.assertEqual(int_receipt.get("steer_outcome"), "interrupted_and_resent", int_receipt)
-        wait_for(
+        self.wait_for(
             lambda: not holder.seat_turn_blocks_all_idle(self.holder_record()),
             10,
             "interrupted resend finished",
         )
-        time.sleep(0.6)
+        self.wait_stable(0.6)
         _, worker_cap = self.acp_custom("capture", "--since", "0", agent_cmd=cmd)
         worker_ended = [e for e in worker_cap.get("events", []) if e.get("kind") == "turn_ended"]
         self.assertEqual(
@@ -487,11 +585,22 @@ class AgentInitiatedTurnTest(unittest.TestCase):
 
         _, send1 = self.acp_custom("send", "--text", "only real turn", "--wait", agent_cmd=cmd)
         self.assertEqual(send1.get("outcome"), "turn_completed")
-        wait_for(lambda: len(self.endpoint.posts) >= 1, 10, "initial turn wake")
+        self.wait_for(lambda: len(self.endpoint.posts) >= 1, 10, "initial turn wake")
         self.assertEqual(len(self.endpoint.posts), 1)
 
-        # Wait past the noise burst + quiet period.
-        time.sleep(1.0)
+        # Wait for the whole noise burst to be observed (its last update is
+        # the session_info_update), not for a guessed window — then settle.
+        def noise_delivered() -> bool:
+            _, cap = self.acp_custom("capture", "--since", "0", agent_cmd=cmd)
+            return any(
+                e.get("kind") == "session_update"
+                and isinstance(e.get("update"), dict)
+                and e["update"].get("sessionUpdate") == "session_info_update"
+                for e in cap.get("events", [])
+            ) or None
+
+        self.wait_for(noise_delivered, 10, "the full noise burst delivered")
+        self.wait_stable(0.6)
         _, cap = self.acp_custom("capture", "--since", "0", agent_cmd=cmd)
         events = cap.get("events", [])
         started = [e for e in events if e.get("kind") == "turn_started"]
@@ -531,9 +640,22 @@ class AgentInitiatedTurnTest(unittest.TestCase):
                 for text in self._chunk_texts(cap.get("events", []))
             ) or None
 
-        wait_for(replay_seen, 8, "pre-prompt replay update captured")
-        # One more quiet window: the replay must not have opened a turn.
-        time.sleep(0.6)
+        self.wait_for(replay_seen, 8, "pre-prompt replay update captured")
+
+        # Wait for the replay's last update (usage_update used=512), not a
+        # guessed window — then settle past the quiet period.
+        def replay_done() -> bool:
+            _, cap = self.acp_custom("capture", "--since", "0", agent_cmd=cmd)
+            return any(
+                e.get("kind") == "session_update"
+                and isinstance(e.get("update"), dict)
+                and e["update"].get("sessionUpdate") == "usage_update"
+                and e["update"].get("used") == 512
+                for e in cap.get("events", [])
+            ) or None
+
+        self.wait_for(replay_done, 8, "the full pre-prompt replay delivered")
+        self.wait_stable(0.6)
         _, cap_idle = self.acp_custom("capture", "--since", "0", agent_cmd=cmd)
         idle_events = cap_idle.get("events", [])
         self.assertEqual(
@@ -550,7 +672,7 @@ class AgentInitiatedTurnTest(unittest.TestCase):
         # opened a synthetic turn and send refused prompt-in-progress).
         _, send1 = self.acp_custom("send", "--text", "kickoff", "--wait", agent_cmd=cmd)
         self.assertEqual(send1.get("outcome"), "turn_completed", send1)
-        wait_for(lambda: len(self.endpoint.posts) >= 1, 10, "first prompt wake")
+        self.wait_for(lambda: len(self.endpoint.posts) >= 1, 10, "first prompt wake")
 
         # The autonomous continuation after prompt 1 still opens exactly one
         # synthetic turn.
@@ -559,7 +681,7 @@ class AgentInitiatedTurnTest(unittest.TestCase):
             ended = [e for e in cap.get("events", []) if e.get("kind") == "turn_ended"]
             return ended if len(ended) >= 2 else None
 
-        ended_events = wait_for(second_ended, 12, "synthetic turn_ended after kickoff")
+        ended_events = self.wait_for(second_ended, 12, "synthetic turn_ended after kickoff")
         assert ended_events is not None
         self.assertEqual(
             [e.get("outcome") for e in ended_events],
@@ -571,8 +693,8 @@ class AgentInitiatedTurnTest(unittest.TestCase):
         self.assertEqual(len(started), 1, started)
         self.assertEqual(started[0].get("prompt_source"), "self")
         self.assertIs(started[0].get("agent_initiated"), True)
-        wait_for(lambda: len(self.endpoint.posts) >= 2, 10, "second wake after continuation")
-        time.sleep(0.4)
+        self.wait_for(lambda: len(self.endpoint.posts) >= 2, 10, "second wake after continuation")
+        self.wait_stable(0.4)
         self.assertEqual(len(self.endpoint.posts), 2, self.endpoint.posts)
 
     def test_case_e_tail_after_canceled_turn_does_not_open_turn(self) -> None:
@@ -588,11 +710,11 @@ class AgentInitiatedTurnTest(unittest.TestCase):
 
         _, send1 = self.acp_custom("send", "--text", "first", "--wait", agent_cmd=cmd)
         self.assertEqual(send1.get("outcome"), "turn_completed")
-        wait_for(lambda: len(self.endpoint.posts) >= 1, 10, "first turn wake")
+        self.wait_for(lambda: len(self.endpoint.posts) >= 1, 10, "first turn wake")
 
         _, send2 = self.acp_custom("send", "--text", "slow", "--no-wait", agent_cmd=cmd)
         self.assertNotIn("error", send2, send2)
-        wait_for(
+        self.wait_for(
             lambda: holder.seat_turn_blocks_all_idle(self.holder_record()),
             5, "slow turn active",
         )
@@ -606,11 +728,19 @@ class AgentInitiatedTurnTest(unittest.TestCase):
                 for e in cap.get("events", [])
             ) or None
 
-        wait_for(turn_canceled, 10, "turn_canceled turn_ended")
-        time.sleep(0.5)  # let the cancel wake settle
+        self.wait_for(turn_canceled, 10, "turn_canceled turn_ended")
+        self.wait_stable(0.5)  # let the cancel wake settle
         settled_posts = len(self.endpoint.posts)
-        # Sleep past the mock's 1.5 s tail plus the 0.45 s quiet window.
-        time.sleep(2.2)
+
+        # Wait for the mock's post-cancel tail itself (observed, not a guessed
+        # window: the tail thread emits it after the sleeping prompt thread),
+        # then settle past the quiet window.
+        def tail_delivered() -> bool:
+            _, cap = self.acp_custom("capture", "--since", "0", agent_cmd=cmd)
+            return "tail after cancel" in self._chunk_texts(cap.get("events", [])) or None
+
+        self.wait_for(tail_delivered, 10, "the post-cancel tail chunk")
+        self.wait_stable(0.6)
         _, cap_final = self.acp_custom("capture", "--since", "0", agent_cmd=cmd)
         events = cap_final.get("events", [])
         ended = [e for e in events if e.get("kind") == "turn_ended"]
@@ -732,7 +862,7 @@ class AgentInitiatedTurnTest(unittest.TestCase):
         _, send1 = self.acp_custom(
             "send", "--text", "kickoff", "--wait", agent_cmd=cmd, extra_env=env)
         self.assertEqual(send1.get("outcome"), "turn_completed")
-        wait_for(lambda: len(self.endpoint.posts) >= 1, 10, "first prompt wake")
+        self.wait_for(lambda: len(self.endpoint.posts) >= 1, 10, "first prompt wake")
 
         def second_ended() -> list[dict[str, Any]] | None:
             _, cap = self.acp_custom(
@@ -740,7 +870,7 @@ class AgentInitiatedTurnTest(unittest.TestCase):
             ended = [e for e in cap.get("events", []) if e.get("kind") == "turn_ended"]
             return ended if len(ended) >= 2 else None
 
-        ended_events = wait_for(second_ended, 10, "synthetic turn_ended")
+        ended_events = self.wait_for(second_ended, 10, "synthetic turn_ended")
         assert ended_events is not None
         self.assertEqual(
             [e.get("outcome") for e in ended_events],
@@ -773,8 +903,8 @@ class AgentInitiatedTurnTest(unittest.TestCase):
             f"window (delta={delta:.3f}s)",
         )
 
-        wait_for(lambda: len(self.endpoint.posts) >= 2, 10, "second wake")
-        time.sleep(1.0)
+        self.wait_for(lambda: len(self.endpoint.posts) >= 2, 10, "second wake")
+        self.wait_stable(1.0)
         _, cap2 = self.acp_custom(
             "capture", "--since", "0", agent_cmd=cmd, extra_env=env)
         self.assertEqual(

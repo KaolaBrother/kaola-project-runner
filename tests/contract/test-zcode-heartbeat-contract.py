@@ -124,13 +124,59 @@ def pid_alive(pid: int | None) -> bool:
     return True
 
 
-def wait_until(predicate, timeout: float, label: str) -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
+def wait_until(predicate, timeout: float, label: str, probe=None) -> None:
+    # ``probe=None`` keeps the original semantics exactly: ``timeout`` is a
+    # plain wall deadline. With a probe — a callable returning a signature of
+    # the fixture's observable state — ``timeout`` becomes a stall budget
+    # (Issue #405): the wait fails only when the signature has not changed for
+    # that long; load slows the producer chain but keeps it emitting. An
+    # absolute ceiling of ``max(6 * timeout, 60)`` remains as the hang
+    # watchdog backstop for progress that never converges.
+    stall_at = time.monotonic() + timeout
+    deadline = time.monotonic() + max(6 * timeout, 60.0)
+    signature = probe() if probe is not None else None
+    while True:
         if predicate():
             return
+        now = time.monotonic()
+        if probe is not None:
+            current = probe()
+            if current != signature:
+                signature = current
+                stall_at = now + timeout
+            elif now >= stall_at:
+                raise AssertionError(
+                    f"timeout: {label} "
+                    f"(no observable progress for {timeout:g}s)")
+        elif now >= stall_at:
+            raise AssertionError(f"timeout: {label}")
+        if now >= deadline:
+            raise AssertionError(
+                f"timeout: {label} "
+                f"(progress but no convergence in {max(6 * timeout, 60.0):g}s)")
         time.sleep(0.05)
-    raise AssertionError(f"timeout: {label}")
+
+
+def wait_still(seconds: float, probe) -> None:
+    """The event-driven form of a settle sleep for 'nothing more happens'
+    assertions (Issue #405): ends when ``probe``'s signature has been
+    unchanged for ``seconds`` — a late event extends the observation instead
+    of sneaking past a fixed wall guess. An absolute ceiling of
+    ``max(6 * seconds, 10)`` stays as the hang watchdog for a fixture that
+    never goes quiet."""
+    signature = probe()
+    quiet_since = time.monotonic()
+    deadline = quiet_since + max(6 * seconds, 10.0)
+    while time.monotonic() - quiet_since < seconds:
+        if time.monotonic() >= deadline:
+            raise AssertionError(
+                f"no observable quiet for {seconds:g}s "
+                f"within {max(6 * seconds, 10.0):g}s")
+        time.sleep(0.05)
+        current = probe()
+        if current != signature:
+            signature = current
+            quiet_since = time.monotonic()
 
 
 def holder_socket(record_dir: Path) -> Path:
@@ -491,8 +537,21 @@ def test_terminated_event_delivers_full_body_and_confirms() -> None:
         check(FIXTURE_SECRET not in blob, "plan credential absent from all Runner records")
         check(FIXTURE_SECRET not in content, "plan credential absent from the delivered payload")
 
-        # No periodic trigger: with no further worker event, no further prompt.
-        time.sleep(1.5)
+        # No periodic trigger: with no further worker event, no further
+        # prompt. Wait for actual quiet on the record/rpc surfaces rather
+        # than a fixed window — a late write extends the observation
+        # (Issue #405).
+        def sandbox_signature() -> tuple:
+            seen = []
+            for path in sorted(sandbox.dir.rglob("*")):
+                try:
+                    st = path.stat()
+                except OSError:
+                    continue
+                seen.append((str(path), st.st_size, st.st_mtime_ns))
+            return tuple(seen)
+
+        wait_still(1.5, sandbox_signature)
         check(len(rpc_sends(sandbox.rpcs[host])) == 1,
               "no worker event means no further heartbeat prompt (no periodic carrier)")
         check(len(events_of_kind(host_dir, "worker_event_delivered")) == 1,

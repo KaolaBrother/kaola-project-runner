@@ -46,6 +46,62 @@ acp_module = load("kaola_acp_255", REPO / "scripts" / "kaola-acp.py")
 dispatch_module = load("kaola_dispatch_255", SCRIPT)
 
 
+_SNAPSHOT_TYPES = (str, bytes, int, float, bool, list, tuple, dict, set,
+                   frozenset, type(None))
+
+
+def _wait_signature(root: Path, extra: tuple = ()) -> tuple:
+    """The fixture's observable signature for stall detection (Issue #405):
+    every entry under ``root`` (record.json, events.jsonl, counters, socket
+    files, heartbeat-prompt.json) by size and mtime, plus ``extra`` for
+    in-process surfaces a file walk cannot see."""
+    signature: list = []
+    if root.is_dir():
+        for path in sorted(root.rglob("*")):
+            try:
+                st = path.stat()
+            except OSError:
+                continue
+            signature.append((str(path), st.st_size, st.st_mtime_ns))
+    signature.extend(extra)
+    return tuple(signature)
+
+
+def wait_observed(check, probe, what: str, timeout: float) -> None:
+    """Wait on the observable condition ``check()``, not a wall window.
+
+    ``timeout`` is a stall budget: the wait fails only when neither the
+    check's own value nor the probe signature has changed for that long.
+    Machine load slows the spawned-node / relay chain but keeps it writing;
+    a real hang writes nothing. An absolute ceiling of ``max(6 * timeout,
+    60)`` seconds remains as the hang watchdog backstop for progress that
+    never converges — a wall bound used only as the watchdog, never as the
+    synchronization. Issue #405.
+    """
+    stall_at = time.monotonic() + timeout
+    deadline = time.monotonic() + max(6 * timeout, 60.0)
+    signature = (probe(), None)
+    while True:
+        value = check()
+        if value:
+            return
+        now = time.monotonic()
+        snap = repr(value) if isinstance(value, _SNAPSHOT_TYPES) else type(value).__name__
+        current = (probe(), snap)
+        if current != signature:
+            signature = current
+            stall_at = now + timeout
+        elif now >= stall_at:
+            raise AssertionError(
+                f"timed out waiting for {what} "
+                f"(no observable progress for {timeout:g}s)")
+        if now >= deadline:
+            raise AssertionError(
+                f"timed out waiting for {what} "
+                f"(progress but no convergence in {max(6 * timeout, 60.0):g}s)")
+        time.sleep(0.05)
+
+
 def run(args: list[str], env: dict[str, str] | None = None) -> tuple[int, dict]:
     proc = subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True,
                           env=env or {k: v for k, v in os.environ.items() if k not in CALLER_ENV})
@@ -1462,6 +1518,40 @@ class HolderFixture(unittest.TestCase):
         return [event_id for line in log for entry in [json.loads(line)]
                 if entry.get("kind") == "worker_event_confirmed" for event_id in entry["event_ids"]]
 
+    def _wait_probe(self) -> tuple:
+        """The observable signature this fixture's waits stall on (Issue
+        #405): the whole fixture tree — record dir ``events.jsonl`` and
+        ``record.json``, the spawned-node counter/argv files, the repo's
+        ``heartbeat-prompt.json`` — plus the in-process surfaces a file walk
+        misses (holder node bookkeeping, pending worker events, the fake's
+        recorded prompts/stops, the stub agent's sends)."""
+        return _wait_signature(Path(self.tmp.name), (
+            repr(getattr(self.holder, "node", None)),
+            len(getattr(self.holder, "pending_worker_events", [])),
+            len(self.fake.prompts) if self.fake is not None else -1,
+            len(getattr(self.fake, "stops", [])) if self.fake is not None else -1,
+            len(self.agent.sent) if getattr(self, "agent", None) is not None else -1,
+        ))
+
+    def wait_still(self, seconds: float) -> None:
+        """The event-driven form of a settle sleep for 'nothing more
+        happens' assertions (Issue #405): ends when the fixture has been
+        observably quiet for ``seconds`` — a late node spawn or write
+        extends the observation instead of sneaking past a fixed wall
+        guess, so a buggy late start still fails the assertion."""
+        signature = self._wait_probe()
+        quiet_since = time.monotonic()
+        deadline = quiet_since + max(6 * seconds, 10.0)
+        while time.monotonic() - quiet_since < seconds:
+            if time.monotonic() >= deadline:
+                self.fail(f"no observable quiet for {seconds:g}s "
+                          f"within {max(6 * seconds, 10.0):g}s")
+            time.sleep(0.05)
+            current = self._wait_probe()
+            if current != signature:
+                signature = current
+                quiet_since = time.monotonic()
+
 
 class HolderRelay(HolderFixture):
     def test_rebind_moves_the_carrier_in_place_and_keeps_the_seat(self) -> None:
@@ -1736,7 +1826,11 @@ class HolderRelay(HolderFixture):
 
         first = threading.Thread(target=send, args=("codex-KT-i3-a", 5))
         first.start()
-        time.sleep(0.2)
+        # The test's premise is the first event already holding the relay —
+        # observe it reaching the fake Sideagent, don't guess a window
+        # (Issue #405).
+        wait_observed(lambda: len(self.fake.prompts) >= 1, self._wait_probe,
+                      "the first event holding the relay", 10)
         second = threading.Thread(target=send, args=("codex-KT-i3-b", 6))
         second.start()
         first.join(10)
@@ -1764,7 +1858,13 @@ class ProcessPreservation(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(prefix="kpr-i255-stop-")
         self.dir = Path(self.tmp.name)
         self.child = subprocess.Popen(["sleep", "30"], start_new_session=True)
-        time.sleep(0.2)
+        # The child must be exec'd and session-leading before the
+        # process-table reads — observe it in ps, don't guess (Issue #405).
+        wait_observed(
+            lambda: str(self.child.pid) in {
+                line.strip() for line in
+                acp_module.run_ps(["pid"], env=acp_module.PS_ENV).stdout.splitlines()},
+            lambda: self.child.poll(), "the spawned child in the process table", 10)
 
     def tearDown(self) -> None:
         self.child.kill()
@@ -1925,16 +2025,26 @@ class WorkerTree(unittest.TestCase):
                                        start_new_session=True)
         spawned_at = int(time.time() * 1000)
         self.groups.append(self.holder.pid)
-        deadline = time.time() + 10
-        while time.time() < deadline and not (pids.exists() and Path(f"{pids}.tool").exists()
-                                              and Path(f"{pids}.tool").read_text()):
-            time.sleep(0.05)
+        # The fake worker holder is a spawned subprocess; under load its
+        # interpreter boot and child spawns take seconds while still making
+        # progress — wait on the observed pid files (Issue #405).
+        wait_observed(lambda: pids.exists() and Path(f"{pids}.tool").exists()
+                      and Path(f"{pids}.tool").read_text(),
+                      lambda: _wait_signature(root), "the worker tree's pid files", 10)
         self.native = int(pids.read_text())
         self.tool = int(Path(f"{pids}.tool").read_text())
         self.orphan = subprocess.Popen(["sleep", "60"], start_new_session=True)
         self.unrelated = subprocess.Popen(["sleep", "60"], start_new_session=True)
         self.groups += [self.native, self.tool, self.orphan.pid, self.unrelated.pid]
-        time.sleep(0.2)
+        # All spawned processes must be exec'd and visible before the lstart
+        # snapshot — observe them in the process table (Issue #405).
+        wanted = {str(pid) for pid in self.groups}
+        wait_observed(
+            lambda: wanted <= {
+                line.strip() for line in
+                acp_module.run_ps(["pid"], env=acp_module.PS_ENV).stdout.splitlines()},
+            lambda: (self.orphan.poll(), self.unrelated.poll()),
+            "the spawned children in the process table", 10)
         starts = self.starts()
         (self.side_dir / "children.jsonl").write_text(json.dumps(
             {"pid": self.holder.pid, "pgid": self.holder.pid, "spawned_at": spawned_at}) + "\n",
@@ -2274,7 +2384,8 @@ class HostReanchorLive(unittest.TestCase):
             reply = sandbox.cli("send", "--text", "work after the Host changed", session=worker)
             self.assertEqual(reply.get("outcome"), "turn_completed")
             hb.wait_until(lambda: hb.events_of_kind(sandbox.record_dir(new), "worker_event"), 10,
-                          "the worker's next turn end reaches the replacement Host")
+                          "the worker's next turn end reaches the replacement Host",
+                          probe=lambda: _wait_signature(sandbox.dir))
         finally:
             sandbox.cleanup()
 
@@ -2491,15 +2602,17 @@ class ConsolidatedDispatch(StateProject):
                                     "--skills-root", str(self.skills)], env=self.env,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
-            deadline = time.monotonic() + 20
-            while time.monotonic() < deadline:
+            def first_return():
                 try:
-                    rows = {row["item_id"]: row for row in json.loads(self.index.read_text())["items"]}
+                    rows = {row["item_id"]: row
+                            for row in json.loads(self.index.read_text())["items"]}
                 except (OSError, ValueError):
-                    rows = {}
-                if rows.get("w1", {}).get("status") == "returned":
-                    break
-                time.sleep(0.02)
+                    return False
+                return rows.get("w1", {}).get("status") == "returned"
+
+            wait_observed(first_return, lambda: _wait_signature(Path(self.tmp.name)),
+                          "the collect's first return", 20)
+            rows = {row["item_id"]: row for row in json.loads(self.index.read_text())["items"]}
             self.assertEqual(rows["w1"]["status"], "returned", "the collect published its first return")
             self.assertIsNone(collect.poll(), "the collect is still waiting on w2")
             code, out = self.update("host", "tasks", "t1", {"dispositions": {"w1": "accepted"}},
@@ -3299,7 +3412,18 @@ class FakeNode(FakeSideagent):
 
 class HolderNodeMode(HolderFixture):
     """The Host carrier starts a fresh node per batch from the recipe argv,
-    settles the batch from that node's checkpoint, and exact-stops it."""
+    settles the batch from that node's checkpoint, and exact-stops it.
+
+    Unique coverage (Issue #405): carrier-side node lifecycle — batch
+    selection, node start/adopt/stop, checkpoint settle, recovery inputs.
+
+    Load sensitivity: a batch is a spawned Python node process (the holder
+    bounds it by NODE_START_TIMEOUT=180 s internally), then a unix-socket
+    prompt the fake node appends to ``prompts``; every hop is scheduled and
+    machine load stretches the chain to seconds per hop while it keeps
+    writing. ``wait_for`` below therefore treats its budget as a stall
+    watchdog on ``_wait_probe``, not a wall window the chain must finish
+    inside; a wall bound remains only as the hang backstop."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -3375,12 +3499,10 @@ class HolderNodeMode(HolderFixture):
         return self.fake.prompts[index]["params"]["text"].split("batch ", 1)[1].split()[0]
 
     def wait_for(self, check, what: str, timeout: float = 10.0) -> None:
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            if check():
-                return
-            time.sleep(0.05)
-        self.fail(f"timed out waiting for {what}")
+        try:
+            wait_observed(check, self._wait_probe, what, timeout)
+        except AssertionError as exc:
+            self.fail(str(exc))
 
     def log_kinds(self) -> list[str]:
         log = Path(self.holder.args.record_dir) / "events.jsonl"
@@ -3785,7 +3907,7 @@ class HolderNodeMode(HolderFixture):
         self.event("codex-KT-i1-b", "terminated", 6)
         self.assertEqual(len(self.agent.prompts()), 2)
         self.finish_host_turn()
-        time.sleep(0.3)
+        self.wait_still(0.3)
         self.assertEqual(self.node_count(), 0, "an ordinary return or termination starts no node")
         self.assertEqual(self.fake.prompts, [])
         self.assertEqual(sorted(self.confirmed_ids()), ["codex/codex-KT-i1-a/idle/5",
@@ -3798,7 +3920,7 @@ class HolderNodeMode(HolderFixture):
         self.boundary()
         self.host_change(4)
         self.boundary()
-        time.sleep(0.3)
+        self.wait_still(0.3)
         self.assertEqual(self.node_count(), 0, "no node while the Host turn may still write")
         self.finish_host_turn()
         self.wait_for(lambda: len(self.fake.prompts) == 1, "the batch at the Host turn end")
@@ -3809,7 +3931,7 @@ class HolderNodeMode(HolderFixture):
         self.assertIn("never a restated, summarized or judged worker result", text)
         self.assertIn("exact-stop only a finished worker whose reclaim the Host recorded", text)
         self.boundary()
-        time.sleep(0.2)
+        self.wait_still(0.2)
         self.assertEqual(len(self.fake.prompts), 1, "the same Host revision is sent once")
         self.assertEqual(self.node_count(), 1)
 
@@ -3850,7 +3972,7 @@ class HolderNodeMode(HolderFixture):
         self.assertIn("w1-gap", prompts[0], "the Host reads the changed view")
         self.finish_host_turn()
         self.boundary()
-        time.sleep(0.2)
+        self.wait_still(0.2)
         self.assertEqual(len(self.agent.prompts()), 1)
         self.assertEqual(len(self.fake.prompts), 2)
         self.assertEqual(self.holder.pending_worker_events, [])
@@ -3886,7 +4008,7 @@ class HolderNodeMode(HolderFixture):
         self.assertIn("checkpoint partial: host revision 1..4 not handled", prompts[0])
         self.finish_host_turn()
         self.boundary()
-        time.sleep(0.2)
+        self.wait_still(0.2)
         self.assertEqual(self.node_count(), 1, "no node restarts for the same range")
 
         self.host_change(6)
@@ -3900,7 +4022,7 @@ class HolderNodeMode(HolderFixture):
         self.assertIn("checkpoint partial: host revision 3..6 not handled", prompts[1])
         self.finish_host_turn()
         self.boundary()
-        time.sleep(0.2)
+        self.wait_still(0.2)
         self.assertEqual(self.node_count(), 2, "no restart storm")
         self.assertEqual(self.holder.pending_worker_events, [])
 
@@ -3915,7 +4037,7 @@ class HolderNodeMode(HolderFixture):
         self.assertIn("checkpoint partial", prompts[0])
         self.finish_host_turn()
         self.boundary()
-        time.sleep(0.2)
+        self.wait_still(0.2)
         self.assertEqual(len(self.fake.prompts), 1, "and no node is started for it")
         self.assertEqual(self.holder.pending_worker_events, [])
 
@@ -3944,7 +4066,7 @@ class HolderNodeMode(HolderFixture):
         self.finish_host_turn()
         self.host_change(5)
         self.boundary()
-        time.sleep(0.3)
+        self.wait_still(0.3)
         self.assertEqual((len(self.fake.prompts), self.node_count()), (1, 1), "no resend, no restart")
         self.assertEqual(self.holder.pending_worker_events, [])
 
@@ -3957,7 +4079,7 @@ class HolderNodeMode(HolderFixture):
         self.wait_for(lambda: "sideagent_node_stop_unconfirmed" in self.log_kinds(), "the unconfirmed stop")
         self.host_change(5)
         self.boundary()
-        time.sleep(0.3)
+        self.wait_still(0.3)
         self.assertEqual(self.node_count(), 1, "no second node starts")
 
     def test_a_stopped_record_is_not_a_stopped_node_until_its_holder_is_gone(self) -> None:
@@ -4017,7 +4139,7 @@ class HolderNodeMode(HolderFixture):
         self.assertIn("sideagent_node_stopped", self.log_kinds())
         self.host_change(5)
         self.boundary()
-        time.sleep(0.3)
+        self.wait_still(0.3)
         self.assertEqual(self.node_count(), 1, "a stopping carrier starts no node")
 
     def test_a_node_start_in_flight_ends_with_the_stopping_carrier(self) -> None:
@@ -4067,7 +4189,7 @@ class HolderNodeMode(HolderFixture):
         self.finish_host_turn()
         self.host_change(5)
         self.boundary()
-        time.sleep(0.3)
+        self.wait_still(0.3)
         self.assertEqual(self.node_count(), 1, "one recorded failure, no retry storm")
         self.assertEqual(len(self.agent.prompts()), 2)
 
@@ -4085,7 +4207,7 @@ class HolderNodeMode(HolderFixture):
         with self.holder.worker_events_lock:
             self.assertEqual(self.holder._relay_pass(), {}, "its own turn end relays nothing")
         self.event("codex-KT-i1-a", "idle", 5)
-        time.sleep(0.3)
+        self.wait_still(0.3)
         self.assertFalse((Path(self.tmp.name) / "count").exists(), "no node is started")
         self.assertEqual(self.fake.prompts, [])
         self.assertNotIn("sideagent_node_started", self.log_kinds())
@@ -5111,12 +5233,10 @@ class DefaultSideagentNode(HolderFixture):
             self.holder._relay_pass()
 
     def wait_for(self, check, what: str, timeout: float = 10.0) -> None:
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            if check():
-                return
-            time.sleep(0.05)
-        self.fail(f"timed out waiting for {what}")
+        try:
+            wait_observed(check, self._wait_probe, what, timeout)
+        except AssertionError as exc:
+            self.fail(str(exc))
 
     def node_count(self) -> int:
         counter = Path(self.tmp.name) / "count"
