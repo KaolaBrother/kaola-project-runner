@@ -1,5 +1,5 @@
 {
-  "build": "400ba8908116",
+  "build": "9e4efb3a3da3",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "a390e7a1908412f6c2f3272edb2f651cc1e4b8f49b41f70e87156a8ac35c0029",
@@ -11,7 +11,7 @@
     "references/host-entry-matrix.md": "01e35b1383a0f83de1908810777c41ef0a46bf9af1f0e0e0a01414b16d097cfb",
     "references/host-startup.md": "804748a4f8f751d9d71e2adced9fae18a44d3c47fe48f23c33bc21e262851aa7",
     "references/issue-dispatch.md": "6407f91879482c6645c37eb439bd5ec09285bbe1f4860fbaf260ac9b715a4bda",
-    "references/lifecycle-state.md": "bac6e48d77f2b99846221fd96a3bf95312835aeee89c78c7056d3cd78514712f",
+    "references/lifecycle-state.md": "2c05a109cd9cc308135b29e9d55b4b06b49f3fc4c2b159507da432f6d7ec54d8",
     "references/profile-catalog.md": "ee16d938319844c079057e241cab70320653c0af6cf5d0dc2d4d3ecf30f11ffd",
     "references/public-research.md": "86e2ad1cd11840fd58900cde429e9b45457f149b67fa91a32e5fe6429a58407c",
     "references/qa-evidence.md": "bf9c3beff60f4407d0bf951ce7a67da4450ac6cca96062a960cd009c38daae7a",
@@ -25,7 +25,7 @@
     "scripts/kaola-acp-paths.py": "e435b3aeab7979fb1bff8d18b25087021ca1daf9a0015831fde46126d24261ac",
     "scripts/kaola-compact-recovery.py": "c45662a4297047bd860a46157e950b4aac460b3e9df1a889abe99ca687e90f27",
     "scripts/kaola-cwd-guard.py": "975be54b05f4aa8e08f18f1eb47da2c9999774639a7df092fe67365312e8c8af",
-    "scripts/kaola-dispatch.py": "4b6022a3864e6062222bcb6d2b32afb17cf2dde6f194d94dc99401894d47624a",
+    "scripts/kaola-dispatch.py": "65df94b185eeec9fe4e8f3c987a6b23f442b489cce1bd4e94935b173a9edf1c2",
     "scripts/kaola-record-contract.py": "2a9ec912ba7ace7f7de9048216d75fd268ea06389c94b710ba0e84a06bfe658c",
     "scripts/kaola-recovery-routes.py": "a461c5ee17ea47fd0076604135a520ce0261aed5106fba94bcdd4c8be0580f7e",
     "scripts/kaola-session-names.py": "772f2d729e61763851b78ab9d440c664df225bc4f08dc71f8ba0102ead411316"

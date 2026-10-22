@@ -7135,6 +7135,10 @@ def stopped_collect_incomplete(ref: str, row: dict[str, Any], task: dict[str, An
         return None
     if collected.get("outcome") != "stopped" or collected.get("mutation_status") != "unknown":
         return None
+    if args.writer != "host":
+        return _route_refusal(ref, task, args,
+                              "this reconciliation is Host-only; a Sideagent returns it to the Host",
+                              _STOPPED_COLLECT_ROUTE)
     verdict = task.get("verdict") if isinstance(task.get("verdict"), dict) else {}
     if task.get("stage") != "done" or verdict.get("value") != "accepted":
         return _route_refusal(ref, task, args, "the task is not accepted-done",
@@ -7189,6 +7193,17 @@ def stopped_collect_incomplete(ref: str, row: dict[str, Any], task: dict[str, An
         return _route_refusal(
             ref, task, args,
             f"a --live row for {session} names another repo", _STOPPED_COLLECT_ROUTE)
+    row_platform = row.get("platform")
+    if not isinstance(row_platform, str) or not row_platform:
+        return _route_refusal(ref, task, args, "missing recorded platform",
+                              _STOPPED_COLLECT_ROUTE)
+    if any(item.get("platform") != row_platform for item in matches):
+        other = next((item.get("platform") for item in matches
+                      if item.get("platform") != row_platform), None)
+        return _route_refusal(
+            ref, task, args,
+            f"{session} is stopped on platform {other!r}, not the recorded {row_platform}",
+            _STOPPED_COLLECT_ROUTE)
     if any(item.get("state") != "stopped" for item in matches):
         return _route_refusal(
             ref, task, args,
@@ -8901,6 +8916,24 @@ def legacy_tasks(body: dict[str, Any], state: dict[str, Any]) -> None:
         state["tasks"][ident] = task
 
 
+def _unique_unverified_key(state: dict[str, Any], base: str) -> str:
+    """A key that never overwrites another migration locator.
+
+    The generic ``note_unmapped`` key folds ``[``/``]`` out of the locator, so
+    two legacy alert keys such as ``a`` and ``a]`` can derive the same key.
+    Alerts key their unmapped locators by the migrated record id instead and
+    disambiguate any residual collision; the summary and locator keep the
+    original v1 locator text.
+    """
+    unverified = state.setdefault("unverified", {})
+    key = base
+    suffix = 1
+    while key in unverified:
+        suffix += 1
+        key = f"{base}-{suffix}"
+    return key
+
+
 def legacy_alerts(body: dict[str, Any], state: dict[str, Any]) -> None:
     """v1 `body.alerts` rows as current alerts, one per nameable id.
 
@@ -8927,7 +8960,7 @@ def legacy_alerts(body: dict[str, Any], state: dict[str, Any]) -> None:
     for number, (key, entry) in enumerate(entries):
         locator = f"alerts[{key}]" if isinstance(key, str) else f"alerts[{number}]"
         if not isinstance(entry, dict):
-            state["unverified"][f"alert-{number}"] = {
+            state["unverified"][_unique_unverified_key(state, f"alert-{number}")] = {
                 "summary": "unreadable legacy alert entry", "locator": locator}
             continue
         raw_id = key if isinstance(key, str) else entry.get("id")
@@ -8951,9 +8984,14 @@ def legacy_alerts(body: dict[str, Any], state: dict[str, Any]) -> None:
                          and entry.get("source") else f"migrated:{locator}")
         row["writer"] = "migration"
         state["alerts"][ident] = row
-        unmapped_fields(state, locator, entry, V1_ALERT_FIELDS)
+        extra = sorted(field for field in entry if field not in V1_ALERT_FIELDS)
+        if extra:
+            state["unverified"][_unique_unverified_key(state, f"{ident}-fields")] = {
+                "summary": f"unmapped {locator} field names: {', '.join(extra)}",
+                "locator": [f"{locator}.{field}" for field in extra],
+            }
         if isinstance(raw_id, str) and raw_id and raw_id != ident:
-            state["unverified"][f"{ident}-legacy-id"] = {
+            state["unverified"][_unique_unverified_key(state, f"{ident}-legacy-id")] = {
                 "summary": f"legacy alert id {raw_id!r} is kept as alerts/{ident}",
                 "locator": locator,
             }

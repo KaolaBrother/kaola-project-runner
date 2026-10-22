@@ -123,15 +123,16 @@ only. `unknown-op`: `drain-restart` the seat at idle.
 ## Size
 
 Rewriting an id replaces it; settled records leave in that write; an old
-revision is `record-retired`. Never drop a duty to fit. Host view max 64 KiB
+revision is `record-retired`. Never drop a duty. Host view max 64 KiB
 (`host-view-too-large`). 1 MiB needs a recorded `carrier` advertising
 `heartbeat-state/2`, else 64 KiB (`carrier-limit`); every write, `migrate
 --write` included, uses it; only an owner stop uses the current bound. A
 refusal names `$S migrate --live LIVE --write`. An unknown row with no
-collected outcome retires on the stale-collect route (session absent or
+outcome retires on the stale-collect route (session absent or
 stopped under the holder); `outcome: stopped` with `mutation_status: unknown`
-retires on `stopped-collect-incomplete-turn` (accepted task, disposition,
-holder, repo and stopped `--live` rows must match). Neither writes index bytes.
+retires on `stopped-collect-incomplete-turn` (Host writer; accepted task,
+disposition, holder, platform, repo, stopped `--live` rows must match).
+Neither writes index bytes.
 
 ## Migration
 

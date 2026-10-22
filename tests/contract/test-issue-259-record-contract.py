@@ -1972,7 +1972,8 @@ class RecordContract(unittest.TestCase):
                                    "dispositions": {"initial": "accepted"}}))
         self.assertEqual(code, 0, out)
         baseline = self.file.read_bytes()
-        for change in ("no-disposition", "in-flight", "in-progress-effect", "foreign-holder",
+        for change in ("no-disposition", "in-flight", "in-progress-effect",
+                       "incomplete-platform", "incomplete-sideagent", "foreign-holder",
                        "foreign-repo", "wrong-task", "unrelated-unknown", "missing-stop", "live",
                        "missing-repo", "foreign-collected-holder", "sideagent"):
             with self.subTest(change=change):
@@ -1989,6 +1990,14 @@ class RecordContract(unittest.TestCase):
                     # mutation has its own route; an in-progress mutation
                     # still proves no settled effect.
                     candidate["evidence"]["collect_status"]["mutation_status"] = "in_progress"
+                elif change == "incomplete-platform":
+                    # #397: the stopped/unknown route inherits the strict
+                    # route's platform equality.
+                    candidate["evidence"]["collect_status"]["mutation_status"] = "unknown"
+                    current_live["platform"] = "other-platform"
+                elif change == "incomplete-sideagent":
+                    # #397: that route is Host-only, like the strict one.
+                    candidate["evidence"]["collect_status"]["mutation_status"] = "unknown"
                 elif change == "foreign-holder":
                     current_live["holder_instance_id"] = "foreign"
                 elif change == "foreign-repo":
@@ -2012,7 +2021,7 @@ class RecordContract(unittest.TestCase):
                                 encoding="utf-8")
                 before_state, before_index = self.file.read_bytes(), index.read_bytes()
                 code, out = self.state("retire", "--file", str(self.file), "--writer",
-                    "sideagent" if change == "sideagent" else "host",
+                    "sideagent" if change in ("sideagent", "incomplete-sideagent") else "host",
                     "--source", "original accepted continuation and exact reclaim",
                     "--kind", "tasks", "--id", "continued", "--expect-rev", "1",
                     "--evidence", "original Host result, custody and exact stop", "--cite", CITE,

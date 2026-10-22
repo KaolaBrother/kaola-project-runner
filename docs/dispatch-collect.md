@@ -260,11 +260,13 @@ then records `outcome: stopped` with `mutation_status: unknown` because the
 seat's follow-up turn was killed (the copied i398-fix row). That shape has its
 own `stopped-collect-incomplete-turn` route instead of the strict route (which
 needs `completed`) or the stale-collect route (which needs an absent outcome).
-It keeps the same evidence: the task is accepted-done with an `accepted`
-per-item disposition, the index row, the collected proof and the project all
-name the same repo, the collected holder is the recorded holder, the collected
-`outcome` is `stopped`, and every `--live` row for that session is `stopped`
-under that holder. A missing live row, a live row, a foreign holder, a
+It keeps the same evidence as the strict continuation: the caller is the Host
+(`--writer host`), the task is accepted-done with an `accepted` per-item
+disposition, the index row, the collected proof and the project all name the
+same repo, the collected holder and the row's recorded platform match every
+`--live` row, the collected `outcome` is `stopped`, and every `--live` row for
+that session is `stopped` under that holder. A Sideagent writer, a missing or
+foreign platform, a missing live row, a live row, a foreign holder, a
 conflicting `turn_outcome`, or a mismatched repo refuses and names the route.
 The command reports the reconciliation in `reconciled_dispatch`, leaves the
 unknown index bytes alone, and writes no wake, re-queue or node traffic.

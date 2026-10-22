@@ -272,6 +272,29 @@ class LegacyBodyAlerts(Fixture):
         self.assertIn("alerts[0]", legacy_id["locator"])
         self.assertIn("not a record key", legacy_id["summary"])
 
+    def test_colliding_old_alert_keys_keep_both_unknown_locators(self) -> None:
+        # Two v1 keys can derive the same old locator key (a and a]); the
+        # migrated alert id keys the unverified entry and both original
+        # locator texts survive.
+        body = {"project": {"code": "KT", "goal": "v1"}, "authorization": AUTH,
+                "alerts": {
+                    "a": {"summary": "one", "custom_one": "pending fact one"},
+                    "a]": {"summary": "two", "custom_two": "pending fact two"},
+                }}
+        self.write_legacy(body)
+        code, out = self.migrate("--write")
+        self.assertEqual(code, 0, out)
+        doc = self.doc()
+        self.assertEqual(set(doc["state"]["alerts"]), {"a", "alert-2"})
+        entries = doc["state"]["unverified"]
+        locators = {locator for row in entries.values() if isinstance(row, dict)
+                    for locator in (row.get("locator") or [])}
+        self.assertIn("alerts[a].custom_one", locators)
+        self.assertIn("alerts[a]].custom_two", locators)
+        self.assertEqual(entries["a-fields"]["locator"], ["alerts[a].custom_one"])
+        self.assertEqual(entries["alert-2-fields"]["locator"], ["alerts[a]].custom_two"])
+        self.assertNotEqual("a-fields", "alert-2-fields")
+
 
 class StoppedCollectIncomplete(Fixture):
     """Shape 3: stopped collected proof with an unknown last mutation."""
@@ -304,8 +327,8 @@ class StoppedCollectIncomplete(Fixture):
             "schema": "kaola-acp-list/1", "rows": live_rows,
         }), encoding="utf-8")
 
-    def retire(self, task_rev: str) -> tuple[int, dict]:
-        return run(["state", "retire", "--file", str(self.file), "--writer", "host",
+    def retire(self, task_rev: str, writer: str = "host") -> tuple[int, dict]:
+        return run(["state", "retire", "--file", str(self.file), "--writer", writer,
                     "--source", "original result and exact stop", "--kind", "tasks",
                     "--id", "i398", "--expect-rev", task_rev,
                     "--evidence", "original close-out evidence", "--cite", json.dumps(CITE),
@@ -443,6 +466,25 @@ class StoppedCollectIncomplete(Fixture):
             live[0]["repo"] = str(self.repo / "elsewhere")
         out = self._refusal(mutate)
         self.assertIn("names another repo", out["detail"])
+
+    def test_a_sideagent_writer_refuses_this_route(self) -> None:
+        _row, _task, _doc, rev = self.build()
+        code, out = self.retire(rev, writer="sideagent")
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("Host-only", out["detail"])
+        self.assertIn("i398", self.doc()["state"]["tasks"])
+
+    def test_a_foreign_live_platform_refuses(self) -> None:
+        def mutate(_row, live):
+            live[0]["platform"] = "codex"
+        out = self._refusal(mutate)
+        self.assertIn("platform 'codex'", out["detail"])
+
+    def test_a_live_row_without_platform_refuses(self) -> None:
+        def mutate(_row, live):
+            live[0].pop("platform", None)
+        out = self._refusal(mutate)
+        self.assertIn("platform None", out["detail"])
 
     def test_a_conflicting_turn_outcome_refuses(self) -> None:
         def mutate(row, _live):

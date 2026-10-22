@@ -251,9 +251,13 @@ This is a release/update requirement. For the lifecycle state of
   --live <list>`. Without `--write` it is a read-only plan; with `--write` it maps each `active`
   row to one `doing` task that keeps its assignment locator and known fields, keeps each
   `pending` row with its stated stage (else `todo`, with the unknown stage listed), keeps
-  `recovery.protected_untracked` when it is a list of non-empty strings, and lists unknown keys,
-  unassociated index rows and any v1 Sideagent binding not proven by `authorization_source`
-  plus its exact live holder as `unverified` locators. Other legacy field names leave and are
+  `recovery.protected_untracked` when it is a list of non-empty strings, maps a v1
+  `body.alerts` dict or list to one current alert per nameable id with `rev 1`, and lists
+  unknown keys, unassociated index rows and any v1 Sideagent binding not proven by
+  `authorization_source` plus its exact live holder as `unverified` locators. An unknown
+  alert field is a locator keyed by the migrated alert id; two different v1 keys that fold
+  to the same bracket-free text keep separate entries and their original locator text.
+  Other legacy field names leave and are
   named in `removed`, or the write is blocked. An unresolved critical mapping writes nothing and leaves the original file
   intact. Do not write `heartbeat-prompt.v1-<sha12>.json` or `recovery.migration.raw`.
   `state-overwritten` is not raised from those copies; overwrite detection is reduced and
