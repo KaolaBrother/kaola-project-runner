@@ -1,0 +1,5 @@
+{"n":1,"name":"Implement git-facts receipt policy and CLI overrides","details":"done: f847a430 — scripts/kaola-acp.py and scripts/kaola-tmux.sh","status":"done"}
+{"n":2,"name":"Add Issue #386 contract suite and pre-fix counter-proof","details":"done: f847a430 — tests/contract/test-issue-386-git-facts.py in validate.sh; base run 12 failures + 1 error (subTest count)","status":"done"}
+{"n":3,"name":"Sync docs/api.md receipt contract and entrypoint usage","details":"done: f847a430 — docs/api.md and CHANGELOG.md","status":"done"}
+{"n":4,"name":"Run focused validation and report candidate","details":"done: validate.sh subset at f847a430 — 10/87/29 tests pass, render PASS, no residual pids","status":"done"}
+{"n":5,"name":"Apply Host/astra review corrections (dual-flag coverage, docs wording, report count)","details":"done: 2f54669c — 6 dual-flag cases across 3 entrypoints, docs/CHANGELOG corrected, pre-fix 12F+1E reproduced, clean-env probe 98 calls, 11/87 tests pass","status":"done"}
