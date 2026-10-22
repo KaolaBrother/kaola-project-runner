@@ -240,10 +240,16 @@ class HolderEnvelope(unittest.TestCase):
 
     def test_entry_is_the_first_payload_line(self) -> None:
         # Issue #119: the payload opens with the holder's own entry line,
-        # which is HOST_SKILL_ENTRY for ZCode.
+        # which is HOST_SKILL_ENTRY for ZCode. Issue #401: #387 hoisted the
+        # carrier schema literal into HOST_NOTIFY_SCHEMA, so anchor the order
+        # on the payload assembly, never on the constant's definition.
         m = re.search(r"lines = \[\s*\n\s*self\.host_entry,", self.src)
         self.assertIsNotNone(m, "the payload list must start with the host entry")
-        self.assertLess(m.start(), self.src.index("kaola-host-notify/1"))
+        header = re.search(
+            r'f"\{HOST_NOTIFY_SCHEMA\}: event-driven heartbeat carrier', self.src)
+        self.assertIsNotNone(
+            header, "the payload must assemble its carrier schema header in place")
+        self.assertLess(m.start(), header.start())
 
     def test_no_second_mechanism(self) -> None:
         for banned in ("KPR-ZCODE-RECOVERY", "KPR-SKILL-RELOAD",
@@ -266,6 +272,7 @@ class HolderEnvelope(unittest.TestCase):
         scope = {"hashlib": hashlib}
         exec(compile(ast.Module(body=[methods["op_steer_interrupt"]], type_ignores=[]),
                      str(HOLDER), "exec"), scope)
+        holder_instance_id = "issue-401-holder"
         for entry in ("", ENTRY):
             for active in (False, True):
                 for text in ("Mention /kaola-project-runner without requesting an entry.",
@@ -278,6 +285,12 @@ class HolderEnvelope(unittest.TestCase):
                             turn={"active": active, "request_id": 7,
                                   "mutation_status": "in_progress" if active else "completed"},
                             _no_acp_session=lambda: None,
+                            # Issue #401: these params carry no client_message_id, so the
+                            # #380 helper takes its legacy (None, None) branch. The id
+                            # paths themselves stay covered by
+                            # test-issue-380-client-message-id.py.
+                            _client_message_id_param=lambda params: (None, None),
+                            holder_instance_id=holder_instance_id,
                             cancel_turn=Mock(return_value=({"outcome": "cancelled"}, True,
                                 {"active": False, "stop_reason": "cancelled",
                                  "mutation_status": "unknown", "is_current": True})),
@@ -285,7 +298,9 @@ class HolderEnvelope(unittest.TestCase):
                                 "turn_request_id": 8, "mutation_status": "in_progress"}),
                         )
                         receipt = scope["op_steer_interrupt"](holder, {"text": text})
-                        holder.op_prompt.assert_called_once_with({"text": text, "wait": False})
+                        holder.op_prompt.assert_called_once_with({
+                            "text": text, "wait": False,
+                            "expected_holder_instance_id": holder_instance_id})
                         self.assertEqual(receipt["steer_fingerprint"],
                                          "sha256:" + hashlib.sha256(text.encode()).hexdigest())
                         self.assertIs(receipt["interrupted"], active)
