@@ -4,7 +4,7 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.9.25 — 2026-10-22 (settled Host decisions are not attention and a Delegator turn end consumes its batch; vanished cwd placeholders released and reported once)
 
 Fixes #399 (vrpai: `question_waiting` woke at every Host turn end with no open question, from settled/host-owned `state.decisions` rows).
 
