@@ -2315,11 +2315,15 @@ only larger structures are summarised) (`record`, `initial_config_options`, `ses
 `agent_info` summarised by size and sha256; `pending_permissions` keeps its newest entries).
 Only `capture --full` is unbounded. Every schema-3 receipt carries `platform`, `session`, `repo`
 and `transport`. Git reporting facts (`git`, `{branch, dirty}`) are command-scoped since Issue #386:
-`send --no-wait`, `steer` and `permit` omit `git` by default and do not run the Git probes; a `send`
-whose resolved wait is blocking (including explicit `--wait`) keeps it, as do `status`, `observe`,
-`start` and the other schema-3 receipts. `--git-facts` or `--no-git-facts` overrides the default for
-one invocation (the last flag wins; `kaola-tmux.sh` forwards both). These facts are evidence for the
-controlling agent and never semantic authority for `send`/`stop`.
+`send --no-wait`, `steer` and `permit` omit `git` by default and skip the two facts queries
+(`git rev-parse --abbrev-ref HEAD` and `git status --porcelain`); a `send` whose resolved wait is
+blocking (including explicit `--wait`) keeps them, as do `status`, `observe`, `start` and the other
+schema-3 receipts. `--git-facts` or `--no-git-facts` overrides the default for one invocation (the
+last occurrence wins; `kaola-tmux.sh` and the generated `runtime-tmux.sh` forward both). This
+decision covers only the receipt facts: independently of it, each ACP CLI call that carries
+`--repo` still runs exactly one `git rev-parse --show-toplevel` in `resolve_repo` to prove the
+repository root, and Issue #386 leaves that identity check unchanged. These facts are evidence for
+the controlling agent and never semantic authority for `send`/`stop`.
 
 ACP receipts also report the notification binding in force (Issue #70). `start`, `observe`
 and `status` carry `heartbeat_host`: the target the running holder really adopted, or `null`

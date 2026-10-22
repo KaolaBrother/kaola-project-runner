@@ -10,18 +10,23 @@ contract that consumes the Git evidence.
 This suite pins the adjudicated minimal repair:
 
 * ``send --no-wait``, ``steer`` and ``permit`` omit ``git`` by default and do
-  not call the Git helper at all;
+  not call the ``git_facts`` helper; the separate ``resolve_repo`` check still
+  runs one ``git rev-parse --show-toplevel`` per CLI invocation that carries
+  ``--repo``, and Issue #386 leaves it unchanged;
 * a waiting ``send`` keeps the Issue #25 L0 receipt shape, including ``git``;
   an omitted wait that resolves to blocking counts as waiting;
 * ``status`` (and the other schema-3 receipts) are unchanged;
-* ``--git-facts`` / ``--no-git-facts`` explicitly override either default, and
-  ``kaola-tmux.sh`` forwards both;
+* ``--git-facts`` / ``--no-git-facts`` explicitly override either default; the
+  last occurrence wins, and ``kaola-tmux.sh`` plus the generated
+  ``runtime-tmux.sh`` forward both;
 * the eight refusal helpers that called ``base_receipt`` and then discarded
   ``git`` skip the helper instead of computing it first.
 
 Pre-fix counter-proof: run this file in a checkout of the base commit
-``f3964ff0``. ``test_default_omission_never_runs_git_facts`` and
-``test_explicit_include_git_false_skips_helper`` fail there because
+``f3964ff0``. The original ten-test revision reports 12 failures + 1 error
+there (unittest counts each failing subTest as a failure; by method that is 8
+failures, 1 error and 1 pass). ``test_default_omission_never_runs_git_facts``
+and ``test_explicit_include_git_false_skips_helper`` fail because
 ``base_receipt`` always computes and emits ``git`` and has no ``include_git``
 parameter; the live ``--git-facts``/``--no-git-facts`` cases fail because the
 base parser rejects the flags. The suite's own default-omission cases are the
@@ -47,6 +52,7 @@ from unittest.mock import patch
 PROJECT = Path(__file__).resolve().parents[2]
 CLI = PROJECT / "scripts" / "kaola-acp.py"
 TMUX = PROJECT / "scripts" / "kaola-tmux.sh"
+RUNTIME = PROJECT / "skills" / "grok-kaola-project-runner" / "scripts" / "runtime-tmux.sh"
 MOCK = PROJECT / "tests" / "contract" / "mock-acp-agent.py"
 
 
@@ -240,6 +246,23 @@ class GitFactsCliContract(unittest.TestCase):
                 f"stdout={result.stdout!r}\nstderr={result.stderr!r}"
             )
 
+    def runtime(self, command: str, *args: str, timeout: float = 45) -> dict:
+        argv = [
+            "bash", str(RUNTIME), command,
+            "--repo", str(self.repo), "--session", self.session, *args,
+        ]
+        result = subprocess.run(
+            argv, capture_output=True, text=True, env=self.env(), timeout=timeout
+        )
+        try:
+            return json.loads(result.stdout)
+        except ValueError:
+            self.fail(
+                f"runtime-tmux.sh {command} emitted no JSON receipt: "
+                f"rc={result.returncode}\n"
+                f"stdout={result.stdout!r}\nstderr={result.stderr!r}"
+            )
+
     def start(self, platform: str = "grok", session: str | None = None,
               **kwargs) -> dict:
         receipt = self.cli(platform, "start", session=session, **kwargs)
@@ -352,6 +375,30 @@ class GitFactsCliContract(unittest.TestCase):
         opted_in = self.tmux(
             "send", "--text", "hello", "--no-wait", "--git-facts")
         self.assert_git_facts(opted_in)
+
+    def test_dual_flags_last_occurrence_wins_across_entrypoints(self) -> None:
+        # argparse and the shell wrapper both assign one effective value, so
+        # the last of the two flags decides, not a fixed --no-git-facts win.
+        self.start()
+        entries = (
+            ("kaola-acp.py", lambda *args: self.cli("grok", "send", *args)),
+            ("kaola-tmux.sh", lambda *args: self.tmux("send", *args)),
+            ("runtime-tmux.sh", lambda *args: self.runtime("send", *args)),
+        )
+        cases = (
+            (("--git-facts", "--no-git-facts"), False),
+            (("--no-git-facts", "--git-facts"), True),
+        )
+        for entry, send in entries:
+            for flags, expected in cases:
+                with self.subTest(entry=entry, flags=flags):
+                    receipt = send("--text", "dual flags", "--wait", *flags)
+                    selection = receipt.get("wait_selection") or {}
+                    self.assertEqual(selection.get("wait"), True, receipt)
+                    self.assertEqual(selection.get("source"), "explicit", receipt)
+                    self.assertEqual("git" in receipt, expected, receipt)
+                    if expected:
+                        self.assert_git_facts(receipt)
 
 
 if __name__ == "__main__":
