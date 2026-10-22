@@ -2655,7 +2655,11 @@ def host_view(doc: dict[str, Any], path: Path | None) -> dict[str, Any]:
                                                 else short(decision.get(key)) for key in
                                                 ("owner", "question", "options", "next")
                                                 if decision.get(key) is not None}})
-        if decision.get("owner") == "host":
+        # Issue #399: only an open Host decision is attention. A settled row is
+        # the same "open unless status is settled" rule the holder's
+        # open_registered_decision_rows already applies; the transcribed-check
+        # row above stays for the pending-adoption migration shape.
+        if decision.get("owner") == "host" and decision.get("status") != "settled":
             attention.append({"kind": "decisions", "id": decision_id, "why": "host-decision",
                               "content": judgment_digest(decision)})
     binding = state.get("sideagent")

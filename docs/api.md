@@ -1199,13 +1199,14 @@ Delegator is not already there and the Host did not continue by itself:
 | what the holder saw | reason |
 | --- | --- |
 | next beat already admitted, or a Delegator after-turn steer is queued | no wake |
+| a Delegator-source turn end (this send or steer), whatever the attention list holds | the current host-view attention is marked seen before the scan; those rows add no `question_waiting`. A pending `state.decisions` row for `delegator`/`user` still reports `needs_decision` when no seat is in a turn (#315), and the `all-idle` / `host_turn_done` fallbacks below still apply |
 | no active seat turn, and an undelivered attention row or an open `state.decisions` row is pending | the attention reason below; not `all-idle` |
 | no active seat turn, that list is empty, and this all-ended episode has not yet sent `all-idle` | `all-idle` |
 | no active seat turn, that list is empty, real work has resumed since the last `all-idle`, and the Host is all-ended | `all-idle` once, even if the turn is the Delegator's and the previous latch was set |
 | no active seat turn, that list is empty, this all-ended episode already sent `all-idle`, real work has not resumed, and a Delegator turn admitted without `--wait` ends | `host_turn_done` once for that turn |
 | the same, but the turn is a self turn or was admitted with `--wait` (a `--wait` caller usually already has the result; a timeout or a caller that disappears is not decided here) | no wake |
 | prompt source `delegator` (this send or steer) and a seat still has an active turn | no wake |
-| undelivered host-view row `kind=decisions`, `why=host-decision` | `question_waiting` |
+| undelivered host-view row `kind=decisions`, `why=host-decision`, for a row that is not `status` `settled` | `question_waiting` |
 | undelivered host-view row `kind=tasks` and `why` one of `awaiting-verdict`, `delivery-open`, `verdict-missing` | `delivery_review` |
 | undelivered `why` `registered-decision` row, or an `alerts` row with `why` `severe` | `needs_decision` |
 | any other undelivered attention row (a `holds` row owned by the host, a non-severe Host alert such as `maintenance-returned`, a `maintenance` or `sideagent` duty, a `transcribed-check`) | no wake of its own (Issue #324) |
@@ -1215,7 +1216,11 @@ Delegator is not already there and the Host did not continue by itself:
 
 Undelivered attention means the heartbeat body is a host view (`view` `host`,
 `attention` a list) whose fingerprint is not the one last delivered on a
-worker-event prompt. A standing Host-owned row whose `content` digest moved
+worker-event prompt or already marked seen at a Delegator-source turn end
+(Issue #399). A `state.decisions` row is attention only while it is open:
+`status` `settled` removes its `host-decision` row, while a settled row that
+still carries `transcribed` keeps its `transcribed-check` row for pending
+adoption (Issue #399). A standing Host-owned row whose `content` digest moved
 (the Host or its Sideagent node edited a hold or the `maintenance-returned`
 alert) counts as undelivered, but it is Host bookkeeping, not a question for
 the Delegator: a compaction-reload turn that ends beside a Sideagent node
@@ -1450,8 +1455,10 @@ wake reason:
 
 Only `session/request_permission` produces `blocked`. An owner question asked
 only in reply text is an ordinary `end_turn` and does not by itself wake; a
-`question_waiting` wake requires an undelivered host-view `decisions` /
-`host-decision` row. The stop reason is whatever the agent reports: codex-acp
+`question_waiting` wake requires an open (not `status` `settled`) undelivered
+host-view `decisions` / `host-decision` row, and a Delegator-source turn end
+marks the current attention batch seen so the same rows do not wake again
+(Issue #399). The stop reason is whatever the agent reports: codex-acp
 maps a failed turn to `end_turn`, which #173's systemError detection turns into
 `error`/`turn_failed`.
 

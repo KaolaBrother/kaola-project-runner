@@ -5449,6 +5449,19 @@ class Holder:
 
     def _delegator_turn_end_reason(self, turn: dict[str, Any]) -> str | None:
         """Issue #302 predicate for one ended turn. See ``delegator_turn_wake_reason``."""
+        if (turn.get("prompt_source") or "delegator") == "delegator":
+            # Issue #399: a Delegator-admitted turn (send or steer) already has
+            # the Delegator in the conversation, while only the self carrier
+            # used to advance this mark when it delivered the body. Without
+            # this, the same undelivered attention rows woke question_waiting
+            # at every Delegator turn end. Refresh from the current body; a
+            # body that is not a Host view leaves the mark alone.
+            source = Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"
+            _doc, body, _defect = read_heartbeat_file(source)
+            fingerprint = attention_fingerprint(body)
+            if fingerprint is not None:
+                with self.worker_events_lock:
+                    self.host_attention_seen = fingerprint
         staged, rows, decisions = self._delegator_pending_facts()
         # Outside the holder locks: this scans ps and other holders' records.
         # Working seats only (#305, #314): agent_exited / stopping / stopped
