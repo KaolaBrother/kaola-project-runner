@@ -1199,7 +1199,7 @@ Delegator is not already there and the Host did not continue by itself:
 | what the holder saw | reason |
 | --- | --- |
 | next beat already admitted, or a Delegator after-turn steer is queued | no wake |
-| a Delegator-source turn end (this send or steer), whatever the attention list holds | the current host-view attention is marked seen before the scan; those rows add no `question_waiting`. A pending `state.decisions` row for `delegator`/`user` still reports `needs_decision` when no seat is in a turn (#315), and the `all-idle` / `host_turn_done` fallbacks below still apply |
+| a Delegator-source turn end (this send or steer) | the attention read at that turn end is recorded on the Delegator-turn mark before the scan; those rows add no `question_waiting` (a rewrite between the mark read and the scan can still over-wake once). A pending `state.decisions` row for `delegator`/`user` still reports `needs_decision` when no seat is in a turn (#315), and the `all-idle` / `host_turn_done` fallbacks below still apply |
 | no active seat turn, and an undelivered attention row or an open `state.decisions` row is pending | the attention reason below; not `all-idle` |
 | no active seat turn, that list is empty, and this all-ended episode has not yet sent `all-idle` | `all-idle` |
 | no active seat turn, that list is empty, real work has resumed since the last `all-idle`, and the Host is all-ended | `all-idle` once, even if the turn is the Delegator's and the previous latch was set |
@@ -1215,9 +1215,13 @@ Delegator is not already there and the Host did not continue by itself:
 | clean `end_turn` with nothing pending, while a seat still has an active turn | no wake |
 
 Undelivered attention means the heartbeat body is a host view (`view` `host`,
-`attention` a list) whose fingerprint is not the one last delivered on a
-worker-event prompt or already marked seen at a Delegator-source turn end
-(Issue #399). A `state.decisions` row is attention only while it is open:
+`attention` a list) whose fingerprint is neither the one last delivered on a
+worker-event prompt nor the one recorded on the Delegator-turn mark at a
+Delegator-source turn end (Issue #399). The Delegator-turn mark is separate
+from the Host-delivered mark: the Sideagent node settle and relay checks still
+ask whether the Host received a node-written attention, so a Delegator turn
+does not make that node write quiet (review round 2). A `state.decisions` row
+is attention only while it is open:
 `status` `settled` removes its `host-decision` row, while a settled row that
 still carries `transcribed` keeps its `transcribed-check` row for pending
 adoption (Issue #399). A standing Host-owned row whose `content` digest moved
@@ -1245,8 +1249,9 @@ while that seat's turn cannot be read. Stop preservation uses the scan
 without this turn filter, so an idle held seat is still kept. The bound
 Sideagent node is not a seat. An open `state.decisions` row has `owner`
 `delegator` or `user` and `status` other than `settled` (a missing status is
-open). `owner` `host` is already attention (`why` `host-decision`) and is not
-added again. When no seat has an active turn, the holder merges each open
+open). An open `owner` `host` row is already attention (`why` `host-decision`)
+and is not added again; a `status` `settled` row adds no `host-decision` row.
+When no seat has an active turn, the holder merges each open
 delegator or user row as `why` `registered-decision` and classifies that list
 before the `all-idle` fallback (Issue #315). The episode latch does not
 suppress that reason. A compaction reload does not skip it:
@@ -1457,9 +1462,10 @@ Only `session/request_permission` produces `blocked`. An owner question asked
 only in reply text is an ordinary `end_turn` and does not by itself wake; a
 `question_waiting` wake requires an open (not `status` `settled`) undelivered
 host-view `decisions` / `host-decision` row, and a Delegator-source turn end
-marks the current attention batch seen so the same rows do not wake again
-(Issue #399). The stop reason is whatever the agent reports: codex-acp
-maps a failed turn to `end_turn`, which #173's systemError detection turns into
+records the current attention batch on the separate Delegator-turn mark so the
+same rows do not wake again (Issue #399). The stop reason is whatever the
+agent reports: codex-acp maps a failed turn to `end_turn`, which #173's
+systemError detection turns into
 `error`/`turn_failed`.
 
 Delivery: POST the payload as the JSON body with `Content-Type: application/json`

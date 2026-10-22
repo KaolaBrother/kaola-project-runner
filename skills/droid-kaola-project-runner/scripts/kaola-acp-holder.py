@@ -669,7 +669,8 @@ def delegator_turn_wake_reason(
       prompt or by steer, and a seat is still live. The Delegator is already
       there. No wake.
     * undelivered Host attention (heartbeat body is a host view whose
-      fingerprint is not ``host_attention_seen``), plus a pending
+      fingerprint is neither the one last delivered to the Host nor the one
+      a Delegator-source turn end already consumed), plus a pending
       ``state.decisions`` row the caller merged when no seat is in a turn.
       A ``decisions``/``host-decision`` row is ``question_waiting``; a
       ``tasks`` row whose ``why`` is awaiting-verdict, delivery-open or
@@ -3020,6 +3021,12 @@ class Holder:
         # to this Host, so a bound Sideagent's routine turn end that changed
         # nothing needing a Host judgment does not wake the Host.
         self.host_attention_seen: str | None = None
+        # Issue #399 review: a Delegator-admitted turn has already put the
+        # Delegator in the conversation, so it consumes the attention batch it
+        # read. That mark is separate from ``host_attention_seen``: the node
+        # settle and relay checks below still ask whether the HOST has seen a
+        # node-written attention, and a Delegator turn must not answer that.
+        self.delegator_turn_attention_seen: str | None = None
         # Issue #264: one pending post-compaction reload and one scalar for the
         # last delivered occurrence. Not a queue, not a history store. The
         # inflight flag is a boolean, so an occurrence-less signal (Devin, Grok,
@@ -5415,8 +5422,9 @@ class Holder:
         """Staged events, undelivered attention, and open registered decisions.
 
         Attention is undelivered when the heartbeat body is a host view whose
-        fingerprint differs from the one last delivered to this Host. A body
-        that is not a host view contributes no attention rows.
+        fingerprint differs from both the one last delivered to this Host and
+        the one a Delegator-source turn end already consumed (Issue #399). A
+        body that is not a host view contributes no attention rows.
 
         The third value is every pending ``state.decisions`` row with owner
         ``delegator`` or ``user`` (Issue #315). Those rows are not in the
@@ -5432,11 +5440,12 @@ class Holder:
                 and self.overflow_inflight_generation is None
             )
             seen = self.host_attention_seen
+            delegator_seen = self.delegator_turn_attention_seen
         source = Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"
         doc, body, _defect = read_heartbeat_file(source)
         decisions = open_registered_decision_rows(doc)
         fingerprint = attention_fingerprint(body)
-        if fingerprint is None or fingerprint == seen:
+        if fingerprint is None or fingerprint == seen or fingerprint == delegator_seen:
             return staged, None, decisions
         try:
             view = json.loads(body or "")
@@ -5452,16 +5461,19 @@ class Holder:
         if (turn.get("prompt_source") or "delegator") == "delegator":
             # Issue #399: a Delegator-admitted turn (send or steer) already has
             # the Delegator in the conversation, while only the self carrier
-            # used to advance this mark when it delivered the body. Without
-            # this, the same undelivered attention rows woke question_waiting
-            # at every Delegator turn end. Refresh from the current body; a
-            # body that is not a Host view leaves the mark alone.
+            # used to advance its delivered mark. Refresh a SEPARATE mark from
+            # the current body, so the same undelivered attention rows no
+            # longer wake question_waiting at every Delegator turn end; a body
+            # that is not a Host view leaves the mark alone. The node settle
+            # and relay checks keep reading ``host_attention_seen``, which this
+            # turn must not move: a node-written attention the Host has not
+            # delivered yet still reaches the Host.
             source = Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"
             _doc, body, _defect = read_heartbeat_file(source)
             fingerprint = attention_fingerprint(body)
             if fingerprint is not None:
                 with self.worker_events_lock:
-                    self.host_attention_seen = fingerprint
+                    self.delegator_turn_attention_seen = fingerprint
         staged, rows, decisions = self._delegator_pending_facts()
         # Outside the holder locks: this scans ps and other holders' records.
         # Working seats only (#305, #314): agent_exited / stopping / stopped

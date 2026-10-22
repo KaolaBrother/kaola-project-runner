@@ -12,8 +12,11 @@ open question:
 2. ``kaola-acp-holder.py`` advanced ``host_attention_seen`` only when the
    self carrier delivered the heartbeat body. A Delegator-admitted turn (a
    socket send or a steer) never advanced it, so the same rows woke again at
-   every such turn end. The holder now refreshes the mark at that turn end;
-   an unknown body leaves it alone.
+   every such turn end. The holder refreshes a separate
+   ``delegator_turn_attention_seen`` mark at that turn end; an unknown body
+   leaves it alone. ``host_attention_seen`` stays the Host-delivered mark the
+   Sideagent node settle and relay checks read, so a node-written attention
+   the Host has not received still wakes the Host (review round 2).
 
 The pure predicate is unchanged: a given undelivered ``host-decision`` row
 still classifies as ``question_waiting`` (test-issue-302 keeps that line).
@@ -181,7 +184,10 @@ class DelegatorTurnConsumes(_Harness):
                  for r in self.pending_attention(host)],
                 [("decisions", "host-q", "host-decision")])
             self.assertIsNone(self.end_turn(host, "delegator"))
-            self.assertIsNotNone(host.host_attention_seen)
+            self.assertIsNotNone(host.delegator_turn_attention_seen)
+            # The Host-delivered mark is separate; a Delegator turn must not
+            # tell the node settle/relay that the Host saw its write.
+            self.assertIsNone(host.host_attention_seen)
             self.assertEqual(self.pending_attention(host), [])
             # The same stored row no longer wakes the next Delegator turn.
             self.assertIsNone(self.end_turn(host, "delegator"))
@@ -222,12 +228,14 @@ class DelegatorTurnConsumes(_Harness):
             host._all_idle_woken = True
             self.write_state({"host-q": decision("host")})
             self.assertIsNone(self.end_turn(host, "delegator"))
-            seen = host.host_attention_seen
+            seen = host.delegator_turn_attention_seen
             self.assertIsInstance(seen, str)
+            self.assertIsNone(host.host_attention_seen)
             path = Path(host.args.repo) / ".kaola" / "heartbeat-prompt.json"
             path.write_text(json.dumps({"body": "plain heartbeat text"}), encoding="utf-8")
             self.assertIsNone(self.end_turn(host, "delegator"))
-            self.assertEqual(host.host_attention_seen, seen)
+            self.assertEqual(host.delegator_turn_attention_seen, seen)
+            self.assertIsNone(host.host_attention_seen)
 
     def test_settled_host_decision_never_wakes_question_waiting(self) -> None:
         self.endpoint = issue302.Endpoint()
@@ -241,6 +249,117 @@ class DelegatorTurnConsumes(_Harness):
             self.assertNotEqual(self.end_turn(host, "self"), "question_waiting")
             wait_for(lambda: host.events.cursor >= 1, 5, "recorded turn")
             self.assertEqual(self.question_posts(host), [])
+
+    def test_flush_second_read_advances_the_delegator_mark(self) -> None:
+        # Review finding 5: a turn end deferred by a send waiter is evaluated
+        # again in _flush_all_ended_after_waiter. The second read advances the
+        # Delegator mark; a body rewritten in between is consumed by the same
+        # Delegator turn, not woken as a new question.
+        self.endpoint = issue302.Endpoint()
+        self.configure_endpoint()
+        with self.webhook_process_env():
+            host = self.idle_host("flush-second-read")
+            self.write_state({"host-q": decision("host")})
+            ended = host._empty_turn()
+            ended.update(outcome="turn_completed", stop_reason="end_turn",
+                         prompt_source="delegator", wait=True)
+            host.turn = ended
+            host._delegator_followups = 0
+            host.events.append({"kind": "turn_ended", "outcome": "turn_completed"})
+            host._send_waiters = 1
+            first_reason = host._delegator_turn_end_reason(ended)
+            host._finish_delegator_turn_wake(ended, first_reason)
+            self.assertEqual(first_reason, "all-idle")
+            first = host.delegator_turn_attention_seen
+            self.assertIsInstance(first, str)
+            self.assertTrue(host._all_ended_deferred)
+            self.write_state({"host-q": decision(
+                "host", question="rewritten before the flush")})
+            host._send_waiters = 0
+            host._flush_all_ended_after_waiter()
+            self.assertNotEqual(host.delegator_turn_attention_seen, first)
+            self.assertIsNone(host.host_attention_seen)
+            wait_for(lambda: self.posts_for(host.holder_instance_id, "all-idle") or None,
+                     15, "one all-idle after the waiter left")
+            self.assertEqual(
+                len(self.posts_for(host.holder_instance_id, "all-idle")), 1)
+            self.assertEqual(self.question_posts(host), [])
+
+
+class NodeSettleAfterDelegatorTurn(_Harness):
+    """A Delegator turn must not hide a node-written attention from the Host."""
+
+    NODE_HOLDER = "node-holder-399"
+
+    def write_node_state(self, host) -> tuple[str, str]:
+        path = Path(host.args.repo) / ".kaola" / "heartbeat-prompt.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        doc = {
+            "schema": "kaola-heartbeat-prompt/2", "revision": 1,
+            "host_revision": 5,
+            "state": {
+                "project": {"repo": host.args.repo, "goal": "issue 399 node order"},
+                "tasks": {}, "holds": {}, "decisions": {},
+                "alerts": {"node-alert": {
+                    "level": "warn", "owner": "host",
+                    "summary": "node wrote this",
+                    "writer_holder": self.NODE_HOLDER, "rev": 1}},
+                "maintenance": {"last_checkpoint": {
+                    "batch": "b-1", "verified": True,
+                    "node": {"holder_instance_id": self.NODE_HOLDER},
+                    "host_revision": {"through": 5}}},
+            },
+        }
+        path.write_text(json.dumps(doc), encoding="utf-8")
+        _doc, body, defect = holder.read_heartbeat_file(path)
+        self.assertIsNone(defect, defect)
+        return holder.attention_fingerprint(body), body
+
+    def settle(self, host, sent: str) -> dict:
+        host.node = {"batch": "b-1", "holder": self.NODE_HOLDER,
+                     "fingerprint": "turn-fp", "attention_sent": sent,
+                     "sent_through": 4, "phase": "running"}
+        host._stop_node = lambda *args, **kwargs: None
+        end = {"holder_instance_id": self.NODE_HOLDER,
+               "turn_fingerprint": "turn-fp", "turn_outcome": "turn_completed"}
+        host._settle_node_batch([end])
+        return end
+
+    def delegator_turn_end(self, host) -> str | None:
+        host._all_idle_woken = True
+        ended = host._empty_turn()
+        ended.update(outcome="turn_completed", stop_reason="end_turn",
+                     prompt_source="delegator", wait=True)
+        host.turn = host._empty_turn()
+        host._delegator_followups = 0
+        host.events.append({"kind": "turn_ended", "outcome": "turn_completed"})
+        return host._delegator_turn_end_reason(ended)
+
+    def test_delegator_turn_end_does_not_quiet_a_node_write(self) -> None:
+        host = self.idle_host("node-order")
+        sent = holder.attention_fingerprint(
+            json.dumps({"view": "host", "attention": []}))
+        current, _body = self.write_node_state(host)
+        self.assertNotEqual(current, sent)
+        self.assertIsNone(self.delegator_turn_end(host))
+        self.assertEqual(host.delegator_turn_attention_seen, current)
+        self.assertIsNone(host.host_attention_seen)
+        end = self.settle(host, sent)
+        self.assertIs(end.get("host_owned"), True, end)
+        self.assertNotEqual(end.get("node_quiet"), True, end)
+
+    def test_host_delivered_mark_still_quiets_the_node(self) -> None:
+        host = self.idle_host("node-delivered")
+        sent = holder.attention_fingerprint(
+            json.dumps({"view": "host", "attention": []}))
+        current, _body = self.write_node_state(host)
+        # The self carrier delivered this body: that is the only mark the node
+        # settle consults. A Delegator consumption is a different fact.
+        host.host_attention_seen = current
+        host.delegator_turn_attention_seen = sent
+        end = self.settle(host, sent)
+        self.assertIs(end.get("node_quiet"), True, end)
+        self.assertNotEqual(end.get("host_owned"), True, end)
 
 
 class SelfTurnUnchanged(_Harness):
