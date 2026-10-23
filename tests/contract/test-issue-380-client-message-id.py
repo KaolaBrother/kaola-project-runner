@@ -730,6 +730,18 @@ class LedgerBoundaryCase(unittest.TestCase):
                 for entry in self.holder.client_message_ledger]
 
     def wire(self, op: str, params: dict) -> dict:
+        # Issue #408: a bound seat gates mutating socket ops on its minted
+        # token plus an explicit expected_holder_instance_id. This helper is
+        # the legitimate-client stand-in, so it presents both the way the
+        # Runner CLI does; an unbound fixture ignores them. (The ambient
+        # KAOLA_ACP_HEARTBEAT_* env of a real managed seat can bind this
+        # fixture, so the proof must be unconditional.)
+        params = dict(params)
+        token = holder_module.acp_paths.read_auth_token(self.holder.record_dir)
+        if token:
+            params["auth_token"] = token
+        params.setdefault("expected_holder_instance_id",
+                          self.holder.holder_instance_id)
         client, server = socket.socketpair()
         thread = threading.Thread(
             target=self.holder.serve_connection, args=(server,))

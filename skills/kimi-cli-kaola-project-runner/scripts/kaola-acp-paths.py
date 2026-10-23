@@ -103,6 +103,39 @@ def read_record(directory: Path) -> dict | None:
         return None
 
 
+AUTH_TOKEN_NAME = 'auth.token'
+AUTH_TOKEN_MAX = 256
+
+
+def write_auth_token(directory: Path, token: str) -> None:
+    """Mint this holder instance's socket capability inside its 0700 record dir.
+
+    Issue #408: peer UID alone proved too little — any same-UID process can speak
+    the socket protocol. The token is never echoed through the record, a state
+    reply, or an event; only a caller that can read this 0600 file may present
+    it on a mutating op against a bound seat.
+    """
+    path = directory / AUTH_TOKEN_NAME
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    if hasattr(os, 'O_NOFOLLOW'):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(path, flags, 0o600)
+    try:
+        os.fchmod(fd, 0o600)
+        os.write(fd, (token + '\n').encode('utf-8'))
+    finally:
+        os.close(fd)
+
+
+def read_auth_token(directory: Path) -> str | None:
+    """The holder's current socket capability, or None when unreadable/absent."""
+    try:
+        raw = (directory / AUTH_TOKEN_NAME).read_text(encoding='utf-8').strip()
+    except (OSError, ValueError):
+        return None
+    return raw if 0 < len(raw) <= AUTH_TOKEN_MAX else None
+
+
 def roots(explicit: str | Path | None = None, *, all_roots: bool = False
           ) -> tuple[list[Path], bool]:
     override = explicit or os.environ.get('KAOLA_ACP_RECORD_ROOT')

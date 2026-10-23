@@ -68,6 +68,19 @@ SENSITIVE_KEYS = ("_API_KEY", "TOKEN", "Authorization")
 # keys only, so the message is redacted and capped before it is stored.
 PROVIDER_ERROR_MESSAGE_MAX = 400
 KIMI_WIRE_TAIL_BYTES = 2 * 1024 * 1024
+# Issue #408: the socket ops that mutate a bound seat's state. On a seat bound
+# to a heartbeat host every one of them requires both the holder-issued
+# auth.token (capability proof, read from the record dir) and an explicit
+# expected_holder_instance_id; a raw same-UID writer has neither and is
+# refused before the op runs. Read ops (state/view/capture/wait/follow) stay
+# open, and an unbound seat — standalone, or a Host-role seat (unbound
+# includes Host-role seats today) — keeps its documented caller-asserted
+# behavior exactly.
+BOUND_WRITE_OPS = frozenset({
+    "prompt", "steer", "steer_interrupt", "cancel", "permit", "stop",
+    "wake_delegator", "worker_event", "compact_notice", "set_config_option",
+    "record_start_evidence", "rebind_heartbeat_host",
+})
 
 
 def canonical(value: Any) -> bytes:
@@ -2927,6 +2940,19 @@ class Holder:
         self.state = "starting"
         self.stop_requested = False
         self.holder_instance_id = secrets.token_hex(16)
+        # Issue #408: the per-instance socket capability. Written 0600 inside
+        # the 0700 record dir before the listener binds, so a client that can
+        # resolve this seat's record dir can present it on mutating ops while
+        # a raw same-UID process that only found the socket path cannot.
+        # The token is instance-scoped: a holder restart mints a fresh one.
+        self.auth_token = secrets.token_hex(32)
+        try:
+            acp_paths.write_auth_token(self.record_dir, self.auth_token)
+        except OSError as exc:
+            # Fail closed: a bound seat with no readable token file refuses
+            # every mutating op, foreign and legitimate alike, rather than
+            # admitting unauthenticated writes.
+            sys.stderr.write(f"kaola-acp-holder: auth.token write failed: {exc}\n")
         self.acp_session_id: str | None = None
         self.session_meta: dict[str, Any] = {}
         self.initial_config_options: Any = None
@@ -5895,6 +5921,14 @@ class Holder:
         """
         receipt: dict[str, Any] = {}
         with self.heartbeat_notify_lock:
+            # Issue #408: this holder's own outbound mutating op faces the same
+            # bound-seat gate. Present the heartbeat host's auth.token and its
+            # current holder_instance_id, both read from its own record dir —
+            # the live record wins over dispatched_by, which a Host restart
+            # leaves stale.
+            wire = dict(params)
+            wire.update(self._socket_peer_auth(
+                target["platform"], target["session"], target["repo"]))
             try:
                 connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
                 try:
@@ -5907,7 +5941,7 @@ class Holder:
                     else:
                         connection.sendall(canonical(
                             {"op": "worker_event", "request_id": secrets.token_hex(8),
-                             "params": params}) + b"\n")
+                             "params": wire}) + b"\n")
                         buffer = bytearray()
                         while b"\n" not in buffer:
                             data = connection.recv(65536)
@@ -6278,7 +6312,10 @@ class Holder:
         if not sock.exists():
             return None
         return {"platform": platform, "session": session, "holder_instance_id": holder,
-                "socket": str(sock), "attention": attention_fingerprint(body)}
+                "socket": str(sock), "attention": attention_fingerprint(body),
+                # Issue #408: the relay prompt is a mutating op on a bound
+                # seat; present the Sideagent's own minted token.
+                "auth_token": acp_paths.read_auth_token(directory)}
 
     def _relay_prompt(self, events: list[dict[str, Any]]) -> str:
         lines = [f"{RELAY_SCHEMA}: worker events relayed by the {self.host_name} Host holder "
@@ -6312,10 +6349,13 @@ class Holder:
                 connection.settimeout(remaining())
                 connection.connect(target["socket"])
                 connection.settimeout(remaining())
+                params = {"text": text, "wait": False,
+                          "expected_holder_instance_id": target["holder_instance_id"]}
+                if target.get("auth_token"):
+                    params["auth_token"] = target["auth_token"]
                 connection.sendall(canonical(
                     {"op": "prompt", "request_id": secrets.token_hex(8),
-                     "params": {"text": text, "wait": False,
-                                "expected_holder_instance_id": target["holder_instance_id"]}}) + b"\n")
+                     "params": params}) + b"\n")
                 buffer = bytearray()
                 while b"\n" not in buffer:
                     connection.settimeout(remaining())
@@ -7626,6 +7666,32 @@ class Holder:
         except acp_paths.RecordRootMismatch:
             return None
 
+    def _socket_peer_auth(self, platform: str, session: str, repo: str) -> dict[str, Any]:
+        """The proof this holder's socket peer requires, or {}.
+
+        Issue #408: a bound seat refuses mutating ops without its minted
+        token and an explicit expected_holder_instance_id. This holder's own
+        outbound ops — ``worker_event`` to its heartbeat host, the Sideagent
+        relay prompt, a node exact stop — are legitimate clients and present
+        both facts the way the CLI does: read from the peer's own record
+        directory. An unreadable record leaves the op to be refused honestly,
+        never retried as a foreign write.
+        """
+        try:
+            directory = acp_paths.find_directory(
+                platform, session, repo,
+                self.record_dir.parent.parent.parent, all_roots=True)
+        except acp_paths.RecordRootMismatch:
+            return {}
+        proof: dict[str, Any] = {}
+        record = acp_paths.read_record(directory) or {}
+        if isinstance(record.get("holder_instance_id"), str):
+            proof["expected_holder_instance_id"] = record["holder_instance_id"]
+        token = acp_paths.read_auth_token(directory)
+        if token:
+            proof["auth_token"] = token
+        return proof
+
     def _node_record(self, binding: dict[str, Any]) -> dict[str, Any] | None:
         directory = self._node_directory(binding["platform"], binding["session"])
         if directory is None:
@@ -7800,8 +7866,16 @@ class Holder:
                 try:
                     connection.settimeout(wait)
                     connection.connect(str(target))
+                    stop_params: dict[str, Any] = {"expected_holder_instance_id": holder}
+                    # Issue #408: a bound node seat refuses an unauthenticated
+                    # stop; present its minted token like the CLI does. The
+                    # directory above is non-None whenever target resolved.
+                    if directory is not None:
+                        auth = acp_paths.read_auth_token(directory)
+                        if auth:
+                            stop_params["auth_token"] = auth
                     connection.sendall(canonical({"op": "stop", "request_id": secrets.token_hex(8),
-                                                  "params": {"expected_holder_instance_id": holder}}) + b"\n")
+                                                  "params": stop_params}) + b"\n")
                     buffer = bytearray()
                     while b"\n" not in buffer:
                         data = connection.recv(65536)
@@ -10412,9 +10486,90 @@ class Holder:
 
     # -- socket server ------------------------------------------------------------
 
+    def _bound_op_refusal(self, op: str, params: Any) -> dict[str, Any] | None:
+        """Issue #408 server-side gate for a heartbeat-bound seat.
+
+        ``verify_peer`` already proves same-UID; that is not the dispatcher.
+        A bound seat additionally requires the ``auth.token`` this holder
+        minted in its record dir (a capability a raw socket speaker cannot
+        obtain) plus an explicit ``expected_holder_instance_id`` naming this
+        instance — omission can no longer skip the binding, and for a bound
+        seat the id comparison itself lives here once so every refusal stamps
+        the same ``socket_op_refused`` shape (an unbound seat keeps the
+        per-op caller-asserted check). A malformed token — non-ASCII or not
+        a string — is the typed ``invalid-token`` refusal, never a
+        ``TypeError`` out of ``compare_digest``. A refusal is typed, starts
+        no turn, is idempotent under retry, and is recorded as
+        ``socket_op_refused`` naming the refused op and reason; it never
+        reaches prompt provenance, so a foreign attempt is never normalized
+        to "delegator".
+        """
+        supplied = params.get("auth_token") if isinstance(params, dict) else None
+        if supplied is not None and (not isinstance(supplied, str)
+                                     or not supplied.isascii()):
+            # secrets.compare_digest raises TypeError on a non-ASCII str, so
+            # a malformed credential gets its own typed refusal before the
+            # comparison — never a traceback down the connection thread.
+            reason = "invalid-token"
+        elif (not isinstance(supplied, str)
+                or not secrets.compare_digest(supplied, self.auth_token)):
+            reason = "unauthenticated"
+        elif params.get("expected_holder_instance_id") is None:
+            reason = "holder-instance-required"
+        elif params.get("expected_holder_instance_id") != self.holder_instance_id:
+            # The instance-id check lives here once for a bound seat: every
+            # gate refusal stamps the same socket_op_refused event, while an
+            # unbound seat keeps the per-op caller-asserted check below.
+            reason = "holder-instance-mismatch"
+        else:
+            return None
+        event: dict[str, Any] = {"kind": "socket_op_refused", "op": op,
+                                 "reason": reason}
+        if reason == "holder-instance-mismatch":
+            event["expected_holder_instance_id"] = params.get(
+                "expected_holder_instance_id")
+        self.events.append(event)
+        message = {
+            "invalid-token": (
+                "auth_token must be the ASCII string this seat's record "
+                "directory holds"),
+            "unauthenticated": (
+                "mutating ops on a heartbeat-bound seat require the "
+                "holder-issued auth_token from this seat's record directory "
+                "plus expected_holder_instance_id"),
+            "holder-instance-required": (
+                "mutating ops on a heartbeat-bound seat require "
+                "expected_holder_instance_id naming this holder instance"),
+            "holder-instance-mismatch": (
+                "expected holder instance does not match this holder process"),
+        }[reason]
+        error: dict[str, Any] = {"code": reason, "message": message,
+                                 "mutation_status": "not_started",
+                                 "mutation_performed": False}
+        if reason == "holder-instance-mismatch":
+            error["expected_holder_instance_id"] = params.get(
+                "expected_holder_instance_id")
+            error["holder_instance_id"] = self.holder_instance_id
+        return {"error": error,
+                "mutation_status": "not_started", "mutation_performed": False}
+
     def handle_request(self, message: dict[str, Any]) -> dict[str, Any]:
         op = message.get("op")
         params = message.get("params") or {}
+        if op in BOUND_WRITE_OPS and self.heartbeat_host is not None:
+            # A bound seat proves the dispatcher: its auth.token and the
+            # instance id it names. This seat's heartbeat_host, once set, is
+            # only ever rebound — a bound seat stays bound for this holder's
+            # life — so this read needs no lock.
+            refused = self._bound_op_refusal(op, params)
+            if refused is not None:
+                return refused
+        # The token is a wire capability, never op input: drop it before any
+        # op runs so it can never persist into a record, event, or outbound
+        # ACP payload (unbound seats receive it too and never check it).
+        if isinstance(params, dict) and "auth_token" in params:
+            params = dict(params)
+            params.pop("auth_token")
         if op == "state":
             return self.op_state()
         if op == "compact_notice":
@@ -10554,6 +10709,14 @@ class Holder:
                 pass
         return os.stat(connection.fileno()).st_uid == os.getuid()
 
+    def _restore_auth_token_file(self) -> None:
+        """Issue #408: the ``auth.token`` file is this seat's socket
+        capability. A deleted or overwritten file would lock every mutating
+        op out until restart, so the 15 s watchdog tick restores it from the
+        in-memory value — the gate's truth, which never rotates."""
+        if acp_paths.read_auth_token(self.record_dir) != self.auth_token:
+            acp_paths.write_auth_token(self.record_dir, self.auth_token)
+
     def idle_watcher(self) -> None:
         while True:
             time.sleep(15)
@@ -10566,6 +10729,10 @@ class Holder:
             except Exception:
                 # The watchdog outlives any single retry; a broken flush must
                 # not take the idle-exit timer down with it.
+                pass
+            try:
+                self._restore_auth_token_file()
+            except Exception:
                 pass
             # Issue #369: the same tick is the tool-cwd status scan, and the
             # one boundary that retries an undelivered notice.

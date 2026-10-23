@@ -1091,6 +1091,11 @@ class CarrierOnlyHolder:
             self._wake_still_owed = still_owed.__get__(self)
         self.retain = holder._retain_undelivered_wake.__get__(self)
         self.flush = holder._flush_undelivered_wakes.__get__(self)
+        # Issue #408: _carrier_send now attaches the peer's auth proof read
+        # from its record dir. The absent host has none, so the wire stays
+        # unauthenticated — matching this harness's unreachable-host intent.
+        self.record_dir = Path("/nonexistent/record")
+        self._socket_peer_auth = holder._socket_peer_auth.__get__(self)
 
 
 def test_the_retention_has_no_retry_deadline() -> None:

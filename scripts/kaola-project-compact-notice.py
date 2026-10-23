@@ -62,7 +62,7 @@ def forward(binding: dict, payload: dict) -> dict:
             or state.get("acp_session_id") != binding["acp_session_id"]
             or not state.get("turn_active") or state.get("turn_request_id") is None):
         return {"notice_write": "not_attempted", "reason": "exact-active-holder-required"}
-    result = request(binding["socket_path"], "compact_notice", {
+    params = {
         "expected_holder_instance_id": binding["holder_instance_id"],
         "expected_acp_session_id": binding["acp_session_id"],
         "expected_prior_turn_request_id": state["turn_request_id"],
@@ -70,7 +70,21 @@ def forward(binding: dict, payload: dict) -> dict:
         "hook_cwd": payload.get("cwd"), "hook_workspace_roots": payload.get("workspace_roots"),
         "project_root": binding["project_root"],
         "platform_skill_path": binding["platform_skill_path"],
-        "task_skill_paths": binding["task_skill_paths"]})
+        "task_skill_paths": binding["task_skill_paths"]}
+    # Issue #408: a heartbeat-bound seat refuses a mutating op that does not
+    # present its minted token. The owner supplies the seat's record dir in
+    # the binding; the token file inside it is read at fire time so a holder
+    # restart's fresh token is the one presented.
+    record_dir = binding.get("record_dir")
+    if isinstance(record_dir, str) and record_dir:
+        try:
+            token = (Path(record_dir) / "auth.token").read_text(
+                encoding="utf-8").strip()
+        except OSError:
+            token = ""
+        if token:
+            params["auth_token"] = token
+    result = request(binding["socket_path"], "compact_notice", params)
     # Never print arbitrary input, auth, headers or vendor response bodies.
     if "error" in result:
         return {"notice_write": result.get("notice_write", "not_admitted"),

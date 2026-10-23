@@ -2002,7 +2002,8 @@ def socket_failure(code: str, stage: str, message: str,
 
 
 def socket_request(sock_path: Path, op: str, params: dict[str, Any],
-                   timeout: float | None) -> dict[str, Any]:
+                   timeout: float | None,
+                   directory: Path | None = None) -> dict[str, Any]:
     connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     stage = "connect"
     # One absolute deadline, not one allowance per syscall. Without this,
@@ -2017,6 +2018,15 @@ def socket_request(sock_path: Path, op: str, params: dict[str, Any],
         if left <= 0:
             raise TimeoutError("timed out")
         return left
+
+    # Issue #408: a bound seat proves this caller holds the dispatcher
+    # capability — the holder-minted ``auth.token`` inside its record dir.
+    # ``directory`` is that seat's own record dir. An unbound seat ignores the
+    # field, so attaching it whenever a readable token exists is harmless.
+    if directory is not None and "auth_token" not in params:
+        auth_token = acp_paths.read_auth_token(directory)
+        if auth_token:
+            params = dict(params, auth_token=auth_token)
 
     try:
         connection.settimeout(remaining())
@@ -2102,16 +2112,22 @@ def opencode_model_not_found(result: Any) -> bool:
 
 
 def set_opencode_model_when_advertised(sock_path: Path, config_id: str,
-                                       value: str) -> dict[str, Any]:
+                                       value: str,
+                                       directory: Path | None = None,
+                                       expected_holder: str | None = None
+                                       ) -> dict[str, Any]:
     """Set the OpenCode model once the live option list contains ``value``."""
     deadline = time.monotonic() + OPENCODE_MODEL_ADVERTISE_WAIT
     while True:
         state = socket_request(sock_path, "state", {}, 5.0)
         advertised = value in advertised_config_values(state, config_id)
         if advertised or time.monotonic() >= deadline:
+            params: dict[str, Any] = {"config_id": config_id, "value": value}
+            if expected_holder is not None:
+                params["expected_holder_instance_id"] = expected_holder
             result = socket_request(
                 sock_path, "set_config_option",
-                {"config_id": config_id, "value": value}, 20.0,
+                params, 20.0, directory,
             )
             if (advertised or not opencode_model_not_found(result)
                     or time.monotonic() >= deadline):
@@ -2359,6 +2375,14 @@ PROMPT_STEER_OPS = frozenset({"prompt", "steer", "steer_interrupt"})
 MUTATING_OPS = frozenset({
     "prompt", "steer", "steer_interrupt", "cancel", "permit", "stop",
     "wake_delegator",
+})
+# Issue #408: the ops a heartbeat-bound seat gates on the holder-issued
+# auth.token plus expected_holder_instance_id — the same set the holder
+# enforces server-side.
+BOUND_WRITE_OPS = frozenset({
+    "prompt", "steer", "steer_interrupt", "cancel", "permit", "stop",
+    "wake_delegator", "worker_event", "compact_notice", "set_config_option",
+    "record_start_evidence", "rebind_heartbeat_host",
 })
 # Issue #380: the client-supplied message id is accepted only by send/steer,
 # and only while the live holder advertises the admission ledger.
@@ -3036,10 +3060,30 @@ def _op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
             receipt["record"] = record
             return receipt
         return holder_lost_receipt(args, repo, record)
-    response = socket_request(sock, op, params, timeout)
+    # Issue #408: a heartbeat-bound seat refuses a mutating op whose caller
+    # did not name this holder instance. The record says whether the seat is
+    # bound; when it is, the CLI fills the still-optional field from the same
+    # record the caller verified, so an omitted flag no longer skips the
+    # binding while an explicit flag still wins. Unbound records keep the
+    # documented caller-asserted behavior.
+    if (op in BOUND_WRITE_OPS and record is not None
+            and isinstance(record.get("heartbeat_host"), dict)
+            and "expected_holder_instance_id" not in params
+            and isinstance(record.get("holder_instance_id"), str)):
+        params = dict(params, expected_holder_instance_id=record["holder_instance_id"])
+    response = socket_request(sock, op, params, timeout, directory=directory)
     wire_error = response.get("error")
     wire_code = (wire_error.get("code")
                  if isinstance(wire_error, dict) else None)
+    if (wire_code == "unauthenticated" and op == "stop"
+            and params.get("force") and record is not None
+            and acp_paths.read_auth_token(directory) is None):
+        # Issue #408: a deleted auth.token must not lock out stop --force.
+        # This caller cannot present the capability at all, and a same-UID
+        # caller can already SIGKILL — the argv-verified path inside still
+        # proves the live PID is this record's holder before it is
+        # signalled. A presented-but-wrong token stays the honest refusal.
+        return force_stop_unreachable(args, repo, directory, record, params)
     if wire_code in ("holder-unreachable", "holder-timeout"):
         if record and not pid_alive(record.get("holder_pid")):
             if op == "stop":
@@ -3684,6 +3728,7 @@ def force_stop_unreachable(args: argparse.Namespace, repo: str, directory: Path,
     # spelling of this record root answers on the socket its argv names: stop
     # it there, exactly as an ordinary stop - never signal a holder that answers.
     sock, state = answering_socket(directory, record)
+    unauthenticated_refusal = False
     if sock is not None:
         if (state or {}).get("holder_instance_id") != record.get("holder_instance_id"):
             # Something answers there as another instance: never stop it on
@@ -3694,10 +3739,32 @@ def force_stop_unreachable(args: argparse.Namespace, repo: str, directory: Path,
                                 "answering_socket": str(sock)}
             receipt.update(mutation_status="not_started", mutation_performed=False)
             return receipt
-        receipt.update(socket_request(sock, "stop", params, 30.0))
-        receipt["answering_socket"] = str(sock)
-        return receipt
-    # Silent on every socket it could use: a wedged holder.
+        # Issue #408: a bound seat gates this stop on its minted token and an
+        # explicit instance id. The state reply already proved this socket's
+        # holder is the recorded one, so fill the id from the record.
+        stop_params = dict(params)
+        if (isinstance(record.get("heartbeat_host"), dict)
+                and "expected_holder_instance_id" not in stop_params
+                and isinstance(record.get("holder_instance_id"), str)):
+            stop_params["expected_holder_instance_id"] = record["holder_instance_id"]
+        reply = socket_request(sock, "stop", stop_params, 30.0, directory)
+        reply_error = reply.get("error")
+        reply_code = (reply_error.get("code")
+                      if isinstance(reply_error, dict) else None)
+        if (reply_code != "unauthenticated"
+                or acp_paths.read_auth_token(directory) is not None):
+            receipt.update(reply)
+            receipt["answering_socket"] = str(sock)
+            return receipt
+        # Issue #408: this bound seat refused a stop its caller could not
+        # authenticate — no readable auth.token to present. The refusal
+        # cannot lock out --force: the argv anchor already proved this live
+        # PID is the record's holder and a same-UID caller can signal it
+        # regardless, so fall to the verified kill. A presented-but-wrong
+        # token would have returned the honest refusal above.
+        unauthenticated_refusal = True
+    # Silent on every socket it could use — a wedged holder — or answering
+    # only to refuse a stop this caller cannot authenticate.
     for sig, grace in ((signal.SIGTERM, 2.0), (signal.SIGKILL, 2.0)):
         try:
             os.kill(holder_pid, sig)
@@ -3709,6 +3776,9 @@ def force_stop_unreachable(args: argparse.Namespace, repo: str, directory: Path,
         if not pid_alive(holder_pid):
             break
     receipt = force_kill_from_record(args, repo, record)
+    if unauthenticated_refusal:
+        receipt["unauthenticated_stop_fallback"] = True
+        receipt["answering_socket"] = str(sock)
     receipt["holder_force_killed"] = holder_pid
     if pid_alive(holder_pid):
         receipt["residual_pids"] = sorted(set(receipt["residual_pids"]) | {holder_pid})
@@ -5836,9 +5906,14 @@ def record_start_evidence(sock: Path, receipt: dict[str, Any], args: argparse.Na
     # The spawn value stays until the holder accepts this final one.
     role = session_role_value(args, selection_basis(args), prior, repo,
                               receipt.get("acp_session_id"))
+    # Issue #408: this op mutates a bound seat, so present the token from the
+    # record dir plus the holder instance id the fresh state reply named.
+    params: dict[str, Any] = {"evidence": evidence, "session_role": role}
+    if receipt.get("holder_instance_id") is not None:
+        params["expected_holder_instance_id"] = receipt["holder_instance_id"]
     reply = socket_request(
-        sock, "record_start_evidence",
-        {"evidence": evidence, "session_role": role}, 10.0,
+        sock, "record_start_evidence", params, 10.0,
+        record_dir(args, repo),
     )
     receipt["start_evidence_recorded"] = reply.get("recorded") is True
     if receipt["start_evidence_recorded"]:
@@ -5849,7 +5924,8 @@ def record_start_evidence(sock: Path, receipt: dict[str, Any], args: argparse.Na
 
 def stop_started_holder(sock: Path, proc: subprocess.Popen | None,
                         holder_pid: int | None = None,
-                        expected_instance: str | None = None) -> dict[str, Any]:
+                        expected_instance: str | None = None,
+                        directory: Path | None = None) -> dict[str, Any]:
     """Force-stop the holder this start just created and report its truth.
 
     The direct path reaps its own Popen child. The outside-launch path (#266)
@@ -5863,7 +5939,7 @@ def stop_started_holder(sock: Path, proc: subprocess.Popen | None,
     params: dict[str, Any] = {"force": True}
     if expected_instance:
         params["expected_holder_instance_id"] = expected_instance
-    stop_reply = socket_request(sock, "stop", params, 30.0)
+    stop_reply = socket_request(sock, "stop", params, 30.0, directory)
     reply = stop_reply if isinstance(stop_reply, dict) else {}
     stopped = reply.get("stopped") is True
     residual = reply.get("residual_pids")
@@ -7624,9 +7700,17 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
                 }
                 continue
             if args.platform == "opencode" and label == "model":
-                result = set_opencode_model_when_advertised(sock, config_id, value)
+                result = set_opencode_model_when_advertised(
+                    sock, config_id, value, directory,
+                    receipt.get("holder_instance_id"))
             else:
-                result = socket_request(sock, "set_config_option", {"config_id": config_id, "value": value}, 20.0)
+                # Issue #408: a bound seat requires the token (from this
+                # seat's own record dir) plus the instance id its state
+                # reply already named.
+                params: dict[str, Any] = {"config_id": config_id, "value": value}
+                if receipt.get("holder_instance_id") is not None:
+                    params["expected_holder_instance_id"] = receipt["holder_instance_id"]
+                result = socket_request(sock, "set_config_option", params, 20.0, directory)
             record: dict[str, Any] = {"applied": not result.get("error"),
                                       "config_id": config_id, "value": value}
             if label == "model":
@@ -7665,9 +7749,11 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
                 fast_value = parse_manifest_value_map(
                     args.manifest.get("acp_fast_values") or ""
                 ).get(fast_state, fast_state)
+                params = {"config_id": fast_id, "value": fast_value}
+                if receipt.get("holder_instance_id") is not None:
+                    params["expected_holder_instance_id"] = receipt["holder_instance_id"]
                 result = socket_request(
-                    sock, "set_config_option",
-                    {"config_id": fast_id, "value": fast_value}, 20.0,
+                    sock, "set_config_option", params, 20.0, directory,
                 )
                 if result.get("error"):
                     application["fast"] = {"applied": False, "config_id": fast_id,
@@ -7789,7 +7875,10 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
                 if args.mode:
                     receipt["error"] = {"code": "config-option-unavailable", "manifest_key": None}
             else:
-                result = socket_request(sock, "set_config_option", {"config_id": config_id, "value": mode_value}, 20.0)
+                params = {"config_id": config_id, "value": mode_value}
+                if receipt.get("holder_instance_id") is not None:
+                    params["expected_holder_instance_id"] = receipt["holder_instance_id"]
+                result = socket_request(sock, "set_config_option", params, 20.0, directory)
                 if result.get("error"):
                     application["mode"] = {"applied": False, "config_id": config_id,
                                            "value": mode_value, "error": result["error"]}
@@ -7857,7 +7946,8 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
             # limitation receipt (``no-advertised-config-option``): no set was
             # attempted and nothing is refused.
             stopped = stop_started_holder(sock, proc, holder_pid_hint,
-                                          receipt.get("holder_instance_id"))
+                                          receipt.get("holder_instance_id"),
+                                          directory)
             reclaimed = stopped.get("holder_reclaimed") is True
             failure = rejected["error"]
             receipt.update({
@@ -7880,7 +7970,8 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
                    if args.platform in EXPLICIT_SELECTION_VERIFIED else None)
         if problem is not None:
             stopped = stop_started_holder(sock, proc, holder_pid_hint,
-                                          receipt.get("holder_instance_id"))
+                                          receipt.get("holder_instance_id"),
+                                          directory)
             reclaimed = stopped.get("holder_reclaimed") is True
             receipt.pop("error", None)
             receipt.update({
@@ -7909,7 +8000,8 @@ def _command_start_seat(args: argparse.Namespace, repo: str,
             receipt["host_selection"] = host_fact
             if not host_fact["verified"]:
                 stopped = stop_started_holder(sock, proc, holder_pid_hint,
-                                              receipt.get("holder_instance_id"))
+                                              receipt.get("holder_instance_id"),
+                                              directory)
                 reclaimed = stopped.get("holder_reclaimed") is True
                 receipt.pop("error", None)
                 receipt.update({
