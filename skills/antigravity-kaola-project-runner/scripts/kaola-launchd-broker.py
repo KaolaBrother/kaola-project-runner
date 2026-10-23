@@ -733,7 +733,8 @@ def do_internal_run(spec_path: Path) -> dict:
         # launch. Stop this exact holder through the existing identity path and
         # reap our own child, so the native agent group is reclaimed too.
         stop = _stop_owned_holder(Path(spec["socket"]),
-                                  verified["record"].get("holder_instance_id"), proc)
+                                  verified["record"].get("holder_instance_id"), proc,
+                                  record_dir)
         receipt = {"schema": SCHEMA, "result": "refused", "reason": "child-record-failed",
                    "child_record_error": child_error, **stop}
     else:
@@ -751,7 +752,8 @@ def do_internal_run(spec_path: Path) -> dict:
     return receipt
 
 
-def _stop_owned_holder(sock: Path, instance: str | None, proc: subprocess.Popen) -> dict:
+def _stop_owned_holder(sock: Path, instance: str | None, proc: subprocess.Popen,
+                       record_dir: Path | None = None) -> dict:
     """Stop this attempt's holder by identity, then reap its own Popen child.
 
     Clean requires a positive stop reply with an actual empty residual list and a
@@ -762,6 +764,15 @@ def _stop_owned_holder(sock: Path, instance: str | None, proc: subprocess.Popen)
     params: dict = {"force": True}
     if instance:
         params["expected_holder_instance_id"] = instance
+    # Issue #408: a heartbeat-bound seat refuses an unauthenticated stop; the
+    # just-spawned holder minted its auth.token inside this record dir.
+    if record_dir is not None:
+        try:
+            token = (record_dir / "auth.token").read_text(encoding="utf-8").strip()
+        except OSError:
+            token = ""
+        if token:
+            params["auth_token"] = token
     reply = socket_op(sock, "stop", params, 30.0)
     reply = reply if isinstance(reply, dict) else {}
     terminate_owned(proc)

@@ -173,7 +173,21 @@ def stop_holder(entry: dict[str, Any]) -> dict[str, Any]:
     sock = entry.get("socket")
     stopped = False
     if sock:
-        receipt = KAOLA_ACP.socket_request(Path(sock), "stop", {"force": True}, STOP_TIMEOUT)
+        params: dict[str, Any] = {"force": True}
+        record_dir = entry.get("record_dir")
+        # Issue #408: a heartbeat-bound seat refuses an unauthenticated stop.
+        # Present this holder's own token and instance id when its record
+        # offers them, so a bound seat still gets the graceful socket stop
+        # instead of falling to the SIGKILL path below.
+        if record_dir:
+            directory = Path(record_dir)
+            record = KAOLA_ACP.read_record(directory) or {}
+            if isinstance(record.get("holder_instance_id"), str):
+                params["expected_holder_instance_id"] = record["holder_instance_id"]
+            token = KAOLA_ACP.acp_paths.read_auth_token(directory)
+            if token:
+                params["auth_token"] = token
+        receipt = KAOLA_ACP.socket_request(Path(sock), "stop", params, STOP_TIMEOUT)
         if "error" not in receipt:
             result["stop_residual_pids"] = list(receipt.get("residual_pids") or [])
             stopped = wait_for_exit(pid, EXIT_WAIT)

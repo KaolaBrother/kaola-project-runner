@@ -1834,6 +1834,26 @@ identity-verified recorded groups without `--force`. `steer` forwards only an ex
 does not bind itself from the record, and `op_steer`/`op_steer_interrupt` check it before any steer write or
 cancel. The interrupt composite's follow-up prompt carries the same verified holder id.
 
+On a seat bound to a heartbeat Host (Issue #408), the binding stops being caller-asserted: every
+mutating socket op (`prompt`, `steer`, `steer_interrupt`, `cancel`, `permit`, `stop`,
+`wake_delegator`, `worker_event`, `compact_notice`, `set_config_option`, `record_start_evidence`,
+`rebind_heartbeat_host`) requires both the holder-issued `auth.token` — a per-instance secret the
+holder writes `0600` inside its `0700` record dir at construction and that the CLI reads and
+presents — and an explicit `expected_holder_instance_id` naming the answering instance. A caller
+that supplies neither (a foreign same-UID process speaking the socket directly) is refused before
+the op runs: `{"error":{"code":"unauthenticated"}}` when the token is absent or wrong,
+`{"error":{"code":"holder-instance-required"}}` when the token is right but the id is omitted,
+`{"error":{"code":"holder-instance-mismatch"}}` when the id is wrong — each with
+`mutation_status: not_started` and `mutation_performed: false`, each writing one
+`socket_op_refused` event naming the refused op, and none starting a turn or being attributed to
+`delegator` provenance. A refusal is idempotent under retry and never wedges or crashes the
+holder. The Runner fills the still-optional flag from the verified record on bound seats, so
+legitimate `send`/`steer`/`permit`/`cancel`/`stop`/`wake`/`rebind-host`,
+`drain-restart`/`--resume` adoption, dispatch execute sends, the Sideagent relay/node machinery,
+and the `worker_event`/`compact_notice` carriers keep working. Read ops
+(`state`/`view`/`capture`/`wait`/`follow`) stay open on every seat, and an unbound standalone
+seat — no heartbeat Host — keeps the documented caller-asserted behavior exactly.
+
 `send` preserves omitted wait selection through `runtime-tmux.sh`, `kaola-tmux.sh`,
 and direct `kaola-acp.py`. Explicit `--wait` blocks and `--no-wait` returns admission;
 when both are supplied, the last wins. Omission remains blocking except when the
@@ -1866,7 +1886,7 @@ ACP is the only transport (Issue #130). `--transport acp` is accepted as a no-op
 {"schema_version":3,"result":"refused","reason":"transport-pty-retired","action":"<command>","platform":"<id>","session":"<name>","repo":"<as given or empty>","detail":"PTY transport is retired (Issue #130); this Runner is ACP-only. Re-run without --transport (or with --transport acp).","mutation_performed":false,"mutation_status":"not_started","transport":{"requested":"pty","supported":["acp"]}}
 ```
 
-Any other `--transport` value exits 1 with `--transport must be acp` on stderr. Every command dispatches to `kaola-acp.py`, and every schema-3 receipt's `transport` block is `{"selected":"acp"}` plus the ACP probe facts where a command adds them; the former `default`, `alternatives`, and `reason` keys are removed and `schema_version` stays 3. ACP supports `preflight`, `start`, `send`, `steer`, `wait`, `observe`, `capture`, `permit`, `cancel`, `stop`, `view`, and local `follow`; an ordinary `capture` receipt (`--lines`, `--since`, `--tools`) is bounded to `capture_receipt_bytes` by dropping its oldest `events`/`tool_calls` and adding `truncated` (`list`, `kept`, `dropped`, `total`, `stream_bytes`, `stream_sha256` of the untruncated one-JSON-line-per-entry stream, `hint`), while `capture --full` is the explicit unbounded request; `--model`, `--effort`, and `--fast` map through the manifest config-option IDs and apply in model → effort → Fast order. For Claude Code's vendored bridge a `permit` answer settles only the reported `tool_call` status (the `claude -p` child takes no `--permission-prompt-tool`, so it cannot gate or resume the child). `permit` / `cancel` / `stop` settle each permission `request_id` at most once (same holder lock as prompt admission); a second settler on that id is `error.code` `unknown-request` and does not write another JSON-RPC result to agent stdin. Each holder process mints an opaque random `holder_instance_id` at construction — immutable for that process, never restored from `record.json` or the native session id, never derived from the PID — and exposes it on `record.json`, `status`/`observe`/`start` receipts, `kaola-acp-list/1` rows, and top-level on every `kaola-acp-view/1` payload (view plus follow snapshot/delta/heartbeat). `permit`, `cancel`, and the `key escape`→cancel alias accept optional `--expected-holder-instance-id VALUE`; when supplied — including an explicit empty value — the holder compares it against its own id under the settlement lock before any permission settlement, pending-permission cancellation, turn mutation, or outbound cancel, even when no permission/turn is active. A mismatch returns `error.code` `holder-instance-mismatch` with `expected_holder_instance_id` and the actual `holder_instance_id` inside the error object plus top-level `mutation_status` `not_started` and `mutation_performed` `false`; nothing is written to the agent. Omitting the flag keeps legacy unbound behavior. The binding is Runner envelope only and is never forwarded into native ACP method params.
+Any other `--transport` value exits 1 with `--transport must be acp` on stderr. Every command dispatches to `kaola-acp.py`, and every schema-3 receipt's `transport` block is `{"selected":"acp"}` plus the ACP probe facts where a command adds them; the former `default`, `alternatives`, and `reason` keys are removed and `schema_version` stays 3. ACP supports `preflight`, `start`, `send`, `steer`, `wait`, `observe`, `capture`, `permit`, `cancel`, `stop`, `view`, and local `follow`; an ordinary `capture` receipt (`--lines`, `--since`, `--tools`) is bounded to `capture_receipt_bytes` by dropping its oldest `events`/`tool_calls` and adding `truncated` (`list`, `kept`, `dropped`, `total`, `stream_bytes`, `stream_sha256` of the untruncated one-JSON-line-per-entry stream, `hint`), while `capture --full` is the explicit unbounded request; `--model`, `--effort`, and `--fast` map through the manifest config-option IDs and apply in model → effort → Fast order. For Claude Code's vendored bridge a `permit` answer settles only the reported `tool_call` status (the `claude -p` child takes no `--permission-prompt-tool`, so it cannot gate or resume the child). `permit` / `cancel` / `stop` settle each permission `request_id` at most once (same holder lock as prompt admission); a second settler on that id is `error.code` `unknown-request` and does not write another JSON-RPC result to agent stdin. Each holder process mints an opaque random `holder_instance_id` at construction — immutable for that process, never restored from `record.json` or the native session id, never derived from the PID — and exposes it on `record.json`, `status`/`observe`/`start` receipts, `kaola-acp-list/1` rows, and top-level on every `kaola-acp-view/1` payload (view plus follow snapshot/delta/heartbeat). `permit`, `cancel`, and the `key escape`→cancel alias accept optional `--expected-holder-instance-id VALUE`; when supplied — including an explicit empty value — the holder compares it against its own id under the settlement lock before any permission settlement, pending-permission cancellation, turn mutation, or outbound cancel, even when no permission/turn is active. A mismatch returns `error.code` `holder-instance-mismatch` with `expected_holder_instance_id` and the actual `holder_instance_id` inside the error object plus top-level `mutation_status` `not_started` and `mutation_performed` `false`; nothing is written to the agent. On an unbound standalone seat omitting the flag keeps legacy unbound behavior; on a heartbeat-bound seat (Issue #408) every mutating op also requires the holder-issued `auth.token` read from the record dir, and omission is refused (`unauthenticated` / `holder-instance-required`). The binding is Runner envelope only and is never forwarded into native ACP method params.
 
 Permission wakes (Issue #92): a `permission_required` event raised while its bound Host
 is not listening is not lost. The worker holds one undelivered wake per pending request
@@ -2337,6 +2357,11 @@ current installed applicable files; file existence alone does not prove applicab
 The helper forwards only selected identity fields. It rejects conflicting native session ids,
 foreign roots, missing identities and unsupported events. It reads the holder's current request
 id, then the holder checks it under its existing lock. No shared unknown-session fallback is used.
+On a heartbeat-bound seat (Issue #408) `compact_notice` is a gated mutating op: the binding must
+also name `record_dir`, the seat's own record directory, and the helper reads the holder-minted
+`auth.token` inside it at fire time so a holder restart's fresh token is the one presented. A
+binding without `record_dir` is still accepted; its notice is then refused `unauthenticated` on a
+bound seat while an unbound standalone seat admits it as before.
 
 A valid notice stages one obligation in the existing compact tracker during the exact active
 request. Duplicate notices for that request coalesce. It does not call compaction completed or

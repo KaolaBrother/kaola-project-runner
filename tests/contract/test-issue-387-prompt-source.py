@@ -449,7 +449,13 @@ class HolderProvenanceTests(unittest.TestCase):
             "params": {"text": "socket text", "wait": False,
                        "_prompt_source": "self",
                        "_prompt_carrier": HOST_SCHEMA,
-                       "_client_message_id_registered": True},
+                       "_client_message_id_registered": True,
+                       # Issue #408: a bound seat (ambient HEARTBEAT env can
+                       # bind this fixture) gates the socket prompt on the
+                       # minted token plus the instance id.
+                       "auth_token": holder_module.acp_paths.read_auth_token(
+                           holder.record_dir),
+                       "expected_holder_instance_id": holder.holder_instance_id},
         })
         self.assertEqual(receipt.get("outcome"), "in_progress", receipt)
         view = holder.op_view({})

@@ -368,7 +368,7 @@ class ClientBoundTests(unittest.TestCase):
         sock.write_text("", encoding="utf-8")
         captured: list[tuple[str, float]] = []
 
-        def fake_socket_request(sock_path, op, params, timeout):
+        def fake_socket_request(sock_path, op, params, timeout, directory=None):
             captured.append((op, timeout))
             return {"error": {"code": "holder-timeout", "stage": "read",
                               "timeout_s": timeout},

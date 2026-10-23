@@ -34,6 +34,11 @@ class Notice(unittest.TestCase):
             path.write_text("Full current fixture Skill\n")
         self.start_turn("original scratch task")
         self.params = {
+            # Issue #408: when ambient KAOLA_ACP_HEARTBEAT_* env binds this
+            # fixture, compact_notice is a gated op — present the minted token
+            # the way the hook's record_dir binding does.
+            "auth_token": race.holder_module.acp_paths.read_auth_token(
+                self.holder.record_dir),
             "expected_holder_instance_id": self.holder.holder_instance_id,
             "expected_acp_session_id": self.holder.acp_session_id,
             "expected_prior_turn_request_id": self.holder.turn["request_id"],
@@ -288,9 +293,12 @@ class Notice(unittest.TestCase):
         self.assertIsNone(self.holder.compact_notice_pending)
 
     def test_hook_uses_existing_socket_and_filters_auth_fields(self):
+        # Issue #408: `record_dir` lets the hook present the seat's minted
+        # token, so the notice is admitted when this fixture runs bound.
         binding = {"platform": "droid", "socket_path": str(self.root / "hook.sock"),
                    "holder_instance_id": self.holder.holder_instance_id,
                    "acp_session_id": self.holder.acp_session_id, "project_root": str(self.root),
+                   "record_dir": str(self.holder.record_dir),
                    "platform_skill_path": str(self.skills[0]),
                    "task_skill_paths": [str(self.skills[1])]}
         payload = {"hook_event_name": "PreCompact", "session_id": "ses-race",
