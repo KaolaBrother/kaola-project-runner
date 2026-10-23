@@ -229,10 +229,65 @@ class BoundSeatAuth(unittest.TestCase):
             "text": "wrong id", "wait": False,
             "auth_token": self.token,
             "expected_holder_instance_id": "not-this-holder"}})
-        self.assertEqual((receipt.get("error") or {}).get("code"),
-                         "holder-instance-mismatch", receipt)
+        error = receipt.get("error") or {}
+        self.assertEqual(error.get("code"), "holder-instance-mismatch", receipt)
+        self.assertEqual(error.get("expected_holder_instance_id"),
+                         "not-this-holder")
+        self.assertEqual(error.get("holder_instance_id"), self.hid)
         self.assertIs(receipt.get("mutation_performed"), False)
         self.assertEqual(self.agent.prompts(), [])
+        # The id check lives once in the gate: a bound-seat wrong id stamps
+        # the same socket_op_refused event kind as every other refusal, not
+        # the older per-op holder_instance_mismatch shape.
+        refused = refusal_events(self.record_dir)
+        self.assertEqual(len(refused), 1)
+        self.assertEqual(refused[0]["reason"], "holder-instance-mismatch")
+        self.assertEqual(refused[0]["expected_holder_instance_id"],
+                         "not-this-holder")
+        self.assertEqual([row for row in event_rows(self.record_dir)
+                          if row.get("kind") == "holder_instance_mismatch"], [])
+
+    def test_malformed_token_is_a_typed_invalid_token_refusal(self) -> None:
+        """secrets.compare_digest raises TypeError on a non-ASCII str; a
+        malformed credential is the typed invalid-token refusal instead, and
+        the connection path stays healthy enough to admit a good prompt."""
+        for bad in ("tök-408", {"nested": "dict"}, 7):
+            with self.subTest(bad=bad):
+                receipt = self.holder.handle_request({"op": "prompt", "params": {
+                    "text": "bad token", "wait": False, "auth_token": bad,
+                    "expected_holder_instance_id": self.hid}})
+                self.assertEqual((receipt.get("error") or {}).get("code"),
+                                 "invalid-token", (bad, receipt))
+                self.assertIs(receipt.get("mutation_performed"), False)
+        self.assertEqual(self.agent.prompts(), [])
+        self.assertEqual([row["reason"] for row in refusal_events(self.record_dir)],
+                         ["invalid-token"] * 3)
+        # Holder health: the same seat still admits a legitimate prompt.
+        good = self.holder.handle_request({"op": "prompt", "params": {
+            "text": "after", "wait": False, "auth_token": self.token,
+            "expected_holder_instance_id": self.hid}})
+        self.assertEqual(good.get("outcome"), "in_progress", good)
+
+    def test_watchdog_tick_restores_the_minted_token_file(self) -> None:
+        """A deleted or overwritten auth.token is rewritten from the
+        in-memory value — never rotated — on the existing tick."""
+        token_path = self.record_dir / "auth.token"
+        token_path.unlink()
+        self.assertIsNone(paths_module.read_auth_token(self.record_dir))
+        self.holder._restore_auth_token_file()
+        self.assertEqual(paths_module.read_auth_token(self.record_dir),
+                         self.token)
+        self.assertEqual(stat.S_IMODE(token_path.stat().st_mode), 0o600)
+        # An overwritten file heals to the in-memory value, which is not
+        # re-minted.
+        token_path.write_text("stale-bytes\n", encoding="utf-8")
+        self.holder._restore_auth_token_file()
+        self.assertEqual(paths_module.read_auth_token(self.record_dir),
+                         self.token)
+        # A correct file is not rewritten.
+        with patch.object(holder_module.acp_paths, "write_auth_token",
+                          side_effect=AssertionError("rewrote a valid file")):
+            self.holder._restore_auth_token_file()
 
     def test_right_token_but_omitted_id_is_refused(self) -> None:
         receipt = self.holder.handle_request({"op": "prompt", "params": {
@@ -310,7 +365,8 @@ class BoundSeatAuth(unittest.TestCase):
 
 
 class UnboundSeatAuth(unittest.TestCase):
-    """The unbound standalone seat keeps its documented behavior exactly."""
+    """An unbound seat — standalone or Host-role — keeps its documented
+    caller-asserted behavior exactly."""
 
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory(prefix="kaola-i408-unbound-")
@@ -518,11 +574,149 @@ class ClientProof(unittest.TestCase):
                 holder._socket_peer_auth("zcode", "gone", str(self.root)), {})
 
 
+    def _bound_record(self) -> dict:
+        return {"holder_instance_id": "hid-live", "holder_pid": os.getpid(),
+                "heartbeat_host": {"platform": "zcode",
+                                   "session": "host", "repo": str(self.root),
+                                   "socket": str(self.root / "host.sock")}}
+
+    def test_force_stop_falls_back_when_no_token_is_presentable(self) -> None:
+        """stop --force on a bound seat that refuses unauthenticated reaches
+        the argv-verified kill when this caller has no token to present — a
+        deleted auth.token can never lock out force-stop."""
+        record = self._bound_record()
+        calls: dict = {}
+        with patch.object(acp_module, "read_record", return_value=record), \
+                patch.object(acp_module, "sock_path",
+                             return_value=self.root / "h.sock"), \
+                patch.object(acp_module.Path, "exists", return_value=True), \
+                patch.object(acp_module, "socket_request",
+                             return_value={"error": {"code": "unauthenticated",
+                                                     "mutation_status": "not_started",
+                                                     "mutation_performed": False}}), \
+                patch.object(acp_module, "force_stop_unreachable",
+                             side_effect=lambda *a: calls.update(
+                                 {"args": a}) or {"stopped": True,
+                                                  "holder_force_killed": 42}):
+            receipt = acp_module._op_or_holder_lost(
+                self._funnel_args(), str(self.root), self.directory,
+                "stop", {"force": True}, 30.0)
+        # The directory holds no auth.token, so nothing could be presented.
+        self.assertIsNone(paths_module.read_auth_token(self.directory))
+        self.assertTrue(receipt.get("stopped"), receipt)
+        self.assertEqual(calls["args"][3], record)
+        # The funnel filled the still-optional id from the verified record —
+        # the refused op carried both the flag and no token.
+        self.assertEqual(calls["args"][4],
+                         {"force": True,
+                          "expected_holder_instance_id": "hid-live"})
+
+    def test_force_stop_keeps_the_refusal_when_a_token_is_presented(self) -> None:
+        """A presented-but-wrong token stays the honest refusal — the
+        fallback only applies when the caller cannot present one at all."""
+        paths_module.write_auth_token(self.directory, "stale-tok")
+        record = self._bound_record()
+        with patch.object(acp_module, "read_record", return_value=record), \
+                patch.object(acp_module, "sock_path",
+                             return_value=self.root / "h.sock"), \
+                patch.object(acp_module.Path, "exists", return_value=True), \
+                patch.object(acp_module, "socket_request",
+                             return_value={"error": {"code": "unauthenticated"}}), \
+                patch.object(acp_module, "force_stop_unreachable",
+                             side_effect=AssertionError("fallback with a presentable token")):
+            receipt = acp_module._op_or_holder_lost(
+                self._funnel_args(), str(self.root), self.directory,
+                "stop", {"force": True}, 30.0)
+        self.assertEqual((receipt.get("error") or {}).get("code"),
+                         "unauthenticated", receipt)
+
+    def test_force_stop_unreachable_falls_through_to_the_argv_kill(self) -> None:
+        """The answering bound socket refusing an unauthenticated stop does
+        not return early: the argv-verified signal path still fires."""
+        record = self._bound_record()
+        sock = self.root / "h.sock"
+        killed: list = []
+
+        def fake_kill(pid, sig):
+            killed.append((pid, sig))
+
+        with patch.object(acp_module, "holder_argv_anchor", return_value=True), \
+                patch.object(acp_module, "answering_socket",
+                             return_value=(sock, {"holder_instance_id": "hid-live"})), \
+                patch.object(acp_module, "socket_request",
+                             return_value={"error": {"code": "unauthenticated"}}), \
+                patch.object(acp_module.os, "kill", side_effect=fake_kill), \
+                patch.object(acp_module, "pid_alive", return_value=False), \
+                patch.object(acp_module, "force_kill_from_record",
+                             return_value={"stopped": True, "residual_pids": []}):
+            receipt = acp_module.force_stop_unreachable(
+                self._funnel_args(), str(self.root), self.directory,
+                record, {"force": True})
+        self.assertTrue(receipt.get("unauthenticated_stop_fallback"), receipt)
+        self.assertEqual(receipt.get("answering_socket"), str(sock))
+        self.assertTrue(killed, "the argv-verified holder PID was signalled")
+        self.assertEqual(killed[0][0], os.getpid())
+        self.assertEqual(receipt.get("holder_force_killed"), os.getpid())
+
+
+class RecoveryRoutesAndBroker(unittest.TestCase):
+    """The #259 contract on the new codes, and the F7 shared reader."""
+
+    ROUTES_PATH = PROJECT / "scripts" / "kaola-recovery-routes.py"
+    BROKER_PATH = PROJECT / "scripts" / "kaola-launchd-broker.py"
+
+    def test_the_new_refusal_codes_have_working_routes(self) -> None:
+        routes = load("kaola_recovery_routes_i408", self.ROUTES_PATH)
+        for code in ("unauthenticated", "holder-instance-required",
+                     "invalid-token"):
+            with self.subTest(code=code):
+                kind, text = routes.ROUTES[code]
+                self.assertEqual(kind, "route", code)
+                self.assertTrue(text, code)
+        # Each route names the tested recovery, not a dead end.
+        self.assertIn("auth.token", routes.ROUTES["unauthenticated"][1])
+        self.assertIn("--force", routes.ROUTES["unauthenticated"][1])
+        self.assertIn("expected-holder-instance-id",
+                      routes.ROUTES["holder-instance-required"][1])
+        self.assertIn("ASCII", routes.ROUTES["invalid-token"][1])
+
+    def test_broker_reads_the_token_through_the_shared_reader(self) -> None:
+        broker = load("kaola_launchd_broker_i408", self.BROKER_PATH)
+        seen: dict = {}
+
+        class Proc:
+            pid = 424242
+
+        def fake_read(directory):
+            seen["dir"] = directory
+            return "minted-tok"
+
+        with tempfile.TemporaryDirectory(prefix="kaola-i408-broker-") as tmp:
+            record_dir = Path(tmp) / "record"
+            record_dir.mkdir()
+            with patch.object(broker.acp_paths, "read_auth_token",
+                              side_effect=fake_read), \
+                    patch.object(broker, "socket_op",
+                                 side_effect=lambda s, op, p, t: seen.update(
+                                     {"params": dict(p)}) or
+                                 {"stopped": True, "residual_pids": []}), \
+                    patch.object(broker, "terminate_owned"), \
+                    patch.object(broker, "pid_alive", return_value=False):
+                fact = broker._stop_owned_holder(
+                    Path(tmp) / "h.sock", "inst-1", Proc(), record_dir)
+        self.assertEqual(seen["dir"], record_dir)
+        self.assertEqual(seen["params"]["auth_token"], "minted-tok")
+        self.assertEqual(seen["params"]["expected_holder_instance_id"],
+                         "inst-1")
+        self.assertTrue(fact.get("host_session_stopped"), fact)
+
+
 class RenderedBytes(unittest.TestCase):
     def test_rendered_worker_scripts_are_the_candidate_bytes(self) -> None:
         for name in ("kaola-acp-holder.py", "kaola-acp.py",
                      "kaola-acp-paths.py", "kaola-launchd-broker.py",
-                     "kaola-project-compact-notice.py"):
+                     "kaola-project-compact-notice.py",
+                     "kaola-recovery-routes.py"):
             source = (PROJECT / "scripts" / name).read_bytes()
             rendered = (PROJECT / "skills" / "zcode-kaola-project-runner"
                         / "scripts" / name).read_bytes()

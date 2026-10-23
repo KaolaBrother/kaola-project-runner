@@ -73,7 +73,8 @@ KIMI_WIRE_TAIL_BYTES = 2 * 1024 * 1024
 # auth.token (capability proof, read from the record dir) and an explicit
 # expected_holder_instance_id; a raw same-UID writer has neither and is
 # refused before the op runs. Read ops (state/view/capture/wait/follow) stay
-# open, and an unbound standalone seat keeps its documented caller-asserted
+# open, and an unbound seat — standalone, or a Host-role seat (unbound
+# includes Host-role seats today) — keeps its documented caller-asserted
 # behavior exactly.
 BOUND_WRITE_OPS = frozenset({
     "prompt", "steer", "steer_interrupt", "cancel", "permit", "stop",
@@ -10492,22 +10493,46 @@ class Holder:
         A bound seat additionally requires the ``auth.token`` this holder
         minted in its record dir (a capability a raw socket speaker cannot
         obtain) plus an explicit ``expected_holder_instance_id`` naming this
-        instance — omission can no longer skip the binding. A refusal is
-        typed, starts no turn, is idempotent under retry, and is recorded as
-        ``socket_op_refused`` naming the refused op; it never reaches prompt
-        provenance, so a foreign attempt is never normalized to "delegator".
+        instance — omission can no longer skip the binding, and for a bound
+        seat the id comparison itself lives here once so every refusal stamps
+        the same ``socket_op_refused`` shape (an unbound seat keeps the
+        per-op caller-asserted check). A malformed token — non-ASCII or not
+        a string — is the typed ``invalid-token`` refusal, never a
+        ``TypeError`` out of ``compare_digest``. A refusal is typed, starts
+        no turn, is idempotent under retry, and is recorded as
+        ``socket_op_refused`` naming the refused op and reason; it never
+        reaches prompt provenance, so a foreign attempt is never normalized
+        to "delegator".
         """
         supplied = params.get("auth_token") if isinstance(params, dict) else None
-        if (not isinstance(supplied, str)
+        if supplied is not None and (not isinstance(supplied, str)
+                                     or not supplied.isascii()):
+            # secrets.compare_digest raises TypeError on a non-ASCII str, so
+            # a malformed credential gets its own typed refusal before the
+            # comparison — never a traceback down the connection thread.
+            reason = "invalid-token"
+        elif (not isinstance(supplied, str)
                 or not secrets.compare_digest(supplied, self.auth_token)):
             reason = "unauthenticated"
         elif params.get("expected_holder_instance_id") is None:
             reason = "holder-instance-required"
+        elif params.get("expected_holder_instance_id") != self.holder_instance_id:
+            # The instance-id check lives here once for a bound seat: every
+            # gate refusal stamps the same socket_op_refused event, while an
+            # unbound seat keeps the per-op caller-asserted check below.
+            reason = "holder-instance-mismatch"
         else:
             return None
-        self.events.append({"kind": "socket_op_refused", "op": op,
-                            "reason": reason})
+        event: dict[str, Any] = {"kind": "socket_op_refused", "op": op,
+                                 "reason": reason}
+        if reason == "holder-instance-mismatch":
+            event["expected_holder_instance_id"] = params.get(
+                "expected_holder_instance_id")
+        self.events.append(event)
         message = {
+            "invalid-token": (
+                "auth_token must be the ASCII string this seat's record "
+                "directory holds"),
             "unauthenticated": (
                 "mutating ops on a heartbeat-bound seat require the "
                 "holder-issued auth_token from this seat's record directory "
@@ -10515,10 +10540,17 @@ class Holder:
             "holder-instance-required": (
                 "mutating ops on a heartbeat-bound seat require "
                 "expected_holder_instance_id naming this holder instance"),
+            "holder-instance-mismatch": (
+                "expected holder instance does not match this holder process"),
         }[reason]
-        return {"error": {"code": reason, "message": message,
-                          "mutation_status": "not_started",
-                          "mutation_performed": False},
+        error: dict[str, Any] = {"code": reason, "message": message,
+                                 "mutation_status": "not_started",
+                                 "mutation_performed": False}
+        if reason == "holder-instance-mismatch":
+            error["expected_holder_instance_id"] = params.get(
+                "expected_holder_instance_id")
+            error["holder_instance_id"] = self.holder_instance_id
+        return {"error": error,
                 "mutation_status": "not_started", "mutation_performed": False}
 
     def handle_request(self, message: dict[str, Any]) -> dict[str, Any]:
@@ -10526,8 +10558,9 @@ class Holder:
         params = message.get("params") or {}
         if op in BOUND_WRITE_OPS and self.heartbeat_host is not None:
             # A bound seat proves the dispatcher: its auth.token and the
-            # instance id it names. The heartbeat host is only ever bound or
-            # rebound (never unbound), so this read needs no lock.
+            # instance id it names. This seat's heartbeat_host, once set, is
+            # only ever rebound — a bound seat stays bound for this holder's
+            # life — so this read needs no lock.
             refused = self._bound_op_refusal(op, params)
             if refused is not None:
                 return refused
@@ -10676,6 +10709,14 @@ class Holder:
                 pass
         return os.stat(connection.fileno()).st_uid == os.getuid()
 
+    def _restore_auth_token_file(self) -> None:
+        """Issue #408: the ``auth.token`` file is this seat's socket
+        capability. A deleted or overwritten file would lock every mutating
+        op out until restart, so the 15 s watchdog tick restores it from the
+        in-memory value — the gate's truth, which never rotates."""
+        if acp_paths.read_auth_token(self.record_dir) != self.auth_token:
+            acp_paths.write_auth_token(self.record_dir, self.auth_token)
+
     def idle_watcher(self) -> None:
         while True:
             time.sleep(15)
@@ -10688,6 +10729,10 @@ class Holder:
             except Exception:
                 # The watchdog outlives any single retry; a broken flush must
                 # not take the idle-exit timer down with it.
+                pass
+            try:
+                self._restore_auth_token_file()
+            except Exception:
                 pass
             # Issue #369: the same tick is the tool-cwd status scan, and the
             # one boundary that retries an undelivered notice.

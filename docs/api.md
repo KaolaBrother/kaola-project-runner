@@ -1842,17 +1842,29 @@ holder writes `0600` inside its `0700` record dir at construction and that the C
 presents — and an explicit `expected_holder_instance_id` naming the answering instance. A caller
 that supplies neither (a foreign same-UID process speaking the socket directly) is refused before
 the op runs: `{"error":{"code":"unauthenticated"}}` when the token is absent or wrong,
+`{"error":{"code":"invalid-token"}}` when the presented token is non-ASCII or not a string at all
+(a typed refusal, never a `TypeError` down the connection thread),
 `{"error":{"code":"holder-instance-required"}}` when the token is right but the id is omitted,
 `{"error":{"code":"holder-instance-mismatch"}}` when the id is wrong — each with
 `mutation_status: not_started` and `mutation_performed: false`, each writing one
-`socket_op_refused` event naming the refused op, and none starting a turn or being attributed to
-`delegator` provenance. A refusal is idempotent under retry and never wedges or crashes the
-holder. The Runner fills the still-optional flag from the verified record on bound seats, so
+`socket_op_refused` event naming the refused op and reason (the bound-seat id check lives once in
+the gate, so a wrong id stamps the same event kind rather than the older per-op
+`holder_instance_mismatch`), and none starting a turn or reaching prompt provenance. A refusal is
+idempotent under retry and never wedges or crashes the holder. Admitted socket prompts keep
+`delegator` provenance by design — the gate changes only that a foreign write never gets there.
+The Runner fills the still-optional flag from the verified record on bound seats, so
 legitimate `send`/`steer`/`permit`/`cancel`/`stop`/`wake`/`rebind-host`,
 `drain-restart`/`--resume` adoption, dispatch execute sends, the Sideagent relay/node machinery,
-and the `worker_event`/`compact_notice` carriers keep working. Read ops
-(`state`/`view`/`capture`/`wait`/`follow`) stay open on every seat, and an unbound standalone
-seat — no heartbeat Host — keeps the documented caller-asserted behavior exactly.
+and the `worker_event`/`compact_notice` carriers keep working. A deleted or overwritten
+`auth.token` self-heals: the holder's existing 15-second watchdog tick rewrites the file from the
+in-memory value, which never rotates, so transient loss does not lock legitimate callers out
+until restart. `stop --force` is never locked out either — when a caller cannot present a token
+at all, an `unauthenticated` refusal falls through to the existing argv-verified signal path,
+which already proves the live PID is the record's holder (a same-UID caller could signal it
+regardless); a presented-but-wrong token still returns the honest refusal. Read ops
+(`state`/`view`/`capture`/`wait`/`follow`) stay open on every seat, and an unbound seat —
+standalone or Host-role, since unbound includes Host-role seats today — keeps the documented
+caller-asserted behavior exactly.
 
 `send` preserves omitted wait selection through `runtime-tmux.sh`, `kaola-tmux.sh`,
 and direct `kaola-acp.py`. Explicit `--wait` blocks and `--no-wait` returns admission;
@@ -2361,7 +2373,7 @@ On a heartbeat-bound seat (Issue #408) `compact_notice` is a gated mutating op: 
 also name `record_dir`, the seat's own record directory, and the helper reads the holder-minted
 `auth.token` inside it at fire time so a holder restart's fresh token is the one presented. A
 binding without `record_dir` is still accepted; its notice is then refused `unauthenticated` on a
-bound seat while an unbound standalone seat admits it as before.
+bound seat while an unbound seat admits it as before.
 
 A valid notice stages one obligation in the existing compact tracker during the exact active
 request. Duplicate notices for that request coalesce. It does not call compaction completed or

@@ -767,10 +767,7 @@ def _stop_owned_holder(sock: Path, instance: str | None, proc: subprocess.Popen,
     # Issue #408: a heartbeat-bound seat refuses an unauthenticated stop; the
     # just-spawned holder minted its auth.token inside this record dir.
     if record_dir is not None:
-        try:
-            token = (record_dir / "auth.token").read_text(encoding="utf-8").strip()
-        except OSError:
-            token = ""
+        token = acp_paths.read_auth_token(record_dir)
         if token:
             params["auth_token"] = token
     reply = socket_op(sock, "stop", params, 30.0)

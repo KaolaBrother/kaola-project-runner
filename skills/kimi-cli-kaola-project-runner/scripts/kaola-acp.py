@@ -3075,6 +3075,15 @@ def _op_or_holder_lost(args: argparse.Namespace, repo: str, directory: Path,
     wire_error = response.get("error")
     wire_code = (wire_error.get("code")
                  if isinstance(wire_error, dict) else None)
+    if (wire_code == "unauthenticated" and op == "stop"
+            and params.get("force") and record is not None
+            and acp_paths.read_auth_token(directory) is None):
+        # Issue #408: a deleted auth.token must not lock out stop --force.
+        # This caller cannot present the capability at all, and a same-UID
+        # caller can already SIGKILL — the argv-verified path inside still
+        # proves the live PID is this record's holder before it is
+        # signalled. A presented-but-wrong token stays the honest refusal.
+        return force_stop_unreachable(args, repo, directory, record, params)
     if wire_code in ("holder-unreachable", "holder-timeout"):
         if record and not pid_alive(record.get("holder_pid")):
             if op == "stop":
@@ -3719,6 +3728,7 @@ def force_stop_unreachable(args: argparse.Namespace, repo: str, directory: Path,
     # spelling of this record root answers on the socket its argv names: stop
     # it there, exactly as an ordinary stop - never signal a holder that answers.
     sock, state = answering_socket(directory, record)
+    unauthenticated_refusal = False
     if sock is not None:
         if (state or {}).get("holder_instance_id") != record.get("holder_instance_id"):
             # Something answers there as another instance: never stop it on
@@ -3737,10 +3747,24 @@ def force_stop_unreachable(args: argparse.Namespace, repo: str, directory: Path,
                 and "expected_holder_instance_id" not in stop_params
                 and isinstance(record.get("holder_instance_id"), str)):
             stop_params["expected_holder_instance_id"] = record["holder_instance_id"]
-        receipt.update(socket_request(sock, "stop", stop_params, 30.0, directory))
-        receipt["answering_socket"] = str(sock)
-        return receipt
-    # Silent on every socket it could use: a wedged holder.
+        reply = socket_request(sock, "stop", stop_params, 30.0, directory)
+        reply_error = reply.get("error")
+        reply_code = (reply_error.get("code")
+                      if isinstance(reply_error, dict) else None)
+        if (reply_code != "unauthenticated"
+                or acp_paths.read_auth_token(directory) is not None):
+            receipt.update(reply)
+            receipt["answering_socket"] = str(sock)
+            return receipt
+        # Issue #408: this bound seat refused a stop its caller could not
+        # authenticate — no readable auth.token to present. The refusal
+        # cannot lock out --force: the argv anchor already proved this live
+        # PID is the record's holder and a same-UID caller can signal it
+        # regardless, so fall to the verified kill. A presented-but-wrong
+        # token would have returned the honest refusal above.
+        unauthenticated_refusal = True
+    # Silent on every socket it could use — a wedged holder — or answering
+    # only to refuse a stop this caller cannot authenticate.
     for sig, grace in ((signal.SIGTERM, 2.0), (signal.SIGKILL, 2.0)):
         try:
             os.kill(holder_pid, sig)
@@ -3752,6 +3776,9 @@ def force_stop_unreachable(args: argparse.Namespace, repo: str, directory: Path,
         if not pid_alive(holder_pid):
             break
     receipt = force_kill_from_record(args, repo, record)
+    if unauthenticated_refusal:
+        receipt["unauthenticated_stop_fallback"] = True
+        receipt["answering_socket"] = str(sock)
     receipt["holder_force_killed"] = holder_pid
     if pid_alive(holder_pid):
         receipt["residual_pids"] = sorted(set(receipt["residual_pids"]) | {holder_pid})
