@@ -1,50 +1,48 @@
-# Finalization Summary — Issue #379
+# Finalization Summary — Issue #407
 
 ## Delivered
 
-Fixed KPR #379 on `workflow/issue-379`: send, steer and steer_interrupt error
-receipts now state the mutation fact for **this** request.
+Fixed KPR #407 on `workflow/issue-407`: the issue-306 bytecode fixture is now a
+real Git checkout, so `render-skills.py --check` pin verification runs honestly
+in the post-release pinned window instead of refusing a non-Git tree copy.
 
-- `no-session`, `record-lost`, `holder-socket-missing` and a `holder-lost`
-  observed before any wire attempt report `mutation_performed: false` with
-  `mutation_status: not_started`; that pre-wire `holder-lost` also carries
-  `previous_prompt`, while `record.last_prompt` still serves `status`/`observe`.
-- `holder-closed`, send/read-stage failures, a stage-less `holder-unreachable`,
-  and a `holder-lost` discovered only after a wire attempt report `null` with
-  `mutation_status: unknown`. A frame that may have been written is never
-  flattened to false.
-- The holder busy receipt now uses `outcome: refused_busy` instead of the
-  successful `--no-wait` word `in_progress`; `mutation_performed: false` and the
-  active turn's `mutation_status` are unchanged.
-- A `start --text`/`--stdin` failure receipt keeps the internal prompt
-  request's mutation, so an unknown brief frame stays unknown.
-- Steer error receipts carry the matching
-  `steer_outcome`/`steer_consumed`/`steer_confirmation`.
-- `status`, `observe`, `capture`, `permit`, `cancel` and `stop` keep their
-  previous `holder_lost_receipt` facts.
-- The `error.stage` hook is in place for #383: connect will be definite
-  `false`, send/read stay `unknown`; the post-wire holder-loss source marker
-  keeps today's stage-less wire death unknown.
-- `docs/api.md` and `CHANGELOG.md` updated; templates and the 8191/8192-byte
-  budgets are unchanged. Generated Skill script copies were re-rendered.
+- Decision **(b)** of the two offered directions. Basis: `pin_findings` proves
+  Git-history facts (accepted commit exists, ancestor of `HEAD`,
+  `required_pin_paths` present, P−R delta limited to the four pin files) that are
+  only meaningful in a checkout, and the issue-49 contract test
+  `test_pinned_stage_cannot_be_verified_outside_a_git_checkout` locks the
+  behavior that a pinned stage on a non-Git tree must fail `--check` and
+  `--write` — "an unverifiable pin is never written". Option (a) would have
+  weakened that locked contract.
+- `tests/contract/test-issue-306-bytecode-payload.py` only; the product
+  (`scripts/render-skills.py`, templates, generated surfaces) is untouched. The
+  fixture follows the file's own `git_repo()`/`set_stage()` precedent: copy →
+  reset to content stage → `--write` → `git init`/commit → R → flip
+  `accepted-revision.json` to `pinned` naming R → `--write` → commit → P.
+- Both pin stages are exercised end to end in one test: `--check` PASS at
+  content stage, then `--check`/`--verify-install`/`install-local.sh` and the
+  real-extra-file rejection at the pinned stage, with bytecode planted per
+  stage (`--write` regenerates skill dirs wholesale). Git fixture calls carry
+  the Issue #80 `maintenance.auto=false` hardening.
 
-Candidate: `56a65dabc93427477ff77a4435ac92655bdd3e14` on `workflow/issue-379`;
-parent `9781d9342788fce1718f828bf50919b29695f5d6`. No tag, release, install, or
-amplification of the change was performed.
+Candidate: `3cad4e496ff95aaca463a43de2d4fc8f17025b0d` on `workflow/issue-407`;
+parent `5c8551ee`. No tag, release, install, or amplification of the change was
+performed.
 
 ## Acceptance Evidence
 
-- Independent review: `/tmp/kpr379rev/REVIEW.md` (F1/F2 raised and fixed).
-- Post-fix boundary probes: `/tmp/kpr379r2/evidence/boundary-probes.json`
-  (`post_write_holder_death` null/unknown; `start_brief_text` and
-  `start_brief_stdin` null/unknown).
-- Seven-shape reproduction: `/tmp/kpr379/evidence-fixed.json`.
-- Host acceptance: `56a65dab` diff reviewed; joint run plus two isolated reruns
-  were 19/19 OK; the astra first-run holder-closed difference was not
-  reproduced after the fixture hardening.
-- Focused validation logs: `/tmp/i379-r2-joint.log`,
-  `/tmp/i379-r2-isolated.log`, `/tmp/i379-r2-related.log`, and
-  `/tmp/i379-joint-fixed-*.log`.
+- Host verdict: ACCEPTED — independent review PASS (mutation probes verified
+  the fixture genuinely enforces ancestry and the P−R delta; no weakened
+  assertions; product untouched) plus Host verification (pinned-window demo
+  rerun green).
+- Original reproduction: historical bisect
+  `/tmp/kpr-405-repro/standalone-306-at-{R,P}.log`,
+  `fullgate-main-22814695-run1.log`; forward probe `/tmp/kpr-407-repro/`.
+- Fix receipts under `/tmp/kpr-407-fix/`: `pin-demo-render-write.log`,
+  `pin-demo-render-check.log` (simulated pin on the candidate worktree,
+  `commit=3cad4e49`, label `repro-only pin window probe`, pin verified),
+  `pin-demo-306-suite.log` (the suite green inside that simulated pinned
+  window), `fullgate.log` (full inventory).
 
 ## Validation
 
@@ -52,20 +50,14 @@ amplification of the change was performed.
 
 ## Documentation Docking
 
-DOCKED — `.cache/doc-docking.md`. `docs/api.md` records the request-scoped
-contract, false vs null, `refused_busy`, the brief-failure preservation and the
-`error.stage` forward boundary; `CHANGELOG.md` records the behavior and the
-holder-restart/CLI-per-call facts.
+None required — the change is test-only; no user-visible surface, API,
+convention, or generated product changed.
 
 ## Follow-Up Items
 
-- #383 will add `error.stage` (`connect`/`send`/`read`) and the holder timeout;
-  the #379 wrapper and the post-wire stage preservation are ready for it.
-- `scripts/kaola-acp-holder.py` is in the operator restart set, so a running
-  holder keeps the old busy word until it restarts; `scripts/kaola-acp.py` is
-  the per-call CLI and takes effect with installation.
-- No release, tag, publish, or install is part of this finalization.
+- None filed; the defect class is closed by this fix. Future release pin
+  commits will recreate the pinned window; the suite is now green in it.
 
-Final readiness: ready. Merge sink to `main`, close #379 with the requested
-comment, archive the run, and remove the run worktree and branch. No release,
+Final readiness: ready. Merge sink to `main`, close #407 with the evidence
+summary, archive the run, and remove the run worktree and branch. No release,
 tag, or install.
