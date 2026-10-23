@@ -5,6 +5,13 @@ A checkout with ``__pycache__/*.pyc`` under ``skills/*/scripts/`` passes
 ``render-skills.py --check``. ``install-local.sh`` then installs without
 deleting that bytecode. A non-bytecode extra file still fails both gates.
 ``--verify-install`` and the host-bundle verifier use the same exclusion.
+
+Issue #407: the fixture is a real Git checkout, not a plain copy. A pinned
+bridge can only be verified against a checkout (the pin names a commit,
+demands ancestry of HEAD, and bounds the P-R delta), so the fixture commits
+a content stage R and a pin P and exercises ``--check`` at both stages; this
+keeps the suite green in the post-release pinned window without weakening
+pin verification.
 """
 from __future__ import annotations
 
@@ -41,12 +48,76 @@ def render_check(root: Path) -> subprocess.CompletedProcess[str]:
     return run([sys.executable, "-B", str(root / "scripts" / "render-skills.py"), "--check"], root)
 
 
+def render_write(root: Path) -> subprocess.CompletedProcess[str]:
+    return run([sys.executable, "-B", str(root / "scripts" / "render-skills.py"), "--write"], root)
+
+
 def verify_install(root: Path, skills: Path) -> subprocess.CompletedProcess[str]:
     return run(
         [sys.executable, "-B", str(root / "scripts" / "render-skills.py"),
          "--verify-install", str(skills)],
         root,
     )
+
+
+def git(root: Path, *args: str) -> str:
+    # Issue #80: git >=2.47 `commit`/`merge`/`rebase` spawn a detached `maintenance run --auto`
+    # child that repacks and rewrites .git after the command returns, racing TemporaryDirectory
+    # teardown into Errno 66. Fixture git calls disable it; gc.auto=0 does not gate this spawn.
+    env = {
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "maintenance.auto",
+        "GIT_CONFIG_VALUE_0": "false",
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.invalid",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.invalid",
+    }
+    completed = run(["git", "-C", str(root), *args], root, env)
+    if completed.returncode != 0:
+        raise AssertionError(f"git {' '.join(args)} failed: {completed.stderr}")
+    return completed.stdout.strip()
+
+
+def set_stage(root: Path, stage: str, commit: str | None = None, label: str | None = None) -> None:
+    data: dict[str, object] = {"stage": stage}
+    if commit is not None:
+        data["commit"] = commit
+    if label is not None:
+        data["label"] = label
+    (root / "templates" / "grok-bot" / "accepted-revision.json").write_text(
+        json.dumps(data, indent=2) + "\n", encoding="utf-8"
+    )
+
+
+def content_checkout(root: Path) -> str:
+    """Make the copy a real Git checkout and return its content-stage commit R.
+
+    The copy is re-rendered at the content stage before its first commit, so the
+    fixture is the same whether the project itself currently sits at a content or a
+    pinned stage.
+    """
+    set_stage(root, "content")
+    written = render_write(root)
+    if written.returncode != 0:
+        raise AssertionError(f"content-stage --write failed: {written.stderr}")
+    git(root, "init", "-q")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "content")
+    return git(root, "rev-parse", "HEAD")
+
+
+def pin_to(root: Path, content: str) -> None:
+    """Commit the pin P naming the checkout's own content commit R."""
+    set_stage(root, "pinned", commit=content, label="issue-306 fixture pin")
+    written = render_write(root)
+    if written.returncode != 0:
+        raise AssertionError(f"pinned-stage --write failed: {written.stderr}")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "pin")
 
 
 def plant_bytecode(root: Path) -> dict[Path, bytes]:
@@ -88,15 +159,31 @@ class BytecodePayload(unittest.TestCase):
             tmp = Path(temporary)
             copy = tmp / "repo"
             shutil.copytree(PROJECT, copy, ignore=COPY_IGNORE)
-            planted = plant_bytecode(copy)
+            content = content_checkout(copy)
             home = tmp / "home"
             home.mkdir()
 
+            plant_bytecode(copy)
             checked = render_check(copy)
             self.assertEqual(
                 checked.returncode, 0,
-                f"--check rejected bytecode:\n{checked.stderr}\n{checked.stdout}",
+                f"--check rejected bytecode at the content stage:\n{checked.stderr}\n{checked.stdout}",
             )
+            self.assertIn("content stage, unpinned", checked.stdout)
+            self.assertNotIn(PYC_NAME, checked.stderr)
+            self.assertNotIn("notes.txt", checked.stderr)
+            self.assertNotIn("loose.pyc", checked.stderr)
+
+            # --write regenerates the Skill trees wholesale, so the planted bytecode
+            # does not survive the pin write; runtime debris lands again afterwards.
+            pin_to(copy, content)
+            planted = plant_bytecode(copy)
+            checked = render_check(copy)
+            self.assertEqual(
+                checked.returncode, 0,
+                f"--check rejected bytecode at the pinned stage:\n{checked.stderr}\n{checked.stdout}",
+            )
+            self.assertIn(f"pinned at {content[:12]}, pin verified", checked.stdout)
             self.assertNotIn(PYC_NAME, checked.stderr)
             self.assertNotIn("notes.txt", checked.stderr)
             self.assertNotIn("loose.pyc", checked.stderr)
@@ -140,6 +227,8 @@ class BytecodePayload(unittest.TestCase):
             self.assertIn("unexpected __pycache__", rejected.stderr)
             self.assertNotIn(PYC_NAME, rejected.stderr)
             self.assertNotIn("notes.txt", rejected.stderr)
+            # The pinned stage still verifies; only the real extra file is rejected.
+            self.assertNotIn("pin:", rejected.stderr)
             skewed = verify_install(copy, copy / "skills")
             self.assertNotEqual(skewed.returncode, 0)
             self.assertIn("not-payload.txt", skewed.stderr)
