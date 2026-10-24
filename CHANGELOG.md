@@ -4,7 +4,11 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.9.29 — 2026-10-24 (kimi-cli default retargets to K2.8; kimi-k3-1-pro higher Elite tier)
+
+Fixes #409 (`kimi-cli/default` started Kimi K3 while the everyday default the owner wanted was K2.8, the duplicate `kimi-cli/kimi-k2-8` named tier pointed at the same model id the retargeted default now takes, and the managed catalog's K3.1 Pro had no KPR preset between the default seat and Expert grants).
+
+Seats: restart required
 
 - **Kimi CLI default retargets to K2.8; `kimi-k3-1-pro` is the new higher Elite tier (#409).** `kimi-cli/default` now starts **Kimi K2.8** (`kimi-code/kimi-for-coding`) at `thinking=max`; the preset id `default` is unchanged, so existing default-seat grants keep meaning "the Kimi default seat" and now run K2.8. The old duplicate named tier `kimi-cli/kimi-k2-8` — the same model id at the same effort — folds into `default` and is deleted: a dispatch that still names `kimi-k2-8` gets the typed unknown-tier refusal and moves to `default`. Plain Kimi K3 (`kimi-code/k3`) leaves the preset catalog entirely — it stays a native catalog model reachable through an explicit model choice, and there is no second "default" story. The new named tier `kimi-cli/kimi-k3-1-pro` starts **Kimi K3.1 Pro** at `thinking=max`, with the owner-approved profile "Strong all round worker. Strong at visual design and visual inspection, with good UI and design taste." Its native id `kimi-code/k3.1-pro` was verified live on 2026-10-24 against kimi cli 2.2.0 (`kimi provider list --json` catalog probe plus two ACP start receipts: default → `kimi-code/kimi-for-coding` and `kimi-k3-1-pro` → `kimi-code/k3.1-pro`, both `thinking=max` applied, both stopped with zero residual); `acp_verified_versions` now records cli=2.2.0. The tier is an Elite escalation in the `grok/xhigh` / `claude-code/opus-xhigh` pattern — ordinary Elite seat grants cover it; it is not an Expert task or standing grant. `platforms/kimi-cli.yaml`, `scripts/adapters/kimi-cli.sh`, the contract pins (#111, #218), the regenerated worker Skill, profile catalog and README carry the change. No KPM mirror: this is a tier/catalog change, not a runner or Delegator bug.
 
