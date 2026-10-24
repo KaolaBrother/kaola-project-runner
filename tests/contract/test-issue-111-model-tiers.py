@@ -47,8 +47,13 @@ SKILLS = PROJECT / "skills"
 # effort, which is empty where no effort was verified for that exact model.
 LIVE_PRESETS = {
     "kimi-cli": {
-        "default": ("Kimi K3", "kimi-code/k3", "max"),
-        "named": [("kimi-k2-8", "Kimi K2.8", "kimi-code/kimi-for-coding", "max")],
+        # Issue #409: default is K2.8 (`kimi-code/kimi-for-coding`); the old
+        # `kimi-k2-8` named tier folded into default (same id, same effort),
+        # and `kimi-k3-1-pro` is the higher Elite tier. Re-measured live on
+        # 2026-10-24 against kimi cli 2.2.0 (`kimi provider list --json`
+        # catalog probe; start receipts in the issue archive).
+        "default": ("Kimi K2.8", "kimi-code/kimi-for-coding", "max"),
+        "named": [("kimi-k3-1-pro", "Kimi K3.1 Pro", "kimi-code/k3.1-pro", "max")],
     },
     "droid": {
         # Issue #125 (correcting #117): default is Auto; the alternative tier

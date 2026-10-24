@@ -49,7 +49,7 @@ README = PROJECT / "README.md"
 ELITE = [
     "antigravity/default", "antigravity/xhigh", "antigravity/opus", "claude-code/default", "claude-code/opus-xhigh", "claude-code/sonnet", "codex/default", "cursor-cli/default",
     "cursor-cli/opus", "devin/opus-fusion", "droid/default", "droid/opus", "droid/core",
-    "grok/default", "grok/xhigh", "kimi-cli/default", "kimi-cli/kimi-k2-8",
+    "grok/default", "grok/xhigh", "kimi-cli/default", "kimi-cli/kimi-k3-1-pro",
 ]
 WORKER = [
     "claude-code/haiku", "codex/luna", "devin/default", "dsh/default",
