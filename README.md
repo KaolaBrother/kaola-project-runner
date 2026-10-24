@@ -379,8 +379,8 @@ explicit `--model` choices, not a separate Fast toggle.
 | Elite | Droid | `core` | `droid/core` | Kimi K3 | reasoning_effort=max | Strong at visual design and visual inspection, with good UI and design taste. |
 | Elite | Grok CLI | `default` | `grok/default` | Grok 4.7 | effort=high, fast=false | Suits exploratory, long-running autonomous work; give clear stage goals and exit conditions. |
 | Elite | Grok CLI | `xhigh` | `grok/xhigh` | Grok 4.7 | effort=xhigh, fast=false | Escalation level: use it when the Grok Build default (Grok 4.7 high) cannot solve the task. |
-| Elite | Kimi CLI | `default` | `kimi-cli/default` | Kimi K3 | thinking=max | Strong at visual design and visual inspection, with good UI and design taste. |
-| Elite | Kimi CLI | `kimi-k2-8` | `kimi-cli/kimi-k2-8` | Kimi K2.8 | thinking=max | All-round implementation worker for every kind of hands-on development and implementation task. |
+| Elite | Kimi CLI | `default` | `kimi-cli/default` | Kimi K2.8 | thinking=max | All-round implementation worker for every kind of hands-on development and implementation task. |
+| Elite | Kimi CLI | `kimi-k3-1-pro` | `kimi-cli/kimi-k3-1-pro` | Kimi K3.1 Pro | thinking=max | Strong all round worker. Strong at visual design and visual inspection, with good UI and design taste. |
 | Worker | Claude Code | `haiku` | `claude-code/haiku` | Claude Haiku | effort=high | Fast all-round execution worker, well suited to well-scoped work, especially UI and 3D visual implementation. |
 | Worker | Codex CLI | `luna` | `codex/luna` | GPT-6 Luna | effort=max | Computer-use worker only: drives GUI/browser/desktop QA and verification with screenshots and verdicts; not for general implementation, debugging, or design. |
 | Worker | Devin CLI | `default` | `devin/default` | SWE-2 | effort=max via ACP option thought_level | Capable full-cycle engineering worker. |

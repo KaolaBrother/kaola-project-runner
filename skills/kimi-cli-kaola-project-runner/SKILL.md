@@ -47,7 +47,7 @@ SESSION="<exact-name>"   # under Project Runner: <platform>-<CODE>-i<ISSUE>-<pur
 A `start` with no `--text` or `--stdin` only brings the seat up (`ready`, no turn). That receipt is not a dispatch. Pass the task as `--text` or `--stdin` (`--no-wait` admits the turn and does not wait for it to end). `ready` is a dispatch only with `brief_delivered` true, that turn's `turn_request_id`, and its `prompt_fingerprint`. A later `send` is another turn; do not send the same brief again.
 
 The controlling Agent owns model selection for each `start`. This Skill declares its per-run
-presets — `--tier default` (**Kimi K3**: `kimi-code/k3`, thinking=max) and `--tier kimi-k2-8` (**Kimi K2.8**: `kimi-code/kimi-for-coding`, thinking=max) — and `default` applies whenever nothing more specific was chosen. Pass
+presets — `--tier default` (**Kimi K2.8**: `kimi-code/kimi-for-coding`, thinking=max) and `--tier kimi-k3-1-pro` (**Kimi K3.1 Pro**: `kimi-code/k3.1-pro`, thinking=max) — and `default` applies whenever nothing more specific was chosen. Pass
 another `--tier` when the human or an existing authorization — an explicit Worker grant included —
 names that preset; never infer one from code size, failures, elapsed time, or your own assessment.
 An undeclared name is refused (`tier-not-declared`), never resolved to `default`.
