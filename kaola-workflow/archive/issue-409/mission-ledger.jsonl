@@ -1,0 +1,5 @@
+{"n": 1, "name": "verify-catalog", "details": "live-verify kimi native catalog ids on kimi cli 2.2.0 via `kimi provider list --json`; evidence kaola-workflow/archive/issue-409/evidence/kimi-provider-list-2.2.0.json", "status": "done"}
+{"n": 2, "name": "implement", "details": "platforms/kimi-cli.yaml default→K2.8 + fold kimi-k2-8 + add kimi-k3-1-pro Elite tier; scripts/adapters/kimi-cli.sh; tests #111/#218; docs/architecture.md; render --write/--check; output branch workflow/issue-409", "status": "done"}
+{"n": 3, "name": "live-presets", "details": "ACP start receipts: default→kimi-code/kimi-for-coding, kimi-k3-1-pro→kimi-code/k3.1-pro, both thinking=max applied, both stopped zero-residual; evidence archive issue-409/evidence/start-*.json stop-*.json", "status": "done"}
+{"n": 4, "name": "validate", "details": "suites 111/218/148/progressive-disclosure/generated-skills/acp-contract exit 0 (logs in evidence/suite-*.log); render-skills --check PASS", "status": "done"}
+{"n": 5, "name": "release", "details": "v0.9.29 R+P+tag cut on main by Host after merge per owner instruction; release commits on main are the record", "status": "done"}
