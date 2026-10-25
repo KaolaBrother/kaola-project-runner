@@ -5159,7 +5159,7 @@ class DefaultSideagentBind(StateProject):
         env = self.host_env()
         cases = (
             {"grants": []},
-            {"grants": [{"id": "codex/luna", "state": "granted", "count": 1}]},
+            {"grants": [{"id": "codex/astra", "state": "granted", "count": 1}]},
             {"grants": [WORKER_GRANT], "exclusions": ["zcode/default"]},
         )
         for authorization in cases:
