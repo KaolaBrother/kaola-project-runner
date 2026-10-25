@@ -3133,9 +3133,12 @@ implementation). The preset ID is not the alias. `--tier sonnet` is Sonnet (`son
 at `effort=high` (Elite; an explicit preset and count grant, not a Worker-class preset).
 `--tier haiku` is Claude Haiku (`haiku`) at `effort=high` (Worker; usable only after an explicit Worker grant).
 Worker-class presets are exactly: `claude-code/haiku`, `codex/luna`, `devin/default`, `dsh/commandcode`, `dsh/default`, `opencode/default`, `zcode/default`. Each of those seven is usable only after an explicit Worker grant. `dsh/commandcode` is the Command Code DeepSeek V4.1 Flash preset in that class, and it needs a grant the same way. Codex's `--tier luna` is GPT-6 Luna (`gpt-6-luna`) at `effort=max`
-(Issue #188, profile narrowed in #301): a computer-use-only Worker, not an upgrade
-and not a general implementation preset. Its catalog row sets `luna_model_roles` to
-`computer-use-only` (Issue #350). These are applied as ordinary ACP config
+(Issue #188; owner decision `luna-research-ok-20261026`): a Worker good at
+computer-use and research, not Expert design or planning, and not a substitute
+for Elite work when a better Elite seat exists. Its catalog row does not set
+`luna_model_roles` (absent means no role gate). Issue #350 still skips any
+preset that does set `computer-use-only`.
+These are applied as ordinary ACP config
 options; a native rejection is a `config_application` limitation, never a substitute.
 
 ## Agent-directed transport results

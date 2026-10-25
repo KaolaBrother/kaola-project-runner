@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Issue #350: automatic Worker selection skips computer-use-only presets.
 
-Fail-on-main at aa362c92: ``_node_chain`` keeps every granted Worker whose
-availability is not absent, so ``codex/luna`` stays in the dsh failure chain.
-The role is a closed catalog value, not a preset name.
+The role is a closed catalog value, not a preset name. Owner decision
+``luna-research-ok-20261026`` removed ``luna_model_roles`` from ``codex/luna``,
+so Luna is a selectable Worker again (research and computer-use). The skip
+still reads the role: a fixture or later preset that sets
+``computer-use-only`` is omitted from automatic selection, including the
+Sideagent node chain.
 """
 
 from __future__ import annotations
@@ -31,7 +34,7 @@ RENDER = SCRIPTS / "render-skills.py"
 
 LUNA = "codex/luna"
 ROLE = "computer-use-only"
-DSH_CHAIN = ["claude-code/haiku", "devin/default", "opencode/default", "zcode/default"]
+DSH_CHAIN = ["claude-code/haiku", LUNA, "devin/default", "opencode/default", "zcode/default"]
 OTHER_WORKERS = [
     "claude-code/haiku", "devin/default", "dsh/commandcode", "dsh/default",
     "opencode/default", "zcode/default",
@@ -156,34 +159,32 @@ class ComputerUseRoles(unittest.TestCase):
         self.assertEqual(event["reason"], "turn-refused:turn_failed")
         self.assertEqual(event["chain"], DSH_CHAIN)
         self.assertEqual(event["to"], "claude-code/haiku")
-        self.assertNotIn(LUNA, event["chain"])
+        self.assertIn(LUNA, event["chain"])
         self.assertNotIn("codex/luna", inspect.getsource(self.holder.Holder._node_chain))
         self.assertIn(ROLE, inspect.getsource(self.holder.automatic_worker_barred))
 
-    def test_absent_haiku_does_not_lead_with_luna(self) -> None:
+    def test_absent_haiku_leads_with_luna(self) -> None:
         self.write_grant()
         self.availability(["claude-code/haiku"])
         chain = self.carrier()._node_chain(self.binding(), ["dsh"])
         presets = [row["preset"] for row in chain]
-        self.assertEqual(presets, ["devin/default", "opencode/default", "zcode/default"])
-        self.assertNotIn(LUNA, presets)
+        self.assertEqual(presets, [LUNA, "devin/default", "opencode/default", "zcode/default"])
+        self.assertEqual(presets[0], LUNA)
 
-    def test_only_computer_use_only_fails_once_on_the_empty_chain(self) -> None:
+    def test_only_luna_takes_the_chain_when_other_workers_are_absent(self) -> None:
         self.write_grant()
         self.availability(OTHER_WORKERS)
         carrier = self.carrier()
         moved = carrier._node_fallback(self.binding(), "dsh", "turn-refused:turn_failed")
-        self.assertIsNone(moved)
-        self.assertEqual(len(carrier.events), 1)
-        event = carrier.events[0]
-        self.assertTrue(event["exhausted"])
-        self.assertEqual(event["chain"], [])
-        self.assertNotIn("to", event)
-        self.assertTrue(carrier.node["runtime"]["exhausted"])
+        self.assertIsNotNone(moved)
+        event = carrier.events[-1]
+        self.assertFalse(event.get("exhausted", False))
+        self.assertEqual(event["chain"], [LUNA])
+        self.assertEqual(event["to"], LUNA)
         projected = json.loads(self.project().stdout)
         workers = [row for row in projected["candidates"] if row["class"] == "Worker"]
         self.assertEqual([row["id"] for row in workers], [LUNA])
-        self.assertEqual(workers[0].get("roles"), [ROLE])
+        self.assertEqual(workers[0].get("roles"), [])
 
     def test_fixture_role_is_excluded_without_naming_the_preset(self) -> None:
         tree = self.root / "checkout"
@@ -245,12 +246,12 @@ class ComputerUseRoles(unittest.TestCase):
         self.assertIn("futureplat/default", detail)
         self.assertNotIn('"candidates"', detail)
 
-    def test_explicit_dispatch_still_offers_the_marked_preset(self) -> None:
+    def test_explicit_dispatch_still_offers_luna(self) -> None:
         self.write_grant()
         projected = json.loads(self.project().stdout)
         luna = next(row for row in projected["candidates"] if row["id"] == LUNA)
         self.assertEqual(luna["class"], "Worker")
-        self.assertEqual(luna["roles"], [ROLE])
+        self.assertEqual(luna["roles"], [])
         self.assertEqual(next(row["roles"] for row in projected["candidates"]
                               if row["id"] == "zcode/default"), [])
         withheld = {row["id"]: row["reason"] for row in projected["withheld"]}
@@ -277,22 +278,17 @@ class ComputerUseRoles(unittest.TestCase):
         self.assertEqual(item["reason"], "dry-run")
         self.assertEqual(item["status"], "not-run")
 
-    def test_factory_luna_row_carries_the_role_and_render_rejects_unknown(self) -> None:
+    def test_factory_luna_row_has_no_role_and_render_rejects_unknown(self) -> None:
         text = (PLATFORMS / "codex.yaml").read_text(encoding="utf-8")
-        self.assertIn('luna_model_roles: "computer-use-only"', text)
+        self.assertNotIn("luna_model_roles", text)
         for path in sorted(PLATFORMS.glob("*.yaml")):
-            if path.name == "codex.yaml":
-                continue
             self.assertNotIn(ROLE, path.read_text(encoding="utf-8"), path.name)
         render = load_render()
         manifest = render.parse_manifest(PLATFORMS / "codex.yaml")
-        self.assertEqual(manifest["luna_model_roles"], ROLE)
+        self.assertNotIn("luna_model_roles", manifest)
         self.assertEqual(render.MODEL_ROLES, frozenset({ROLE}))
         bad = self.root / "codex.yaml"
-        bad.write_text(text.replace(
-            'luna_model_roles: "computer-use-only"',
-            'luna_model_roles: "desktop-only"',
-        ), encoding="utf-8")
+        bad.write_text(text.rstrip() + '\nluna_model_roles: "desktop-only"\n', encoding="utf-8")
         with self.assertRaises(ValueError) as caught:
             render.parse_manifest(bad)
         self.assertIn("unknown model role", str(caught.exception))

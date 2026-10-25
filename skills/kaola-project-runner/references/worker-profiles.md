@@ -97,7 +97,7 @@ If no eligible Sol is available, use locally available Luna when an explicit
 Worker grant covers it. If
 neither qualifies, report the concrete availability or authorization gap;
 never silently switch tiers or substitute another preset.
-`codex/luna` sets `luna_model_roles` to `computer-use-only`. Automatic non-computer-use selection, including the Sideagent node chain, skips any preset with that role. The skip reads the role, not the preset name. Explicit dispatch of a granted marked preset stays. Grants, exclusions, holds, and availability are unchanged.
+`codex/luna` does not set `luna_model_roles` (absent means no role gate). Automatic non-computer-use selection, including the Sideagent node chain, may pick it. The skip still reads the role, not the preset name. Explicit dispatch of a granted marked preset stays. Grants, exclusions, holds, and availability are unchanged.
 
 Do not infer computer-operation capability from visual-design or screenshot-review profiles or class membership. Visual analysis is not computer use. Model authorization and permission to
 use computer tools are separate existing facts. Profile wording grants no tool
