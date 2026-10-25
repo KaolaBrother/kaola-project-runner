@@ -4,6 +4,12 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+Seats: restart required
+
+- **`codex/luna` is no longer computer-use-only (owner decision `luna-research-ok-20261026`).** GPT-6 Luna (`effort=max`, Worker) stays strong at GUI/browser/desktop QA with screenshots and verdicts, and may also do research. It is still not Expert design or planning, and not a substitute for Elite work when a better Elite seat exists. `luna_model_roles` is removed (absent means no role gate), so automatic non-computer-use selection — including the Sideagent node chain — may pick a granted Luna. Issue #350 still skips any preset that does set `computer-use-only`. `platforms/codex.yaml` is in the operator restart set (`docs/conventions.md`). This change does not install. This content change leaves the Grok Bot bridge at the unpinned content stage (`saveable: false`) so renderer checks stay green; a later release pin names the content commit.
+
 ## 0.9.29 — 2026-10-24 (kimi-cli default retargets to K2.8; kimi-k3-1-pro higher Elite tier)
 
 Fixes #409 (`kimi-cli/default` started Kimi K3 while the everyday default the owner wanted was K2.8, the duplicate `kimi-cli/kimi-k2-8` named tier pointed at the same model id the retargeted default now takes, and the managed catalog's K3.1 Pro had no KPR preset between the default seat and Expert grants).
