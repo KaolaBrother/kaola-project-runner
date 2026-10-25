@@ -66,9 +66,9 @@ HAIKU_PROFILE = (
 )
 SONNET_PROFILE = "All-round execution worker, especially UI and 3D visual implementation."
 LUNA_PROFILE = (
-    "Worker good at computer-use (GUI/browser/desktop QA with screenshots and "
-    "verdicts) and research; not Expert design or planning, nor a substitute "
-    "for Elite work when a better Elite seat exists."
+    "Computer-use and research worker: GUI/browser/desktop QA with screenshots "
+    "and verdicts; not Expert design/planning, nor Elite substitute when a "
+    "better Elite seat exists."
 )
 
 ROW = re.compile(
