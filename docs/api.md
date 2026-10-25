@@ -828,8 +828,13 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   one: `why` `owed range already returned to the Host; the carrier does not resend it`,
   `next` `request one bounded batch: python3 <state tool> state recovery-input
   --file <file> --kind request --source ORIGINAL_SOURCE --evidence
-  alerts/maintenance-returned` (the tool is the binding's absolute
-  `recipe.state_tool`, else `<Project Runner>/scripts/kaola-dispatch.py`; #412).
+  alerts/maintenance-returned` (the tool resolves like the holder's own
+  discovery: an existing absolute `recipe.state_tool`, then the
+  `kaola-dispatch.py` beside this module, then the installed
+  `kaola-project-runner` Skill's sibling copy; when none exists the `next`
+  names the missing prerequisite — `none was found (checked: …); set
+  sideagent.recipe.state_tool to the absolute path of kaola-dispatch.py` —
+  instead of a runnable-looking command; #412).
   That request records one typed recovery input; once any stop duty in the
   returned inputs is cleared, the carrier selects it once, past `handled`, and
   records it as sent (`recovery_sent`), so it is not reselected. While a returned

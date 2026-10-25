@@ -2595,6 +2595,28 @@ def _bound_node_record(binding: Any, repo: Path | None,
     return True, record
 
 
+def _state_tool_path(binding: Any) -> tuple[str | None, list[str]]:
+    """The Project Runner state tool an emitted recovery route may name.
+
+    Mirrors the holder's ``_state_tool`` discovery order exactly: a usable
+    explicit ``recipe.state_tool``, then the tool beside this module (a source
+    checkout's ``scripts/``), then the installed orchestrator Skill's sibling
+    copy. Returns the first existing path and every candidate checked, so a
+    view can name the prerequisite instead of a placeholder when none exists.
+    """
+    recipe = binding.get("recipe") if isinstance(binding, dict) and isinstance(binding.get("recipe"), dict) else {}
+    named = recipe.get("state_tool")
+    here = Path(__file__).resolve().parent
+    candidates = ([Path(named)] if isinstance(named, str) and os.path.isabs(named) else []) + [
+        here / "kaola-dispatch.py",
+        here.parent.parent / "kaola-project-runner" / "scripts" / "kaola-dispatch.py"]
+    checked = [str(candidate) for candidate in candidates]
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate), checked
+    return None, checked
+
+
 def node_is_running(binding: Any, repo: Path | None, host: dict[str, str] | None) -> bool | None:
     """True only for this repo's ready Sideagent record dispatched by this Host.
 
@@ -2811,27 +2833,30 @@ def host_view(doc: dict[str, Any], path: Path | None) -> dict[str, Any]:
                       if isinstance(ident, str) and isinstance(row, dict)
                       and row.get("why") in MAINTENANCE_STOP_DUTIES)
     stranded_stop = stranded and bool(stop_ids)
-    recipe = binding.get("recipe") if isinstance(binding, dict) and isinstance(binding.get("recipe"), dict) else {}
-    tool = recipe.get("state_tool")
-    if not (isinstance(tool, str) and os.path.isabs(tool)):
-        tool = "<Project Runner>/scripts/kaola-dispatch.py"
+    tool, checked_tools = _state_tool_path(binding)
     file_text = str(path) if isinstance(path, Path) else ".kaola/heartbeat-prompt.json"
+    if tool is not None:
+        request = (f"request one bounded batch: python3 {shlex.quote(tool)} "
+                   f"state recovery-input --file {shlex.quote(file_text)} --kind request "
+                   "--source ORIGINAL_SOURCE --evidence alerts/maintenance-returned")
+    else:
+        # No runnable-looking command: name the missing prerequisite.
+        request = (f"request one bounded batch with the Project Runner state tool; none was found "
+                   f"(checked: {', '.join(checked_tools)}); set sideagent.recipe.state_tool to the "
+                   "absolute path of kaola-dispatch.py, then run it with: state recovery-input "
+                   f"--file {shlex.quote(file_text)} --kind request "
+                   "--source ORIGINAL_SOURCE --evidence alerts/maintenance-returned")
     if stranded_stop:
         attention.append({"kind": "maintenance", "id": "pending",
                           "why": "owed range waits on a maintenance stop duty; the carrier starts "
                                  "or sends no node while that old node holder is alive",
                           "next": f"confirm the exact stop of the old node holder named by "
                                   f"alerts/maintenance-returned input(s) {', '.join(stop_ids)} "
-                                  "(their evidence locators name it), then request one bounded batch: "
-                                  f"python3 {shlex.quote(tool)} state recovery-input "
-                                  f"--file {shlex.quote(file_text)} --kind request "
-                                  "--source ORIGINAL_SOURCE --evidence alerts/maintenance-returned"})
+                                  "(their evidence locators name it), then " + request})
     elif stranded:
         attention.append({"kind": "maintenance", "id": "pending",
                           "why": "owed range already returned to the Host; the carrier does not resend it",
-                          "next": f"request one bounded batch: python3 {shlex.quote(tool)} "
-                                  f"state recovery-input --file {shlex.quote(file_text)} --kind request "
-                                  "--source ORIGINAL_SOURCE --evidence alerts/maintenance-returned"})
+                          "next": request})
     elif owed:
         attention.append({"kind": "maintenance", "id": "pending", "why": "bounded reconciliation owed",
                           "next": "use the bound node or recover from original receipts"})

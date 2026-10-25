@@ -314,9 +314,10 @@ class StrandedReturnedRange(unittest.TestCase):
         self.assertIn("--evidence alerts/maintenance-returned", row["next"])
 
     def test_the_stranded_next_uses_the_bindings_state_tool(self) -> None:
-        tool = "/abs/state-tool"
+        tool = Path(self.tmp.name) / "state-tool"
+        tool.write_text("#!/bin/sh\n", encoding="utf-8")
         fx = self.stranded(recipe={"runner": "/abs/runner", "argv": ["start"],
-                                   "state_tool": tool})
+                                   "state_tool": str(tool)})
         row = self.maintenance_row(fx.host_view())
         self.assertIsNotNone(row)
         self.assertIn(f"python3 {tool} state recovery-input", row["next"])
@@ -328,7 +329,75 @@ class StrandedReturnedRange(unittest.TestCase):
                          "and is not resent automatically; request one bounded batch with "
                          "state recovery-input --kind request")
 
-    def test_the_named_route_selects_exactly_one_bounded_batch(self) -> None:
+    @staticmethod
+    def usable_recipe(fx: Fixture) -> dict:
+        """A node recipe the real Holder's `_node_binding` accepts, without an
+        explicit `state_tool` — discovery must find the sibling dispatch tool."""
+        return {"runner": str(SCRIPT),
+                "argv": ["start", "--repo", str(fx.repo), "--session", NODE["session"],
+                         "--role", "sideagent"]}
+
+    def test_the_emitted_route_runs_without_an_explicit_state_tool(self) -> None:
+        fx = self.stranded()
+        doc = fx.doc()
+        binding = doc["state"]["sideagent"]
+        binding["recipe"] = self.usable_recipe(fx)
+        doc["carrier"] = {"holder_instance_id": HOST["holder_instance_id"],
+                          "platform": HOST["platform"], "session": HOST["session"]}
+        fx.write(doc)
+        fx.write_record(NODE["platform"], NODE["session"],
+                        fx.node_record(holder="node-1",
+                                       features=["sideagent-relay/1"], socket=True))
+        holder = fx.make_holder()
+        self.assertEqual((holder._node_binding() or {}).get("session"), NODE["session"],
+                         "the recipe is usable to a real Holder without state_tool")
+        view = fx.host_view()
+        self.assertEqual(view["sideagent_maintenance"], "a node is running")
+        row = self.maintenance_row(view)
+        self.assertIsNotNone(row)
+        self.assertNotIn("<Project Runner>", row["next"])
+        command = row["next"].split("request one bounded batch: ", 1)[1]
+        argv = shlex.split(command)
+        self.assertTrue(Path(argv[1]).is_file(), f"no resolved tool: {command}")
+        # Execute exactly the emitted command under the verified Host identity.
+        host = {"platform": "zcode", "session": "zcode-KT-orchestrator-main",
+                "repo": str(fx.repo), "holder_instance_id": "host-recovery"}
+        fx.write_record(host["platform"], host["session"], {
+            "holder_instance_id": host["holder_instance_id"], "session_role": "host",
+            "state": "ready", "repo": str(fx.repo), "holder_pid": os.getpid(),
+            "acp_session_id": "ses-412"})
+        env = fx.env()
+        env["KAOLA_ACP_DISPATCHER"] = json.dumps(host)
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=60, env=env)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        doc = fx.doc()
+        item = doc["state"]["maintenance"].get("recovery_input")
+        self.assertEqual((item or {}).get("kind"), "request")
+        current = doc["host_revision"]
+        # The live node then gets exactly one batch for the requested range.
+        sends = []
+        holder._relay_send = lambda target, text: (
+            sends.append((target, text)) or {"outcome": "in_progress",
+                                             "prompt_fingerprint": "sha256:x"})
+        holder._sweep_pass = lambda *a, **k: None
+        holder.turn["active"] = False
+        holder.node.update(holder="node-1", phase="running")
+        for _ in range(2):
+            holder._node_relay_pass(binding)
+        self.assertEqual(len(sends), 1, "exactly one send for the requested range")
+        self.assertEqual(sends[0][0]["holder_instance_id"], "node-1")
+        events = [json.loads(line)
+                  for line in (holder.record_dir / "events.jsonl").read_text().splitlines()
+                  if line.strip()]
+        batches = [event for event in events if event.get("kind") == "sideagent_node_batch"]
+        self.assertEqual(len(batches), 1)
+        self.assertEqual(batches[0]["host_revision_through"], current)
+        self.assertEqual(batches[0]["recovery_input"], item)
+
+    def test_the_request_selector_selects_the_stranded_range_once(self) -> None:
+        """Proves the existing request selector for a stranded range — it calls
+        `state recovery-input` directly rather than executing the emitted
+        `next` command, so it does not prove the command itself is runnable."""
         fx = self.stranded()
         carrier = self.carrier()
         # The route itself runs under the verified Host identity.
@@ -436,6 +505,21 @@ class StopDutyPrecedence(unittest.TestCase):
         fx.write(doc)
         self.assertEqual(fx.host_view()["sideagent_maintenance"], f"a node is running; {tail}")
 
+    def test_the_stop_duty_route_resolves_a_real_tool(self) -> None:
+        fx = self.stranded_with_stop_duty()
+        doc = fx.doc()
+        doc["state"]["sideagent"]["recipe"] = StrandedReturnedRange.usable_recipe(fx)
+        fx.write(doc)
+        row = self.maintenance_row(fx.host_view())
+        self.assertIsNotNone(row)
+        self.assertNotIn("<Project Runner>", row["next"])
+        self.assertIn("confirm the exact stop of the old node holder named by "
+                      "alerts/maintenance-returned input(s) batch:b-oldnode", row["next"])
+        command = row["next"].split("then request one bounded batch: ", 1)[1]
+        argv = shlex.split(command)
+        self.assertTrue(Path(argv[1]).is_file(), f"no resolved tool: {command}")
+        # Not executed: the live old node holder still blocks the batch.
+
     def test_a_live_old_node_holder_blocks_the_request_batch(self) -> None:
         """Control, green on baseline too: while ``stop_unconfirmed`` names a
         holder whose record pid is still alive, the carrier's relay pass sends
@@ -467,6 +551,68 @@ class StopDutyPrecedence(unittest.TestCase):
         holder._node_relay_pass(binding)
         self.assertEqual(sends, [], "no batch while the old node holder is alive")
         self.assertEqual(holder.node.get("stop_unconfirmed"), {"holder": "old-node"})
+
+
+class StateToolDiscoveryNotFound(unittest.TestCase):
+    """Item: when no state tool exists anywhere the view names the prerequisite
+    instead of a runnable-looking placeholder command."""
+
+    def load_isolated_record(self, isolated: Path):
+        """Load a copy of the record module beside no dispatch tool and no
+        sibling `kaola-project-runner` Skill (the installed-Skill layout)."""
+        import shutil
+        module_dir = isolated / "deep" / "mod"
+        module_dir.mkdir(parents=True)
+        shutil.copy(REPO / "scripts" / "kaola-record-contract.py", module_dir)
+        shutil.copy(REPO / "scripts" / "kaola-acp-paths.py", module_dir)
+        sys.dont_write_bytecode = True
+        spec = importlib.util.spec_from_file_location(
+            "kaola_record_contract_isolated", module_dir / "kaola-record-contract.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    @staticmethod
+    def stranded_doc(recipe: dict | None = None) -> dict:
+        binding = {"platform": "zcode", "session": "zcode-KT-i412-notool",
+                   "state": "active", "mode": "node"}
+        if recipe is not None:
+            binding["recipe"] = recipe
+        return {"host_revision": 5,
+                "state": {"sideagent": binding,
+                          "maintenance": {"handled_host_revision": 1,
+                                          "acked_host_revision": 1},
+                          "alerts": {"maintenance-returned": {
+                              "owner": "host", "level": "warn", "rev": 1,
+                              "summary": "s",
+                              "inputs": {"batch:b-returned": {
+                                  "why": "checkpoint-missing",
+                                  "host_revision_through": 5}}}},
+                          "tasks": {"t1": {"stage": "doing", "goal": "g",
+                                          "host_revision": 5}}}}
+
+    def test_no_tool_anywhere_names_the_prerequisite(self) -> None:
+        tmp = tempfile.TemporaryDirectory(prefix="kpr-i412-notool-")
+        self.addCleanup(tmp.cleanup)
+        isolated = Path(tmp.name)
+        record = self.load_isolated_record(isolated)
+        for recipe in (None,
+                       {"runner": "/abs/runner", "argv": ["start"],
+                        "state_tool": "/abs/nonexistent-state-tool"}):
+            with self.subTest(recipe=recipe):
+                view = record.host_view(self.stranded_doc(recipe), None)
+                row = next(row for row in view["attention"]
+                           if row.get("kind") == "maintenance" and row.get("id") == "pending")
+                self.assertIn("none was found (checked:", row["next"])
+                self.assertIn(str(isolated / "deep" / "mod" / "kaola-dispatch.py"), row["next"])
+                self.assertIn("set sideagent.recipe.state_tool", row["next"])
+                self.assertIn("state recovery-input --file", row["next"])
+                self.assertNotIn("<Project Runner>", row["next"])
+                self.assertNotIn("python3 ", row["next"],
+                                 "no runnable-looking command without a real tool")
+                if recipe is not None:
+                    self.assertIn("/abs/nonexistent-state-tool", row["next"],
+                                  "the checked candidates are listed")
 
 
 class LiveNodeHolderVisible(unittest.TestCase):
