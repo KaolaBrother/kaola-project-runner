@@ -277,8 +277,9 @@ that has no collected continuation. `--live` shows that session `stopped`, or
 the session is absent because it is gone. `--evidence` carries the original
 close (closed issue, archive, receipt) and `--cite` names a retrievable path.
 The task verdict is accepted. A per-item `dispositions` entry, when the task
-has one, is `accepted` for that item. The command reports `reconciled_dispatch`
-and does not rewrite the unknown index row. A missing session link, a foreign
+has one, is `accepted` or `cancelled` for that item (Issue #412), and the
+reconciliation reports that item as its own disposition. The command reports
+`reconciled_dispatch` and does not rewrite the unknown index row. A missing session link, a foreign
 holder, and a live session still refuse, and that refusal names the
 dead-holder unknown route. A `fingerprint-differs` row that already carries
 collected continuation evidence stays on the continuation route above. This

@@ -819,6 +819,36 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   The Host's bounded request selects every change past the handled revision, and a repaired
   binding sends the changes after the failed one to a fresh node. A typed recovery input
   without a usable binding still records its one failure per sequence.
+  The carrier selects a batch only after `max(handled_host_revision, sent_through,
+  returned_through)`, where `returned_through` is the largest `host_revision_through`
+  of the `maintenance-returned` inputs. When every owed change is already inside a
+  returned input and no `maintenance.recovery_input` exists, the carrier opens no
+  batch — a returned range is never replayed on its own — and the Host view's
+  `maintenance` attention row names the executable route instead of the generic
+  one: `why` `owed range already returned to the Host; the carrier does not resend it`,
+  `next` `request one bounded batch: python3 <state tool> state recovery-input
+  --file <file> --kind request --source ORIGINAL_SOURCE --evidence
+  alerts/maintenance-returned` (the tool is the binding's absolute
+  `recipe.state_tool`, else `<Project Runner>/scripts/kaola-dispatch.py`; #412).
+  That request records one typed recovery input; once any stop duty in the
+  returned inputs is cleared, the carrier selects it once, past `handled`, and
+  records it as sent (`recovery_sent`), so it is not reselected. While a returned
+  input's `why` is a maintenance stop duty (`stop-unconfirmed`, `old-node-live`),
+  the carrier starts and sends no node — it returns early on `stop_unconfirmed`
+  — so the attention row names that duty first: `why` `owed range waits on a
+  maintenance stop duty; the carrier starts or sends no node while that old node
+  holder is alive`, `next` `confirm the exact stop of the old node holder named
+  by alerts/maintenance-returned input(s) <ids> (their evidence locators name it),
+  then request one bounded batch: python3 <state tool> state recovery-input ...`;
+  `sideagent_maintenance` becomes `<a node is running | no node is running>; the
+  owed range waits on a maintenance stop duty in alerts/maintenance-returned;
+  confirm that old node holder's exact stop, then request one bounded batch with
+  state recovery-input --kind request`. A new Host business change past
+  `returned_through` restores the ordinary owed row. With no live node the same
+  stranded range changes
+  `sideagent_maintenance` to `no node is running; the owed range was already
+  returned to the Host and is not resent automatically; request one bounded
+  batch with state recovery-input --kind request`.
   The bound runtime is not a pin (Issue #324). When its Runner file is missing, its start
   fails, or its node does not admit a batch, the carrier moves the node to the next runtime
   instead of failing: only Worker presets that `kaola-dispatch.py project` finds
@@ -864,9 +894,17 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   For `mode: node`, `sideagent_maintenance` says `a node is running` only when the
   record for this canonical repo digest is `ready`, its `holder_pid` is alive, its
   `repo` matches this state file, and its `dispatcher` matches this file's Host
-  carrier (`platform`, `session`, `holder_instance_id`, and `repo`). The record
+  carrier (`platform`, `session`, `holder_instance_id`, and `repo`) or — when the
+  file has no carrier, or its carrier names an older incarnation of the same
+  Host session — the dispatcher's own `ready` Host record in this repo with a
+  live `holder_pid` (Issue #412). A dispatcher of a different Host session than
+  a recorded carrier still fails. When running is true the view also reports
+  `sideagent_node_holder`, the live record's `holder_instance_id` (Issue #412);
+  `maintenance.last_checkpoint`/`last_verified` are never rewritten by the
+  view — the next real checkpoint still names its own caller's holder. The record
   root is `KAOLA_ACP_RECORD_ROOT`, else `XDG_RUNTIME_DIR`, else the process
-  temporary directory, then `kaola-<uid>`. A missing record or a dead pid says no
+  temporary directory, then `kaola-<uid>`. A missing
+  record or a dead pid says no
   node is running. An unreadable record says liveness was not read. The sentence
   reports the view. Transport stays on the existing start, send, and stop commands.
 - `check [--index] [--live] [--repo]` reports problems without writing.

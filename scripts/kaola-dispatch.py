@@ -7279,7 +7279,8 @@ def stopped_collect_incomplete(ref: str, row: dict[str, Any], task: dict[str, An
 _DEAD_HOLDER_UNKNOWN_REASONS = ("event-range-unavailable", "no-last-prompt",
                                 "fingerprint-differs", "session-gone")
 _DEAD_HOLDER_RETIRE_ROUTE = (
-    "dead-holder unknown route: an accepted task retires this unknown row when --live "
+    "dead-holder unknown route: an accepted task retires this unknown row when its "
+    "per-item disposition is accepted or cancelled (reported as that disposition), --live "
     "shows that session stopped or absent (the session is gone) and --evidence carries "
     "the original close (closed issue, archive, receipt) with --cite. A missing session "
     "link, a foreign holder, or a live session still refuses. This writes no index bytes, "
@@ -7309,9 +7310,12 @@ def dead_holder_unknown_settlement(ref: str, row: dict[str, Any], task: dict[str
     if task.get("stage") != "done" or verdict.get("value") != "accepted":
         return f"{ref} is unknown"
     dispositions = task.get("dispositions") if isinstance(task.get("dispositions"), dict) else None
-    if dispositions is not None and dispositions.get(ref) != "accepted":
-        return (f"{ref} is unknown; its per-item disposition is not accepted. "
-                + _DEAD_HOLDER_RETIRE_ROUTE)
+    # Issue #412: an owner-cancelled item is a truthful close of that item,
+    # not a refusal; any other value stays unresolved on this route.
+    disposition = dispositions.get(ref) if dispositions is not None else "accepted"
+    if disposition not in ("accepted", "cancelled"):
+        return (f"{ref} is unknown; its per-item disposition is not accepted or cancelled "
+                f"({disposition!r}). " + _DEAD_HOLDER_RETIRE_ROUTE)
     session = session_name(row.get("session"))
     if session is None:
         return f"{ref} is unknown; missing session link. " + _DEAD_HOLDER_RETIRE_ROUTE
@@ -7329,7 +7333,7 @@ def dead_holder_unknown_settlement(ref: str, row: dict[str, Any], task: dict[str
         live_proof = "stopped"
     entry: dict[str, Any] = {
         "item_id": ref, "session": session, "collect_status": "unknown", "reason": reason,
-        "disposition": "accepted", "evidence": evidence, "live": live_proof,
+        "disposition": disposition, "evidence": evidence, "live": live_proof,
     }
     if holder:
         entry["holder_instance_id"] = holder

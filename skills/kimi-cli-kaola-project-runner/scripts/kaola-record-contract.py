@@ -13,6 +13,7 @@ import importlib.util
 import json
 import os
 import re
+import shlex
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -2480,51 +2481,41 @@ def seat_exempt_record(record: Any) -> bool:
     return record.get("session_role") in SEAT_EXEMPT_ROLES
 
 
-def node_is_running(binding: Any, repo: Path | None, host: dict[str, str] | None) -> bool | None:
-    """True only for this repo's ready Sideagent record dispatched by this Host.
+def _live_host_record(dispatcher: Any, repo_text: str) -> bool:
+    """True when the node record's dispatcher is a live Host holder of this repo.
 
-    The path is ``<record root>/<platform>/<session>/<sha256(repo)[:16]>/record.json``.
-    ``repo`` on that record and ``dispatcher`` must match this state file and its
-    Host carrier. Another ready record that shares only the platform and session
-    name does not count. False means no such live record. None means the record
-    could not be read, or this file does not name a repo.
+    ``carrier`` on the state file is written only by ``state migrate --live``,
+    so an ordinary file — or one whose carrier names an older incarnation of
+    the same Host session — still proves the dispatcher through that Host's
+    own record: same platform/session, ``session_role`` ``host``, ``ready``,
+    this repo, a matching ``holder_instance_id`` and a live ``holder_pid``.
     """
-    if not isinstance(binding, dict) or binding.get("mode") != "node":
-        return None
-    platform, session = binding.get("platform"), binding.get("session")
-    if not isinstance(platform, str) or not isinstance(session, str):
+    if not isinstance(dispatcher, dict):
         return False
-    if repo is None:
-        return None
-    repo_text = str(repo)
+    platform, session, holder = (dispatcher.get("platform"), dispatcher.get("session"),
+                                 dispatcher.get("holder_instance_id"))
+    if not all(isinstance(item, str) and item for item in (platform, session, holder)):
+        return False
+    if not _same_repo(dispatcher.get("repo"), repo_text):
+        return False
     try:
         path = record_directory(platform, session, repo_text) / "record.json"
-    except acp_paths.RecordRootMismatch:
-        return None
-    try:
-        if not path.is_file():
-            return False
         record = json.loads(path.read_text(encoding="utf-8"))
-    except OSError:
-        return None
-    except ValueError:
+    except acp_paths.RecordRootMismatch:
+        return False
+    except (OSError, ValueError):
         return False
     if not isinstance(record, dict):
         return False
-    if record.get("session_role") not in SEAT_EXEMPT_ROLES:
+    if record.get("holder_instance_id") != holder:
+        return False
+    if record.get("session_role") != "host":
         return False
     if record.get("platform") != platform or record.get("session") != session:
         return False
     if record.get("state") != "ready":
         return False
     if not _same_repo(record.get("repo"), repo_text):
-        return False
-    dispatcher = record.get("dispatcher")
-    if (not isinstance(host, dict) or not isinstance(dispatcher, dict)
-            or dispatcher.get("holder_instance_id") != host.get("holder_instance_id")
-            or dispatcher.get("platform") != host.get("platform")
-            or dispatcher.get("session") != host.get("session")
-            or not _same_repo(dispatcher.get("repo"), repo_text)):
         return False
     pid = record.get("holder_pid")
     if not isinstance(pid, int) or pid <= 0:
@@ -2534,6 +2525,83 @@ def node_is_running(binding: Any, repo: Path | None, host: dict[str, str] | None
     except OSError:
         return False
     return True
+
+
+def _bound_node_record(binding: Any, repo: Path | None,
+                       host: dict[str, str] | None) -> tuple[bool | None, dict[str, Any] | None]:
+    """(liveness, record) for this repo's bound-node record.
+
+    Liveness is True only for this repo's ready Sideagent record dispatched by
+    this Host. The path is
+    ``<record root>/<platform>/<session>/<sha256(repo)[:16]>/record.json``.
+    ``repo`` on that record
+    and ``dispatcher`` must match this state file and its Host carrier, or —
+    when the file has no carrier, or its carrier names an older incarnation of
+    the same Host session — the dispatcher's own live ready Host record in this
+    repo. Another ready record that shares only the platform and session name
+    does not count. False means no such live record. None means the record
+    could not be read, or this file does not name a repo.
+    """
+    if not isinstance(binding, dict) or binding.get("mode") != "node":
+        return None, None
+    platform, session = binding.get("platform"), binding.get("session")
+    if not isinstance(platform, str) or not isinstance(session, str):
+        return False, None
+    if repo is None:
+        return None, None
+    repo_text = str(repo)
+    try:
+        path = record_directory(platform, session, repo_text) / "record.json"
+    except acp_paths.RecordRootMismatch:
+        return None, None
+    try:
+        if not path.is_file():
+            return False, None
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except OSError:
+        return None, None
+    except ValueError:
+        return False, None
+    if not isinstance(record, dict):
+        return False, None
+    if record.get("session_role") not in SEAT_EXEMPT_ROLES:
+        return False, None
+    if record.get("platform") != platform or record.get("session") != session:
+        return False, None
+    if record.get("state") != "ready":
+        return False, None
+    if not _same_repo(record.get("repo"), repo_text):
+        return False, None
+    dispatcher = record.get("dispatcher")
+    dispatcher_matches_host = (
+        isinstance(host, dict) and isinstance(dispatcher, dict)
+        and dispatcher.get("holder_instance_id") == host.get("holder_instance_id")
+        and dispatcher.get("platform") == host.get("platform")
+        and dispatcher.get("session") == host.get("session")
+        and _same_repo(dispatcher.get("repo"), repo_text))
+    if not (dispatcher_matches_host
+            or (_live_host_record(dispatcher, repo_text)
+                and (host is None
+                     or (host.get("platform") == dispatcher.get("platform")
+                         and host.get("session") == dispatcher.get("session"))))):
+        return False, None
+    pid = record.get("holder_pid")
+    if not isinstance(pid, int) or pid <= 0:
+        return False, None
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False, None
+    return True, record
+
+
+def node_is_running(binding: Any, repo: Path | None, host: dict[str, str] | None) -> bool | None:
+    """True only for this repo's ready Sideagent record dispatched by this Host.
+
+    Same liveness leg as ``_bound_node_record``; the record itself is for the
+    Host view's node-holder report.
+    """
+    return _bound_node_record(binding, repo, host)[0]
 
 
 def delegator_file_view(doc: dict[str, Any]) -> dict[str, Any]:
@@ -2717,7 +2785,54 @@ def host_view(doc: dict[str, Any], path: Path | None) -> dict[str, Any]:
     owed = bool(maintenance.get("recovery_input") or (
         binding is not None and host_changes(
             doc, int(maintenance.get("handled_host_revision") or 0), int(doc.get("host_revision") or 0))))
-    if owed:
+    # Issue #412: the carrier selects a batch only after
+    # max(handled, sent_through, returned_through), so an owed range that a
+    # maintenance-returned input already covers is never resent. That is by
+    # design — no blind replay — but the view must name the executable route:
+    # the Host's bounded request selects every change past handled again.
+    returned = (((state.get("alerts") or {}).get("maintenance-returned") or {}).get("inputs") or {})
+    returned_through = max(
+        [0] + [row["host_revision_through"] for row in returned.values()
+               if isinstance(row, dict) and isinstance(row.get("host_revision_through"), int)
+               and not isinstance(row.get("host_revision_through"), bool)])
+    handled = int(maintenance.get("handled_host_revision") or 0)
+    current = int(doc.get("host_revision") or 0)
+    stranded = bool(
+        owed and not maintenance.get("recovery_input")
+        and isinstance(binding, dict) and binding.get("mode") == "node"
+        and binding.get("state") == "active"
+        and host_changes(doc, handled, current)
+        and not host_changes(doc, max(handled, returned_through), current))
+    # A returned stop duty (stop-unconfirmed, old-node-live) gates first: the
+    # carrier returns early on stop_unconfirmed and a recovery request opens
+    # nothing until that old node holder is gone. The route still exists; the
+    # exact stop comes first.
+    stop_ids = sorted(ident for ident, row in returned.items()
+                      if isinstance(ident, str) and isinstance(row, dict)
+                      and row.get("why") in MAINTENANCE_STOP_DUTIES)
+    stranded_stop = stranded and bool(stop_ids)
+    recipe = binding.get("recipe") if isinstance(binding, dict) and isinstance(binding.get("recipe"), dict) else {}
+    tool = recipe.get("state_tool")
+    if not (isinstance(tool, str) and os.path.isabs(tool)):
+        tool = "<Project Runner>/scripts/kaola-dispatch.py"
+    file_text = str(path) if isinstance(path, Path) else ".kaola/heartbeat-prompt.json"
+    if stranded_stop:
+        attention.append({"kind": "maintenance", "id": "pending",
+                          "why": "owed range waits on a maintenance stop duty; the carrier starts "
+                                 "or sends no node while that old node holder is alive",
+                          "next": f"confirm the exact stop of the old node holder named by "
+                                  f"alerts/maintenance-returned input(s) {', '.join(stop_ids)} "
+                                  "(their evidence locators name it), then request one bounded batch: "
+                                  f"python3 {shlex.quote(tool)} state recovery-input "
+                                  f"--file {shlex.quote(file_text)} --kind request "
+                                  "--source ORIGINAL_SOURCE --evidence alerts/maintenance-returned"})
+    elif stranded:
+        attention.append({"kind": "maintenance", "id": "pending",
+                          "why": "owed range already returned to the Host; the carrier does not resend it",
+                          "next": f"request one bounded batch: python3 {shlex.quote(tool)} "
+                                  f"state recovery-input --file {shlex.quote(file_text)} --kind request "
+                                  "--source ORIGINAL_SOURCE --evidence alerts/maintenance-returned"})
+    elif owed:
         attention.append({"kind": "maintenance", "id": "pending", "why": "bounded reconciliation owed",
                           "next": "use the bound node or recover from original receipts"})
     view: dict[str, Any] = {
@@ -2736,11 +2851,22 @@ def host_view(doc: dict[str, Any], path: Path | None) -> dict[str, Any]:
     if isinstance(binding, dict):
         if binding.get("mode") == "node":
             repo = _repo_of_state_file(path) if isinstance(path, Path) else None
-            running = node_is_running(binding, repo, _host_of(doc))
+            running, node_record = _bound_node_record(binding, repo, _host_of(doc))
             if running is True:
-                view["sideagent_maintenance"] = "a node is running"
+                view["sideagent_node_holder"] = node_record.get("holder_instance_id")
+                view["sideagent_maintenance"] = (
+                    "a node is running; the owed range waits on a maintenance stop duty in "
+                    "alerts/maintenance-returned; confirm that old node holder's exact stop, then "
+                    "request one bounded batch with state recovery-input --kind request"
+                    if stranded_stop else "a node is running")
             elif running is False:
                 view["sideagent_maintenance"] = (
+                    "no node is running; the owed range waits on a maintenance stop duty in "
+                    "alerts/maintenance-returned; confirm that old node holder's exact stop, then "
+                    "request one bounded batch with state recovery-input --kind request" if stranded_stop else
+                    "no node is running; the owed range was already returned to the Host and is not "
+                    "resent automatically; request one bounded batch with state recovery-input "
+                    "--kind request" if stranded else
                     "no node is running; an idle binding is not missing; bounded reconciliation is owed" if owed else
                     "no node is running; an idle binding is not missing maintenance"
                 )
