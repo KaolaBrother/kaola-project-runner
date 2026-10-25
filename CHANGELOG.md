@@ -4,7 +4,9 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
-## Unreleased
+## 0.9.31 — 2026-10-26 (combined install boundary: Codex profiles + sideagent maintenance fix #412)
+
+This is the single combined install boundary for tonight's change set; v0.9.30 was tagged but never installed (owner hold). It carries everything on `main` since v0.9.29: the two Codex preset decisions from the v0.9.30 line — `luna-research-ok-20261026` (`codex/luna` is no longer computer-use-only, may do research, `luna_model_roles` removed; supersedes PR #411 with identical content) and `sol-no-implement-20261026` (`codex/default` GPT-6.1 Sol: "Do not use to implement. Strong at exploring directions, finding problems, and review; good at UI and 3D visual work, with computer-use capability.") — plus the #412 fix below and one test-only alignment (suite 255's no-eligible-preset case now grants `codex/astra`, because a granted Luna is now an eligible Worker; the computer-use role-gate mechanism itself stays covered by suite 350's synthetic `futureplat/cu` fixture). Install this release directly; do not install v0.9.30 alone.
 
 Fixes #412 (a live bound node was reported as not running when the state file had no `carrier` or a stale-incarnation one, an already-returned owed range left the Host view without an executable route, and an accepted task could not retire an unknown dispatch row whose per-item disposition was `cancelled`).
 
