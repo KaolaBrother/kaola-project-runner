@@ -61,7 +61,7 @@ LIVE_PRESETS = {
         "default": ("Auto Model", "auto", ""),
         # Issue #243: the opus preset effort is high. The catalog id is unchanged.
         "named": [("opus", "Opus 5.5", "claude-opus-5-5", "high"),
-                  ("core", "Kimi K3", "kimi-k3", "max")],
+                  ("core", "DeepSeek V4.1 Flash 1017", "deepseek-v4.1-flash-1017", "max")],
     },
     "dsh": {
         # Issue #338: the opencode-go route accepts reasoning_effort max, and
@@ -163,7 +163,8 @@ class LiveVerifiedPresets(unittest.TestCase):
                     self.assertEqual(values[f"{key(word)}_model_effort"], effort)
 
     def test_droid_needs_no_model_map_for_its_first_class_id(self) -> None:
-        """`auto` and `kimi-k3` are real Droid catalog ids, so nothing is hardcoded."""
+        """`auto` and `deepseek-v4.1-flash-1017` are Droid catalog ids (the 1017
+        entry is feature-flagged in the 0.249.0 catalog), so nothing is hardcoded."""
         self.assertEqual(manifest("droid")["acp_model_map"], "")
 
     def test_dsh_default_is_already_carried_by_the_model_map(self) -> None:
@@ -176,13 +177,14 @@ class LiveVerifiedPresets(unittest.TestCase):
         )
 
     def test_droid_launch_summary_names_auto_default_and_no_alternative(self) -> None:
-        """Issue #125/#188: the summary states the Auto default, opus, and K3 core."""
+        """Issue #125/#188/#413: the summary states the Auto default, opus, and the
+        DeepSeek V4.1 Flash 1017 core."""
         summary = manifest("droid")["launch_summary"]
         # Issue #130 dropped the PTY launch clause that spelled "default Auto
         # Model"; the ACP clause states the same default.
         self.assertIn("The default preset is the first-class catalog id auto", summary)
         self.assertNotIn("--skip-permissions-unsafe", summary)
-        self.assertIn("--tier core is the first-class catalog id kimi-k3", summary)
+        self.assertIn("--tier core is the catalog id deepseek-v4.1-flash-1017", summary)
         self.assertNotIn("--tier upgrade", summary)
         for leftover in ("kimi-k2.7", "K2.7", "K2.8", "alternative"):
             self.assertNotIn(leftover, summary)

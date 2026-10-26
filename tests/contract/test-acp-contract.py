@@ -2145,6 +2145,61 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertIsNone((receipt.get("model_display") or {}).get("preset_id"))
         self.assertIsNone(receipt.get("requested_effort"))
 
+    def test_cursor_xhigh_tier_maps_grok_base_id(self) -> None:
+        # Issue #413: --tier xhigh is the grok-4.7-xhigh preset id, decomposed
+        # onto the parameterized surface like the default preset.
+        receipt = self.start(
+            "cursor-cli", "--tier", "xhigh", caps="cursor-params,strict-config",
+        )
+        self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
+        self.assertEqual(
+            self.config_events(),
+            [
+                ("model", "grok-4.7"),
+                ("reasoning_effort", "xhigh"),
+                ("fast", "false"),
+            ],
+        )
+        model = (receipt.get("config_application") or {}).get("model") or {}
+        self.assertTrue(model.get("applied"))
+        self.assertEqual(model.get("requested_id"), "grok-4.7-xhigh")
+        self.assertTrue(model.get("mapped"))
+        effort = (receipt.get("config_application") or {}).get("effort") or {}
+        self.assertTrue(effort.get("applied"))
+        self.assertEqual(effort.get("config_id"), "reasoning_effort")
+        self.assertEqual(effort.get("value"), "xhigh")
+        display = receipt.get("model_display") or {}
+        self.assertEqual(display.get("preset_id"), "cursor-cli/xhigh")
+        self.assertEqual(display.get("preset_effort"), "xhigh")
+
+    def test_cursor_opus_xhigh_tier_maps_opus_base_id(self) -> None:
+        # Issue #413: --tier opus-xhigh is the claude-opus-5-5-xhigh preset id;
+        # Opus advertises its effort option as ``effort`` (#143), and the fake
+        # mirrors the native catalog whose effort list includes xhigh.
+        receipt = self.start(
+            "cursor-cli", "--tier", "opus-xhigh", caps="cursor-params,strict-config",
+        )
+        self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
+        self.assertEqual(
+            self.config_events(),
+            [
+                ("model", "claude-opus-5-5"),
+                ("effort", "xhigh"),
+                ("fast", "false"),
+            ],
+        )
+        model = (receipt.get("config_application") or {}).get("model") or {}
+        self.assertTrue(model.get("applied"))
+        self.assertEqual(model.get("requested_id"), "claude-opus-5-5-xhigh")
+        self.assertTrue(model.get("mapped"))
+        effort = (receipt.get("config_application") or {}).get("effort") or {}
+        self.assertTrue(effort.get("applied"))
+        self.assertEqual(effort.get("config_id"), "effort")
+        self.assertEqual(effort.get("value"), "xhigh")
+        display = receipt.get("model_display") or {}
+        self.assertEqual(display.get("preset_id"), "cursor-cli/opus-xhigh")
+        self.assertEqual(display.get("preset_effort"), "xhigh")
+
     def test_claude_code_default_applies_effort_high(self) -> None:
         receipt = self.start("claude-code")
         self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")

@@ -174,6 +174,7 @@ class QuotaSchemaTest(unittest.TestCase):
             ("cursor-cli", "grok-4.7-xhigh-fast", "cursor-cli:account"),
             ("cursor-cli", "claude-opus-5-5", "cursor-cli:account"),
             ("cursor-cli", "claude-opus-5-5-high", "cursor-cli:account"),
+            ("cursor-cli", "claude-opus-5-5-xhigh", "cursor-cli:account"),
             ("cursor-cli", "brand-new-model", "cursor-cli:account"),
             ("grok", "grok-4.7", "grok:account"),
             ("grok", "grok-4.7-brand-new", "grok:account"),
@@ -181,7 +182,9 @@ class QuotaSchemaTest(unittest.TestCase):
             # knowledge; the static query has no live billingPool row.
             ("droid", "auto", "droid:standard"),
             ("droid", "claude-opus-5-5", "droid:standard"),
-            ("droid", "kimi-k3", "droid:core"),
+            ("droid", "deepseek-v4.1-flash-1017", "droid:core"),
+            # Issue #413: kimi-k3 lost its static claim with the core retarget.
+            ("droid", "kimi-k3", None),
             ("droid", "brand-new-model", None),
             ("dsh", "opencode-go/deepseek-v4.1-flash", "dsh:opencode-go"),
             ("dsh", '["opencode-go","deepseek-v4.1-flash"]', "dsh:opencode-go"),

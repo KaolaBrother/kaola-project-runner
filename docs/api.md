@@ -333,7 +333,7 @@ Droid's executable override is `DROID_BIN`. Its ACP command is the native
 `auto-high|auto-low|auto-medium|auto-high|normal` through `acp_mode_config_id: autonomy_level`.
 ACP model, reasoning-effort, and autonomy options use config IDs `model`, `reasoning_effort`, and
 `autonomy_level`. Droid's default preset is Auto (`auto`); `--tier opus` is Opus 5.5 (`claude-opus-5-5`,
-`reasoning_effort=high`) and `--tier core` is Kimi K3 (`kimi-k3`, `reasoning_effort=max`); it has no
+`reasoning_effort=high`) and `--tier core` is DeepSeek V4.1 Flash 1017 (`deepseek-v4.1-flash-1017`, `reasoning_effort=max`); it has no
 separate Fast toggle.
 
 `--runtime` selects a verified consuming-runtime destination: `codex` →
@@ -3163,8 +3163,9 @@ to fill these fields. The start receipt reports `start_evidence_recorded` (and
 over 16 KiB); neither is a refusal. Old records without `start_evidence` stay readable.
 
 Droid's default is Auto Model (`auto`) with no effort pin; `--tier opus` is Opus 5.5
-(`claude-opus-5-5` at `reasoning_effort=high`) and `--tier core` is Kimi K3 (`kimi-k3` at
-`reasoning_effort=max`). These ids are catalog values, so `acp_model_map` stays empty. `--tier alternative` stays the typed `tier-not-declared` refusal. Its native ACP mode option is
+(`claude-opus-5-5` at `reasoning_effort=high`) and `--tier core` is DeepSeek V4.1 Flash 1017 (`deepseek-v4.1-flash-1017` at
+`reasoning_effort=max`). These ids are catalog values (the 1017 entry is feature-flagged in
+the 0.249.0 catalog and rejected by the installed 0.241.1 CLI), so `acp_model_map` stays empty. `--tier alternative` stays the typed `tier-not-declared` refusal. Its native ACP mode option is
 manifest-driven as `acp_mode_config_id: autonomy_level`; the default bypass value is
 `auto-high`, and there is no bridge or translator.
 

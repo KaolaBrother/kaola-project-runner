@@ -410,23 +410,23 @@ class DroidAcpStartContractTests(DroidAcpSessionFixture):
         self.assertEqual(receipt.get("requested_effort"), "medium")
         self.assertEqual((receipt.get("model_selection") or {}).get("resolved_effort"), "medium")
 
-    def test_core_tier_applies_kimi_k3_max(self) -> None:
-        """Issue #125: core (Kimi K3 Max) is the third tier, not the upgrade:
-        kimi-k3 at reasoning_effort=max."""
+    def test_core_tier_applies_deepseek_flash_1017_max(self) -> None:
+        """Issue #413: core is DeepSeek V4.1 Flash 1017, not the upgrade:
+        deepseek-v4.1-flash-1017 at reasoning_effort=max."""
         receipt = self.start("--tier", "core")
         self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
         selection = receipt.get("model_selection") or {}
         self.assertEqual(selection.get("source"), "runner-core")
         self.assertEqual(selection.get("tier"), "core")
-        self.assertEqual(selection.get("resolved_model"), "kimi-k3")
+        self.assertEqual(selection.get("resolved_model"), "deepseek-v4.1-flash-1017")
         self.assertEqual(selection.get("resolved_effort"), "max")
         self.assertEqual(
             self.config_events(),
-            [("model", "kimi-k3"), ("reasoning_effort", "max"),
+            [("model", "deepseek-v4.1-flash-1017"), ("reasoning_effort", "max"),
              ("autonomy_level", "auto-high")],
         )
         # Issue #185: the echoed effort is part of the verdict.
-        self.assertEqual(receipt.get("actual_runtime_model_id"), "kimi-k3")
+        self.assertEqual(receipt.get("actual_runtime_model_id"), "deepseek-v4.1-flash-1017")
         self.assertEqual(receipt.get("actual_parameters"), {"effort": "max"})
         self.assertIs(receipt.get("model_verified"), True)
 

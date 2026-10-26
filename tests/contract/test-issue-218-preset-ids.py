@@ -7,8 +7,8 @@ so a declaration change regenerates the rows instead of leaving a handwritten
 mapping behind. This suite pins four things:
 
 * the exact catalog: the README's generated region and the installed
-  ``profile-catalog.md`` table carry the same 27 Preset ID cells in class
-  grouping (Elite 17 / Worker 7 / Expert 3), each ID resolving to its
+  ``profile-catalog.md`` table carry the same 29 Preset ID cells in class
+  grouping (Elite 19 / Worker 7 / Expert 3), each ID resolving to its
   manifest model name on the same row;
 * the similar-name pairs the IDs exist to keep apart — ``cursor-cli/default``
   vs ``grok/default``, ``claude-code/default`` vs ``claude-code/sonnet`` — plus
@@ -47,8 +47,8 @@ README = PROJECT / "README.md"
 # regenerates these rows; this pin fails loudly instead of letting the catalog
 # and the issue's grants drift apart.
 ELITE = [
-    "antigravity/default", "antigravity/xhigh", "antigravity/opus", "claude-code/default", "claude-code/opus-xhigh", "claude-code/sonnet", "codex/default", "cursor-cli/default",
-    "cursor-cli/opus", "devin/opus-fusion", "droid/default", "droid/opus", "droid/core",
+    "antigravity/default", "antigravity/xhigh", "antigravity/opus", "claude-code/default", "claude-code/opus-xhigh", "claude-code/sonnet", "codex/default", "cursor-cli/default", "cursor-cli/xhigh",
+    "cursor-cli/opus", "cursor-cli/opus-xhigh", "devin/opus-fusion", "droid/default", "droid/opus", "droid/core",
     "grok/default", "grok/xhigh", "kimi-cli/default", "kimi-cli/kimi-k3-1-pro",
 ]
 WORKER = [
@@ -129,7 +129,7 @@ class PresetCatalogTest(unittest.TestCase):
         for label, rows in (("profile-catalog", self.orchestrator_rows),
                             ("README region", self.readme_rows)):
             self.assertEqual(catalog_ids(rows), EXPECTED_ORDER, label)
-            self.assertEqual(len(set(catalog_ids(rows))), 27, label)
+            self.assertEqual(len(set(catalog_ids(rows))), 29, label)
 
     def test_class_grouping_matches_issue(self) -> None:
         for rows in (self.orchestrator_rows, self.readme_rows):
@@ -271,7 +271,27 @@ class PresetCatalogTest(unittest.TestCase):
         self.assertEqual(cursor_default["parameters"].strip(), "effort=high (encoded in model ID), fast=false")
         cursor_manifest, _ = self.by_id["cursor-cli/default"]
         self.assertEqual(cursor_manifest["default_model_id"], "grok-4.7-high")
-        self.assertEqual(cursor_manifest["named_tiers"], "opus")
+        # Issue #413: cursor gains Grok-style escalation rungs on both presets.
+        self.assertEqual(cursor_manifest["named_tiers"], "xhigh,opus,opus-xhigh")
+        self.assertEqual(rows["cursor-cli/xhigh"]["class"], "Elite")
+        self.assertEqual(
+            rows["cursor-cli/xhigh"]["profile"].strip(),
+            "Escalation level: use it when the Cursor CLI default (Grok 4.7 high) cannot solve the task.")
+        self.assertEqual(rows["cursor-cli/opus-xhigh"]["class"], "Elite")
+        self.assertEqual(
+            rows["cursor-cli/opus-xhigh"]["profile"].strip(),
+            "Escalation level: use it when the Cursor CLI opus preset (Claude Opus 5.5 high) cannot solve the task.")
+        # Issue #413: droid/core is DeepSeek V4.1 Flash 1017 and borrows the
+        # dsh/default worker profile word for word.
+        self.assertEqual(rows["droid/core"]["class"], "Elite")
+        droid_manifest, _ = self.by_id["droid/core"]
+        dsh_manifest, _ = self.by_id["dsh/default"]
+        self.assertEqual(
+            droid_manifest["core_model_profile"],
+            dsh_manifest["default_model_profile"])
+        self.assertEqual(
+            rows["droid/core"]["profile"].strip(),
+            dsh_manifest["default_model_profile"].strip())
         self.assertNotEqual(default["model"], sonnet["model"])
 
     def test_worker_pool_line_names_exact_ids(self) -> None:

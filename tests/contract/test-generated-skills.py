@@ -249,6 +249,7 @@ def check_no_cross_platform_leakage(assertions: Assertions, package: Path, packa
         text = text.replace("grok-4.7-xhigh", "cursor-default-model-id")
         text = text.replace("claude-opus-5-5-high", "cursor-opus-model-id")
         text = text.replace("claude-opus-5-5-medium", "cursor-opus-model-id")
+        text = text.replace("claude-opus-5-5-xhigh", "cursor-opus-model-id")
         text = text.replace("claude opus 5.5", "cursor-opus-model")
         text = text.replace("grok 4.7", "cursor-default-model")
         # Cursor's ACP option values are the adapter's own bracketed model
@@ -265,14 +266,14 @@ def check_no_cross_platform_leakage(assertions: Assertions, package: Path, packa
         text = text.replace("fusion-claude-fable-5-1-high-sidekick-swe-2-medium", "devin-fable-model-id")
         text = text.replace("claude-fable-5-1-high", "devin-retired-fable-model-id")
     if package_id == "droid-kaola-project-runner":
-        # Issue #111/#117: Droid's catalog carries first-class Kimi-family
-        # models, and its Runner core preset selects kimi-k3 (Issue #125). That is a
-        # Factory catalog fact, not Kimi CLI adapter leakage -- remove only the
-        # exact declared preset strings, so a real kimi-cli fact would still fail.
+        # Issue #413: the Runner core preset selects the feature-flagged
+        # deepseek-v4.1-flash-1017 catalog id. That is a Factory catalog fact,
+        # not dsh adapter leakage -- remove only the exact declared preset
+        # strings, so a real dsh fact would still fail.
         # Issue #188: the opus preset's claude-opus-5-5 is likewise a Factory
         # catalog id, not Claude Code adapter leakage.
-        text = text.replace("kimi k3", "droid-core-model")
-        text = text.replace("kimi-k3", "droid-core-model-id")
+        text = text.replace("deepseek v4.1 flash 1017", "droid-core-model")
+        text = text.replace("deepseek-v4.1-flash-1017", "droid-core-model-id")
         text = text.replace("claude-opus-5-5", "droid-opus-model-id")
     if package_id == "dsh-kaola-project-runner":
         # Issue #111: dsh's model catalog is grouped by provider route, and one

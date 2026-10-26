@@ -372,11 +372,13 @@ explicit `--model` choices, not a separate Fast toggle.
 | Elite | Claude Code | `sonnet` | `claude-code/sonnet` | Sonnet | effort=high | All-round execution worker, especially UI and 3D visual implementation. |
 | Elite | Codex CLI | `default` | `codex/default` | GPT-6.1 Sol | effort=high | Do not use to implement. Strong at exploring directions, finding problems, and review; good at UI and 3D visual work, with computer-use capability. |
 | Elite | Cursor CLI | `default` | `cursor-cli/default` | Grok 4.7 | effort=high (encoded in model ID), fast=false | Investigates unfamiliar problems, explores solution paths, and autonomously carries them through implementation; well suited to long-running, adaptive work. |
+| Elite | Cursor CLI | `xhigh` | `cursor-cli/xhigh` | Grok 4.7 | effort=xhigh (encoded in model ID), fast=false | Escalation level: use it when the Cursor CLI default (Grok 4.7 high) cannot solve the task. |
 | Elite | Cursor CLI | `opus` | `cursor-cli/opus` | Claude Opus 5.5 | effort=high (encoded in model ID) | All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation. |
+| Elite | Cursor CLI | `opus-xhigh` | `cursor-cli/opus-xhigh` | Claude Opus 5.5 | effort=xhigh (encoded in model ID) | Escalation level: use it when the Cursor CLI opus preset (Claude Opus 5.5 high) cannot solve the task. |
 | Elite | Devin CLI | `opus-fusion` | `devin/opus-fusion` | Opus Fusion | effort=high (encoded in model ID) | All-round execution worker, especially strong at complex execution work. |
 | Elite | Droid | `default` | `droid/default` | Auto Model | no Runner effort override | All-round worker, balanced in every respect, suited to many kinds of tasks. |
 | Elite | Droid | `opus` | `droid/opus` | Opus 5.5 | reasoning_effort=high | All-round execution worker, especially strong at complex execution work and UI and 3D visual implementation. |
-| Elite | Droid | `core` | `droid/core` | Kimi K3 | reasoning_effort=max | Strong at visual design and visual inspection, with good UI and design taste. |
+| Elite | Droid | `core` | `droid/core` | DeepSeek V4.1 Flash 1017 | reasoning_effort=max | Fast, low-cost worker for self-contained tasks with clear goals, boundaries, acceptance criteria; strong at 3D and frontend; one-pass complete features; iterative validation, self-repair. Review each output; split long chain. |
 | Elite | Grok CLI | `default` | `grok/default` | Grok 4.7 | effort=high, fast=false | Suits exploratory, long-running autonomous work; give clear stage goals and exit conditions. |
 | Elite | Grok CLI | `xhigh` | `grok/xhigh` | Grok 4.7 | effort=xhigh, fast=false | Escalation level: use it when the Grok Build default (Grok 4.7 high) cannot solve the task. |
 | Elite | Kimi CLI | `default` | `kimi-cli/default` | Kimi K2.8 | thinking=max | All-round implementation worker for every kind of hands-on development and implementation task. |

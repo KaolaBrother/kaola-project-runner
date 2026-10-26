@@ -34,10 +34,12 @@ MODEL_VALUES = ("auto", "gpt-5.6-sol", "gpt-5.6-sol-fast", "grok-4.7", "claude-o
                 # droid/opus catalog id. The fake accepts the preset the manifest already names.
                 "claude-opus-5-5",
                 "deepseek-v4-pro",
-                # Issue #111 read these three from the live 51-value catalog;
-                # the Runner core preset names kimi-k3. kimi-k2.7-code stays
-                # so the deleted alternative tier (Issue #117) is refused by
-                # tier, not by catalog absence.
+                # Issue #111 read these from the live 51-value catalog.
+                # Issue #413: the Runner core preset names the feature-flagged
+                # 0.249.0 entry deepseek-v4.1-flash-1017; kimi-k3 stays a plain
+                # catalog value. kimi-k2.7-code stays so the deleted alternative
+                # tier (Issue #117) is refused by tier, not by catalog absence.
+                "deepseek-v4.1-flash-1017",
                 "kimi-k3", "kimi-k2.7-code", "kimi-k2.6")
 EFFORT_VALUES = ("none", "low", "medium", "high", "xhigh", "max")
 
