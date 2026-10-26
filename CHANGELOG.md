@@ -4,6 +4,37 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## 0.9.32 — 2026-10-27 (Cursor xhigh escalation presets; Droid core DeepSeek V4.1 Flash 1017; AGY language-expression profiles)
+
+Fixes #413 and #414. Cursor gains two AGY-style escalation tiers — `cursor-cli/xhigh`
+(`grok-4.7-xhigh`, fast=false, Elite) and `cursor-cli/opus-xhigh` (`claude-opus-5-5-xhigh`,
+Elite) — with profile wording mirroring grok/xhigh: use the higher tier only when the
+previous tier cannot solve the task; `default` and `opus` are unchanged. The "remove the
+open tiers" request found no `open` tier anywhere (KPR tree, installed copies, KPM consumer
+tables, live `cursor-agent --list-models` on 2026.10.22); nothing was removed and the
+question is recorded open on #413. `droid/core` replaces Kimi K3 (`kimi-k3`) with DeepSeek
+V4.1 Flash 1017 — catalog id `deepseek-v4.1-flash-1017`, `reasoning_effort=max`, profile
+copied verbatim from the dsh default profile (a test pins the copy), the static
+billing-pool map retargets the new id to the `core` pool and drops `kimi-k3`; `kimi-cli.yaml`
+is untouched. #414 adds "Strong language expression in English and Chinese." to the three
+antigravity profiles (the opus row scopes it "within UI and 3D implementation"); every
+existing review/limits sentence is unchanged. `templates/budgets.json` re-measures
+`reference_bytes` 8192 -> 9216 (profile-catalog renders 8761 B; the growth is the two
+owner-ordered #413 rows plus the #414 AGY text); the test-issue-68/test-issue-72 guards move
+to <= 9216 and still forbid any further raise. Facts and live evidence at the release
+boundary: the droid id exists only in droid CLI 0.249.0 (display "DeepSeek V4.1 Flash 1017",
+billingPool `core`, efforts off/low/high/max, behind an account feature flag that is off by
+default); the installed 0.241.1 rejects the id, so the live droid-core smoke is
+environment-blocked until a CLI >= 0.249.0 and the flag are on — catalog facts were verified
+read-only from the published 0.249.0 package. `cursor-cli/xhigh` live smoke passed the full
+roundtrip (tier accepted, Grok 4.7 applied, fast off, prompt/reply, exact stop);
+`cursor-cli/opus-xhigh` preset application verified, and the model execution was refused by
+the Cursor account ("Add a payment method to continue") — an account entitlement fact, not a
+transport defect. Offline validation: render --check PASS at the real budget; the eleven
+targeted suites green (logs recorded on the #413 run).
+
+Seats: restart required
+
 ## 0.9.31 — 2026-10-26 (combined install boundary: Codex profiles + sideagent maintenance fix #412)
 
 This is the single combined install boundary for tonight's change set; v0.9.30 was tagged but never installed (owner hold). It carries everything on `main` since v0.9.29: the two Codex preset decisions from the v0.9.30 line — `luna-research-ok-20261026` (`codex/luna` is no longer computer-use-only, may do research, `luna_model_roles` removed; supersedes PR #411 with identical content) and `sol-no-implement-20261026` (`codex/default` GPT-6.1 Sol: "Do not use to implement. Strong at exploring directions, finding problems, and review; good at UI and 3D visual work, with computer-use capability.") — plus the #412 fix below and one test-only alignment (suite 255's no-eligible-preset case now grants `codex/astra`, because a granted Luna is now an eligible Worker; the computer-use role-gate mechanism itself stays covered by suite 350's synthetic `futureplat/cu` fixture). Install this release directly; do not install v0.9.30 alone.
