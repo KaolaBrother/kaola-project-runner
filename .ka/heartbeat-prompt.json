@@ -1,0 +1,72 @@
+{
+ "body": "{\"as_of\":\"2026-10-14T10:33:55.785274+00:00\",\"attention\":[],\"authorization\":{\"exclusions\":[\"codex/luna\",\"devin/default\",\"devin/opus-fusion\",\"dsh/default\",\"opencode/default\",\"zcode/default\"],\"grants\":[{\"count\":2,\"id\":\"grok/default\",\"model_switch\":false,\"shared_seat\":\"grok/default\",\"state\":\"granted\"},{\"count\":1,\"expires\":\"2026-10-14T23:59:00+08:00\",\"id\":\"claude-code/sonnet\",\"lifetime\":\"task\",\"model_switch\":false,\"shared_seat\":\"claude-code/sonnet\",\"special_requirements\":{\"task_scope\":\"KPR #323 and #324 only (Yanlei 15:17; #324 extended 18:28)\"},\"state\":\"granted\"}]},\"detail\":\"heartbeat-prompt.json state; `state view --role sideagent` for evidence and dispatch rows\",\"host_revision\":1,\"project\":{\"code\":\"KPR\",\"goal\":\"Fix #324: spurious needs_decision + A missed all-idle + B milestone wake + C maintenance failure loop\",\"repo\":\"/Users/ylpromax5/Workspace/kaola-project-runner-dev\",\"requirements_source\":\"AGENTS.md + Delegator brief + #324 body + A-C comments\",\"stop\":\"After #324 merged (tests green) and closed: report and STOP. No tag/release/install\"},\"revision\":1,\"sideagent\":null,\"sideagent_maintenance\":\"no binding; that is not evidence maintenance ran\",\"tasks\":[],\"view\":\"host\"}",
+ "created_from": "Host re-init after .ka/heartbeat-prompt.json loss during #324 claim",
+ "host_revision": 1,
+ "revision": 1,
+ "schema": "kaola-heartbeat-prompt/2",
+ "state": {
+  "alerts": {},
+  "authorization": {
+   "exclusions": [
+    "codex/luna",
+    "devin/default",
+    "devin/opus-fusion",
+    "dsh/default",
+    "opencode/default",
+    "zcode/default"
+   ],
+   "grants": [
+    {
+     "count": 2,
+     "model_switch": false,
+     "preset_ids": [
+      "grok/default"
+     ],
+     "state": "granted"
+    },
+    {
+     "count": 1,
+     "expires": "2026-10-14T23:59:00+08:00",
+     "lifetime": "task",
+     "model_switch": false,
+     "preset_ids": [
+      "claude-code/sonnet"
+     ],
+     "special_requirements": {
+      "task_scope": "KPR #323 and #324 only (Yanlei 15:17; #324 extended 18:28)"
+     },
+     "state": "granted"
+    }
+   ]
+  },
+  "decisions": {},
+  "holds": {},
+  "maintenance": {},
+  "project": {
+   "code": "KPR",
+   "goal": "Fix #324: spurious needs_decision + A missed all-idle + B milestone wake + C maintenance failure loop",
+   "repo": "/Users/ylpromax5/Workspace/kaola-project-runner-dev",
+   "requirements_source": "AGENTS.md + Delegator brief + #324 body + A-C comments",
+   "stop": "After #324 merged (tests green) and closed: report and STOP. No tag/release/install"
+  },
+  "recovery": {},
+  "section_sources": {
+   "authorization": {
+    "at": "2026-10-14T10:33:55.785269+00:00",
+    "host_revision": 1,
+    "source": "Host re-init after .ka/heartbeat-prompt.json loss during #324 claim",
+    "writer": "host"
+   },
+   "project": {
+    "at": "2026-10-14T10:33:55.785103+00:00",
+    "host_revision": 1,
+    "source": "Host re-init after .ka/heartbeat-prompt.json loss during #324 claim",
+    "writer": "host"
+   }
+  },
+  "sideagent": null,
+  "tasks": {},
+  "unverified": {}
+ },
+ "updated_at": "2026-10-14T10:33:55.785274+00:00"
+}
