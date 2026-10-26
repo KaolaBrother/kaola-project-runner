@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: ./scripts/render-skills.py --check && ./scripts/validate.sh --suite test-generated-skills.py --suite test-issue-111-model-tiers.py --suite test-issue-218-preset-ids.py --suite test-acp-contract.py --suite test-droid-acp-contract.py --suite test-issue-331-effort-model-id.py --suite test-issue-237-model-display.py --suite test-issue-148-quota-packages.py --suite test-progressive-disclosure.py --suite test-issue-72-session-naming.py --suite test-issue-68-heartbeat-snapshot.py
+validated_candidate_hash: e2681fc3577a267b914ac8e00ef4ccbb4bc63f36f51c13f5c0e05df9dc980410
