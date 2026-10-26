@@ -104,7 +104,9 @@ class HeartbeatGuidanceObligation(unittest.TestCase):
     def test_budgets_are_not_raised(self) -> None:
         limits = json.loads(BUDGETS.read_text(encoding="utf-8"))
         self.assertLessEqual(limits["main_skill_bytes"], 17408)
-        self.assertLessEqual(limits["reference_bytes"], 8192)
+        # Issue #413 Host decision: reference_bytes re-measured 8192 -> 9216 for the
+        # owner-ordered profile-catalog growth; no further raise.
+        self.assertLessEqual(limits["reference_bytes"], 9216)
         self.assertLessEqual(len(SKILL.read_bytes()), limits["main_skill_bytes"])
         self.assertLessEqual(len(SKELETON.read_bytes()), limits["reference_bytes"])
 
