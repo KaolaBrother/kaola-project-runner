@@ -46,3 +46,11 @@ archived_paths:
 - kaola-workflow/archive/issue-220/finalization-summary.md
 - kaola-workflow/archive/issue-220/mission-ledger.jsonl
 - kaola-workflow/archive/issue-220/workflow-state.md
+
+## Errata 2026-10-27 (close-out audit)
+
+Two citations name pre-archive paths: `kaola-workflow/.ledger/issue-220.jsonl` moved at sink
+to `archive/issue-220/mission-ledger.jsonl` (present in this archive), and
+`kaola-workflow/issue-220/.cache/final-validation.md` was not carried into the archive and
+exists nowhere in git history. The archive's `.cache/origin/selection-record.json` and this
+summary remain the surviving evidence.

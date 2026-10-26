@@ -290,3 +290,13 @@ Paths left in the main checkout:
 ## Latest owner264 scope — publication held
 
 Owner6012954294 supersedes prior release readiness: all ten runtimes need separately version-bound actual Host compaction completed detection, full applicable current Skill reread/use and automatic scoped Sideagent checkpoint/reclaim. Original source acceptance and valid measured stages remain; renewed264 mission6/three disjoint diagnostic lanes are in flight. Capability table and informed Delegator choice guidance are existing264 work. No sink/tag/PATCH publication until renewed verification is concluded and reviewed; no installation.
+
+## Errata 2026-10-27 (close-out audit)
+
+Locator corrections and absences: `evidence/artifact-bindings.json` moved at sink to
+`archive/issue-259/evidence/artifact-bindings.json` (present). `.cache/final-validation.md`
+was not carried into the archive (`.cache/origin/` only) and exists nowhere in git history.
+The five `docs/harness-acp-*-2026-10-*.md` files (compat 10-01/03/06, reverify 10-01,
+codex-160-live 10-03) were never committed to this repository — those citations named
+transient run artifacts; the durable evidence is the receipts and commits cited alongside
+them. No content was reconstructed.

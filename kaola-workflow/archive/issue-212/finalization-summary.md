@@ -36,3 +36,9 @@ archived_paths:
 - kaola-workflow/archive/issue-212/finalization-summary.md
 - kaola-workflow/archive/issue-212/mission-ledger.jsonl
 - kaola-workflow/archive/issue-212/workflow-state.md
+
+## Errata 2026-10-27 (close-out audit)
+
+The citation `.cache/doc-docking.md` names the run directory's cache file, which was not
+carried into this archive at sink time; it exists nowhere in git history. The docking facts
+it held are superseded by the committed CHANGELOG and skill-build manifests cited above.
