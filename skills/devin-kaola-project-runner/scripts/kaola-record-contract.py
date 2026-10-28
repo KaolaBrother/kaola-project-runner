@@ -42,9 +42,24 @@ BACKUP_RE = re.compile(r"^(?P<stem>.+)\.v(?P<gen>[0-9]+)-(?P<digest>[0-9a-f]{12}
 PROJECT_KEYS = frozenset({
     "code", "goal", "issue", "repo", "requirements_source", "status", "stop",
 })
+# Issue #419 seat stale-quota rule (owner decision id below; KPM #892 mirrors
+# it). A seat row that never produces quota/credit feedback inside the window
+# is auto-revoked like an owner revocation; feedback inside the window attaches
+# a typed hold with expiry, whose expiry is the same revoke. The two optional
+# members below are written only by the quota rule's machine marks; agent
+# patches carry them forward verbatim or are refused.
+QUOTA_RULE_ID = "owner-seat-stale-quota-revoke-5h-20261028"
+QUOTA_STALL_WINDOW_S = 18000  # owner-fixed 5h window
+QUOTA_HOLD_S = 18000          # V-1 default A: hold until = feedback_at + 5h
+QUOTA_STALL_KEYS = frozenset({"stall_at", "kind", "member", "evidence"})
+QUOTA_HOLD_KEYS = frozenset({"until", "stall_at", "feedback_at", "feedback", "member", "rule", "evidence"})
+QUOTA_STALL_KINDS = frozenset({"no-reply", "limit"})
+QUOTA_HOLD_FEEDBACKS = frozenset({"vendor-time", "reply", "quota-ok"})
+QUOTA_MARK_MEMBERS = ("quota_stall", "quota_hold")
+
 GRANT_KEYS = frozenset({
     "id", "preset_ids", "state", "count", "shared_seat", "model_switch", "special_requirements",
-    "lifetime", "expires", "extra_seats",
+    "lifetime", "expires", "extra_seats", "quota_stall", "quota_hold",
 })
 AUTH_KEYS = frozenset({
     "grants", "exclusions", "account_token_quotas",
@@ -166,9 +181,11 @@ HOLD_TEXT_KEYS = frozenset({
 DELEGATOR_GRANT_KEYS = frozenset({
     "preset_id", "preset_ids", "count", "switch_authorization",
     "state", "lifetime", "expires", "special_requirements", "extra_seats",
+    "quota_stall", "quota_hold",
 })
 # Worker rows are not elite/expert rows. `scope` stays off DELEGATOR_GRANT_KEYS.
-WORKER_GRANT_KEYS = frozenset({"preset_ids", "count", "state", "expires"})
+WORKER_GRANT_KEYS = frozenset({"preset_ids", "count", "state", "expires",
+                               "quota_stall", "quota_hold"})
 WORKER_SCOPE_ALL = "all-worker-presets"
 UNLIMITED_COUNT = "unlimited"
 DAY_START_KEYS = frozenset({"action", "state", "evidence"})
@@ -1056,6 +1073,132 @@ def _grant_preset_ids(row: Any) -> list[str]:
     return [ident for ident in ids if isinstance(ident, str) and ident]
 
 
+QUOTA_TIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+
+
+def _quota_time_ok(value: Any) -> bool:
+    return isinstance(value, str) and QUOTA_TIME_RE.fullmatch(value) is not None
+
+
+def _quota_evidence_ok(value: Any) -> bool:
+    return (isinstance(value, list) and 1 <= len(value) <= 3
+            and all(isinstance(item, str) and item for item in value))
+
+
+def quota_mark_blockers(row: Any, path: str, ids: list[str]) -> list[dict[str, str]]:
+    """Closed quota_stall/quota_hold shapes on one grant row (Issue #419).
+
+    ``member`` must name a preset this row grants; a row never carries both
+    members. Only the quota rule writes these members.
+    """
+    if not isinstance(row, dict):
+        return []
+    stall = row.get("quota_stall")
+    hold = row.get("quota_hold")
+    if stall is None and hold is None:
+        return []
+    recovery = ("only the quota rule writes these members; the Owner removes the row or re-adds it "
+                "through the grant route. The file was not written")
+    if stall is not None and hold is not None:
+        return [refusal(f"{path}.quota_hold", "one of quota_stall or quota_hold, never both", recovery)]
+    found: list[dict[str, str]] = []
+    members = set(ids or [])
+    if stall is not None:
+        spath = f"{path}.quota_stall"
+        if not isinstance(stall, dict) or stall.keys() != QUOTA_STALL_KEYS:
+            return [refusal(spath, "closed object " + ", ".join(sorted(QUOTA_STALL_KEYS)), recovery)]
+        if not _quota_time_ok(stall.get("stall_at")):
+            found.append(refusal(f"{spath}.stall_at", "UTC time YYYY-MM-DDTHH:MM:SSZ", recovery))
+        if stall.get("kind") not in QUOTA_STALL_KINDS:
+            found.append(refusal(f"{spath}.kind", ", ".join(sorted(QUOTA_STALL_KINDS)), recovery))
+        if not isinstance(stall.get("member"), str) or stall["member"] not in members:
+            found.append(refusal(f"{spath}.member", "a preset id this row grants", recovery))
+        if not _quota_evidence_ok(stall.get("evidence")):
+            found.append(refusal(f"{spath}.evidence", "1-3 non-empty evidence locators", recovery))
+    if hold is not None:
+        hpath = f"{path}.quota_hold"
+        if not isinstance(hold, dict) or hold.keys() != QUOTA_HOLD_KEYS:
+            return [refusal(hpath, "closed object " + ", ".join(sorted(QUOTA_HOLD_KEYS)), recovery)]
+        for key in ("until", "stall_at", "feedback_at"):
+            if not _quota_time_ok(hold.get(key)):
+                found.append(refusal(f"{hpath}.{key}", "UTC time YYYY-MM-DDTHH:MM:SSZ", recovery))
+        if hold.get("feedback") not in QUOTA_HOLD_FEEDBACKS:
+            found.append(refusal(f"{hpath}.feedback", ", ".join(sorted(QUOTA_HOLD_FEEDBACKS)), recovery))
+        if hold.get("rule") != QUOTA_RULE_ID:
+            found.append(refusal(f"{hpath}.rule", QUOTA_RULE_ID, recovery))
+        if not isinstance(hold.get("member"), str) or hold["member"] not in members:
+            found.append(refusal(f"{hpath}.member", "a preset id this row grants", recovery))
+        if not _quota_evidence_ok(hold.get("evidence")):
+            found.append(refusal(f"{hpath}.evidence", "1-3 non-empty evidence locators", recovery))
+    return found
+
+
+def _quota_row_identity(row: Any) -> Any:
+    """The identity an agent patch matches a stored grant row by."""
+    if not isinstance(row, dict):
+        return None
+    ids = row.get("preset_ids")
+    if _string_list_ok(ids) and ids:
+        return ("preset_ids", tuple(sorted(ids)))
+    for key in ("id", "preset_id"):
+        if isinstance(row.get(key), str) and row[key]:
+            return (key, row[key])
+    return None
+
+
+def quota_member_guard(old_rows: Any, new_rows: Any, path: str) -> tuple[list[Any], list[dict[str, str]]]:
+    """Agent patches cannot forge or strip the quota clock/hold (Issue #419).
+
+    A patched row with the same identity carries forward the stored
+    quota_stall/quota_hold when the patch omits them. Supplying a different
+    value, or adding a row that carries either member, is refused: only the
+    quota rule writes these members. Removing the whole row takes its members.
+    """
+    old_by_key: dict[Any, dict[str, Any]] = {}
+    if isinstance(old_rows, list):
+        for row in old_rows:
+            key = _quota_row_identity(row)
+            if key is not None and key not in old_by_key:
+                old_by_key[key] = row
+    out: list[Any] = []
+    blockers: list[dict[str, str]] = []
+    if not isinstance(new_rows, list):
+        return new_rows, blockers
+    for index, row in enumerate(new_rows):
+        if not isinstance(row, dict):
+            out.append(row)
+            continue
+        key = _quota_row_identity(row)
+        old = old_by_key.get(key)
+        supplied = {member: row[member] for member in QUOTA_MARK_MEMBERS if member in row}
+        if supplied:
+            if old is None:
+                blockers.append(refusal(
+                    f"{path}[{index}].{sorted(supplied)[0]}",
+                    "no quota_stall/quota_hold on an added or rewritten grant row",
+                    "only the quota rule writes these members; the Owner removes the row or re-adds it "
+                    "through the grant route. The file was not written"))
+            else:
+                for member, value in sorted(supplied.items()):
+                    if value != old.get(member):
+                        blockers.append(refusal(
+                            f"{path}[{index}].{member}",
+                            "the stored value the quota rule wrote, verbatim",
+                            "only the quota rule writes these members; the Owner removes the row or "
+                            "re-adds it through the grant route. The file was not written"))
+            out.append(row)
+            continue
+        if old is not None:
+            carried = dict(row)
+            for member in QUOTA_MARK_MEMBERS:
+                if member in old:
+                    carried[member] = old[member]
+            out.append(carried)
+            continue
+        out.append(row)
+    return out, blockers
+
+
 def worker_grant_blockers(auth: dict[str, Any]) -> list[dict[str, str]]:
     """Closed shape of ``worker_grants``. A bad count never becomes unlimited.
 
@@ -1136,6 +1279,7 @@ def worker_grant_blockers(auth: dict[str, Any]) -> list[dict[str, str]]:
         if "expires" in grant and grant.get("expires") is not None and not isinstance(grant.get("expires"), str):
             found.append(refusal(f"{path}.expires", "string",
                                  "Delegator: source the original expiry; the file was not written"))
+        found.extend(quota_mark_blockers(grant, path, ids if ids_ok else _grant_preset_ids(grant)))
     other: set[str] = set()
     for key in ("elite_grants", "expert_task_grants"):
         for row in auth.get(key) or []:
@@ -1277,6 +1421,7 @@ def delegator_authorization_blockers(auth: Any) -> list[dict[str, str]]:
                     found.extend(_closed_strings(f"{path}.special_requirements", special,
                                                  frozenset({"model", "effort", "task_scope"})))
             found.extend(extra_seat_blockers(grant, path))
+            found.extend(quota_mark_blockers(grant, path, _grant_preset_ids(grant)))
     found.extend(worker_grant_blockers(auth))
     return found
 
@@ -1359,6 +1504,10 @@ def authorization_blockers(auth: Any, prefix: str = "authorization") -> list[dic
                     found.extend(_closed_strings(f"{prefix}.grants[{index}].special_requirements", special,
                                                  frozenset({"model", "effort", "task_scope"})))
             found.extend(extra_seat_blockers(grant, f"{prefix}.grants[{index}]"))
+            found.extend(quota_mark_blockers(
+                grant, f"{prefix}.grants[{index}]",
+                grant.get("preset_ids") if _string_list_ok(grant.get("preset_ids"))
+                else [grant.get("id")] if isinstance(grant.get("id"), str) else []))
     shared = [grant.get("shared_seat") for grant in grants if isinstance(grant, dict) and isinstance(grant.get("shared_seat"), str)]
     if len(shared) != len(set(shared)):
         found.append(refusal(f"{prefix}.grants", "one authoritative row per shared group",

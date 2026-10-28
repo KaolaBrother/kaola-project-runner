@@ -461,6 +461,11 @@ def normalize_grants(auth: dict[str, Any]) -> list[dict[str, Any]]:
         shared_count = item.get("shared_count")
         if isinstance(shared_count, int) and not isinstance(shared_count, bool) and shared_count >= 0:
             grant["shared_count"] = shared_count
+        # Issue #419: the machine clock/hold follows the seat it names.
+        for mark in RECORD.QUOTA_MARK_MEMBERS:
+            value = item.get(mark)
+            if isinstance(value, dict) and value.get("member") == preset:
+                grant[mark] = dict(value)
         grants.append(grant)
     return grants
 
@@ -514,6 +519,577 @@ def current_authorization(auth: dict[str, Any]) -> dict[str, Any]:
     if exclusions:
         auth["exclusions"] = sorted(exclusions)
     return auth
+
+
+def _load_quota():
+    """The quota-package catalog helpers (Issue #419 member pool mapping)."""
+    cached = getattr(_load_quota, "module", None)
+    if cached is not None:
+        return cached or None
+    path = Path(__file__).resolve().with_name("kaola-quota.py")
+    if not path.is_file():
+        _load_quota.module = False
+        return None
+    spec = importlib.util.spec_from_file_location("kaola_quota", path)
+    if spec is None or spec.loader is None:
+        _load_quota.module = False
+        return None
+    module = importlib.util.module_from_spec(spec)
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        _load_quota.module = False
+        return None
+    finally:
+        sys.dont_write_bytecode = previous
+    _load_quota.module = module
+    return module
+
+
+# ---------------------------------------------------------------------------
+# Issue #419: seat stale-quota rule (owner HARD decision
+# owner-seat-stale-quota-revoke-5h-20261028; KPM #892 mirrors it).
+#
+# A seat row with no quota/credit feedback sufficient to reply inside
+# QUOTA_STALL_WINDOW_S is auto-revoked exactly like an owner revocation (row
+# removed, no tombstone, no auto-restore). Feedback inside the window attaches
+# a typed quota_hold with expiry; the hold's expiry is the same revoke. The
+# machine marks are reduce-only: rows are only removed whole, and the only
+# member changes are quota_stall/quota_hold add/remove/replace. Agent patches
+# carry these members forward or are refused (RECORD.quota_member_guard).
+# ---------------------------------------------------------------------------
+QUOTA_RULE_ID = RECORD.QUOTA_RULE_ID
+QUOTA_WINDOW_S = RECORD.QUOTA_STALL_WINDOW_S
+QUOTA_HOLD_S = RECORD.QUOTA_HOLD_S
+QUOTA_TIME = "%Y-%m-%dT%H:%M:%SZ"
+
+
+def _quota_time(moment: datetime) -> str:
+    return moment.astimezone(timezone.utc).strftime(QUOTA_TIME)
+
+
+def _quota_parse(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc) if value.tzinfo else None
+    if not isinstance(value, str):
+        return None
+    try:
+        moment = datetime.strptime(value, QUOTA_TIME).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+    return moment
+
+
+def _quota_row_ids(row: Any) -> list[str]:
+    """Every preset id this grant row covers: id / preset_id / preset_ids."""
+    if not isinstance(row, dict):
+        return []
+    ids = row.get("preset_ids")
+    if isinstance(ids, list) and ids and all(isinstance(item, str) and item for item in ids):
+        return list(dict.fromkeys(ids))
+    for key in ("id", "preset_id"):
+        if isinstance(row.get(key), str) and row[key]:
+            return [row[key]]
+    return []
+
+
+def _quota_row_key(row: dict[str, Any], index: int) -> str:
+    ids = _quota_row_ids(row)
+    return ",".join(ids) if ids else f"[{index}]"
+
+
+def quota_verdicts(rows: Any, facts: list[dict[str, Any]], now: Any) -> tuple[list[Any], list[dict[str, Any]]]:
+    """The pure seat stale-quota verdicts (Issue #419).
+
+    ``rows`` is one record's grant list; ``facts`` are typed facts for this
+    beat (kind no-reply/reply/exhausted/quota-ok/account, member, evidence,
+    optional at/vendor_time); ``now`` is a datetime or ``...Z`` string. Time
+    verdicts evaluate first (half-open window: feedback counts only when
+    feedback_at < stall_at + QUOTA_WINDOW_S). Returns (new rows, marks).
+    """
+    now_dt = _quota_parse(now) if not isinstance(now, datetime) else now.astimezone(timezone.utc)
+    if now_dt is None:
+        raise ValueError("quota verdicts need a usable now")
+    now_str = _quota_time(now_dt)
+    marks: list[dict[str, Any]] = []
+    out: list[Any] = []
+    for index, row in enumerate(rows if isinstance(rows, list) else []):
+        if not isinstance(row, dict):
+            out.append(row)
+            continue
+        ids = _quota_row_ids(row)
+        row_key = _quota_row_key(row, index)
+        stall = row.get("quota_stall") if isinstance(row.get("quota_stall"), dict) else None
+        hold = row.get("quota_hold") if isinstance(row.get("quota_hold"), dict) else None
+        # Time verdicts first.
+        if stall is not None:
+            stall_dt = _quota_parse(stall.get("stall_at"))
+            if stall_dt is not None and now_dt.timestamp() >= stall_dt.timestamp() + QUOTA_WINDOW_S:
+                marks.append({"action": "revoke", "member": stall.get("member"), "row_key": row_key,
+                              "cause": "no-quota-feedback", "stall_at": stall.get("stall_at"),
+                              "evidence": stall.get("evidence"), "_ids": ids, "_row": row})
+                continue
+        if hold is not None:
+            until = _quota_parse(hold.get("until"))
+            if until is not None and now_dt >= until:
+                marks.append({"action": "revoke", "member": hold.get("member"), "row_key": row_key,
+                              "cause": "quota-hold-expired", "until": hold.get("until"),
+                              "evidence": hold.get("evidence"), "_ids": ids, "_row": row})
+                continue
+        new = dict(row)
+        granted = new.get("state") in (None, "granted")
+        # A row no longer granted closes its stall; a hold stays and expires.
+        if stall is not None and not granted:
+            new.pop("quota_stall")
+            stall = None
+            marks.append({"action": "close", "member": stall_member(row), "row_key": row_key,
+                          "cause": "row-not-granted"})
+        if new.get("quota_hold") is not None:
+            # A machine hold is never cleared, extended or moved by new facts.
+            out.append(new)
+            continue
+        for fact in facts:
+            if not isinstance(fact, dict):
+                continue
+            member = fact.get("member")
+            if not isinstance(member, str) or member not in ids:
+                continue
+            kind = fact.get("kind")
+            evidence = fact.get("evidence") if isinstance(fact.get("evidence"), str) else None
+            stall = new.get("quota_stall") if isinstance(new.get("quota_stall"), dict) else None
+            feedback_dt = _quota_parse(fact.get("at")) or now_dt
+            if stall is not None:
+                stall_dt = _quota_parse(stall.get("stall_at"))
+                if stall_dt is None or feedback_dt.timestamp() >= stall_dt.timestamp() + QUOTA_WINDOW_S:
+                    continue
+            if kind == "no-reply":
+                if stall is None and granted:
+                    new["quota_stall"] = {
+                        "stall_at": now_str, "kind": "no-reply", "member": member,
+                        "evidence": [evidence] if evidence else [],
+                    }
+                    marks.append({"action": "open", "member": member, "row_key": row_key,
+                                  "stall_at": now_str,
+                                  "evidence": [evidence] if evidence else []})
+            elif kind == "reply":
+                if stall is None:
+                    continue
+                if stall.get("kind") == "no-reply":
+                    new.pop("quota_stall")
+                    marks.append({"action": "close", "member": member, "row_key": row_key,
+                                  "cause": "reply", "evidence": [evidence] if evidence else []})
+                else:
+                    new.pop("quota_stall")
+                    new["quota_hold"] = _quota_hold(stall, _quota_time(feedback_dt), "reply", evidence)
+                    marks.append({"action": "hold", "member": member, "row_key": row_key,
+                                  "stall_at": stall.get("stall_at"),
+                                  "until": new["quota_hold"]["until"], "feedback": "reply",
+                                  "evidence": new["quota_hold"]["evidence"]})
+            elif kind == "quota-ok":
+                if stall is None:
+                    continue
+                if stall.get("kind") == "no-reply":
+                    new.pop("quota_stall")
+                    marks.append({"action": "close", "member": member, "row_key": row_key,
+                                  "cause": "quota-ok", "evidence": [evidence] if evidence else []})
+                else:
+                    new.pop("quota_stall")
+                    new["quota_hold"] = _quota_hold(stall, _quota_time(feedback_dt), "quota-ok", evidence)
+                    marks.append({"action": "hold", "member": member, "row_key": row_key,
+                                  "stall_at": stall.get("stall_at"),
+                                  "until": new["quota_hold"]["until"], "feedback": "quota-ok",
+                                  "evidence": new["quota_hold"]["evidence"]})
+            elif kind == "exhausted":
+                if stall is None:
+                    continue
+                if fact.get("vendor_time"):
+                    new.pop("quota_stall")
+                    new["quota_hold"] = _quota_hold(stall, _quota_time(feedback_dt), "vendor-time", evidence)
+                    marks.append({"action": "hold", "member": member, "row_key": row_key,
+                                  "stall_at": stall.get("stall_at"),
+                                  "until": new["quota_hold"]["until"], "feedback": "vendor-time",
+                                  "evidence": new["quota_hold"]["evidence"]})
+                elif stall.get("kind") == "no-reply":
+                    new["quota_stall"] = {**stall, "kind": "limit"}
+                    marks.append({"action": "limit", "member": member, "row_key": row_key,
+                                  "stall_at": stall.get("stall_at"),
+                                  "evidence": [evidence] if evidence else []})
+            elif kind == "account":
+                if stall is not None:
+                    new.pop("quota_stall")
+                    marks.append({"action": "close", "member": member, "row_key": row_key,
+                                  "cause": "account", "evidence": [evidence] if evidence else []})
+        out.append(new)
+    return out, marks
+
+
+def stall_member(row: dict[str, Any]) -> Any:
+    stall = row.get("quota_stall")
+    return stall.get("member") if isinstance(stall, dict) else None
+
+
+def _quota_hold(stall: dict[str, Any], feedback_at: str, feedback: str,
+                locator: str | None) -> dict[str, Any]:
+    """Replace a stall by its hold: until = feedback_at + QUOTA_HOLD_S (V-1 default A)."""
+    feedback_dt = _quota_parse(feedback_at) or datetime.now(timezone.utc)
+    evidence = [item for item in (stall.get("evidence") or []) if isinstance(item, str) and item]
+    if locator:
+        evidence.append(locator)
+    return {
+        "until": _quota_time(datetime.fromtimestamp(feedback_dt.timestamp() + QUOTA_HOLD_S, timezone.utc)),
+        "stall_at": stall.get("stall_at"),
+        "feedback_at": feedback_at,
+        "feedback": feedback,
+        "member": stall.get("member"),
+        "rule": QUOTA_RULE_ID,
+        "evidence": evidence[:3],
+    }
+
+
+def _quota_reduce_only(before: Any, after: Any) -> bool:
+    """The only allowed diffs: whole rows removed; quota_stall/quota_hold member
+    add/remove/replace on surviving rows. Anything else refuses the write."""
+    if not isinstance(before, list) or not isinstance(after, list) or len(after) > len(before):
+        return False
+    members = set(RECORD.QUOTA_MARK_MEMBERS)
+
+    def stripped(row: Any) -> Any:
+        if not isinstance(row, dict):
+            return row
+        return {key: value for key, value in row.items() if key not in members}
+
+    cursor = 0
+    for new_row in after:
+        matched = None
+        while cursor < len(before):
+            candidate = before[cursor]
+            cursor += 1
+            if stripped(candidate) == stripped(new_row):
+                matched = candidate
+                break
+            # candidate was removed entirely; keep scanning.
+        if matched is None:
+            return False
+        if isinstance(new_row, dict) or isinstance(matched, dict):
+            for member in members:
+                if member in new_row and member in matched and new_row.get(member) == matched.get(member):
+                    continue
+                if member not in new_row and member not in matched:
+                    continue
+                # member added/removed/replaced is allowed only on dict rows.
+                if not isinstance(new_row, dict):
+                    return False
+    return True
+
+
+def _quota_alert(state: dict[str, Any], row: dict[str, Any], member: Any,
+                 cause: str, at: str, evidence: Any) -> None:
+    """One warn alert per auto-revoke, retired later through `state retire`."""
+    ident = "quota-revoked-" + str(member).replace("/", "-")
+    alerts = state.setdefault("alerts", {})
+    prior = alerts.get(ident) if isinstance(alerts.get(ident), dict) else {}
+    alerts[ident] = {
+        "level": "warn",
+        "summary": (json.dumps(row, ensure_ascii=False, sort_keys=True)
+                    + f" auto-revoked cause={cause} at={at} rule={QUOTA_RULE_ID}"),
+        "evidence": evidence if isinstance(evidence, (str, list)) else json.dumps(evidence),
+        "next": "Owner re-adds through the existing grant route if wanted; no auto-restore",
+        "source": QUOTA_RULE_ID,
+        "writer": "quota-rule",
+        "created_at": prior.get("created_at") or at,
+        "updated_at": at,
+        "rev": int(prior.get("rev") or 0) + 1,
+    }
+
+
+def _quota_apply_rows(rows: Any, facts: list[dict[str, Any]], now_dt: datetime,
+                      now_str: str, record: str, marks: list[dict[str, Any]],
+                      revoked: list[tuple[dict[str, Any], dict[str, Any]]]) -> list[Any]:
+    new_rows, row_marks = quota_verdicts(rows, facts, now_dt)
+    for mark in row_marks:
+        public = {key: value for key, value in mark.items() if not key.startswith("_")}
+        public["record"] = record
+        marks.append(public)
+        if mark["action"] == "revoke":
+            revoked.append((mark.get("_row") or {}, mark))
+    return new_rows
+
+
+def quota_rule_apply(repo: Any, now: Any = None, facts: list[dict[str, Any]] | None = None,
+                     write: bool = True) -> dict[str, Any]:
+    """Apply the seat stale-quota rule to both durable records under ``repo``.
+
+    Loads <repo>/.kaola/heartbeat-prompt.json and delegator-heartbeat.json (a
+    missing or unreadable file is skipped), evaluates each record's own row
+    members plus the shared facts, and writes each changed record through the
+    existing locked write helpers. Idempotent: no write when nothing changes.
+    """
+    repo = Path(repo)
+    facts = list(facts or [])
+    now_dt = _quota_parse(now) if not isinstance(now, datetime) else now
+    if now_dt is None:
+        now_dt = datetime.now(timezone.utc)
+    now_str = _quota_time(now_dt)
+    result: dict[str, Any] = {"marks": [], "writes": 0, "revoked_presets": [], "refusals": []}
+    marks: list[dict[str, Any]] = result["marks"]
+
+    host_path = repo / ".kaola" / "heartbeat-prompt.json"
+    if host_path.is_file():
+        try:
+            with StateLock(host_path):
+                doc = require_current(read_state_file(host_path)[0], host_path)
+                state = doc["state"]
+                auth = state.get("authorization")
+                before_rows = (auth or {}).get("grants") or []
+                revoked: list[tuple[dict[str, Any], dict[str, Any]]] = []
+                own_marks: list[dict[str, Any]] = []
+                new_rows = _quota_apply_rows(before_rows, facts, now_dt, now_str, "host",
+                                             own_marks, revoked)
+                changed_rows = new_rows != before_rows
+                if changed_rows or revoked:
+                    if not _quota_reduce_only(before_rows, new_rows):
+                        result["refusals"].append(RECORD.refusal(
+                            "authorization.grants",
+                            "reduce-only quota marks: whole-row removal plus quota_stall/quota_hold",
+                            "the quota rule produced a non reduce-only diff; the file was not written"))
+                    else:
+                        if changed_rows:
+                            if not isinstance(auth, dict):
+                                auth = state["authorization"] = {}
+                            auth["grants"] = new_rows
+                        for row, mark in revoked:
+                            _quota_alert(state, row, mark.get("member"), mark.get("cause") or "",
+                                         now_str, mark.get("evidence"))
+                        sources = state.get("section_sources") if isinstance(state.get("section_sources"), dict) else {}
+                        last = own_marks[-1] if own_marks else {}
+                        sources["authorization"] = {
+                            "source": "{}:{}:{}".format(
+                                QUOTA_RULE_ID, last.get("cause") or last.get("action") or "mark",
+                                last.get("member")),
+                            "writer": "quota-rule", "at": now_str}
+                        state["section_sources"] = sources
+                        if write:
+                            write_state(host_path, doc)
+                            result["writes"] += 1
+                        marks.extend(own_marks)
+                        for _row, mark in revoked:
+                            result["revoked_presets"].extend(mark.get("_ids") or _quota_row_ids(_row))
+        except StateRefusal as refusal:
+            result["skipped"] = {**result.get("skipped", {}), "host": refusal.payload["reason"]}
+        except (OSError, ValueError) as exc:
+            result["skipped"] = {**result.get("skipped", {}), "host": str(exc)}
+
+    delegator_path = repo / ".kaola" / "delegator-heartbeat.json"
+    if delegator_path.is_file():
+        try:
+            with StateLock(delegator_path):
+                doc = load_object(delegator_path)
+                auth = doc.get("authorization") if isinstance(doc.get("authorization"), dict) else None
+                changed = False
+                blocked = False
+                revoked_ids: list[str] = []
+                if auth is not None:
+                    for collection in ("elite_grants", "expert_task_grants", "worker_grants"):
+                        rows = auth.get(collection)
+                        if not isinstance(rows, list):
+                            continue
+                        own_marks = []
+                        revoked: list[tuple[dict[str, Any], dict[str, Any]]] = []
+                        new_rows = _quota_apply_rows(rows, facts, now_dt, now_str, "delegator",
+                                                     own_marks, revoked)
+                        if new_rows != rows:
+                            if not _quota_reduce_only(rows, new_rows):
+                                result["refusals"].append(RECORD.refusal(
+                                    f"authorization.{collection}",
+                                    "reduce-only quota marks: whole-row removal plus quota_stall/quota_hold",
+                                    "the quota rule produced a non reduce-only diff; the file was not written"))
+                                blocked = True
+                                continue
+                            auth[collection] = new_rows
+                            marks.extend(own_marks)
+                            for _row, mark in revoked:
+                                revoked_ids.extend(mark.get("_ids") or _quota_row_ids(_row))
+                            changed = True
+                if changed and not blocked:
+                    result["revoked_presets"].extend(revoked_ids)
+                    if write:
+                        doc["revision"] = int(doc.get("revision") or 0) + 1
+                        doc["updated_at"] = observed_at()
+                        atomic_write(delegator_path, json.dumps(doc, ensure_ascii=False, sort_keys=True,
+                                                                indent=1) + "\n")
+                        result["writes"] += 1
+                elif blocked:
+                    marks[:] = [mark for mark in marks if mark.get("record") != "delegator"]
+        except (OSError, ValueError) as exc:
+            result["skipped"] = {**result.get("skipped", {}), "delegator": str(exc)}
+    result["revoked_presets"] = sorted(set(result["revoked_presets"]))
+    return result
+
+
+def quota_member_pool(preset: str, preset_catalog: dict[str, dict[str, Any]],
+                      quota_catalogs: dict[str, Any]) -> str | None:
+    """The usage-envelope pool one member preset maps to (Issue #419).
+
+    Resolve the preset's catalog model id through kaola-quota's catalog and
+    ``resolve_model``; the member pool is ``pool`` or ``packageId``. An
+    unmapped preset has no pool and no envelope ever applies to it.
+    """
+    quota = _load_quota()
+    row = preset_catalog.get(preset)
+    if quota is None or not isinstance(row, dict):
+        return None
+    platform = row.get("platform") or preset.split("/", 1)[0]
+    if platform not in quota_catalogs:
+        try:
+            quota_catalogs[platform] = quota.load_catalog(platform)
+        except Exception:
+            quota_catalogs[platform] = None
+    catalog = quota_catalogs.get(platform)
+    if catalog is None:
+        return None
+    model_id = (row.get("selection") or {}).get("model_id") or ""
+    resolved = quota.resolve_model(catalog, model_id, row)
+    if not isinstance(resolved, dict) or resolved.get("status") != "mapped":
+        return None
+    return resolved.get("pool") or resolved.get("packageId")
+
+
+def quota_member_pools(repo: Path, preset_catalog: dict[str, dict[str, Any]]) -> dict[str, str | None]:
+    """Every seat member's envelope pool, read from both current records."""
+    members: dict[str, str | None] = {}
+    quota_catalogs: dict[str, Any] = {}
+    rows: list[Any] = []
+    host_path = repo / ".kaola" / "heartbeat-prompt.json"
+    if host_path.is_file():
+        try:
+            doc = require_current(read_state_file(host_path)[0], host_path)
+            rows.extend((doc["state"].get("authorization") or {}).get("grants") or [])
+        except (StateRefusal, OSError, ValueError):
+            pass
+    delegator_path = repo / ".kaola" / "delegator-heartbeat.json"
+    if delegator_path.is_file():
+        try:
+            doc = load_object(delegator_path)
+            auth = doc.get("authorization") if isinstance(doc.get("authorization"), dict) else {}
+            for collection in ("elite_grants", "expert_task_grants", "worker_grants"):
+                rows.extend(auth.get(collection) or [])
+        except (OSError, ValueError):
+            pass
+    for row in rows:
+        for preset in _quota_row_ids(row):
+            if preset not in members:
+                members[preset] = quota_member_pool(preset, preset_catalog, quota_catalogs)
+    return members
+
+
+def quota_classify_envelope(usage: Any) -> tuple[str, bool] | None:
+    """One quota-packages usage envelope -> (class, vendor_time), or None.
+
+    exhausted: status ok with a window ``exceeded is True`` or a numeric
+    remaining_fraction <= 0; vendor_time when that window names reset_at.
+    quota-ok: status ok with no exhausted window. account: login_required.
+    Anything else is unknown and ignored.
+    """
+    if not isinstance(usage, dict):
+        return None
+    status = usage.get("status")
+    if status == "login_required":
+        return ("account", False)
+    if status != "ok":
+        return None
+    windows = usage.get("windows")
+    exhausted: dict[str, Any] | None = None
+    if isinstance(windows, dict):
+        for window in windows.values():
+            if not isinstance(window, dict):
+                continue
+            remaining = window.get("remaining_fraction")
+            if window.get("exceeded") is True or (
+                    isinstance(remaining, (int, float)) and not isinstance(remaining, bool)
+                    and remaining <= 0):
+                exhausted = window
+                break
+    if exhausted is None:
+        return ("quota-ok", False)
+    return ("exhausted", exhausted.get("reset_at") is not None)
+
+
+def quota_usage_facts(paths: Any, repo: Path) -> list[dict[str, Any]]:
+    """``--usage`` files -> envelope facts for the members their pool covers.
+
+    A file may be the full ``kaola-quota.py --probe`` stdout (its ``usage``) or
+    a bare usage object. Envelope pool = ``pool`` or ``packageId``; an unmapped
+    member never matches. The feedback time is the consuming apply's now.
+    """
+    if not paths:
+        return []
+    envelopes: list[tuple[dict[str, Any], str]] = []
+    for raw in paths:
+        try:
+            doc = load_object(Path(raw))
+        except (OSError, ValueError):
+            continue
+        usage = doc.get("usage") if isinstance(doc.get("usage"), dict) else doc
+        if isinstance(usage, dict):
+            envelopes.append((usage, str(raw)))
+    if not envelopes:
+        return []
+    try:
+        preset_catalog = catalog_from_files(platform_paths(Path(__file__), None))
+    except (OSError, ValueError):
+        preset_catalog = {}
+    pools = quota_member_pools(repo, preset_catalog)
+    facts: list[dict[str, Any]] = []
+    for usage, locator in envelopes:
+        classified = quota_classify_envelope(usage)
+        if classified is None:
+            continue
+        kind, vendor_time = classified
+        pool = usage.get("pool") or usage.get("packageId")
+        if not isinstance(pool, str) or not pool:
+            continue
+        for member, member_pool in pools.items():
+            if member_pool is not None and member_pool == pool:
+                facts.append({"kind": kind, "member": member, "evidence": locator,
+                              "vendor_time": vendor_time})
+    return facts
+
+
+def quota_collect_facts(before_items: dict[str, dict[str, Any]], after_items: list[Any],
+                        index_path: str) -> list[dict[str, Any]]:
+    """Index transitions THIS collect made (Issue #419 S1 open and reply).
+
+    An item newly ``failed`` with ``turn_outcome == "turn_failed"`` opens the
+    clock; an item newly ``returned`` with ``reply_chars`` a positive int is a
+    reply. Host/Sideagent-role items never count; a preset with no grant row
+    matches no row downstream.
+    """
+    facts: list[dict[str, Any]] = []
+    exempt = {"host", *SIDEAGENT_ROLES}
+    for item in after_items:
+        if not isinstance(item, dict):
+            continue
+        item_id = item.get("item_id")
+        prior = before_items.get(item_id) if isinstance(item_id, str) else None
+        prior = prior if isinstance(prior, dict) else {}
+        role = item.get("session_role") or prior.get("session_role")
+        if role in exempt:
+            continue
+        member = item.get("preset") if isinstance(item.get("preset"), str) else None
+        if member is None:
+            continue
+        locator = f"{index_path}#{item_id}"
+        if (item.get("status") == "failed" and prior.get("status") != "failed"
+                and item.get("turn_outcome") == "turn_failed"):
+            facts.append({"kind": "no-reply", "member": member, "evidence": locator})
+        elif (item.get("status") == "returned" and prior.get("status") != "returned"
+                and isinstance((item.get("result") or {}).get("reply_chars"), int)
+                and not isinstance((item.get("result") or {}).get("reply_chars"), bool)
+                and item["result"]["reply_chars"] > 0):
+            facts.append({"kind": "reply", "member": member, "evidence": locator})
+    return facts
 
 
 def availability_map(doc: dict[str, Any] | None) -> dict[str, str]:
@@ -1194,6 +1770,10 @@ def flatten_delegator_grants(source: dict[str, Any]) -> dict[str, Any]:
             row.setdefault("state", "granted")
             if "switch_authorization" in grant:
                 row["model_switch"] = grant["switch_authorization"]
+            # Issue #419: the machine clock/hold stays verbatim on its row.
+            for mark in RECORD.QUOTA_MARK_MEMBERS:
+                if isinstance(grant.get(mark), dict):
+                    row[mark] = dict(grant[mark])
             auth["grants"].append(row)
     return auth
 
@@ -2544,6 +3124,16 @@ def apply_worker_grants(grants: list[dict[str, Any]], ceiling: dict[str, Any]) -
 def command_execute(args: argparse.Namespace) -> int:
     try:
         plan = load_object(Path(args.plan))
+        # Issue #419: a due seat revoke lands before admission reads the
+        # authorization. A dry run evaluates it in memory only and withholds
+        # the due presets, reporting quota_marks_due without writing.
+        quota_marks: list[dict[str, Any]] = []
+        quota_due: set[str] = set()
+        plan_repo = plan.get("repo")
+        if isinstance(plan_repo, str) and Path(plan_repo).is_absolute():
+            applied = quota_rule_apply(Path(plan_repo).resolve(), write=not args.dry_run)
+            quota_marks = applied["marks"]
+            quota_due = set(applied["revoked_presets"])
         auth_doc = load_object(Path(args.authorization))
         auth = authorization_object(auth_doc)
         binding = bound_sideagent(auth_doc)
@@ -2654,6 +3244,12 @@ def command_execute(args: argparse.Namespace) -> int:
         by_candidate = {item["id"]: item for item in candidates}
         withheld_reason = {item["id"]: item["reason"] for item in withheld}
 
+    for preset in quota_due:
+        # Issue #419: a row the quota rule just revoked admits nothing. On a
+        # dry run the row is still stored but the seat is withheld as due.
+        by_candidate.pop(preset, None)
+        withheld_reason[preset] = "quota-revoked"
+
     prepared: list[dict[str, Any]] = []
     blocked: list[dict[str, Any]] = []
     for item in items:
@@ -2688,7 +3284,9 @@ def command_execute(args: argparse.Namespace) -> int:
         if candidate is None:
             reason = "not-authorized"
             auth_grant = grant_index(grants).get(preset)
-            if withheld_reason.get(preset) in CEILING_REASONS:
+            if withheld_reason.get(preset) == "quota-revoked":
+                reason = "quota-revoked"
+            elif withheld_reason.get(preset) in CEILING_REASONS:
                 reason = withheld_reason[preset]
             elif available.get(preset) == "absent":
                 reason = "absent"
@@ -3125,6 +3723,8 @@ def command_execute(args: argparse.Namespace) -> int:
                     f"task {row['task_id']} is not a current task in {args.state}")
         if not args.dry_run:
             index["task_links"] = link_dispatch_to_tasks(Path(args.state), index, args.index)
+    if args.dry_run:
+        index["quota_marks_due"] = quota_marks
     return finish_index(index, args.index, write=not args.dry_run, base=base)
 
 
@@ -4421,7 +5021,25 @@ def command_collect(args: argparse.Namespace) -> int:
                 publish()
     index["items"] = rows()
     index["phase"] = "collection"
-    return finish_index(index, args.index, base=base)
+    # Issue #419: the transitions this collect made are seat quota facts; the
+    # machine marks stay out of the index file and ride the receipt only.
+    quota_facts = quota_collect_facts(
+        {item.get("item_id"): item for item in own if isinstance(item, dict)},
+        index["items"], str(args.index))
+    quota_facts += quota_usage_facts(getattr(args, "usage", None), Path(repo))
+    try:
+        applied = quota_rule_apply(repo, facts=quota_facts)
+        quota_marks = applied["marks"]
+        quota_refusals = applied["refusals"]
+    except Exception as exc:
+        quota_marks, quota_refusals = [], [str(exc)]
+    finish_index(index, args.index, emit_stdout=False, base=base)
+    payload = dict(index)
+    payload["index_path"] = str(args.index)
+    payload["quota_marks"] = quota_marks
+    if quota_refusals:
+        payload["quota_refusals"] = quota_refusals
+    return emit(payload)
 
 
 def read_turn(item: dict[str, Any], repo: str, skills_root: Path, index_path: str) -> int:
@@ -5670,7 +6288,12 @@ def carrier_replaced_by_older(carrier: dict[str, Any], path: Path) -> bool:
 
 def check_writer(args: argparse.Namespace, state: dict[str, Any]) -> dict[str, str] | None:
     if args.writer not in WRITER_ROLES:
-        raise StateRefusal("writer-refused", f"writer {args.writer!r} may not change lifecycle state")
+        # Issue #419: the quota rule's only record write is its revoke alert.
+        quota_alert = (args.writer == "quota-rule" and getattr(args, "kind", None) == "alerts"
+                       and isinstance(getattr(args, "id", None), str)
+                       and args.id.startswith("quota-revoked-"))
+        if not quota_alert:
+            raise StateRefusal("writer-refused", f"writer {args.writer!r} may not change lifecycle state")
     if not isinstance(args.source, str) or not args.source.strip():
         raise StateRefusal("source-required", "every state change names its source")
     caller = caller_dispatcher()
@@ -6676,6 +7299,14 @@ def apply_section_update(args: argparse.Namespace, doc: dict[str, Any], patch: A
                     merged_section = current_authorization(merged_section)
                     if had_revoked:
                         args._authorization_removed.append("authorization.revoked -> current grants/exclusions")
+            # Issue #419: a patch cannot forge or strip the machine quota
+            # clock/hold; the same-identity row carries them forward.
+            guarded, guard_blockers = RECORD.quota_member_guard(
+                (state.get("authorization") or {}).get("grants"),
+                merged_section.get("grants"), "authorization.grants")
+            if isinstance(merged_section.get("grants"), list):
+                merged_section["grants"] = guarded
+            blocked += guard_blockers
             blocked += RECORD.authorization_blockers(merged_section)
         elif section == "recovery":
             blocked = []
@@ -8157,6 +8788,11 @@ def command_state_init(args: argparse.Namespace) -> int:
         if not isinstance(project, dict) or not isinstance(authorization, dict):
             return fail("invalid-input", "project and authorization are JSON objects")
         blocked = RECORD.project_blockers(project) + RECORD.authorization_blockers(authorization)
+        # Issue #419: a new file starts clean; only the quota rule writes
+        # quota_stall/quota_hold, so no init row may carry them.
+        _guarded, init_guard = RECORD.quota_member_guard(
+            [], authorization.get("grants"), "authorization.grants")
+        blocked += init_guard
         if blocked:
             first = blocked[0]
             return emit({"result": "refused", "reason": "invalid-input", **first}, 2)
@@ -8875,6 +9511,10 @@ def state_problems(doc: dict[str, Any], path: Path, index: dict[str, Any] | None
 def command_state_check(args: argparse.Namespace) -> int:
     path = Path(args.file)
     try:
+        repo = Path(args.repo).resolve() if args.repo else repo_of_state_file(path)
+        # Issue #419: this beat applies due quota marks first; --usage feeds
+        # envelope facts. A write makes the check not read-only.
+        applied = quota_rule_apply(repo, facts=quota_usage_facts(getattr(args, "usage", None), repo))
         doc = require_current(read_state_file(path)[0], path)
         index = load_object(Path(args.index)) if args.index else None
         rows = live_rows_of(args.live)
@@ -8882,10 +9522,11 @@ def command_state_check(args: argparse.Namespace) -> int:
         return emit(refusal.payload, 2)
     except ValueError as exc:
         return fail("invalid-input", str(exc))
-    repo = Path(args.repo).resolve() if args.repo else repo_of_state_file(path)
     problems, diagnosis = state_problems(doc, path, index, rows, repo, args)
     return emit({"result": "checked", "revision": doc.get("revision"), "ok": not problems,
-                 "problems": problems, "diagnosis": diagnosis, "read_only": True,
+                 "problems": problems, "diagnosis": diagnosis, "read_only": not applied["writes"],
+                 "quota_marks": applied["marks"],
+                 **({"quota_refusals": applied["refusals"]} if applied["refusals"] else {}),
                  "unchecked": [name for name, value in (("index", index), ("live", rows)) if value is None]})
 
 
@@ -10725,6 +11366,8 @@ def build_parser() -> argparse.ArgumentParser:
     collect.add_argument("--index", required=True, help="JSON file path")
     collect.add_argument("--skills-root", required=True)
     collect.add_argument("--item", help="read one exact turn without rewriting the index")
+    collect.add_argument("--usage", action="append", default=[],
+                       help="quota-packages usage JSON (probe stdout or a bare usage object); repeatable")
     collect.set_defaults(func=command_collect)
 
     snapshot = commands.add_parser("snapshot")
@@ -10878,6 +11521,8 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("--index", help="JSON file path")
     check.add_argument("--live", help="JSON file path")
     check.add_argument("--repo")
+    check.add_argument("--usage", action="append", default=[],
+                       help="quota-packages usage JSON (probe stdout or a bare usage object); repeatable")
     check.set_defaults(func=command_state_check)
 
     timer = actions.add_parser("timer")
@@ -10940,14 +11585,19 @@ def _delegator_read(path: Path) -> dict[str, Any]:
 
 
 def command_delegator_view(args: argparse.Namespace) -> int:
+    path = Path(args.file)
+    repo = Path(args.repo).resolve() if getattr(args, "repo", None) else repo_of_state_file(path)
+    # Issue #419: this beat applies due quota marks before the view is read.
+    applied = quota_rule_apply(repo)
     try:
-        doc = _delegator_read(Path(args.file))
+        doc = _delegator_read(path)
     except (OSError, ValueError) as exc:
         return fail("invalid-input", str(exc))
     view = RECORD.delegator_file_view(doc)
+    view["quota_marks"] = applied["marks"]
+    if applied["refusals"]:
+        view["quota_refusals"] = applied["refusals"]
     delegator_view_diagnosis(args, doc, view)
-    path = Path(args.file)
-    repo = Path(args.repo).resolve() if getattr(args, "repo", None) else repo_of_state_file(path)
     try:
         host_path = repo / ".kaola" / "heartbeat-prompt.json"
         host = require_current(read_state_file(host_path)[0], host_path)
@@ -11165,6 +11815,21 @@ def command_delegator_update(args: argparse.Namespace) -> int:
             merged.pop("retired", None)
             if isinstance(merged.get("authorization"), dict):
                 merged["authorization"].pop("retired_pool_grants", None)
+            # Issue #419: a patch cannot forge or strip the machine quota
+            # clock/hold; same-identity rows carry the members forward.
+            old_auth = doc.get("authorization") if isinstance(doc.get("authorization"), dict) else {}
+            if isinstance(merged.get("authorization"), dict):
+                guard_blockers: list[dict[str, str]] = []
+                for collection in ("elite_grants", "expert_task_grants", "worker_grants"):
+                    guarded, found = RECORD.quota_member_guard(
+                        old_auth.get(collection), merged["authorization"].get(collection),
+                        f"authorization.{collection}")
+                    if isinstance(merged["authorization"].get(collection), list):
+                        merged["authorization"][collection] = guarded
+                    guard_blockers += found
+                if guard_blockers:
+                    return emit({"result": "refused", "reason": "invalid-input",
+                                 "blockers": guard_blockers, **guard_blockers[0]}, 2)
             merged["schema"] = RECORD.DELEGATOR_SCHEMA
             merged["revision"] = actual + 1
             merged["updated_at"] = observed_at()

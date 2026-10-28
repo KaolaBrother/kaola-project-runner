@@ -1,5 +1,5 @@
 {
-  "build": "c17901040399",
+  "build": "126fb0936796",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "16c500471d627178b76c94117fbf6f20471101b2519f8a205c66f7cf17b5ca8d",
@@ -15,7 +15,7 @@
     "references/profile-catalog.md": "732e4ac296441e57772112759ed8f04d596f408e2e9d5c90b2eca4624ad4f7a7",
     "references/public-research.md": "86e2ad1cd11840fd58900cde429e9b45457f149b67fa91a32e5fe6429a58407c",
     "references/qa-evidence.md": "bf9c3beff60f4407d0bf951ce7a67da4450ac6cca96062a960cd009c38daae7a",
-    "references/quota-packages.md": "57f207ac3ca3814929befdf9b824a60598be8b23f88bcc20508d451cf31b5b57",
+    "references/quota-packages.md": "d0c4c2affa3c62fa807c8c7dd92157de4cb63ff7eae9660cc3eee985af61e3be",
     "references/sideagent-node.md": "a50db2037719a456f8e5e098025c6d2e4941e9b778b862cb0ee0ff07e3cd2e58",
     "references/task-failure.md": "f60fe47ce2ce0ddd7d17594c4b57d8455342aa44d0cc3a9f4256129861307668",
     "references/worker-profiles.md": "daee82665fb9c35e75f7fbb5dd22f1dfe39a6d160bbe70b78748f99032e1b39f",
@@ -25,8 +25,8 @@
     "scripts/kaola-acp-paths.py": "124bd8fb908857bb2c7df8bc33797f69df6ef513e859f365c9270724d4eb5402",
     "scripts/kaola-compact-recovery.py": "c45662a4297047bd860a46157e950b4aac460b3e9df1a889abe99ca687e90f27",
     "scripts/kaola-cwd-guard.py": "975be54b05f4aa8e08f18f1eb47da2c9999774639a7df092fe67365312e8c8af",
-    "scripts/kaola-dispatch.py": "49c2bf07aae472a5e4eda23e911aec93147044d5f66c8d730f09db7e6889e3b1",
-    "scripts/kaola-record-contract.py": "784c4ed957dc65b6738dfc9a90ea26f66bb9e03c95fbb887ba3d9087b8c2b311",
+    "scripts/kaola-dispatch.py": "df3c4e94e66a1fdde53b8a972d024d935f3bf97c4e1b0d75567d52869680337f",
+    "scripts/kaola-record-contract.py": "c02653eec303105f2e86ed0879987cc680438f58abaea11d27a6bfb30984dda5",
     "scripts/kaola-recovery-routes.py": "c7467093832ee0be246004ebb9ca83cbe0c837ff45ffc23a10ec76819c1f3395",
     "scripts/kaola-session-names.py": "772f2d729e61763851b78ab9d440c664df225bc4f08dc71f8ba0102ead411316"
   },

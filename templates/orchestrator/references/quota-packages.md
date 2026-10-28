@@ -25,3 +25,11 @@ Never log in: no attempt, retry, delegation, cycling, credential refresh or repl
 An explicit `login expired`, `authentication required`, revoked or invalid credentials, `account disabled`, or an equivalent account-access refusal takes this branch, including an explicit refusal with no class remedy. A timeout, 429, network error, or uncertain message does not: keep the unknown and report a blocking access failure if the seat cannot continue. The class branches above never apply, and there is no automatic substitution.
 
 Pause the seat; this is not a revocation. Preserve the task, locator, output, and identity, give it no new work, exact-stop it once the turn settles, and mark it paused. Report the runtime, the exact message, and what was preserved. Ask for no secrets. No other seat takes that task before the user directs. Resume only on the user's direction, from existing records, with no duplicate claim. Never log in.
+
+**Tool-applied stale-quota clock (#419).** The seat stale-quota rule is applied by the
+tool, never by the Host: `quota_stall`/`quota_hold` members appear on grant rows only
+through machine marks — the Host never hand-writes them — and a row the rule revokes
+returns only through the Owner's existing grant route (no auto-restore). Feed the rule
+vendor evidence by passing `kaola-quota.py --probe` stdout (or a bare `usage` object)
+through `collect`/`state check --usage`; read `docs/api.md` "Seat stale-quota rule" for
+the exact verdicts.

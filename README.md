@@ -561,6 +561,11 @@ another already-authorized Elite, and only you reauthorize it; a **Worker** task
 another suitable Worker preset without cycling seats of an exhausted shared pool. With no
 suitable authorized replacement, the task is reported and you are asked.
 
+Separately, the tool-applied stale-quota rule (#419) auto-revokes an Elite/Expert/Worker
+grant row that produces no quota/credit feedback sufficient to reply within 5 hours,
+or whose typed feedback hold expires — exactly like an owner revocation, with no
+auto-restore; only you re-add it through the existing grant route.
+
 ### Login or account access failure
 
 An explicit `login expired`, `authentication required`, revoked or invalid credentials,

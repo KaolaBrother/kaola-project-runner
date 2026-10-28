@@ -2280,6 +2280,114 @@ returns `ok`. The failure vocabulary extends the Command Code one
 `login_required` for a 401/403 rejection. Neither probe spawns a
 CLI binary, starts a session or seat, or writes a usage record.
 
+## Seat stale-quota rule (#419)
+
+Owner HARD decision `owner-seat-stale-quota-revoke-5h-20261028` (mirrored in KPM #892).
+A seat whose preset produces no quota/credit feedback sufficient to reply inside
+`QUOTA_STALL_WINDOW_S` (the owner's fixed 5h) is auto-revoked in
+durable authorization — the grant row is removed exactly like an owner
+revocation, with no tombstone. There is no auto-restore; the Owner re-adds the
+row only through the existing grant route. Feedback inside the window instead
+attaches a typed `quota_hold` whose expiry is the same revoke. The rule applies
+to Elite/Expert/Worker grant rows; Host/Sideagent/Delegator are never seats, and
+no path creates or widens a grant.
+
+### Row members
+
+Two optional machine-written members on one grant row (never both), in both
+`state.authorization.grants[]` (heartbeat-prompt.json) and
+`authorization.{elite_grants,expert_task_grants,worker_grants}[]`
+(delegator-heartbeat.json). Schemas stay `kaola-heartbeat-prompt/2` and
+`kaola-delegator-heartbeat/1`; the members ride inside the closed grant shapes.
+
+- `quota_stall` — the 5h clock. Closed keys `{stall_at, kind, member, evidence}`;
+  `kind` is `no-reply` or `limit`; `member` is a preset id the row grants;
+  `evidence` is 1-3 non-empty locators; `stall_at` is UTC `YYYY-MM-DDTHH:MM:SSZ`.
+- `quota_hold` — the feedback hold. Closed keys
+  `{until, stall_at, feedback_at, feedback, member, rule, evidence}`; `feedback`
+  is `vendor-time`, `reply`, or `quota-ok`; `rule` is exactly the rule id;
+  `until = feedback_at + QUOTA_HOLD_S` (V-1 default A: 5h, an owner value choice).
+
+Validators (`authorization_blockers`, `delegator_authorization_blockers`,
+`worker_grant_blockers`, and both migrate paths) accept exactly these shapes and
+refuse anything else. Agent patches that touch grant rows carry the members
+forward on the same-identity row, are refused when they supply a different value
+or add a row carrying either member, and remove them only by removing the whole
+row (`RECORD.quota_member_guard`).
+
+### Facts
+
+Facts are mechanical only; no text classifier.
+
+- **S1 open (`no-reply`)**: an index item THIS collect transitions to
+  `status: failed` with `turn_outcome == "turn_failed"` (the ACP prompt-error
+  class — not `turn_canceled`, not `process_exited`, not a runner
+  `result: refused`, not unknown). Member = `item.preset`; worker items only.
+- **Reply**: an index item THIS collect transitions to `status: returned` with
+  `result.reply_chars` an integer > 0.
+- **Usage envelopes**: repeatable `--usage PATH` on `collect` and `state check`.
+  A file may be full `kaola-quota.py --probe` stdout (its `usage`) or a bare
+  usage object. Envelope pool = `pool` or `packageId`; member pool = the member
+  preset's catalog `model_id` resolved through `load_catalog(platform)` +
+  `resolve_model` (`pool` or `packageId`); an unmapped preset never matches an
+  envelope. Classification: `status "ok"` with some window `exceeded is True`
+  or a numeric `remaining_fraction <= 0` is *exhausted* ("with vendor time"
+  when that window has a non-null `reset_at`); `status "ok"` with no exhausted
+  window is *quota-ok*; `status "login_required"` is *account*; anything else is
+  ignored. Envelope feedback time is the consuming apply's `now`.
+
+### Verdicts (`quota_verdicts`, pure; `now` is a parameter)
+
+Time verdicts first (half-open: feedback counts only if
+`feedback_at < stall_at + QUOTA_WINDOW_S`):
+
+- `quota_stall` and `now >= stall_at + QUOTA_WINDOW_S` → REVOKE, cause
+  `no-quota-feedback`.
+- `quota_hold` and `now >= until` → REVOKE, cause `quota-hold-expired`.
+
+Then facts, on surviving rows only:
+
+- no stall/hold + S1 (and row `state == "granted"`) → open `quota_stall`.
+  Exhaustion on a row that never stalled opens nothing.
+- stall `no-reply` + reply or quota-ok → CLOSE (stall removed; not a quota
+  matter).
+- stall `no-reply` + exhausted with vendor time → HOLD `vendor-time`.
+- stall `no-reply` + exhausted without vendor time → `kind` becomes `limit`
+  (`stall_at` unchanged).
+- stall `limit` + reply → HOLD `reply`; + quota-ok → HOLD `quota-ok`;
+  + exhausted with vendor time → HOLD `vendor-time`.
+- any stall + account envelope → CLOSE (V-2 default A: an account refusal keeps
+  no clock; the existing pause route applies).
+- row `state != "granted"` → its stall is CLOSED; a hold stays and expires.
+- a `quota_hold` is never cleared, extended, or moved by new facts.
+- a revoked row is absent: later facts write nothing.
+
+### Write path (`quota_rule_apply`)
+
+One reduce-only, idempotent apply loads both records under `<repo>/.kaola/`
+(a missing record is skipped), evaluates each record's own rows plus the shared
+facts, and writes each changed record through the existing locked helpers
+(locked write, revision bump, body regeneration; `section_sources.authorization`
+names the rule id, cause, and member with writer `quota-rule`). Before writing
+it asserts the only diffs are whole-row removals and `quota_stall`/`quota_hold`
+member changes; anything else means no write plus a refusal in the receipt. A
+conflict skips that record for the beat. Each REVOKE also writes one Host alert
+`quota-revoked-<preset>` (level `warn`, writer `quota-rule` — the only
+`quota-revoked-` record that writer may touch) whose summary is the removed row
+verbatim plus cause, at, and rule id; the existing `state retire` route retires
+it. Open/close/hold write no alert. Hook points: `collect` (transition facts +
+`--usage`, receipt `quota_marks`, never persisted into the index), `execute`
+(non-dry-run applies before admission; `--dry-run` writes nothing, withholds
+due rows, and reports `quota_marks_due`), `state check` (time verdicts +
+`--usage`; receipt `quota_marks`, `read_only` false only when it wrote), and
+`delegator view` (time verdicts; `quota_marks`). Each `quota_marks` entry is
+`{record, action, member, row_key, cause?, stall_at?, until?, feedback?,
+evidence}` with action `open|limit|close|hold|revoke` (`limit` is the
+`no-reply` → `limit` kind change).
+
+Residual: a running turn that never ends opens no clock; there is no
+holder-side limit classifier, and error text is not classified.
+
 ## Tool cwd watch (#369, #373)
 
 The holder records its own agent's tool-shell working directory before a removal can take it,
