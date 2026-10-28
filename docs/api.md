@@ -816,6 +816,16 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   itself a node input. When no eligible preset exists or the runner cannot be built,
   `sideagent` stays unset and `state check` reports `sideagent-default-unbound` with the
   `state ensure-sideagent` command. The next Host boundary retries.
+  A binding whose `state` is `failed` rebinds with `state ensure-sideagent
+  --recover-failed --live L --evidence E` (Host caller only): the `--live` rows
+  must show the old node gone, no `holds/*` or `decisions/*` row may name the
+  old session or the sideagent, and recovery runs no sweep and does not raise
+  `host_revision`. `state check` reports `sideagent-failed` with that command.
+  `state retire --index` also accepts this project's `kpm.dispatch-index/1.x`
+  (KPM items addressed `<task_id>/<id>`; the mirror never writes it), and
+  `state retire --stop-evidence` settles a task-named seat absent from `--live`
+  from four verified durable kinds: `index-stop-receipt`, `archived-ledger`,
+  `direct-dispatch`, `sweep-purge` (Host writer, accepted-done task only).
 - With node mode, worker events are not node inputs: they reach the Host at its next idle
   boundary as without a binding. A Host holder advertising `sideagent-node/1` starts one fresh
   node per batch of Host business changes past `handled_host_revision`, selected only while the

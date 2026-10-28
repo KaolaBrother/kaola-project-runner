@@ -2192,6 +2192,14 @@ def evidence(receipt: dict[str, Any] | None, code: int | None, note: str = "") -
         body["turn_active"] = active
         body["turn_outcome"] = turn_outcome
         body["stop_reason"] = stop
+    if isinstance(receipt, dict) and "stopped" in receipt:
+        # Issue #421: an exact-stop receipt is durable stop evidence. Keep its
+        # identity and the observation time so `state retire` can compare the
+        # recorded stop to boot time.
+        body["session"] = receipt.get("session")
+        body["stopped"] = receipt.get("stopped")
+        body["residual_pids"] = receipt.get("residual_pids")
+        body["observed_at"] = _quota_time(datetime.now(timezone.utc))
     if note:
         body["note"] = note
     return body
@@ -6735,11 +6743,12 @@ def closed_issue_items(args: argparse.Namespace, number: int) -> tuple[list[dict
             f"the index at {index_path} {mismatch}; a closed issue is proven only from this "
             "project's dispatch index",
             recovery="pass --index pointing at this project's kaola-dispatch-index/1")
+    schema = index.get("schema")
+    kpm = isinstance(schema, str) and RECORD.KPM_INDEX_SCHEMA_RE.fullmatch(schema)
+    closed = RECORD.KPM_CLOSED_STATUS if kpm else CLOSED_COVERAGE
     found = []
-    for item in index.get("items") or []:
-        if not isinstance(item, dict):
-            continue
-        if normalize_issue(item.get("issue")) != number or item.get("status") not in CLOSED_COVERAGE:
+    for item in index_rows(index):
+        if normalize_issue(item.get("issue")) != number or item.get("status") not in closed:
             continue
         found.append(item)
     return found, None
@@ -7409,19 +7418,73 @@ def open_seats(seats: dict[str, list[str]], rows: list[dict[str, Any]]) -> list[
 def index_identity_problem(index: dict[str, Any], repo: str) -> str | None:
     """Issue #286 (G5): retire and its index mirror read only this project's
     dispatch index, identified the way every index execute and collect write
-    identifies itself: kaola-dispatch-index/1 for this project's repo. A
-    missing, wrong, or foreign identity proves no closure."""
+    identifies itself: kaola-dispatch-index/1 for this project's repo. Issue
+    #421: a KPM dispatch index (kpm.dispatch-index/1.x) identifies itself by
+    project.canonical_root instead of a top-level repo. A missing, wrong, or
+    foreign identity proves no closure."""
     declared = index.get("schema")
+    if isinstance(declared, str) and RECORD.KPM_INDEX_SCHEMA_RE.fullmatch(declared):
+        project = index.get("project") if isinstance(index.get("project"), dict) else {}
+        seen = project.get("canonical_root")
+        if not isinstance(seen, str) or not seen:
+            return "declares no project.canonical_root, not this project's index"
+        if not same_repo(seen, repo):
+            return f"declares canonical_root {seen!r}, not this project"
+        return None
     if declared != "kaola-dispatch-index/1":
         if declared is None:
-            return "declares no schema, not kaola-dispatch-index/1"
-        return f"declares schema {declared!r}, not kaola-dispatch-index/1"
+            return "declares no schema, not kaola-dispatch-index/1 or kpm.dispatch-index/1.x"
+        return (f"declares schema {declared!r}, not kaola-dispatch-index/1 or "
+                "kpm.dispatch-index/1.x")
     seen = index.get("repo")
     if not isinstance(seen, str) or not seen:
         return "declares no repo, not this project's index"
     if not same_repo(seen, repo):
         return f"declares repo {seen!r}, not this project"
     return None
+
+
+def index_rows(index: dict[str, Any]) -> list[dict[str, Any]]:
+    """Item rows of an accepted dispatch index, normalized for retire.
+
+    Issue #421: KPR rows pass through as-is. A KPM plan item maps to one row
+    with the same keys retire reads; item ids are unique only per plan, so a
+    KPM row is addressed `<task_id>/<id>`, or by bare `<id>` only when unique
+    across all plans. KPM rows carry no collect evidence and never reach the
+    KPR reconciliation routes."""
+    schema = index.get("schema")
+    if not (isinstance(schema, str) and RECORD.KPM_INDEX_SCHEMA_RE.fullmatch(schema)):
+        return [row for row in index.get("items") or [] if isinstance(row, dict)]
+    root = (index.get("project") or {}).get("canonical_root")
+    rows: list[dict[str, Any]] = []
+    for plan in index.get("plans") or []:
+        if not isinstance(plan, dict):
+            continue
+        task_id = plan.get("task_id")
+        for item in plan.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            execution = item.get("execution") if isinstance(item.get("execution"), dict) else {}
+            start_input = (execution.get("start_input")
+                           if isinstance(execution.get("start_input"), dict) else {})
+            preset = item.get("preset")
+            if not isinstance(preset, str) or not preset:
+                preset = start_input.get("preset")
+            preset = preset if isinstance(preset, str) and preset else None
+            rows.append({
+                "item_id": item.get("id"),
+                "task_id": task_id,
+                "status": item.get("state"),
+                "session": start_input.get("session_name"),
+                "holder_instance_id": execution.get("holder"),
+                "platform": preset.split("/", 1)[0] if preset and "/" in preset else preset,
+                "preset": preset,
+                "repo": root,
+                "issue": item.get("issue"),
+                "evidence": {},
+                "index_schema": schema,
+            })
+    return rows
 
 
 # Issue #354: diagnosis only. A row larger than this is named as a hint.
@@ -7999,6 +8062,25 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
     refs = task.get("dispatch")
     refs = [refs] if isinstance(refs, str) else [ref for ref in refs or [] if isinstance(ref, str)]
     seats = task_seats(task)
+    # Issue #421: each --stop-evidence value is a closed-shape JSON object
+    # naming a seat of this task; free text, an unknown kind, a missing or
+    # extra key, or a foreign session is invalid input before anything writes.
+    entries: list[dict[str, Any]] = []
+    for raw in getattr(args, "stop_evidence", None) or []:
+        try:
+            entry = json.loads(raw)
+        except ValueError as exc:
+            raise StateRefusal("invalid-input", f"--stop-evidence is not JSON: {exc}") from exc
+        problem = RECORD.stop_evidence_problem(entry)
+        if problem:
+            raise StateRefusal("invalid-input", f"--stop-evidence {problem}")
+        entries.append(entry)
+    for entry in entries:
+        if entry["session"] not in seats:
+            raise StateRefusal(
+                "invalid-input",
+                f"--stop-evidence session {entry['session']} names no seat of this task")
+    args._stop_evidence_input = entries
     if not refs and not seats:
         return []
     problems: list[str] = []
@@ -8016,6 +8098,7 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
         rows: dict[str, dict[str, Any]] = {}
         row_index: dict[str, str] = {}
         ambiguous: set[str] = set()
+        bare_ambiguous: dict[str, tuple[str, list[str]]] = {}
         for index_path in indices:
             index = load_object(Path(index_path))
             mismatch = index_identity_problem(index, repo)
@@ -8026,21 +8109,44 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
                     "project's dispatch index",
                     recovery="pass --index pointing at this project's kaola-dispatch-index/1, the "
                              "file execute and collect write here")
-            for index_row in index.get("items") or []:
-                if not isinstance(index_row, dict):
-                    continue
+            schema = index.get("schema")
+            kpm = (isinstance(schema, str)
+                   and RECORD.KPM_INDEX_SCHEMA_RE.fullmatch(schema) is not None)
+            bare: dict[str, list[str]] = {}
+            for index_row in index_rows(index):
                 item_id = index_row.get("item_id")
                 if not isinstance(item_id, str):
                     continue
-                if item_id in row_index and row_index[item_id] != index_path:
+                if kpm:
+                    # Issue #421: a KPM item id is unique only per plan; the
+                    # full ref is <task_id>/<id>, the bare id only when unique.
+                    key = f"{index_row.get('task_id')}/{item_id}"
+                    bare.setdefault(item_id, []).append(key)
+                else:
+                    key = item_id
+                if key in row_index and row_index[key] != index_path:
                     # Issue #290: a ref in two supplied indices is not in
                     # exactly one, so the pair proves no single closure.
-                    ambiguous.add(item_id)
-                row_index[item_id] = index_path
-                rows[item_id] = index_row
+                    ambiguous.add(key)
+                row_index[key] = index_path
+                rows[key] = index_row
+            if kpm:
+                for item_id, keys in bare.items():
+                    if len(keys) == 1:
+                        if item_id in row_index and row_index[item_id] != index_path:
+                            ambiguous.add(item_id)
+                        row_index[item_id] = index_path
+                        rows[item_id] = rows[keys[0]]
+                    else:
+                        bare_ambiguous[item_id] = (index_path, keys)
         for ref in refs:
             row = rows.get(ref)
             if row is None:
+                if ref in bare_ambiguous:
+                    index_path, keys = bare_ambiguous[ref]
+                    problems.append(f"{ref} is ambiguous in {index_path}; name it "
+                                    + " or ".join(sorted(keys)))
+                    continue
                 problems.append(f"{ref} is not in the index")
                 continue
             if ref in ambiguous:
@@ -8048,6 +8154,14 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
                                 "one --index file to show it closed")
                 continue
             status = row.get("status")
+            if row.get("index_schema") is not None:
+                # Issue #421: a KPM row closes on its own closed set; no KPR
+                # reconciliation route applies (its rows carry no collect
+                # evidence), so every other state stays open as-is.
+                if status in RECORD.KPM_CLOSED_STATUS:
+                    continue
+                problems.append(f"{ref} is {status}")
+                continue
             if status in CLOSED_COVERAGE:
                 continue
             if status not in ("in-flight", "unknown"):
@@ -8119,7 +8233,276 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
         for row in live:
             if row.get("state") != "stopped" and row.get("session") in sessions:
                 problems.append(f"{row.get('session')} is still live")
-    return problems + open_seats(seats, live)
+    return problems + open_seats_settled(seats, live, task, args)
+
+
+# Issue #421: durable stop evidence settles a task-named seat only when no
+# --live row exists for it at all. Every other open_seats refusal is unchanged.
+_STOP_EVIDENCE_HINT = ('; durable stop evidence: --stop-evidence {"kind": '
+                       '"index-stop-receipt"|"archived-ledger"|"sweep-purge"|'
+                       '"direct-dispatch", "session": ...}')
+
+
+def open_seats_settled(seats: dict[str, list[str]], rows: list[dict[str, Any]],
+                       task: dict[str, Any], args: argparse.Namespace) -> list[str]:
+    """`open_seats` plus the durable stop-evidence routes (Issue #421)."""
+    problems = []
+    for session, holders in sorted(seats.items()):
+        matches = [row for row in rows if row.get("session") == session]
+        running = [row for row in matches if row.get("state") != "stopped"]
+        own = [row for row in matches if not holders or row.get("holder_instance_id") in holders]
+        if len(holders) > 1:
+            problems.append(f"{session} has conflicting recorded holders {', '.join(holders)}; the "
+                            "association is unresolved")
+        elif not matches:
+            receipt, why = settle_seat_stop(session, holders, task, args)
+            if receipt is not None:
+                args._stop_evidence = getattr(args, "_stop_evidence", []) + [receipt]
+            else:
+                problems.append(f"{session} is not in the live rows; its stop is not shown"
+                                + (f"; {why}" if why else "") + _STOP_EVIDENCE_HINT)
+        elif any(row in own for row in running):
+            problems.append(f"{session} is still live")
+        elif running or not own:
+            other = (running or matches)[0]
+            problems.append(f"{session} is {'live' if running else 'stopped'} under holder "
+                            f"{other.get('holder_instance_id')}, not the recorded "
+                            f"{holders[0] if holders else None}; the association is unresolved")
+    return problems
+
+
+def settle_seat_stop(session: str, holders: list[str], task: dict[str, Any],
+                     args: argparse.Namespace) -> tuple[dict[str, Any] | None, str | None]:
+    """(verified receipt, why not) for one absent-live-row seat.
+
+    Only a supplied --stop-evidence entry for this exact session can settle it;
+    the route is Host-only and the task must be accepted-done."""
+    entries = [entry for entry in getattr(args, "_stop_evidence_input", [])
+               if entry.get("session") == session]
+    if not entries:
+        return None, None
+    if args.writer != "host":
+        return None, "durable stop evidence is a Host route; a Sideagent returns it to the Host"
+    verdict = task.get("verdict") if isinstance(task.get("verdict"), dict) else {}
+    if task.get("stage") != "done" or verdict.get("value") != "accepted":
+        return None, "durable stop evidence settles only an accepted-done task"
+    why = None
+    for entry in entries:
+        receipt, why = verify_stop_evidence(entry, session, holders, task, args)
+        if receipt is not None:
+            return receipt, None
+    return None, why
+
+
+def verify_stop_evidence(entry: dict[str, Any], session: str, holders: list[str],
+                         task: dict[str, Any], args: argparse.Namespace
+                         ) -> tuple[dict[str, Any] | None, str | None]:
+    kind = entry["kind"]
+    if kind == "index-stop-receipt":
+        return index_stop_receipt_settle(entry, session, holders, task, args)
+    if kind == "archived-ledger":
+        return archived_ledger_settle(entry, session, holders, task, args)
+    if kind == "sweep-purge":
+        return sweep_purge_settle(entry, session, holders, task, args)
+    return direct_dispatch_settle(entry, session, holders, task, args)
+
+
+def boot_epoch() -> float | None:
+    """When this machine last booted, as epoch seconds; None when unknown."""
+    if sys.platform == "darwin":
+        try:
+            proc = subprocess.run(["sysctl", "-n", "kern.boottime"],
+                                  capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        match = re.search(r"sec\s*=\s*(\d+)", proc.stdout or "")
+        return float(match.group(1)) if match else None
+    try:
+        with open("/proc/stat", encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("btime "):
+                    return float(line.split()[1])
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
+def seat_preset(task: dict[str, Any], session: str) -> str | None:
+    """The preset recorded for this seat on the task or its assignment/session row."""
+    preset = task.get("preset")
+    if isinstance(preset, str) and preset:
+        return preset
+    for row in [*(task.get("assignments") or []), *(task.get("sessions") or [])]:
+        if isinstance(row, dict) and row.get("session") == session:
+            value = row.get("preset")
+            if isinstance(value, str) and value:
+                return value
+    return None
+
+
+def _name_token(text: str, token: str) -> bool:
+    """`token` appears in `text` as a whole name, not inside a longer one."""
+    return re.search(r"(?<![A-Za-z0-9_.-])" + re.escape(token) + r"(?![A-Za-z0-9_.-])",
+                     text) is not None
+
+
+def index_stop_receipt_settle(entry: dict[str, Any], session: str, holders: list[str],
+                              task: dict[str, Any], args: argparse.Namespace
+                              ) -> tuple[dict[str, Any] | None, str | None]:
+    """A pre-reboot exact-stop receipt this project's index recorded (c1)."""
+    if len(holders) != 1:
+        return None, ("index-stop-receipt needs exactly one recorded holder for this seat; "
+                      "a seat with none uses archived-ledger or sweep-purge")
+    holder = holders[0]
+    repo = str(repo_of_state_file(Path(args.file)))
+    refs = task.get("dispatch")
+    refs = {refs} if isinstance(refs, str) else {ref for ref in refs or [] if isinstance(ref, str)}
+    found: list[tuple[str, dict[str, Any]]] = []
+    for index_path in supplied_index_paths(args):
+        index = load_object(Path(index_path))
+        mismatch = index_identity_problem(index, repo)
+        if mismatch:
+            return None, f"the index at {index_path} {mismatch}"
+        for row in index_rows(index):
+            if row.get("item_id") == entry["item_id"]:
+                found.append((index_path, row))
+    if not found:
+        return None, f"{entry['item_id']} is not in the supplied index"
+    if len(found) > 1:
+        return None, f"{entry['item_id']} names more than one supplied index row"
+    index_path, row = found[0]
+    if entry["item_id"] not in refs and row.get("task_id") != getattr(args, "id", None):
+        return None, "the index row is not this task's row"
+    if row.get("session") != session:
+        return None, "the index row names a different session"
+    if row.get("holder_instance_id") != holder:
+        return None, "the index row holder differs from the recorded holder"
+    if not same_repo(row.get("repo"), repo):
+        return None, "the index row repo is not this project"
+    preset = task.get("preset")
+    if isinstance(preset, str) and preset and row.get("preset") != preset:
+        return None, "the index row preset differs from the task's"
+    blocks = row.get("evidence") if isinstance(row.get("evidence"), dict) else {}
+    block = blocks.get(entry["block"])
+    problem = RECORD.stop_receipt_problem(block, session, holder)
+    if problem:
+        return None, problem
+    boot = boot_epoch()
+    if boot is None:
+        return None, "boot time unknown; pre-reboot cannot be shown"
+    observed = (datetime.strptime(block["observed_at"], QUOTA_TIME)
+                .replace(tzinfo=timezone.utc).timestamp())
+    if not observed < boot:
+        return None, "the recorded stop is not pre-reboot"
+    return {"kind": entry["kind"], "session": session, "holder_instance_id": holder,
+            "route": "index-stop-receipt", "index": index_path,
+            "item_id": entry["item_id"], "block": entry["block"],
+            "observed_at": block["observed_at"], "boot_at": boot}, None
+
+
+def archived_ledger_settle(entry: dict[str, Any], session: str, holders: list[str],
+                           task: dict[str, Any], args: argparse.Namespace
+                           ) -> tuple[dict[str, Any] | None, str | None]:
+    """A committed, pre-reboot archived mission ledger that names the seat (c2)."""
+    holder = holders[0] if len(holders) == 1 else None
+    preset = seat_preset(task, session)
+    tokens = [token for token in (holder, preset) if token]
+    if not tokens:
+        return None, "archived-ledger needs a recorded holder or a platform/tier preset"
+    boot = boot_epoch()
+    if boot is None:
+        return None, "boot time unknown; pre-reboot cannot be shown"
+    repo = repo_of_state_file(Path(args.file))
+    commit, path = entry["commit"], entry["path"]
+
+    def git(*argv: str) -> subprocess.CompletedProcess | None:
+        try:
+            return subprocess.run(["git", "-C", str(repo), *argv],
+                                  capture_output=True, text=True, timeout=15)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+
+    proc = git("cat-file", "-e", f"{commit}:{path}")
+    if proc is None or proc.returncode != 0:
+        return None, "the named commit does not contain that ledger path in this repository"
+    proc = git("merge-base", "--is-ancestor", commit, "HEAD")
+    if proc is None or proc.returncode != 0:
+        return None, "the ledger commit is not an ancestor of HEAD in this repository"
+    proc = git("show", f"{commit}:{path}")
+    if proc is None or proc.returncode != 0:
+        return None, "the ledger commit content is unreadable"
+    text = proc.stdout
+    proc = git("show", "-s", "--format=%ct", commit)
+    try:
+        committed_at = int((proc.stdout if proc else "").strip())
+    except ValueError:
+        return None, "the ledger commit's committer time is unreadable"
+    if not committed_at < boot:
+        return None, "the ledger commit is not pre-reboot"
+    problem, line = RECORD.ledger_problem(text, session, tokens)
+    if problem:
+        return None, problem
+    receipt: dict[str, Any] = {"kind": entry["kind"], "session": session,
+                             "route": "archived-ledger", "path": path, "commit": commit,
+                             "committed_at": committed_at, "boot_at": boot, "line": line}
+    if holder:
+        receipt["holder_instance_id"] = holder
+    return receipt, None
+
+
+def direct_dispatch_settle(entry: dict[str, Any], session: str, holders: list[str],
+                           task: dict[str, Any], args: argparse.Namespace
+                           ) -> tuple[dict[str, Any] | None, str | None]:
+    """A seat the Host dispatched directly: no index row was ever written (d)."""
+    refs = task.get("dispatch")
+    refs = [refs] if isinstance(refs, str) else [ref for ref in refs or [] if isinstance(ref, str)]
+    if refs:
+        return None, "the task still has dispatch refs; direct-dispatch proves a seat only"
+    if holders:
+        return None, ("a recorded holder is not direct dispatch; "
+                      "use index-stop-receipt or archived-ledger")
+    preset = seat_preset(task, session)
+    if not (isinstance(preset, str) and re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", preset)):
+        return None, "no platform/tier preset is recorded for this seat"
+    evidence = task.get("evidence")
+    texts = ([evidence] if isinstance(evidence, str)
+             else [text for text in evidence if isinstance(text, str)]
+             if isinstance(evidence, list) else [])
+    if not any(_name_token(text, session) for text in texts):
+        return None, "the task's acceptance evidence does not name this session"
+    return {"kind": entry["kind"], "session": session, "route": "direct-dispatch",
+            "dispatch": "none", "holder_instance_id": None, "preset": preset,
+            "live": "absent",
+            "verified_from": f"tasks/{getattr(args, 'id', '')} verdict accepted + evidence"}, None
+
+
+def sweep_purge_settle(entry: dict[str, Any], session: str, holders: list[str],
+                       task: dict[str, Any], args: argparse.Namespace
+                       ) -> tuple[dict[str, Any] | None, str | None]:
+    """The recorded sweep already purged this seat's session (e). Report-only
+    provenance: a purge id is never a stop receipt."""
+    parsed = _sweep_item_from_id(entry["id"])
+    if parsed is None or parsed.get("kind") != "session":
+        return None, "the purge id is not session:<platform>/<session>@<holder>"
+    if parsed["session"] != session:
+        return None, "the purge id names a different session"
+    sweep = getattr(args, "_last_sweep", None)
+    sweep = sweep if isinstance(sweep, dict) else {}
+    removed = sweep.get("removed") if isinstance(sweep.get("removed"), list) else []
+    if entry["id"] not in removed:
+        return None, "the purge id is not in maintenance.last_sweep.removed"
+    if holders and parsed["holder_instance_id"] not in holders:
+        return None, "the purge holder differs from the recorded holder"
+    preset = task.get("preset")
+    platform = task.get("platform")
+    recorded = platform if isinstance(platform, str) and platform else (
+        preset.split("/", 1)[0] if isinstance(preset, str) and "/" in preset else None)
+    if recorded and parsed["platform"] != recorded:
+        return None, "the purge platform differs from the recorded platform"
+    return {"kind": entry["kind"], "session": session, "route": "sweep-purge",
+            "purge": {"source": "maintenance.last_sweep", "id": entry["id"],
+                      "at": sweep.get("at"), "batch": sweep.get("batch")},
+            "stop_receipt": None}, None
 
 
 def handoff_seats(receiver: dict[str, Any], task: dict[str, Any], task_id: str,
@@ -8316,6 +8699,8 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
         handed = handoff_seats(state["tasks"][handoff], current, record_id, args)
     elif kind == "tasks":
         args._file_revision = doc.get("revision")
+        maintenance = state.get("maintenance") if isinstance(state.get("maintenance"), dict) else {}
+        args._last_sweep = maintenance.get("last_sweep")
         open_refs = open_dispatch(current, args)
         if open_refs:
             raise StateRefusal("retire-unmet", "its dispatched work is not shown closed: "
@@ -8362,6 +8747,8 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
              **({"evidence": args.evidence} if direct else {}),
              **({"reconciled_dispatch": args._reconciled_dispatch}
                 if getattr(args, "_reconciled_dispatch", None) else {}),
+             **({"stop_evidence": args._stop_evidence}
+                if getattr(args, "_stop_evidence", None) else {}),
              **({"cite": cite} if cite else {}),
              **({"handed_to": handoff, **handed} if handoff else {})}
     stamp_writer(doc, stone, args, caller_dispatcher())
@@ -8476,6 +8863,12 @@ def mirror_dispositions(args: argparse.Namespace, doc: dict[str, Any], path: Pat
 def mirror_task(args: argparse.Namespace, task: dict[str, Any], path: Path, index_path: str) -> dict[str, Any]:
     with IndexLock(Path(index_path)):
         index = load_object(Path(index_path))
+        schema = index.get("schema")
+        if isinstance(schema, str) and RECORD.KPM_INDEX_SCHEMA_RE.fullmatch(schema):
+            # Issue #421: KPM dispatch is the sole writer of its index; the
+            # mirror never opens it for write.
+            return {"index": index_path, "changed": {},
+                    "skipped": "kpm.dispatch-index is written only by KPM dispatch"}
         mismatch = index_identity_problem(index, str(repo_of_state_file(Path(path))))
         if mismatch:
             # Issue #286 (G5): the state write above stays (I12); the mirror
@@ -8706,6 +9099,52 @@ def ensure_sideagent_command(path: Path, repo: Path) -> str:
                        "--file", str(path), "--repo", str(repo)])
 
 
+def ensure_sideagent_recover_command(path: Path, repo: Path) -> str:
+    return shlex.join([sys.executable, str(Path(__file__).resolve()), "state",
+                       "ensure-sideagent", "--file", str(path), "--repo", str(repo),
+                       "--recover-failed", "--live", "LIVE_ROWS",
+                       "--evidence", "ORIGINAL_OWNER_EVIDENCE"])
+
+
+# Issue #421: a hold row, or any decision row settled or not, whose strings
+# name the old binding session or the sideagent holds the recovery; the tool
+# never interprets an Owner answer on its own.
+_SIDEAGENT_HELD_RE = re.compile(r"(?i)(?<![a-z0-9])sideagent")
+
+
+def sideagent_held_rows(state: dict[str, Any], old_session: Any) -> list[str]:
+    held: list[str] = []
+    for kind in ("holds", "decisions"):
+        rows = state.get(kind) if isinstance(state.get(kind), dict) else {}
+        for name, row in sorted(rows.items()):
+            if not isinstance(row, dict):
+                continue
+            for text in record_strings(row):
+                if isinstance(old_session, str) and old_session and old_session in text:
+                    held.append(f"{kind}/{name}")
+                    break
+                if _SIDEAGENT_HELD_RE.search(text):
+                    held.append(f"{kind}/{name}")
+                    break
+    return held
+
+
+def failed_sideagent_problem(doc: dict[str, Any], path: Path, repo: Path) -> dict[str, Any] | None:
+    """A failed binding is visible with its recovery command; check writes nothing."""
+    state = doc.get("state") if isinstance(doc.get("state"), dict) else {}
+    binding = state.get("sideagent")
+    if not (isinstance(binding, dict) and binding.get("state") == "failed"):
+        return None
+    command = ensure_sideagent_recover_command(path, repo)
+    held = sideagent_held_rows(state, binding.get("session"))
+    detail = (f"the bound Sideagent {binding.get('session')} is failed; the Host runs "
+              f"{command} once the old node is gone")
+    if held:
+        detail += "; held by " + ", ".join(held)
+    return {"code": "sideagent-failed", "level": "warn", "kind": "sideagent",
+            "command": command, "held_by": held, "detail": detail}
+
+
 def default_bind_problem(doc: dict[str, Any], path: Path, rows: list[dict[str, Any]] | None,
                          repo: Path) -> dict[str, Any] | None:
     """Visible while a declaring carrier has no binding. Check does not write."""
@@ -8736,6 +9175,78 @@ def apply_default_sideagent(doc: dict[str, Any], repo: Path, repo_text: str) -> 
         state["sideagent"] = binding
 
 
+def recover_failed_sideagent(args: argparse.Namespace, path: Path, repo: Path,
+                             repo_text: str, caller: dict[str, str] | None) -> int:
+    """Issue #421: rebind a failed binding once the old node is shown gone and
+    no hold or decision holds it. No sweep runs and host_revision is untouched."""
+    try:
+        with StateLock(path):
+            doc, _raw = read_state_file(path)
+            if doc is None:
+                return emit({"result": "not-applicable", "detail": "no lifecycle state file"})
+            doc = require_current(doc, path)
+            state = doc["state"]
+            old = state.get("sideagent")
+            if not (isinstance(old, dict) and old.get("state") == "failed"):
+                return emit({"result": "refused", "reason": "sideagent-not-failed",
+                             "detail": "--recover-failed applies only to a binding whose "
+                                      "state is failed"}, 2)
+            evidence = getattr(args, "evidence", None)
+            if not isinstance(evidence, str) or not evidence.strip():
+                return emit({"result": "refused", "reason": "evidence-required",
+                             "detail": "--recover-failed names the Owner's original "
+                                      "rebind evidence"}, 2)
+            if evidence.startswith("ORIGINAL_"):
+                return emit({"result": "refused", "reason": "invalid-input",
+                             "detail": "pass the actual original evidence, not the "
+                                      "ORIGINAL_* placeholder the named command carries"}, 2)
+            live_arg = getattr(args, "live", None)
+            if not isinstance(live_arg, str) or not live_arg:
+                return emit({"result": "refused", "reason": "invalid-input",
+                             "detail": "--recover-failed needs --live rows to show the "
+                                      "old node gone"}, 2)
+            rows = live_rows_of(live_arg)
+            old_session = old.get("session")
+            if any(row.get("session") == old_session and row.get("state") != "stopped"
+                   for row in rows):
+                return emit({"result": "refused", "reason": "old-node-live",
+                             "detail": f"{old_session} still has a live row; recovery "
+                                      "does not rebind over a live old node"}, 2)
+            held = sideagent_held_rows(state, old_session)
+            if held:
+                return emit({"result": "refused", "reason": "sideagent-held",
+                             "held_by": held,
+                             "detail": ", ".join(held) + " still name the old binding or "
+                                      "the sideagent; the Host retires those rows with "
+                                      "the Owner's original evidence first; the tool "
+                                      "does not interpret an Owner answer"}, 2)
+            if not node_capability_declared(doc, rows, repo, caller):
+                return emit({"result": "not-applicable",
+                             "detail": "platform and carrier do not both declare "
+                                      "sideagent node mode"})
+            binding, why = choose_default_binding(doc, repo, repo_text, caller)
+            if binding is None:
+                problem = default_bind_problem(doc, path, rows, repo) or {"detail": why}
+                return emit({"result": "unbound", "problem": problem})
+            binding["source"] = "recover-failed"
+            state["sideagent"] = binding
+            before = doc.get("revision")
+            sizes = write_state(path, doc)
+    except StateRefusal as refusal:
+        return emit(refusal.payload, 2)
+    except (OSError, ValueError) as exc:
+        return fail("invalid-input", str(exc))
+    return emit({"result": "recovered", "revision": doc["revision"],
+                 "previous_revision": before,
+                 "previous": {"session": old_session, "preset": old.get("preset"),
+                              "state": "failed", "since": old.get("since")},
+                 "sideagent": {"session": binding["session"], "preset": binding["preset"],
+                               "mode": binding["mode"], "since": binding["since"],
+                               "platform": binding["platform"]},
+                 "evidence": evidence,
+                 "sweep": "not run; recovery schedules no sweep", **sizes})
+
+
 def command_state_ensure_sideagent(args: argparse.Namespace) -> int:
     path = Path(args.file)
     repo_text = args.repo if isinstance(getattr(args, "repo", None), str) and args.repo else str(repo_of_state_file(path))
@@ -8745,6 +9256,8 @@ def command_state_ensure_sideagent(args: argparse.Namespace) -> int:
     if caller and role not in (None, "host"):
         return emit({"result": "refused", "reason": "host-only",
                      "detail": "only the Host carrier binds the default Sideagent"}, 2)
+    if getattr(args, "recover_failed", False):
+        return recover_failed_sideagent(args, path, repo, repo_text, caller)
     binding: dict[str, Any] | None = None
     try:
         with StateLock(path):
@@ -8755,9 +9268,14 @@ def command_state_ensure_sideagent(args: argparse.Namespace) -> int:
             state = doc["state"]
             if sideagent_kept(state):
                 current = state["sideagent"]
-                return emit({"result": "kept", "sideagent": {
+                payload: dict[str, Any] = {"result": "kept", "sideagent": {
                     "session": current.get("session"), "preset": current.get("preset"),
-                    "mode": current.get("mode"), "since": current.get("since")}})
+                    "mode": current.get("mode"), "since": current.get("since")}}
+                if current.get("state") == "failed":
+                    # Issue #421: kept, with the recovery command visible.
+                    payload["state"] = "failed"
+                    payload["recovery"] = ensure_sideagent_recover_command(path, repo)
+                return emit(payload)
             if not node_capability_declared(doc, None, repo, caller):
                 return emit({"result": "not-applicable",
                              "detail": "platform and carrier do not both declare sideagent node mode"})
@@ -9503,6 +10021,9 @@ def state_problems(doc: dict[str, Any], path: Path, index: dict[str, Any] | None
     gap = default_bind_problem(doc, path, rows, repo)
     if gap is not None:
         problems.append(gap)
+    failed_binding = failed_sideagent_problem(doc, path, repo)
+    if failed_binding is not None:
+        problems.append(failed_binding)
     extra, diagnosis = diagnose_state_bloat(doc, args)
     problems.extend(extra)
     return problems, diagnosis
@@ -11438,6 +11959,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="bind node mode when this carrier declares it and no binding exists")
     ensure.add_argument("--file", required=True)
     ensure.add_argument("--repo")
+    ensure.add_argument("--recover-failed", action="store_true",
+                        help="rebind a failed Sideagent binding after the old node is shown gone")
+    ensure.add_argument("--evidence",
+                        help="the Owner's original rebind evidence for --recover-failed")
+    ensure.add_argument("--live", help="JSON file path: kaola-acp-list/1 rows proving "
+                                       "the old node is gone")
     ensure.set_defaults(func=command_state_ensure_sideagent)
 
     update = actions.add_parser("update")
@@ -11470,10 +11997,15 @@ def build_parser() -> argparse.ArgumentParser:
     retire.add_argument("--cite", help="JSON {commit, path} for a completed outcome that must survive")
     retire.add_argument("--outcome")
     retire.add_argument("--index", action="append",
-                        help="JSON file path: this project's kaola-dispatch-index/1 showing the task's "
-                             "items closed; repeatable when separate execute runs wrote separate indices")
+                        help="JSON file path: this project's kaola-dispatch-index/1 or "
+                             "kpm.dispatch-index/1.x showing the task's items closed; "
+                             "repeatable when separate execute runs wrote separate indices")
     retire.add_argument("--live", help="JSON file path: kaola-acp.py list --repo --include-dead rows "
                         "(kaola-acp-list/1) showing its sessions stopped")
+    retire.add_argument("--stop-evidence", action="append",
+                        help="durable stop evidence for a task-named seat absent from --live: "
+                             "--stop-evidence {\"kind\": \"index-stop-receipt\"|\"archived-ledger\"|"
+                             "\"sweep-purge\"|\"direct-dispatch\", \"session\": ...}; repeatable")
     retire.add_argument("--handoff", help="current task that takes over its seats and dispatch")
     retire.set_defaults(func=command_state_retire)
 

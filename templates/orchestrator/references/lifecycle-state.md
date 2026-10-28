@@ -36,24 +36,24 @@ The Host gets outcomes, capacity and pending decisions.
 - `$S update --section project|authorization|sideagent|recovery|unverified
   --expect-revision N --set PATCH`: first three Host-only.
 - `$S retire --kind K --id ID --expect-rev N --evidence REF [--outcome T]
-  [--index I ... --live L] [--handoff TASK]`: needs verdict
-  `accepted`/`cancelled`, items closed, seats stopped, or handed off. `L` is
-  `list --repo --include-dead` rows; repeat `--index`, each ref in one file.
+  [--index I ... --live L] [--stop-evidence J] [--handoff TASK]`: needs
+  verdict `accepted`/`cancelled`, items closed, seats stopped or handed off.
+  `L`: `list --repo --include-dead` rows; repeat `--index`, each ref in one
+  file. Absent seats need typed `J` (Host, accepted-done).
 - `$S view --role host|sideagent|delegator [--repo ROOT]` (read-only).
 - `$S checkpoint`, `update --index`: [sideagent-node.md](sideagent-node.md).
 - `$S check [--index I] [--live L] [--repo R]`: read-only. Problems:
   `doing-untraced`, `done-not-retired`, `transcription-unechoed`,
-  `sideagent-not-live`, `carrier-unproven`, `state-bloat`. `state-bloat`
-  lists accepted-done/cancelled tasks, settled decisions, empty-`inputs`
+  `sideagent-not-live`, `sideagent-failed`, `carrier-unproven`, `state-bloat`.
+  `state-bloat` lists accepted-done/cancelled tasks, settled decisions, empty-`inputs`
   alerts, and shell tasks (evidence only `retired:tasks/ID`, duty fields
-  empty). Each names kind, id, rev, and its `state retire` command when
+  empty). Each names kind, id, rev and its `state retire` command when
   runnable; a large row is a `diagnosis` hint, not a gate.
   `done-not-retired` stays watch until `maintenance.handled_host_revision`
   covers it, then warns without refusing writes. `carrier-unproven` names
   `state migrate --live`. A row lacking `rev` is `record-versionless`:
-  open rows name `migrate` (`--write` assigns rev 1); closed rows
-  (empty-`inputs` alert, settled decision, accepted-done/cancelled task)
-  name `retire --expect-rev 0 --evidence`.
+  open rows name `migrate` (`--write` assigns rev 1); closed rows name
+  `retire --expect-rev 0 --evidence`.
 - `$S migrate [--index I] [--live L] [--repo R] [--write]`; `$S timer`
   is the Delegator's.
 
@@ -131,8 +131,8 @@ revision is `record-retired`. Never drop a duty. Host view max 64 KiB
 refusal names `$S migrate --live LIVE --write`. An unknown row with no
 outcome retires on the stale-collect route (session absent or
 stopped under the holder); `outcome: stopped` with `mutation_status: unknown`
-retires on `stopped-collect-incomplete-turn` (Host writer; accepted task,
-disposition, holder, platform, repo, stopped `--live` rows must match).
+retires on `stopped-collect-incomplete-turn` (Host; accepted task,
+disposition, holder, platform, repo, stopped `L` rows match).
 Neither writes index bytes.
 
 ## Migration

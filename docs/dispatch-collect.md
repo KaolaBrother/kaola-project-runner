@@ -287,6 +287,27 @@ writes no index bytes, no wake, no re-queue, and no node traffic.
 A pending recovery input requires its exact scoped checkpoint. Retiring an old
 alert does not clear a newer recovery input. Plan `state migrate` before `--write`;
 repeat migration preserves pending adoption, grants, duties and current links.
+`state retire --index` also reads this project's KPM dispatch index,
+`kpm.dispatch-index/1.x` (identified by `project.canonical_root`), beside
+`kaola-dispatch-index/1` (Issue #421). A KPM item is addressed
+`<task_id>/<id>`, or by its bare `<id>` only when unique across all plans; a
+bare id in two plans refuses as ambiguous. The KPM closed set is `returned`,
+`failed`, `cancelled`; every other state stays open, no KPR reconciliation
+route applies to KPM rows, and the retire mirror never writes a KPM index —
+KPM dispatch is its sole writer.
+A task-named seat with no `--live` row at all may still be settled by durable
+`--stop-evidence` (repeatable JSON): `index-stop-receipt` (a pre-reboot
+recorded stop receipt on an index row: `stopped: true`, `residual_pids: []`,
+the recorded holder and session, `observed_at` before boot),
+`archived-ledger` (a `kaola-workflow/archive/*/mission-ledger.jsonl` file
+committed pre-reboot, ancestor of HEAD, every line `done`/`failed`/handed-over
+`blocked`, one line naming the seat and its holder or preset),
+`direct-dispatch` (no dispatch refs, no recorded holder, a recorded
+platform/tier preset, the task's acceptance evidence naming the session), or
+`sweep-purge` (the id in `maintenance.last_sweep.removed`). Every route is
+Host-only, needs an accepted-done task, and verifies before it settles; the
+refusal names the failed check. Without matching evidence the absent-row
+refusal is unchanged plus a hint.
 
 ### Owner-required user-facing Elite and Expert seat summary (2026-10-06)
 

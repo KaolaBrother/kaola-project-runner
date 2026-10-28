@@ -272,6 +272,121 @@ def cite_problem(cite: Any) -> str | None:
     return None
 
 
+# Issue #421: dispatch index schemas retire accepts. The runner index is
+# `kaola-dispatch-index/1`; KPM writes `kpm.dispatch-index/1.x` with the same
+# closure question answered from `plans[].items[]` instead of `items[]`.
+KPR_INDEX_SCHEMA = "kaola-dispatch-index/1"
+KPM_INDEX_SCHEMA_RE = re.compile(r"^kpm\.dispatch-index/1\.(0|[1-9][0-9]*)$")
+KPR_CLOSED_STATUS = frozenset({"returned", "failed", "not-run"})
+KPM_CLOSED_STATUS = frozenset({"returned", "failed", "cancelled"})
+
+# Issue #421: durable stop evidence for `state retire --stop-evidence`. Each
+# kind has a closed key set; anything else is invalid input, never a guess.
+STOP_EVIDENCE_KINDS = {
+    "index-stop-receipt": frozenset({"kind", "session", "item_id", "block"}),
+    "archived-ledger": frozenset({"kind", "session", "path", "commit"}),
+    "sweep-purge": frozenset({"kind", "session", "id"}),
+    "direct-dispatch": frozenset({"kind", "session"}),
+}
+LEDGER_KEYS = ("n", "name", "details", "status")
+
+
+def stop_evidence_problem(obj: Any) -> str | None:
+    """Shape of one --stop-evidence JSON object; None when it is well formed."""
+    if not isinstance(obj, dict):
+        return "stop evidence is a JSON object"
+    kind = obj.get("kind")
+    if kind not in STOP_EVIDENCE_KINDS:
+        return "kind must be one of " + ", ".join(sorted(STOP_EVIDENCE_KINDS))
+    keys = STOP_EVIDENCE_KINDS[kind]
+    if set(obj) != keys:
+        return f"{kind} takes exactly {', '.join(sorted(keys))}"
+    if not isinstance(obj.get("session"), str) or not obj["session"]:
+        return "session must be a non-empty string"
+    if kind == "archived-ledger":
+        path = obj.get("path")
+        if (not isinstance(path, str) or path.startswith("/") or ".." in path.split("/")
+                or not path.startswith("kaola-workflow/archive/")
+                or not path.endswith("/mission-ledger.jsonl")):
+            return ("path is a relative repository path under kaola-workflow/archive/ "
+                    "ending /mission-ledger.jsonl")
+        commit = obj.get("commit")
+        if not isinstance(commit, str) or COMMIT_RE.fullmatch(commit) is None:
+            return "commit is 7 to 40 lowercase hex characters"
+    if kind == "sweep-purge":
+        ident = obj.get("id")
+        if not isinstance(ident, str) or not ident.startswith("session:"):
+            return "id is a session:<platform>/<session>@<holder> purge id"
+    if kind == "index-stop-receipt":
+        for key in ("item_id", "block"):
+            if not isinstance(obj.get(key), str) or not obj[key]:
+                return f"{key} must be a non-empty string"
+    return None
+
+
+def stop_receipt_problem(block: Any, session: str, holder: Any) -> str | None:
+    """A recorded exact-stop receipt that proves this seat stopped; None when it does."""
+    if not isinstance(block, dict):
+        return "the receipt block is not an object"
+    if block.get("stopped") is not True:
+        return "the receipt does not record stopped: true"
+    if block.get("residual_pids") != []:
+        return "the receipt does not record residual_pids: []"
+    if not isinstance(holder, str) or not holder:
+        return "the seat records no holder to compare"
+    if block.get("holder_instance_id") != holder:
+        return "the receipt holder differs from the recorded holder"
+    if block.get("session") != session:
+        return "the receipt session differs from the seat"
+    observed = block.get("observed_at")
+    if not (isinstance(observed, str) and QUOTA_TIME_RE.fullmatch(observed)):
+        return "the receipt carries no UTC observed_at (YYYY-MM-DDTHH:MM:SSZ)"
+    return None
+
+
+def _token_in(text: str, token: str) -> bool:
+    """`token` appears as a whole name, not inside a longer session name."""
+    return re.search(r"(?<![A-Za-z0-9_.-])" + re.escape(token) + r"(?![A-Za-z0-9_.-])",
+                     text) is not None
+
+
+def ledger_problem(text: Any, session: str, tokens: list[str]) -> tuple[str | None, int | None]:
+    """An archived mission ledger that terminally names this seat.
+
+    Every non-blank line is one JSON object with exactly LEDGER_KEYS; a status
+    is done, failed, or a blocked line that handed over. At least one line's
+    details names `session` and one of `tokens` (holder id or preset) as whole
+    tokens. Returns (problem, matching line n)."""
+    if not isinstance(text, str):
+        return "the ledger is not text", None
+    names = [token for token in tokens if isinstance(token, str) and token]
+    if not names:
+        return "no holder or preset token names this seat's lines", None
+    matched = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            return "a ledger line is not JSON", None
+        if not isinstance(entry, dict) or sorted(entry) != sorted(LEDGER_KEYS):
+            return "a ledger line is not {n, name, details, status}", None
+        status = entry.get("status")
+        details = entry.get("details") if isinstance(entry.get("details"), str) else ""
+        if status == "blocked":
+            if "handed-over:" not in details:
+                return "a blocked ledger line names no handed-over target", None
+        elif status not in ("done", "failed"):
+            return "a ledger line is not done, failed, or a handed-over blocked", None
+        if _token_in(details, session) and any(_token_in(details, token) for token in names):
+            matched = entry.get("n")
+    if matched is None:
+        return "no ledger line names this session with its holder or preset", None
+    return None, matched
+
+
 def machine_stone(stone: dict[str, Any]) -> dict[str, Any]:
     """Fixed machine identity, outcome, time, and revision. No prose."""
     kept = {key: stone[key] for key in STONE_KEYS if key in stone and stone[key] is not None}
