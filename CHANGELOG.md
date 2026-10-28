@@ -4,6 +4,37 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## 0.9.33 — 2026-10-28 (Worker tier swap: Codex Terra replaces Luna Max)
+
+Owner decisions `owner-worker-luna-max-to-codex-terra-20261028` and
+`owner-kpr-terra-release-then-notify-20261028`. The Codex Worker tier is replaced one-for-one:
+**`codex/luna` (GPT-6 Luna, `gpt-6-luna`, `effort=max`) is dropped** and
+**`codex/terra` (Codex Terra, `gpt-6.1-terra`, `effort=high`) joins as the Worker tier**
+(`platforms/codex.yaml` `named_tiers` is `astra,terra`). The Worker role text and the
+computer-use designation carry over unchanged: computer-use and research worker, GUI/browser/desktop
+QA with screenshots and verdicts; not Expert design/planning, nor an Elite substitute; usable only
+after an explicit Worker grant (`terra_model_roles` stays absent, so no role gate). The Worker-class
+preset list is `claude-code/haiku`, `codex/terra`, `devin/default`, `dsh/commandcode`, `dsh/default`,
+`opencode/default`, `zcode/default`. No KPR `codex/luna` Worker grant existed, so nothing was revoked;
+the standing Worker authorization moves to `codex/terra` ×2 to match KPM durable rev37. Elite grants
+and standing Expert `codex/astra` are untouched; Hermes Worker count stays 0.
+
+Changed surfaces: `platforms/codex.yaml`, `scripts/adapters/codex.sh`, the orchestrator
+`worker-profiles.md` template (Computer interaction paragraph), `host-startup.md`/`zcode-host-dispatch.md`
+examples, `docs/api.md` (Worker pool sentence, display-identity list, direct-model mechanics wording),
+and suites `test-issue-345-worker-pool.py`, `test-issue-237-model-display.py`,
+`test-issue-350-computer-use-roles.py` retargeted from luna to terra; rendered Skills regenerated.
+
+**Seats: restart required.** The operator test
+`git diff v0.9.32 v0.9.33 -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
+is non-empty: `platforms/codex.yaml` and `scripts/adapters/codex.sh` (the terra tier block and adapter
+fields). Per-platform pins: no platform other than the Grok Bot bridge changes adapter or manifest this
+release; the bridge re-pins at the pin commit P naming this content commit R with release `v0.9.33`
+(`render-skills.py --check --require-pinned` gates P); no platform is intentionally left unpinned.
+
+Also on `main` since v0.9.32 with no product effect: the v0.9.32 pin commit and archive-citation
+errata (docs/lifecycle only). This release carries no install; installing is a separate authorized act.
+
 ## 0.9.32 — 2026-10-27 (Cursor xhigh escalation presets; Droid core DeepSeek V4.1 Flash 1017; AGY language-expression profiles)
 
 Fixes #413 and #414. Cursor gains two AGY-style escalation tiers — `cursor-cli/xhigh`
