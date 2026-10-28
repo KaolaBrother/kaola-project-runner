@@ -59,6 +59,27 @@ def manifest_values() -> dict[str, str]:
     return values
 
 
+def hermes_grant_rows(node: Any, where: str) -> list[str]:
+    """Hermes preset ids inside any `*grants` list (worker/elite/expert/Host rows)."""
+    found: list[str] = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key.endswith("grants") and isinstance(value, list):
+                for row in value:
+                    if not isinstance(row, dict):
+                        continue
+                    listed = row.get("preset_ids")
+                    ids = [row.get("id"), row.get("preset"),
+                           *(listed if isinstance(listed, list) else [])]
+                    found += [f"{where}.{key}: {i}" for i in ids
+                              if isinstance(i, str) and i.startswith("hermes/")]
+            found += hermes_grant_rows(value, f"{where}.{key}")
+    elif isinstance(node, list):
+        for value in node:
+            found += hermes_grant_rows(value, where)
+    return found
+
+
 def hermetic_env(**extra: str) -> dict[str, str]:
     env = {key: value for key, value in os.environ.items()
            if not key.startswith(("KAOLA_", "FAKE_HERMES", "HERMES_"))}
@@ -431,11 +452,31 @@ class StaticPins(unittest.TestCase):
             (SKILL / "scripts" / "kaola-hermes-acp.py").read_bytes(), WRAPPER.read_bytes())
 
     def test_no_hermes_worker_grant_exists_anywhere_tracked(self) -> None:
-        result = subprocess.run(
-            ["git", "-C", str(PROJECT), "grep", "-n", "worker_grants"],
-            capture_output=True, text=True)
-        for line in result.stdout.splitlines():
-            self.assertNotIn("hermes", line, line)
+        # Grant rows live in tracked JSON authorization records; a schema
+        # field name in generated scripts is not a grant.
+        listed = subprocess.run(
+            ["git", "-C", str(PROJECT), "ls-files", "-z", "--", "*.json", "*.jsonl"],
+            capture_output=True, text=True, check=True).stdout.split("\0")
+        found: list[str] = []
+        for name in filter(None, listed):
+            text = (PROJECT / name).read_text(encoding="utf-8", errors="replace")
+            for doc in (text.splitlines() if name.endswith(".jsonl") else [text]):
+                try:
+                    found += hermes_grant_rows(json.loads(doc), name)
+                except ValueError:
+                    continue
+        self.assertEqual(found, [])
+
+    def test_grant_scan_detects_hermes_grant_rows(self) -> None:
+        # The guard must see real rows, so it cannot pass vacuously.
+        sample = {"authorization": {
+            "worker_grants": [{"preset_ids": ["hermes/default"], "count": 1}],
+            "grants": [{"id": "hermes/max", "state": "granted", "count": 1},
+                       {"id": "dsh/default", "count": 1}]},
+            "fields": ["worker_grants", "elite_grants"]}
+        self.assertEqual(sorted(hermes_grant_rows(sample, "x")),
+                         ["x.authorization.grants: hermes/max",
+                          "x.authorization.worker_grants: hermes/default"])
 
     def test_registration_facts(self) -> None:
         acp = load("kaola-acp")
