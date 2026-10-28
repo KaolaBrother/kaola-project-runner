@@ -1,7 +1,7 @@
 # Hermes Agent steering (`steer`)
 
 Scope: the ACP channel only. Noninterrupting input on this platform's ACP route:
-**unknown**. unmeasured (source-read only; #417 measures live): a second `session/prompt` while a turn is busy is queued or redirected per the source read and returns `end_turn` at once; the adapter is a pure pass-through and claims no steer method.
+**unknown**. MacBook 2026-10-28: a busy second send is holder-refused prompt-in-progress and never reaches Hermes. A bare after-turn steer is refused steer-mode-required and writes nothing. Native busy processing, the after-turn holder queue, and worker-result notification were not measured. native_steering stays unknown. Mac Mini not measured.
 
 `steer` has two modes and the Agent picks one. `--steer-mode native` uses the
 native entry and exists only where the entry does. `--steer-mode interrupt` is

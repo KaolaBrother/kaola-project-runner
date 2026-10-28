@@ -13,7 +13,8 @@ any other configId refused locally; a busy second prompt passes through; a
 resume of an unknown id is refused -32002 instead of reporting a fresh
 session; the uncredentialed path is ``login-required`` end to end; and the
 manifest/static pins hold (verbatim profile, default+max Worker tiers, the
-shipped adapter, unmeasured fields, no ``worker_grants``).
+shipped adapter, MacBook-measured fields with still-unknown pins, no
+``worker_grants``).
 """
 
 from __future__ import annotations
@@ -423,8 +424,18 @@ class StaticPins(unittest.TestCase):
 
     def test_manifest_unmeasured_fields_stay_honest(self) -> None:
         values = manifest_values()
-        for key in ("acp_quirks", "acp_verified_versions", "quit_text"):
-            self.assertIn("unmeasured", values[key], key)
+        # Quit text was not measured live. Versions and quirks are the MacBook
+        # measurement; the Mac Mini leg stays inside the version condition.
+        self.assertIn("unmeasured", values["quit_text"])
+        self.assertNotIn("unmeasured", values["acp_quirks"])
+        self.assertTrue(values["acp_verified_versions"].startswith(
+            "cli=0.22.5;agent=hermes-agent/0.22.5;protocol=1"))
+        self.assertIn("mini-unmeasured", values["acp_verified_versions"])
+        self.assertIn("prompt-in-progress", values["acp_quirks"])
+        self.assertIn("-32603", values["acp_quirks"])
+        self.assertNotIn("ask/accept_edits/dont_ask", values["acp_quirks"])
+        self.assertIn("prompt-in-progress", values["steering_summary"])
+        self.assertNotIn("queued or redirected", values["steering_summary"])
         self.assertEqual(values["native_steering"], "unknown")
         self.assertEqual(values["acp_steer_method"], "")
         self.assertEqual(values["acp_effort_config_id"], "")

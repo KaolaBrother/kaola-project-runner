@@ -100,7 +100,7 @@ measured evidence, and fill a gap only when verified.
 | Kimi CLI 2.1.1 | measured | **POSITIVE** on fixed `24a2355a`: full automatic chain, **VERIFIED** scoped checkpoint `b-e93d1a2aaa85` (explicit `/compact`) | after-turn: ACP rejects concurrent prompt (`agent_busy`) → holder queue + ordinary prompt — #263 verified the owned prompt processed ADOPTED; admission-guard proof ran on a different holder/CLI hash (not a full-byte final-holder proof) | single-run positive; background route unmeasured; earlier r1/r2 partials retained |
 | Antigravity agy 1.3.5 (adapter 0.1.0) | **none** — no measured entry, not a Host | not applicable (not a Host) | after-turn: holder queue + ordinary prompt by manifest design; agy has no native steer (`control_request` ends the session); not measured live | live one-turn, two-turn and resume verified on agy 1.3.5 (2026-10-14); steer and cancel unverified live; worker only |
 | OpenCode 2.0.23 (bridge 47a3b97d) | measured | **VERIFIED** scoped checkpoint (candidate `24a2355a`, recovery-only) | busy: V2 local adapter inbox admission (2.0.22) — #263 verified the request ended ADOPTED (admitted ≠ adopted) | numbered wrapper omits final-newline byte exposure; home propagation qualified |
-| Hermes Agent (source-read only) | **none** — not a Host | not applicable (not a Host) | unknown (pending live evidence; a busy second `session/prompt` is queued or redirected per source read and returns `end_turn` at once; #417 measures) | worker only; all cells source-read, nothing measured live yet |
+| Hermes Agent 0.22.5 (MacBook 2026-10-28; Mac Mini not measured) | **none** — not a Host | not applicable (not a Host) | unknown — a busy second `send` is holder-refused `prompt-in-progress` and never reaches Hermes; a bare after-turn `steer` is refused `steer-mode-required`; native busy processing, the after-turn queue, and worker-result notification were not measured | worker only; MacBook smoke measured (model `deepseek:deepseek-flash`, mode `dont_ask`, cancel, ACP stop). Gateway session rows survive ACP stop. Mac Mini deferred |
 
 Every runtime also has the composite `--steer-mode interrupt` path, and
 worker events are turn-boundary prompts (notify/wake/read) independent of
@@ -443,13 +443,17 @@ and `references/acp.md`; transport and bridge internals are in the
   passed through) and translates the `model`/`mode` config options to
   `session/set_model`/`session/set_mode`. `start` sets mode `dont_ask`; effort
   comes from Hermes config, not an ACP option. Provider setup is a human act
-  (`hermes acp --setup` or `hermes model`, interactive); an uncredentialed start
-  is a recoverable `login-required` refusal. Sessions are gateway-owned, so an
-  ACP child exit is not proof a session ended (#417 measures stop). Resume uses
-  `session/load`; an unknown id is refused rather than silently creating a fresh
-  session. KPR writes nothing under `$HERMES_HOME` (KW owns native delivery
-  there), and unmeasured fields stay `unknown`/empty pending #417. Hermes is a
-  worker runtime, not a Host.
+  (`hermes acp --setup` or `hermes model`, interactive); the designed
+  uncredentialed refusal is `login-required`. The MacBook cold-home probe
+  returned `acp-initialize-timeout` instead. Sessions are gateway-owned, so an
+  ACP child exit is not proof a session ended: the MacBook exact stop left the
+  gateway row loadable. Resume uses `session/load`; an unknown id is refused
+  (`-32603` `not_found`) rather than silently creating a fresh session. KPR
+  writes nothing under `$HERMES_HOME` (KW owns native delivery there). Measured
+  MacBook fields are in
+  [docs/hermes-live-verification-20261028.md](docs/hermes-live-verification-20261028.md).
+  Quit text, continue, native steer, and the Mac Mini leg stay unmeasured.
+  Hermes is a worker runtime, not a Host. No Hermes worker grant.
 - **dsh** runs its shipped automation-only ACP profile (`dsh --profile acp`); it
   needs no login and has no terminal UI, and the profile must already exist under
   `$DSH_HOME`. It starts with **full access by default** (`danger-full-access`, no

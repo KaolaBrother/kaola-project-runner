@@ -59,7 +59,7 @@ already encodes effort or Fast (such as a `-fast` variant), pass it as-is; the R
 invent extra effort or Fast configuration for it.
 
 Fast is OFF by default. Pass `--fast on` only on an explicit user request for Fast; this platform's
-Fast support: no native Fast toggle and no Fast config option on the ACP surface (source-read only; #417 measures live). Fast and tier are independent selections. When a native fast model
+Fast support: no native Fast toggle and no Fast config option on the ACP surface (MacBook 0.22.5; effort not applied). Fast and tier are independent selections. When a native fast model
 ID is what the user explicitly selected, it counts as the explicit Fast selection — report the
 conflict honestly if it is also passed with `--fast off`.
 
@@ -114,7 +114,7 @@ or editor replacement. Settle a pending permission `request_id` with
 `permit [--request-id ID] --option OPTION_ID` (an option the request offers); omitting `--option`
 answers `cancelled`, which denies. Read the resulting output before choosing another action.
 
-Permission default: The adapter launches `hermes --yolo acp` (never `--accept-hooks`; the caller's `HERMES_YOLO_MODE`/`HERMES_ACCEPT_HOOKS` are not passed through). `start` sets mode `dont_ask` (edit approvals; sensitive paths still ask), the most permissive source-read `acp_adapter/modes.py` value; any remaining `session/request_permission` is settled by `permit`. #417 confirms live..
+Permission default: The adapter launches `hermes --yolo acp` (never `--accept-hooks`; the caller's `HERMES_YOLO_MODE`/`HERMES_ACCEPT_HOOKS` are not passed through). `start` sets mode `dont_ask`. MacBook 0.22.5 auto-approved a normal edit and still asked for `id_ed25519`, settled by `permit` `allow_once`..
 
 When the Agent decides the exact session is finished, end only that owned session:
 

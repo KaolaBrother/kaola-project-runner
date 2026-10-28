@@ -98,7 +98,9 @@ Hermes Agent speaks ACP through the in-repo adapter `scripts/kaola-hermes-acp.py
 (Issue #416): a pass-through over `hermes --yolo acp` that synthesizes the `model`/`mode`
 config options from the `models`/`modes` blocks, translates `session/set_config_option`
 to `session/set_model`/`session/set_mode`, and refuses a resume that would silently
-report a fresh session. Its fields stay unmeasured until #417.
+report a fresh session. MacBook 2026-10-28 measured fields are in
+[docs/hermes-live-verification-20261028.md](hermes-live-verification-20261028.md).
+Quit text, continue, native steer, and the Mac Mini leg stay unmeasured.
 
 Grok Bot is a **bridge host** for Kaola-Delegator, not a Project Runner host.
 Research on Grok Bot 0.51.0 found `NO_SUPPORTED_PATH` for
