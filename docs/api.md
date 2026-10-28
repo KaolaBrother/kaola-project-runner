@@ -585,6 +585,32 @@ If resume still fails, start a fresh Host and hand it the summary from
 does not auto-reap the leftover job. The Delegator procedure is
 `templates/kaola-delegator/references/host-restart.md`.
 
+## Test-lane receipt certification (Issue #422)
+
+A declared test lane is a receipt with `test_lane` set, or `kind` `test-lane`.
+`certify_test_lane_receipt` in `scripts/kaola-acp.py` runs at the start of
+`_emit_receipt`, before the recovery stamp. Ordinary session receipts have
+neither field and pass through unchanged. The guard is platform-neutral.
+
+Exit 0 does not certify the lane. Certification requires output on stdout or
+stderr. Both streams empty (sha256 `e3b0c442…`, the empty digest, including a
+missing stream) is a refusal. The minimum duration is 50 ms
+(`TEST_LANE_MIN_DURATION_MS`). The 2026-10-29 noop receipts were 7–9 ms with
+that empty digest: an HTML-escaped `&&` (or any quoting artifact) left the
+test binary unexecuted while the receipt said pass. A one-test run on the
+same class of machine was about 28–44 ms and a `python3 -c` print about 15 ms,
+both with real output, so a floor above the 7–9 ms band overlaps a fast real
+lane. The floor therefore refuses only together with empty output. A lane
+that produced output still certifies, including one faster than 50 ms.
+
+The refusal is typed. `result` and `outcome` are `refused`, `reason` and
+`error.code` are `noop-test-lane`, and `error.evidence` records `test_lane`,
+`exit_code`, `stdout_sha256`, `stderr_sha256`, `duration_ms`,
+`min_duration_ms`, and `checks` (`empty-output`, and `sub-floor-duration`
+when the recorded duration is under 50 ms). The caller's object is not
+rewritten in place. The recovery table names the next step: re-run the lane
+so the test binary executes, and do not accept the receipt.
+
 ## Dispatch and collect (`kaola-dispatch.py`)
 
 The orchestrator Skill ships one entry, `scripts/kaola-dispatch.py`, for an

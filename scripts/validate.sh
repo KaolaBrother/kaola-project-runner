@@ -398,6 +398,7 @@ python_suites_all=(
   "test-issue-404-legacy-decision-evidence.py"
   "test-issue-406-versionless-decision-retire.py"
   "test-issue-408-bound-seat-socket-auth.py"
+  "test-issue-422-noop-receipt-guard.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -567,7 +568,8 @@ python_suites_b=(
   "test-issue-359-record-loss.py"
   "test-issue-404-legacy-decision-evidence.py"
   "test-issue-406-versionless-decision-retire.py"
-  "test-issue-408-bound-seat-socket-auth.py")
+  "test-issue-408-bound-seat-socket-auth.py"
+  "test-issue-422-noop-receipt-guard.py")
 
 # Selectable shell contract suites: they run serially before the Python lanes.
 shell_suites=(

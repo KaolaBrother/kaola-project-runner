@@ -79,6 +79,8 @@ def _stamp_recovery(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _emit_receipt(payload: dict[str, Any]) -> None:
     """Print one receipt. Stamp a copy so a stored object stays unchanged."""
+    if isinstance(payload, dict):
+        payload = certify_test_lane_receipt(payload)
     printed = payload
     module = _load_recovery_routes()
     if module is not None and isinstance(payload, dict):
@@ -88,6 +90,156 @@ def _emit_receipt(payload: dict[str, Any]) -> None:
             printed["holder_lost"] = dict(lost)
         printed = module.stamp(printed)
     print(json.dumps(printed, ensure_ascii=False, sort_keys=True))
+
+
+# Issue #422. sha256 of the empty byte string. The noop receipts that certified
+# pass had this digest on both stdout and stderr: the test binary never ran.
+EMPTY_OUTPUT_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+# Observed noop receipts were 7–9 ms. A one-test unittest on this machine
+# measured about 28–44 ms and ``python3 -c "print('ok')"`` about 15 ms, both
+# with real output. Any floor that sits above 7–9 ms also sits inside that
+# fast-lane band, so the floor refuses only when stdout and stderr are both
+# empty. A lane that produced output still certifies. 50 ms is above the
+# noop band with margin for timer granularity and is recorded on the refusal.
+TEST_LANE_MIN_DURATION_MS = 50
+_PASS_OUTCOMES = frozenset({"pass", "passed", "ok"})
+
+
+def _declared_test_lane(receipt: dict[str, Any]) -> str | None:
+    """The lane name when this receipt is a declared test lane, else None."""
+    lane = receipt.get("test_lane")
+    if isinstance(lane, str) and lane.strip():
+        return lane.strip()
+    if receipt.get("kind") == "test-lane":
+        named = receipt.get("lane")
+        if isinstance(named, str) and named.strip():
+            return named.strip()
+        return "test-lane"
+    return None
+
+
+def _parse_sha256(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip().lower()
+    if text.startswith("sha256:"):
+        text = text[7:]
+    if len(text) == 64 and all(char in "0123456789abcdef" for char in text):
+        return text
+    return None
+
+
+def _stream_sha256(receipt: dict[str, Any], raw_key: str, sha_key: str) -> str:
+    """Sha256 of one stream. Missing output is the empty digest."""
+    if raw_key in receipt and receipt[raw_key] is not None:
+        raw = receipt[raw_key]
+        if isinstance(raw, str):
+            return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        return EMPTY_OUTPUT_SHA256
+    for key in (sha_key, raw_key + "_sha"):
+        parsed = _parse_sha256(receipt.get(key))
+        if parsed is not None:
+            return parsed
+    return EMPTY_OUTPUT_SHA256
+
+
+def _exit_code(receipt: dict[str, Any]) -> int | None:
+    for key in ("exit_code", "exit"):
+        if key not in receipt or receipt[key] is None:
+            continue
+        value = receipt[key]
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        if isinstance(value, str) and value.strip().lstrip("-").isdigit():
+            return int(value.strip())
+    return None
+
+
+def _duration_ms(receipt: dict[str, Any]) -> int | float | None:
+    """Milliseconds from ``duration_ms`` or ``duration``. Both are milliseconds."""
+    for key in ("duration_ms", "duration"):
+        if key not in receipt or receipt[key] is None:
+            continue
+        value = receipt[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        return value
+    return None
+
+
+def _claims_pass(receipt: dict[str, Any]) -> bool:
+    outcome = receipt.get("outcome")
+    if isinstance(outcome, str) and outcome.lower() in _PASS_OUTCOMES:
+        return True
+    return outcome in (None, "") and _exit_code(receipt) == 0
+
+
+def certify_test_lane_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
+    """Certify a declared test lane, or refuse it closed.
+
+    A receipt declares a lane with ``test_lane`` or ``kind`` ``test-lane``.
+    Any other receipt is returned unchanged. Exit 0 is never proof the suite
+    ran. Empty stdout and empty stderr refuse certification. A duration under
+    ``TEST_LANE_MIN_DURATION_MS`` refuses only together with that empty output,
+    and the refusal records the sha and the duration that were seen. The
+    error code is ``noop-test-lane``. The caller's object is left unchanged.
+    """
+    if not isinstance(receipt, dict):
+        return receipt
+    lane = _declared_test_lane(receipt)
+    if lane is None or not _claims_pass(receipt):
+        return receipt
+    stdout_sha = _stream_sha256(receipt, "stdout", "stdout_sha256")
+    stderr_sha = _stream_sha256(receipt, "stderr", "stderr_sha256")
+    duration = _duration_ms(receipt)
+    exit_code = _exit_code(receipt)
+    empty = stdout_sha == EMPTY_OUTPUT_SHA256 and stderr_sha == EMPTY_OUTPUT_SHA256
+    checks: list[str] = []
+    if empty:
+        checks.append("empty-output")
+    if empty and duration is not None and duration < TEST_LANE_MIN_DURATION_MS:
+        checks.append("sub-floor-duration")
+    certified = dict(receipt)
+    certified["test_lane"] = lane
+    certified["stdout_sha256"] = stdout_sha
+    certified["stderr_sha256"] = stderr_sha
+    certified["exit_code"] = exit_code
+    if duration is not None:
+        certified["duration_ms"] = duration
+    if not checks:
+        certified["outcome"] = "pass"
+        certified["result"] = "pass"
+        certified.pop("error", None)
+        return certified
+    evidence = {
+        "test_lane": lane,
+        "exit_code": exit_code,
+        "stdout_sha256": stdout_sha,
+        "stderr_sha256": stderr_sha,
+        "duration_ms": duration,
+        "min_duration_ms": TEST_LANE_MIN_DURATION_MS,
+        "checks": checks,
+    }
+    certified["outcome"] = "refused"
+    certified["result"] = "refused"
+    certified["reason"] = "noop-test-lane"
+    certified["error"] = {
+        "code": "noop-test-lane",
+        "message": (
+            f"test lane {lane} was not certified ({', '.join(checks)}); "
+            f"stdout_sha256={stdout_sha} stderr_sha256={stderr_sha} "
+            f"duration_ms={duration} exit_code={exit_code}. "
+            "Exit 0 is not proof the suite ran."
+        ),
+        "evidence": evidence,
+    }
+    return certified
 
 
 def _load_session_names():
