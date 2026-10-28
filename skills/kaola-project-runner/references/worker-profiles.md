@@ -84,20 +84,20 @@ Do not keep a universal model ranking, invent a complexity classifier or
 routing engine, fix per-runtime quotas, create work to fill
 capacity, or interrupt useful work.
 
-Worker-class presets are exactly: `claude-code/haiku`, `codex/luna`, `devin/default`, `dsh/commandcode`, `dsh/default`, `opencode/default`, `zcode/default`.
+Worker-class presets are exactly: `claude-code/haiku`, `codex/terra`, `devin/default`, `dsh/commandcode`, `dsh/default`, `opencode/default`, `zcode/default`.
 Each needs an explicit grant; none means no Workers. Seats do not consume Elite/Expert grants. A runtime `default` is not a grant. Limits and exclusions apply; an exclusion vetoes `unlimited`. `unlimited` is explicit, not a number. A grant is permission, not a preference over Elite. Existing grants stay valid; a Worker grant is not a model-switch grant.
 
 ## Computer interaction
 
 The owner designates exactly two presets for tasks that operate a computer:
-`codex/default` (GPT-6.1 Sol, effort=high; Elite) and `codex/luna` (GPT-6
-Luna, effort=max; Worker). Prefer Sol only when its local row is discovered,
+`codex/default` (GPT-6.1 Sol, effort=high; Elite) and `codex/terra` (Codex
+Terra, effort=high; Worker). Prefer Sol only when its local row is discovered,
 available for the task, and covered by the user's explicit preset/seat grant.
-If no eligible Sol is available, use locally available Luna when an explicit
+If no eligible Sol is available, use locally available Terra when an explicit
 Worker grant covers it. If
 neither qualifies, report the concrete availability or authorization gap;
 never silently switch tiers or substitute another preset.
-`codex/luna` does not set `luna_model_roles` (absent means no role gate). Automatic non-computer-use selection, including the Sideagent node chain, may pick it. The skip still reads the role, not the preset name. Explicit dispatch of a granted marked preset stays. Grants, exclusions, holds, and availability are unchanged.
+`codex/terra` does not set `terra_model_roles` (absent means no role gate). Automatic non-computer-use selection, including the Sideagent node chain, may pick it. The skip still reads the role, not the preset name. Explicit dispatch of a granted marked preset stays. Grants, exclusions, holds, and availability are unchanged.
 
 Do not infer computer-operation capability from visual-design or screenshot-review profiles or class membership. Visual analysis is not computer use. Model authorization and permission to
 use computer tools are separate existing facts. Profile wording grants no tool

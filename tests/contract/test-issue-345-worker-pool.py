@@ -2,7 +2,7 @@
 """Issue #345, retargeted by #346: dsh/commandcode is a Worker-class catalog preset.
 
 The class list is seven preset ids. Each one, including ``dsh/commandcode``,
-is usable only after an explicit Worker grant. ``codex/luna`` and
+is usable only after an explicit Worker grant. ``codex/terra`` and
 ``zcode/default`` stay in that class. Antigravity stays out.
 """
 
@@ -24,7 +24,7 @@ PLATFORMS = PROJECT / "platforms"
 
 POOL = [
     "claude-code/haiku",
-    "codex/luna",
+    "codex/terra",
     "devin/default",
     "dsh/commandcode",
     "dsh/default",
@@ -117,7 +117,7 @@ class ExactWorkerPool(unittest.TestCase):
             self.assertEqual(commandcode["state"], "granted")
             self.assertFalse(commandcode["pool"])
             self.assertEqual(commandcode["count"], 1)
-            self.assertNotIn("codex/luna", by_id)
+            self.assertNotIn("codex/terra", by_id)
             self.assertNotIn("zcode/default", by_id)
 
             delegator = repo / ".kaola" / "delegator-heartbeat.json"

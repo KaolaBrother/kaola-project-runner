@@ -90,14 +90,14 @@ Each needs an explicit grant; none means no Workers. Seats do not consume Elite/
 ## Computer interaction
 
 The owner designates exactly two presets for tasks that operate a computer:
-`codex/default` (GPT-6.1 Sol, effort=high; Elite) and `codex/luna` (GPT-6
-Luna, effort=max; Worker). Prefer Sol only when its local row is discovered,
+`codex/default` (GPT-6.1 Sol, effort=high; Elite) and `codex/terra` (Codex
+Terra, effort=high; Worker). Prefer Sol only when its local row is discovered,
 available for the task, and covered by the user's explicit preset/seat grant.
-If no eligible Sol is available, use locally available Luna when an explicit
+If no eligible Sol is available, use locally available Terra when an explicit
 Worker grant covers it. If
 neither qualifies, report the concrete availability or authorization gap;
 never silently switch tiers or substitute another preset.
-`codex/luna` does not set `luna_model_roles` (absent means no role gate). Automatic non-computer-use selection, including the Sideagent node chain, may pick it. The skip still reads the role, not the preset name. Explicit dispatch of a granted marked preset stays. Grants, exclusions, holds, and availability are unchanged.
+`codex/terra` does not set `terra_model_roles` (absent means no role gate). Automatic non-computer-use selection, including the Sideagent node chain, may pick it. The skip still reads the role, not the preset name. Explicit dispatch of a granted marked preset stays. Grants, exclusions, holds, and availability are unchanged.
 
 Do not infer computer-operation capability from visual-design or screenshot-review profiles or class membership. Visual analysis is not computer use. Model authorization and permission to
 use computer tools are separate existing facts. Profile wording grants no tool

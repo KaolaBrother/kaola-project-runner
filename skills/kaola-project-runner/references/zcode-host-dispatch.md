@@ -22,7 +22,7 @@ standalone, degraded or same-assignment recovery.
 ```bash
 W="/abs/path/to/codex-kaola-project-runner/scripts/runtime-tmux.sh"
 WORK_REPO="/abs/path/to/project"
-"$W" start --repo "$WORK_REPO" --session codex-KT-i274-parser --tier luna --no-wait --text '<task>'
+"$W" start --repo "$WORK_REPO" --session codex-KT-i274-parser --tier terra --no-wait --text '<task>'
 ```
 
 Run `start` from your own session: it binds the worker to you and refuses

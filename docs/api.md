@@ -3019,7 +3019,7 @@ Claude Code `default` and `opus-xhigh` are both
 sidekick `SWE-2` at `medium`). Devin `fable` is `Fable Fusion` (main `Fable 5.1` at `high`,
 sidekick `SWE-2` at `medium`). Codex `default` now selects `gpt-6.1-sol` at `high`.
 Other display identities are:
-`Fable`, `Sonnet`, `GPT-6.1 Sol`, `GPT-6 Astra`, `GPT-6 Luna`, `Grok 4.7`, `Claude Opus 5.5`,
+`Fable`, `Sonnet`, `GPT-6.1 Sol`, `GPT-6 Astra`, `Codex Terra`, `Grok 4.7`, `Claude Opus 5.5`,
 `Auto Model`, `DeepSeek V4.1 Flash`, `DeepSeek V4.1 Flash (Command Code)`, `Kimi K3`, `Kimi K2.8`, `GLM 5.3`. `Flash` is the model
 variant, `Auto Model` is the `auto` catalog identity, and Cursor's `Claude` prefix is the
 declared family name.
@@ -3108,7 +3108,7 @@ is `role` `main`. Do not label `high` as the sidekick effort or as `current_effo
 
 Direct `--model gpt-6-luna --effort high` on Codex: `model_display.name` is `GPT-6 Luna`,
 `preset_id` and `preset_effort` are null, `requested_effort` and
-`model_selection.resolved_effort` are `high` (not the luna preset's `max`), and
+`model_selection.resolved_effort` are `high` (the explicit `high`, not a preset tier effort), and
 `resolved_runtime_model_id` is `gpt-6-luna`.
 
 Direct `--model custom-model-max`: `model_display.name` is null,
@@ -3176,11 +3176,11 @@ is the same display name Opus 5.5, preset `claude-code/opus-xhigh`, native alias
 implementation). The preset ID is not the alias. `--tier sonnet` is Sonnet (`sonnet`)
 at `effort=high` (Elite; an explicit preset and count grant, not a Worker-class preset).
 `--tier haiku` is Claude Haiku (`haiku`) at `effort=high` (Worker; usable only after an explicit Worker grant).
-Worker-class presets are exactly: `claude-code/haiku`, `codex/luna`, `devin/default`, `dsh/commandcode`, `dsh/default`, `opencode/default`, `zcode/default`. Each of those seven is usable only after an explicit Worker grant. `dsh/commandcode` is the Command Code DeepSeek V4.1 Flash preset in that class, and it needs a grant the same way. Codex's `--tier luna` is GPT-6 Luna (`gpt-6-luna`) at `effort=max`
-(Issue #188; owner decision `luna-research-ok-20261026`): a Worker good at
+Worker-class presets are exactly: `claude-code/haiku`, `codex/terra`, `devin/default`, `dsh/commandcode`, `dsh/default`, `opencode/default`, `zcode/default`. Each of those seven is usable only after an explicit Worker grant. `dsh/commandcode` is the Command Code DeepSeek V4.1 Flash preset in that class, and it needs a grant the same way. Codex's `--tier terra` is Codex Terra (`terra-6.1`) at `effort=high`
+(owner decision `owner-worker-luna-max-to-codex-terra-20261028`, replacing the retired Luna tier of Issue #188): a Worker good at
 computer-use and research, not Expert design or planning, and not a substitute
 for Elite work when a better Elite seat exists. Its catalog row does not set
-`luna_model_roles` (absent means no role gate). Issue #350 still skips any
+`terra_model_roles` (absent means no role gate). Issue #350 still skips any
 preset that does set `computer-use-only`.
 These are applied as ordinary ACP config
 options; a native rejection is a `config_application` limitation, never a substitute.

@@ -2,8 +2,8 @@
 """Issue #350: automatic Worker selection skips computer-use-only presets.
 
 The role is a closed catalog value, not a preset name. Owner decision
-``luna-research-ok-20261026`` removed ``luna_model_roles`` from ``codex/luna``,
-so Luna is a selectable Worker again (research and computer-use). The skip
+``terra-research-ok-20261026`` removed ``terra_model_roles`` from ``codex/terra``,
+so Terra is a selectable Worker again (research and computer-use). The skip
 still reads the role: a fixture or later preset that sets
 ``computer-use-only`` is omitted from automatic selection, including the
 Sideagent node chain.
@@ -32,9 +32,9 @@ CONTRACT = SCRIPTS / "kaola-record-contract.py"
 PATHS = SCRIPTS / "kaola-acp-paths.py"
 RENDER = SCRIPTS / "render-skills.py"
 
-LUNA = "codex/luna"
+TERRA = "codex/terra"
 ROLE = "computer-use-only"
-DSH_CHAIN = ["claude-code/haiku", LUNA, "devin/default", "opencode/default", "zcode/default"]
+DSH_CHAIN = ["claude-code/haiku", TERRA, "devin/default", "opencode/default", "zcode/default"]
 OTHER_WORKERS = [
     "claude-code/haiku", "devin/default", "dsh/commandcode", "dsh/default",
     "opencode/default", "zcode/default",
@@ -92,7 +92,7 @@ class ComputerUseRoles(unittest.TestCase):
             "expert_task_grants": [],
             "worker_grants": [
                 {"preset_ids": [preset], "count": "unlimited", "state": "granted"}
-                for preset in sorted(OTHER_WORKERS + [LUNA])
+                for preset in sorted(OTHER_WORKERS + [TERRA])
             ],
         }
         if extra:
@@ -159,19 +159,19 @@ class ComputerUseRoles(unittest.TestCase):
         self.assertEqual(event["reason"], "turn-refused:turn_failed")
         self.assertEqual(event["chain"], DSH_CHAIN)
         self.assertEqual(event["to"], "claude-code/haiku")
-        self.assertIn(LUNA, event["chain"])
-        self.assertNotIn("codex/luna", inspect.getsource(self.holder.Holder._node_chain))
+        self.assertIn(TERRA, event["chain"])
+        self.assertNotIn("codex/terra", inspect.getsource(self.holder.Holder._node_chain))
         self.assertIn(ROLE, inspect.getsource(self.holder.automatic_worker_barred))
 
-    def test_absent_haiku_leads_with_luna(self) -> None:
+    def test_absent_haiku_leads_with_terra(self) -> None:
         self.write_grant()
         self.availability(["claude-code/haiku"])
         chain = self.carrier()._node_chain(self.binding(), ["dsh"])
         presets = [row["preset"] for row in chain]
-        self.assertEqual(presets, [LUNA, "devin/default", "opencode/default", "zcode/default"])
-        self.assertEqual(presets[0], LUNA)
+        self.assertEqual(presets, [TERRA, "devin/default", "opencode/default", "zcode/default"])
+        self.assertEqual(presets[0], TERRA)
 
-    def test_only_luna_takes_the_chain_when_other_workers_are_absent(self) -> None:
+    def test_only_terra_takes_the_chain_when_other_workers_are_absent(self) -> None:
         self.write_grant()
         self.availability(OTHER_WORKERS)
         carrier = self.carrier()
@@ -179,11 +179,11 @@ class ComputerUseRoles(unittest.TestCase):
         self.assertIsNotNone(moved)
         event = carrier.events[-1]
         self.assertFalse(event.get("exhausted", False))
-        self.assertEqual(event["chain"], [LUNA])
-        self.assertEqual(event["to"], LUNA)
+        self.assertEqual(event["chain"], [TERRA])
+        self.assertEqual(event["to"], TERRA)
         projected = json.loads(self.project().stdout)
         workers = [row for row in projected["candidates"] if row["class"] == "Worker"]
-        self.assertEqual([row["id"] for row in workers], [LUNA])
+        self.assertEqual([row["id"] for row in workers], [TERRA])
         self.assertEqual(workers[0].get("roles"), [])
 
     def test_fixture_role_is_excluded_without_naming_the_preset(self) -> None:
@@ -195,32 +195,32 @@ class ComputerUseRoles(unittest.TestCase):
         (tree / "platforms" / "futureplat.yaml").write_text(
             "\n".join([
                 'id: "futureplat"',
-                'named_tiers: "cu,luna"',
+                'named_tiers: "cu,terra"',
                 'default_model_class: "Worker"',
                 'default_model_profile: "General future worker."',
                 'cu_model_class: "Worker"',
                 'cu_model_roles: "computer-use-only"',
                 'cu_model_profile: "Future computer-use only preset."',
-                'luna_model_class: "Worker"',
-                'luna_model_profile: "Named luna and still a general worker."',
+                'terra_model_class: "Worker"',
+                'terra_model_profile: "Named terra and still a general worker."',
                 "",
             ]),
             encoding="utf-8",
         )
         self.write_grant({"worker_grants": [
             {"preset_ids": [preset], "count": "unlimited", "state": "granted"}
-            for preset in ("futureplat/cu", "futureplat/default", "futureplat/luna")
+            for preset in ("futureplat/cu", "futureplat/default", "futureplat/terra")
         ]})
         tool = tree / "scripts" / "kaola-dispatch.py"
         projected = self.project(tree / "platforms", tool)
         self.assertEqual(projected.returncode, 0, projected.stdout + projected.stderr)
         rows = {row["id"]: row for row in json.loads(projected.stdout)["candidates"]}
         self.assertEqual(rows["futureplat/cu"]["roles"], [ROLE])
-        self.assertEqual(rows["futureplat/luna"]["roles"], [])
+        self.assertEqual(rows["futureplat/terra"]["roles"], [])
         self.assertIn("futureplat/cu", rows)
         chain = self.carrier(tool)._node_chain(self.binding(), ["dsh"])
         presets = [row["preset"] for row in chain]
-        self.assertEqual(presets, ["futureplat/default", "futureplat/luna"])
+        self.assertEqual(presets, ["futureplat/default", "futureplat/terra"])
         self.assertNotIn("futureplat/cu", presets)
 
     def test_unknown_role_rejects_the_catalog_row(self) -> None:
@@ -246,21 +246,21 @@ class ComputerUseRoles(unittest.TestCase):
         self.assertIn("futureplat/default", detail)
         self.assertNotIn('"candidates"', detail)
 
-    def test_explicit_dispatch_still_offers_luna(self) -> None:
+    def test_explicit_dispatch_still_offers_terra(self) -> None:
         self.write_grant()
         projected = json.loads(self.project().stdout)
-        luna = next(row for row in projected["candidates"] if row["id"] == LUNA)
-        self.assertEqual(luna["class"], "Worker")
-        self.assertEqual(luna["roles"], [])
+        terra = next(row for row in projected["candidates"] if row["id"] == TERRA)
+        self.assertEqual(terra["class"], "Worker")
+        self.assertEqual(terra["roles"], [])
         self.assertEqual(next(row["roles"] for row in projected["candidates"]
                               if row["id"] == "zcode/default"), [])
         withheld = {row["id"]: row["reason"] for row in projected["withheld"]}
-        self.assertNotIn(LUNA, withheld)
+        self.assertNotIn(TERRA, withheld)
         plan = self.root / "plan.json"
         plan.write_text(json.dumps({
             "scope": "research",
             "repo": str(self.repo),
-            "items": [{"item_id": "i0", "preset": LUNA, "session": "seat0", "prompt": "bounded"}],
+            "items": [{"item_id": "i0", "preset": TERRA, "session": "seat0", "prompt": "bounded"}],
         }), encoding="utf-8")
         auth = self.root / "auth.json"
         auth.write_text(json.dumps({"grants": []}), encoding="utf-8")
@@ -274,21 +274,21 @@ class ComputerUseRoles(unittest.TestCase):
             capture_output=True, text=True, timeout=60, env=env)
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         item = json.loads(proc.stdout)["items"][0]
-        self.assertEqual(item["preset"], LUNA)
+        self.assertEqual(item["preset"], TERRA)
         self.assertEqual(item["reason"], "dry-run")
         self.assertEqual(item["status"], "not-run")
 
-    def test_factory_luna_row_has_no_role_and_render_rejects_unknown(self) -> None:
+    def test_factory_terra_row_has_no_role_and_render_rejects_unknown(self) -> None:
         text = (PLATFORMS / "codex.yaml").read_text(encoding="utf-8")
-        self.assertNotIn("luna_model_roles", text)
+        self.assertNotIn("terra_model_roles", text)
         for path in sorted(PLATFORMS.glob("*.yaml")):
             self.assertNotIn(ROLE, path.read_text(encoding="utf-8"), path.name)
         render = load_render()
         manifest = render.parse_manifest(PLATFORMS / "codex.yaml")
-        self.assertNotIn("luna_model_roles", manifest)
+        self.assertNotIn("terra_model_roles", manifest)
         self.assertEqual(render.MODEL_ROLES, frozenset({ROLE}))
         bad = self.root / "codex.yaml"
-        bad.write_text(text.rstrip() + '\nluna_model_roles: "desktop-only"\n', encoding="utf-8")
+        bad.write_text(text.rstrip() + '\nterra_model_roles: "desktop-only"\n', encoding="utf-8")
         with self.assertRaises(ValueError) as caught:
             render.parse_manifest(bad)
         self.assertIn("unknown model role", str(caught.exception))

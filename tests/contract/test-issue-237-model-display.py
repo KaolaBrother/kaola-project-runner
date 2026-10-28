@@ -171,12 +171,12 @@ class ModelDisplayContract(unittest.TestCase):
     def test_known_direct_selection_names_the_id_without_a_preset(self) -> None:
         manifest = self.manifests["codex"]
         basis = self.acp.selection_basis(
-            args("codex", manifest, model="gpt-6-luna", effort="high", tier="luna"))
+            args("codex", manifest, model="terra-6.1", effort="high", tier="terra"))
         display = self.acp.model_display_fact(basis)
-        self.assertEqual(basis["candidate"], "gpt-6-luna")
+        self.assertEqual(basis["candidate"], "terra-6.1")
         self.assertEqual(basis["effort"], "high")
         self.assertEqual(display, {
-            "name": "GPT-6 Luna",
+            "name": "Codex Terra",
             "preset_id": None,
             "preset_effort": None,
             "components": None,
@@ -190,7 +190,7 @@ class ModelDisplayContract(unittest.TestCase):
     def test_unknown_direct_selection_stays_unnamed(self) -> None:
         manifest = self.manifests["codex"]
         basis = self.acp.selection_basis(
-            args("codex", manifest, model="custom-model-max", tier="luna"))
+            args("codex", manifest, model="custom-model-max", tier="terra"))
         display = self.acp.model_display_fact(basis)
         self.assertEqual(basis["candidate"], "custom-model-max")
         self.assertEqual(basis["effort"], "")
@@ -276,13 +276,13 @@ class ModelDisplayContract(unittest.TestCase):
             "effective_selection": {"effort_config_id": "reasoning_effort"},
             "inherited": {"model_display": inherited},
         }, [
-            {"id": "model", "currentValue": "gpt-6-luna"},
+            {"id": "model", "currentValue": "terra-6.1"},
             {"id": "reasoning_effort", "currentValue": "max"},
         ])
         self.assertIsNone(live["model_display"]["name"])
         self.assertEqual(live["current"], {
-            "name": "GPT-6 Luna",
-            "native_id": "gpt-6-luna",
+            "name": "Codex Terra",
+            "native_id": "terra-6.1",
             "effort": "max",
             "name_provenance": "catalog-declared",
         })
@@ -299,14 +299,14 @@ class ModelDisplayContract(unittest.TestCase):
             "model_selection": {"resolved_effort": "high", "resolved_model": "gpt-6.1-sol"},
             "effective_selection": {"effort_config_id": "reasoning_effort"},
         }, [
-            {"id": "model", "currentValue": "gpt-6-luna"},
+            {"id": "model", "currentValue": "terra-6.1"},
             {"id": "reasoning_effort", "currentValue": "max"},
         ])
         self.assertEqual(view["model_display"]["name"], "GPT-6.1 Sol")
         self.assertEqual(view["current_effort"], "max")
         self.assertEqual(view["current"], {
-            "name": "GPT-6 Luna",
-            "native_id": "gpt-6-luna",
+            "name": "Codex Terra",
+            "native_id": "terra-6.1",
             "effort": "max",
             "name_provenance": "catalog-declared",
         })

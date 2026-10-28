@@ -15,7 +15,7 @@ You keep authorization, dispatch, acceptance and close-out in your own session.
 Nothing below in this file applies: no event binding, no heartbeat file, no Host.
 
 ```bash
-"$WORKER" start   --repo "$PROJECT" --session codex-KT-i274-parser --tier luna --no-wait --text '<the task>'
+"$WORKER" start   --repo "$PROJECT" --session codex-KT-i274-parser --tier terra --no-wait --text '<the task>'
 "$WORKER" observe --repo "$PROJECT" --session codex-KT-i274-parser
 "$WORKER" capture --repo "$PROJECT" --session codex-KT-i274-parser --lines 200
 "$WORKER" stop    --repo "$PROJECT" --session codex-KT-i274-parser
