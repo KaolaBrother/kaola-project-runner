@@ -28,7 +28,7 @@ RENDER_PATH = PROJECT / "scripts" / "render-skills.py"
 PLATFORMS = PROJECT / "platforms"
 PLATFORM_ORDER = [
     "antigravity", "claude-code", "codex", "cursor-cli", "devin", "droid",
-    "dsh", "grok", "kimi-cli", "opencode", "zcode",
+    "dsh", "grok", "hermes", "kimi-cli", "opencode", "zcode",
 ]
 
 
@@ -81,6 +81,7 @@ class QuotaSchemaTest(unittest.TestCase):
             "droid": ["standard", "core", "extra_usage"],
             "dsh": ["opencode-go", "commandcode"],
             "grok": ["account"],
+            "hermes": ["deepseek"],
             "kimi-cli": ["managed", "managed_monthly"],
             "opencode": ["opencode-go", "zhipuai-coding-plan", "zen"],
             "zcode": ["bigmodel-coding-plan"],
@@ -124,6 +125,7 @@ class QuotaSchemaTest(unittest.TestCase):
                 "commandcode": ["5h", "weekly", "monthly"],
             },
             "grok": {"account": ["monthly"]},
+            "hermes": {"deepseek": None},
             "kimi-cli": {
                 "managed": ["weekly", "monthly"],
                 "managed_monthly": ["monthly"],

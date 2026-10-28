@@ -79,7 +79,7 @@ make_fixture() {
   mkdir -p "$root/skills/kaola-delegator"
   printf '%s\n' 'kaola-delegator' >"$root/skills/kaola-delegator/.generated-by-kaola-project-runner"
   printf '%s\n' '# fixture Skill' >"$root/skills/kaola-delegator/SKILL.md"
-  for id in grok claude-code opencode kimi-cli cursor-cli devin droid dsh antigravity codex zcode; do
+  for id in grok claude-code opencode kimi-cli cursor-cli devin droid dsh antigravity hermes codex zcode; do
     case "$id" in
       grok) name=grok-kaola-project-runner ;;
       claude-code) name=claude-code-kaola-project-runner ;;
@@ -90,6 +90,7 @@ make_fixture() {
       droid) name=droid-kaola-project-runner ;;
       dsh) name=dsh-kaola-project-runner ;;
       antigravity) name=antigravity-kaola-project-runner ;;
+      hermes) name=hermes-kaola-project-runner ;;
       codex) name=codex-kaola-project-runner ;;
       zcode) name=zcode-kaola-project-runner ;;
     esac
@@ -1371,7 +1372,7 @@ output="$(run_installer "$repo236" "$home236" --skills-dir "$dest236" --method l
 [[ "$output" == *"install-local: continue at docs/api.md#acp-layer-preparation-during-install"* ]] \
   || fail "test_236_normal_guide" "missing canonical guide: $output"
 sel="$(printf '%s\n' "$output" | sed -n 's/^install-local: platform selection: //p')"
-[[ "$sel" == "grok,claude-code,opencode,kimi-cli,cursor-cli,devin,codex,zcode,droid,dsh,antigravity" ]] \
+[[ "$sel" == "grok,claude-code,opencode,kimi-cli,cursor-cli,devin,codex,zcode,droid,dsh,antigravity,hermes" ]] \
   || fail "test_236_normal_selection" "expected every worker platform, got: $sel"
 [[ "$(printf '%s\n' "$output" | grep -c 'install-local: payloads verified')" -eq 1 ]] \
   || fail "test_236_normal_once" "footer repeated: $output"
@@ -1381,7 +1382,7 @@ sel="$(printf '%s\n' "$output" | sed -n 's/^install-local: platform selection: /
 output="$(run_installer "$repo236" "$home236" --runtime claude-code --method link 2>&1)" \
   || fail "test_236_runtime_destination" "install failed: $output"
 sel="$(printf '%s\n' "$output" | sed -n 's/^install-local: platform selection: //p')"
-[[ "$sel" == "grok,claude-code,opencode,kimi-cli,cursor-cli,devin,codex,zcode,droid,dsh,antigravity" ]] \
+[[ "$sel" == "grok,claude-code,opencode,kimi-cli,cursor-cli,devin,codex,zcode,droid,dsh,antigravity,hermes" ]] \
   || fail "test_236_runtime_not_sole_cli" "--runtime narrowed the platform selection to: $sel"
 
 dest_filtered="$tmp_root/dest-236-filtered/skills"

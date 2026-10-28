@@ -561,13 +561,13 @@ def orchestrator_values(manifests: list[dict[str, str]]) -> dict[str, str]:
         # description is otherwise a ScannerError under yaml.safe_load.
         "DESCRIPTION": json.dumps(
             "Use when the controlling Agent should supervise explicitly authorized "
-            "CLI workers through the eleven platform Runner Skills: recover live "
+            "CLI workers through the twelve platform Runner Skills: recover live "
             "authorization, dispatch and review work, accept deliveries before "
             "finalize, cap live workers at the authorized count, and stop each "
             "accepted seat without dropping close-out duties."
         ),
         "SHORT_DESCRIPTION": (
-            "Supervise authorized CLI workers through the eleven platform Runner Skills"
+            "Supervise authorized CLI workers through the twelve platform Runner Skills"
         ),
         "DEFAULT_PROMPT": (
             f"Use ${ORCHESTRATOR_NAME} to recover authorization, supervise named "
@@ -830,6 +830,8 @@ def expected_files(manifest: dict[str, str], main_build: bytes) -> dict[str, byt
             result[f"scripts/{name}"] = (shared_root / name).read_bytes()
     if manifest["id"] == "antigravity":
         result["scripts/kaola-antigravity-acp.py"] = (shared_root / "kaola-antigravity-acp.py").read_bytes()
+    if manifest["id"] == "hermes":
+        result["scripts/kaola-hermes-acp.py"] = (shared_root / "kaola-hermes-acp.py").read_bytes()
     return result
 
 
@@ -1556,12 +1558,12 @@ def main() -> int:
     manifests = [parse_manifest(path) for path in sorted(PLATFORMS.glob("*.yaml"))]
     expected_ids = [
         "antigravity", "claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok",
-        "kimi-cli", "opencode", "zcode",
+        "hermes", "kimi-cli", "opencode", "zcode",
     ]
     if [m["id"] for m in manifests] != expected_ids:
         raise ValueError(
             "platform inventory must be exactly "
-            "antigravity,claude-code,codex,cursor-cli,devin,droid,dsh,grok,kimi-cli,opencode,zcode"
+            "antigravity,claude-code,codex,cursor-cli,devin,droid,dsh,grok,hermes,kimi-cli,opencode,zcode"
         )
 
     findings: list[str] = []

@@ -34,6 +34,7 @@ WORKER_IDS = (
     "droid",
     "dsh",
     "grok",
+    "hermes",
     "kimi-cli",
     "opencode",
     "zcode",

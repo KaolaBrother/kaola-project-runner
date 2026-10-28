@@ -67,8 +67,10 @@ class GeneratedDelegator(unittest.TestCase):
 
     def test_every_manifest_is_a_selectable_host_row(self) -> None:
         self.assertEqual(len(self.ids), 10)
-        self.assertEqual(sorted(set(self.all_ids) - set(self.ids)), ["antigravity"])
+        self.assertEqual(sorted(set(self.all_ids) - set(self.ids)), ["antigravity", "hermes"])
         self.assertIn("| antigravity (`Antigravity`) | `antigravity-kaola-project-runner` | "
+                      "none (not a Host) | n/a |", self.platforms)
+        self.assertIn("| hermes (`Hermes Agent`) | `hermes-kaola-project-runner` | "
                       "none (not a Host) | n/a |", self.platforms)
         for platform in self.ids:
             with self.subTest(platform=platform):

@@ -1,10 +1,10 @@
 {
-  "_comment": "Progressive-disclosure byte budgets, enforced by scripts/render-skills.py --check, scripts/kaola-grok-bot-verify.py, and tests/contract/test-progressive-disclosure.py. Bytes on disk (UTF-8); descriptions in characters. Ordinary receipts are bounded — ACP observe/status on the larger state_receipt_bytes (Issue #64) — and an explicit `capture --full` is exempt by design. external_skill_bytes (Issue #74) is the thin Kaola-Delegator Skill: smaller than a worker, larger than the Grok Bot bridge; existing ceilings are not raised. reference_bytes re-measured 8192 -> 9216 (Issue #413 Host decision) for the owner-ordered #413 Cursor xhigh presets plus the AGY profile-text addition in the orchestrator profile catalog; every other ceiling unchanged.",
+  "_comment": "Progressive-disclosure byte budgets, enforced by scripts/render-skills.py --check, scripts/kaola-grok-bot-verify.py, and tests/contract/test-progressive-disclosure.py. Bytes on disk (UTF-8); descriptions in characters. Ordinary receipts are bounded — ACP observe/status on the larger state_receipt_bytes (Issue #64) — and an explicit `capture --full` is exempt by design. external_skill_bytes (Issue #74) is the thin Kaola-Delegator Skill: smaller than a worker, larger than the Grok Bot bridge; existing ceilings are not raised. reference_bytes re-measured 8192 -> 9216 (Issue #413 Host decision) for the owner-ordered #413 Cursor xhigh presets plus the AGY profile-text addition in the orchestrator profile catalog; every other ceiling unchanged. reference_bytes re-measured 9216 -> 10240 (Issue #416, pending Host acceptance) for the owner-ordered Hermes hermes/default + hermes/max Worker rows (owner-hermes-tiers-high-max-autoescalate-20261028) in the orchestrator profile catalog; every other ceiling unchanged.",
   "description_chars": 320,
   "main_skill_bytes": 17408,
   "worker_skill_bytes": 12288,
   "external_skill_bytes": 4096,
-  "reference_bytes": 9216,
+  "reference_bytes": 10240,
   "bridge_bytes": 2560,
   "bridge_guide_bytes": 8192,
   "locator_receipt_bytes": 4096,

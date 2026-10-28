@@ -1,6 +1,6 @@
 ---
 name: kaola-project-runner
-description: "Use when the controlling Agent should supervise explicitly authorized CLI workers through the eleven platform Runner Skills: recover live authorization, dispatch and review work, accept deliveries before finalize, cap live workers at the authorized count, and stop each accepted seat without dropping close-out duties."
+description: "Use when the controlling Agent should supervise explicitly authorized CLI workers through the twelve platform Runner Skills: recover live authorization, dispatch and review work, accept deliveries before finalize, cap live workers at the authorized count, and stop each accepted seat without dropping close-out duties."
 ---
 
 # Project Runner

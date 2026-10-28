@@ -4,7 +4,7 @@
 
 Kaola Project Runner is a runtime-neutral Agent Skills CLI communication driver: any agent that
 can load a skill directory and run shell commands in an environment containing the target CLI can
-use the same eleven worker Skills, and Codex remains a fully supported consuming runtime. A separate
+use the same twelve worker Skills, and Codex remains a fully supported consuming runtime. A separate
 generated control-plane Skill, `kaola-project-runner` (display name Project Runner), supervises
 explicitly authorized workers through those transport Skills. Worker Skills do not orchestrate
 Kaola Workflow, implement Workflow, or own a runtime's configuration.
@@ -56,7 +56,7 @@ use the communication channel.
 prompt, PR handoff, heartbeat, foreground scheduler, and closing references. Project prompt, task-mode,
 scheduling, handoff, and lifecycle bytes. Those bytes remain frozen as reference evidence; active
 generated worker Skills do not impose them, and they are not the contract for `kaola-project-runner`.
-`templates/SKILL.md.tmpl` is the authoritative eleven-platform communication-only contract.
+`templates/SKILL.md.tmpl` is the authoritative twelve-platform communication-only contract.
 `templates/orchestrator/` is the authoritative main-Skill contract.
 
 Only platform facts may vary: executable, runtime carrier preflight, ACP command and quirks,
@@ -72,10 +72,10 @@ existing eight platforms retain byte-identical behavior.
 ## Generated Skills
 
 `render-skills.py` combines the active communication template, frozen optional references, fixed manifests, metadata templates, the shared
-entrypoint `kaola-tmux.sh` (historical name, ACP only), the ACP CLI/holder, the model-policy helper, and one matching adapter into ten self-contained
+entrypoint `kaola-tmux.sh` (historical name, ACP only), the ACP CLI/holder, the model-policy helper, and one matching adapter into twelve self-contained
 worker directories under `skills/`, and renders the fixed orchestrator directory
 `skills/kaola-project-runner/` from `templates/orchestrator/` plus a supported-worker summary
-derived from the eleven manifests (no orchestrator platform manifest or adapter). It also emits
+derived from the twelve manifests (no orchestrator platform manifest or adapter). It also emits
 the Grok Bot host bundle `hosts/grok-bot/`: one thin bridge Skill
 `kaola-delegator.md`, its fingerprint manifest `bridge.json`, and the install guide
 `INSTALL.md`. It also renders `skills/kaola-delegator/` from
@@ -84,8 +84,8 @@ directory has a `.generated-by-kaola-project-runner` marker. A published Skill n
 outside its own directory. The renderer refuses unmanaged targets and `--check` compares complete
 byte inventories, including the orchestrator package and `hosts/grok-bot/`.
 
-The eleven-worker inventory includes Antigravity, Claude Code, Codex, Cursor CLI, Devin, Droid, dsh, Grok CLI,
-Kimi CLI, OpenCode, and ZCode, all ACP only. Antigravity is the second in-repo translator after ZCode: `scripts/kaola-antigravity-acp.py`
+The twelve-worker inventory includes Antigravity, Claude Code, Codex, Cursor CLI, Devin, Droid, dsh, Grok CLI,
+Hermes Agent, Kimi CLI, OpenCode, and ZCode, all ACP only. Antigravity is the second in-repo translator after ZCode: `scripts/kaola-antigravity-acp.py`
 speaks ACP to the holder and agy's headless stream-json protocol to one long-lived `agy` child per session (Issue #323). Droid uses the native ACP agent
 `droid exec --output-format acp`; dsh uses its shipped automation-only ACP profile
 `dsh --profile acp`. dsh's ACP composition sends no permission request: its mode is
@@ -94,6 +94,11 @@ dsh pins that preset into the session log at creation and keeps it on resume, so
 resumed session's start receipt reports the recorded effective permission, not the
 launch variable. Under dsh's own default `workspace-write`, a Runner start launched from that shell
 inherits the sandbox, so a nested dsh worker cannot boot under it.
+Hermes Agent speaks ACP through the in-repo adapter `scripts/kaola-hermes-acp.py`
+(Issue #416): a pass-through over `hermes --yolo acp` that synthesizes the `model`/`mode`
+config options from the `models`/`modes` blocks, translates `session/set_config_option`
+to `session/set_model`/`session/set_mode`, and refuses a resume that would silently
+report a fresh session. Its fields stay unmeasured until #417.
 
 Grok Bot is a **bridge host** for Kaola-Delegator, not a Project Runner host.
 Research on Grok Bot 0.51.0 found `NO_SUPPORTED_PATH` for
@@ -118,7 +123,7 @@ for the content commit R, stage `pinned` for the pin commit P that names R; the 
 renderer and verifier proves R exists, is an ancestor, is a content-stage commit, holds the
 locator and every entry path, and differs from P only by `accepted-revision.json` plus the
 three generated products with a one-line bridge diff; an accepted R/P pair is never rebased or
-squashed, and a moved `main` means a fresh R/P). Grok Bot is a **host**, not a twelfth platform: there is
+squashed, and a moved `main` means a fresh R/P). Grok Bot is a **host**, not a thirteenth platform: there is
 no `platforms/grok-bot.yaml`, no transport adapter, no runtime copy, no per-worker account
 Skills, and no installer destination. `scripts/kaola-grok-bot-verify.py` proves the bridge
 shape and budgets and, with `--repo`, byte identity with a fresh render. `--platform grok`
@@ -205,7 +210,7 @@ budget or a loading boundary regresses.
 
 There is exactly one canonical Skill system: `templates/orchestrator/` (the main Skill and its
 references), `templates/SKILL.md.tmpl` with `templates/agents/` and `templates/references/` (the
-worker contract), the eleven `platforms/*.yaml` manifests, and the shared `scripts/`. A **host
+worker contract), the twelve `platforms/*.yaml` manifests, and the shared `scripts/`. A **host
 adapter** re-packages that system for one host inside `render-skills.py`; it never authors a
 second body. Grok Bot is such a packaging adapter (the delimited "Host adapter: grok-bot" section
 of the renderer), not a CLI transport platform: there is no `platforms/grok-bot.yaml` and no
@@ -263,7 +268,7 @@ top-level; starting there is an Agent decision, not a transport refusal.
 
 A Project Runner Orchestrator states the root explicitly instead, by exporting
 `KAOLA_PROJECT_RUNNER_CANONICAL_REPO=<abs root>` once at setup. `scripts/kaola-tmux.sh` — the one
-entrypoint all eleven platforms pass through — then resolves that binding and the
+entrypoint all twelve platforms pass through — then resolves that binding and the
 requested `--repo` with `realpath`, requires the binding to be a Git top-level, completes an omitted
 `--repo` from it, and on `start` compares the two exactly. A different root, including a linked
 worktree of the same repository, returns a typed `canonical-root-mismatch` refusal (an unusable

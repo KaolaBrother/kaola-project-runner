@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Issue #345, retargeted by #346: dsh/commandcode is a Worker-class catalog preset.
 
-The class list is seven preset ids. Each one, including ``dsh/commandcode``,
-is usable only after an explicit Worker grant. ``codex/terra`` and
+The class list is nine preset ids. Each one, including ``dsh/commandcode`` and
+the two Hermes tiers (Issue #416, owner-ordered high/max), is usable only after
+an explicit Worker grant. ``codex/terra`` and
 ``zcode/default`` stay in that class. Antigravity stays out.
 """
 
@@ -28,6 +29,8 @@ POOL = [
     "devin/default",
     "dsh/commandcode",
     "dsh/default",
+    "hermes/default",
+    "hermes/max",
     "opencode/default",
     "zcode/default",
 ]
@@ -46,7 +49,7 @@ def load_render():
 
 
 class ExactWorkerPool(unittest.TestCase):
-    def test_source_and_rendered_text_name_the_same_seven(self) -> None:
+    def test_source_and_rendered_text_name_the_same_nine(self) -> None:
         render = load_render()
         manifests = [render.parse_manifest(path) for path in sorted(PLATFORMS.glob("*.yaml"))]
         self.assertEqual(render.worker_pool_members(manifests), MEMBERS)

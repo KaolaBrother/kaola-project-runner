@@ -13,7 +13,7 @@ Runner sessions end to end. Phase 2 adds the event-driven heartbeat carrier
 - **Native skill-directory Host** (`--runtime zcode`): the host discovery
   form. `./scripts/install-local.sh --runtime zcode --method copy` installs
   the generated Skills into `$HOME/.zcode/skills`, sibling `kaola-project-runner`
-  plus the eleven `<platform>-kaola-project-runner` workers. A **workspace**
+  plus the twelve `<platform>-kaola-project-runner` workers. A **workspace**
   skills destination — `.zcode/skills` and `.agents/skills` are both
   live-verified default discovery roots — is the same payload reached
   through the explicit `--skills-dir /abs/path`, because

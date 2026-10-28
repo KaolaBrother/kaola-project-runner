@@ -110,8 +110,8 @@ REGISTRATION_FILE = f".{LOCATOR_COMMAND}.json"
 EXPECTED_ORIGIN = "github.com/KaolaBrother/kaola-project-runner"
 ORCHESTRATOR = "kaola-project-runner"
 WORKER_IDS = (
-    "antigravity", "claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok", "kimi-cli",
-    "opencode", "zcode",
+    "antigravity", "claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok", "hermes",
+    "kimi-cli", "opencode", "zcode",
 )
 TARGETS = ("local", "cloud")
 REVISION = re.compile(r"^[0-9a-f]{40}$")

@@ -158,7 +158,7 @@ def started(repo: str, model, effort=None, advertised=None, holder: str = "holde
     return receipt
 
 
-def plan_item(name: str, preset: str = "codex/luna") -> dict:
+def plan_item(name: str, preset: str = "codex/terra") -> dict:
     return {"item_id": name, "preset": preset, "session": f"codex-KPR-i255-{name}", "prompt": name}
 
 
@@ -230,7 +230,7 @@ class DispatchEntry(unittest.TestCase):
         numeric host grant when the authorization does not already name it.
         """
         workers = {
-            "claude-code/haiku", "codex/luna", "devin/default", "dsh/commandcode",
+            "claude-code/haiku", "codex/terra", "devin/default", "dsh/commandcode",
             "dsh/default", "opencode/default", "zcode/default",
         }
         try:
@@ -305,7 +305,7 @@ class DispatchEntry(unittest.TestCase):
     def test_summary_uses_present_grants_and_hides_ungranted_expert(self) -> None:
         auth = self.authorization([
             {"id": "codex/default", "state": "granted", "count": 1},
-        ], exclusions=["codex/luna"])
+        ], exclusions=["codex/terra"])
         avail = self.availability(["codex/default", "zcode/default", "codex/astra"])
         payload = self.project(auth, avail)
         summary = payload["capability_summary"]
@@ -322,9 +322,9 @@ class DispatchEntry(unittest.TestCase):
         self.assertIn("codex/default", ids)
         self.assertNotIn("zcode/default", ids)
         self.assertNotIn("codex/astra", ids)
-        self.assertNotIn("codex/luna", ids)
-        luna = [row for row in payload["withheld"] if row["id"] == "codex/luna"]
-        self.assertEqual(luna, [{"id": "codex/luna", "reason": "excluded"}])
+        self.assertNotIn("codex/terra", ids)
+        luna = [row for row in payload["withheld"] if row["id"] == "codex/terra"]
+        self.assertEqual(luna, [{"id": "codex/terra", "reason": "excluded"}])
         codex = next(item for item in payload["candidates"] if item["id"] == "codex/default")
         self.assertEqual(codex["class"], "Elite")
         self.assertTrue(codex["selection"]["model_id"])
@@ -356,16 +356,16 @@ class DispatchEntry(unittest.TestCase):
             }
         })
         auth = self.authorization([
-            {"count": 1, "id": "codex/luna", "special_requirements": {"task_scope": "visual QA"}},
+            {"count": 1, "id": "codex/terra", "special_requirements": {"task_scope": "visual QA"}},
         ])
         plan = self.plan([{
             "item_id": "tier",
-            "preset": "codex/luna",
+            "preset": "codex/terra",
             "session": "codex-KPR-i244-tier",
             "prompt": "read only",
             "overrides": {"effort": "high"},
         }])
-        payload = self.execute(plan, auth, self.availability(["codex/luna"]))
+        payload = self.execute(plan, auth, self.availability(["codex/terra"]))
         item = payload["items"][0]
         self.assertEqual(item["status"], "in-flight")
         self.assertEqual(item["reason"], "admitted")
@@ -388,15 +388,15 @@ class DispatchEntry(unittest.TestCase):
                 "send": sent("fp-role"),
             }
         })
-        auth = self.authorization([{"count": 1, "id": "codex/luna", "state": "granted"}])
+        auth = self.authorization([{"count": 1, "id": "codex/terra", "state": "granted"}])
         plan = self.plan([{
             "item_id": "sideagent",
-            "preset": "codex/luna",
+            "preset": "codex/terra",
             "session": "codex-KPR-i245-role",
             "prompt": "draft only",
             "role": "sideagent",
         }])
-        payload = self.execute(plan, auth, self.availability(["codex/luna"]))
+        payload = self.execute(plan, auth, self.availability(["codex/terra"]))
         item = payload["items"][0]
         self.assertEqual(item["status"], "in-flight")
         self.assertEqual(item["reason"], "admitted")
@@ -428,10 +428,10 @@ class DispatchEntry(unittest.TestCase):
         auth = self.authorization()
         plan = self.plan([
             {"item_id": "qualified", "preset": "zcode/default", "session": "zcode-KPR-i244-qual", "prompt": "a"},
-            {"item_id": "mismatch", "preset": "codex/luna", "session": "codex-KPR-i244-miss", "prompt": "b"},
+            {"item_id": "mismatch", "preset": "codex/terra", "session": "codex-KPR-i244-miss", "prompt": "b"},
             {"item_id": "route", "preset": "opencode/default", "session": "opencode-KPR-i244-route", "prompt": "c"},
         ])
-        payload = self.execute(plan, auth, self.availability(["zcode/default", "codex/luna", "opencode/default"]))
+        payload = self.execute(plan, auth, self.availability(["zcode/default", "codex/terra", "opencode/default"]))
         by_id = {item["item_id"]: item for item in payload["items"]}
         self.assertEqual(by_id["qualified"]["selection"]["fields"]["model_id"]["applied"], "match")
         self.assertEqual(by_id["qualified"]["status"], "in-flight")
@@ -459,11 +459,11 @@ class DispatchEntry(unittest.TestCase):
         auth = self.authorization()
         plan = self.plan([{
             "item_id": "unknown",
-            "preset": "codex/luna",
+            "preset": "codex/terra",
             "session": "codex-KPR-i244-unk",
             "prompt": "look",
         }])
-        payload = self.execute(plan, auth, self.availability(["codex/luna"]))
+        payload = self.execute(plan, auth, self.availability(["codex/terra"]))
         item = payload["items"][0]
         self.assertEqual(item["selection"]["comparison"], "unknown")
         self.assertEqual(item["selection"]["fields"]["model_id"]["applied"], "unknown")
@@ -496,11 +496,11 @@ class DispatchEntry(unittest.TestCase):
         auth = self.authorization()
         plan = self.plan([{
             "item_id": "advertised",
-            "preset": "codex/luna",
+            "preset": "codex/terra",
             "session": "codex-KPR-i244-adv",
             "prompt": "look",
         }])
-        payload = self.execute(plan, auth, self.availability(["codex/luna"]))
+        payload = self.execute(plan, auth, self.availability(["codex/terra"]))
         item = payload["items"][0]
         self.assertEqual(item["selection"]["fields"]["model_id"]["applied"], "match")
         self.assertEqual(item["selection"]["fields"]["model_id"]["advertised"], "unknown")
@@ -528,10 +528,10 @@ class DispatchEntry(unittest.TestCase):
         auth = self.authorization([{"count": 1, "id": "cursor-cli/opus", "state": "revoked"}])
         plan = self.plan([
             {"item_id": "ok", "preset": "zcode/default", "session": "zcode-KPR-i244-ok", "prompt": "a"},
-            {"item_id": "bad", "preset": "codex/luna", "session": "codex-KPR-i244-bad", "prompt": "b"},
+            {"item_id": "bad", "preset": "codex/terra", "session": "codex-KPR-i244-bad", "prompt": "b"},
             {"item_id": "revoked", "preset": "cursor-cli/opus", "session": "cursor-cli-KPR-i244-no", "prompt": "c"},
         ])
-        payload = self.execute(plan, auth, self.availability(["zcode/default", "codex/luna", "cursor-cli/opus"]))
+        payload = self.execute(plan, auth, self.availability(["zcode/default", "codex/terra", "cursor-cli/opus"]))
         by_id = {item["item_id"]: item for item in payload["items"]}
         self.assertEqual(by_id["ok"]["status"], "in-flight")
         self.assertEqual(by_id["bad"]["status"], "failed")
@@ -994,15 +994,15 @@ class DispatchEntry(unittest.TestCase):
             },
         })
         auth = self.authorization([
-            {"count": 2, "id": "codex/luna", "state": "granted"},
+            {"count": 2, "id": "codex/terra", "state": "granted"},
             {"count": 1, "id": "cursor-cli/default", "state": "granted"},
         ])
         plan = self.plan([
-            {"item_id": "sol", "preset": "codex/luna", "session": "codex-KPR-i244-sol", "prompt": "a"},
-            {"item_id": "refuse", "preset": "codex/luna", "session": "codex-KPR-i244-refuse", "prompt": "b"},
+            {"item_id": "sol", "preset": "codex/terra", "session": "codex-KPR-i244-sol", "prompt": "a"},
+            {"item_id": "refuse", "preset": "codex/terra", "session": "codex-KPR-i244-refuse", "prompt": "b"},
             {"item_id": "mapped", "preset": "cursor-cli/default", "session": "cursor-cli-KPR-i244-map", "prompt": "c"},
         ])
-        payload = self.execute(plan, auth, self.availability(["codex/luna", "cursor-cli/default"]))
+        payload = self.execute(plan, auth, self.availability(["codex/terra", "cursor-cli/default"]))
         by_id = {item["item_id"]: item for item in payload["items"]}
         sol = by_id["sol"]["selection"]
         self.assertEqual(sol["source"], "start_evidence.config_application")
@@ -1365,17 +1365,17 @@ class DispatchEntry(unittest.TestCase):
         self.assertEqual(payload["items"][0]["reason"], "occupancy-unknown")
 
         owner = self.authorization([
-            {"count": 1, "id": "codex/luna", "state": "granted", "special_requirements": {"effort": "high", "task_scope": "visual QA"}},
+            {"count": 1, "id": "codex/terra", "state": "granted", "special_requirements": {"effort": "high", "task_scope": "visual QA"}},
         ])
         owner_plan = self.plan([{
             "item_id": "owner",
-            "preset": "codex/luna",
+            "preset": "codex/terra",
             "session": "codex-KPR-i244-owner",
             "prompt": "look",
             "overrides": {"effort": "max"},
         }])
         self.log.write_text("", encoding="utf-8")
-        payload = self.execute(owner_plan, owner, self.availability(["codex/luna"]))
+        payload = self.execute(owner_plan, owner, self.availability(["codex/terra"]))
         item = payload["items"][0]
         self.assertEqual(item["status"], "not-run")
         self.assertEqual(item["reason"], "override-conflicts-owner")
@@ -1383,11 +1383,11 @@ class DispatchEntry(unittest.TestCase):
 
         passed = self.plan([{
             "item_id": "owner",
-            "preset": "codex/luna",
+            "preset": "codex/terra",
             "session": "codex-KPR-i244-owner",
             "prompt": "look",
         }])
-        payload = self.execute(passed, owner, self.availability(["codex/luna"]))
+        payload = self.execute(passed, owner, self.availability(["codex/terra"]))
         item = payload["items"][0]
         self.assertEqual(item["status"], "in-flight")
         self.assertEqual(item["task_scope"], "visual QA")
@@ -1534,39 +1534,39 @@ class DispatchEntry(unittest.TestCase):
             "repo": str(link) + "/",
             "items": [{
                 "item_id": "linked",
-                "preset": "codex/luna",
+                "preset": "codex/terra",
                 "session": "codex-KPR-i244-link",
                 "prompt": "look",
                 "role": None,
             }],
         })
         auth = self.authorization()
-        payload = self.execute(linked, auth, self.availability(["codex/luna"]))
+        payload = self.execute(linked, auth, self.availability(["codex/terra"]))
         self.assertEqual(payload["items"][0]["status"], "in-flight")
         self.assertEqual(payload["repo"], real)
         self.assertNotIn("role", payload["items"][0])
 
         absent_holder = self.plan([{
             "item_id": "orphan",
-            "preset": "codex/luna",
+            "preset": "codex/terra",
             "session": "codex-KPR-i244-hold",
             "prompt": "look",
             "expected_holder_instance_id": "holder-old",
         }])
         self.log.write_text("", encoding="utf-8")
-        payload = self.execute(absent_holder, auth, self.availability(["codex/luna"]))
+        payload = self.execute(absent_holder, auth, self.availability(["codex/terra"]))
         self.assertEqual(payload["items"][0]["status"], "not-run")
         self.assertEqual(payload["items"][0]["reason"], "expected-holder-absent")
         self.assertNotIn("start", {row["command"] for row in commands(self.log)})
 
         first = self.plan([{
             "item_id": "first",
-            "preset": "codex/luna",
+            "preset": "codex/terra",
             "session": "codex-KPR-i244-live",
             "prompt": "fresh",
         }])
         self.log.write_text("", encoding="utf-8")
-        payload = self.execute(first, auth, self.availability(["codex/luna"]))
+        payload = self.execute(first, auth, self.availability(["codex/terra"]))
         self.assertEqual(payload["items"][0]["status"], "in-flight")
         self.assertEqual(payload["items"][0]["reason"], "admitted")
         self.assertIn("send", {row["command"] for row in commands(self.log)})
@@ -1595,33 +1595,33 @@ class DispatchEntry(unittest.TestCase):
         self.assertEqual(payload["items"][0]["reason"], "resources-unreadable")
         self.assertEqual(payload["items"][0]["detail"], "ports must be strings")
 
-        counted = self.authorization([{"id": "codex/luna", "state": "granted", "count": 1}])
+        counted = self.authorization([{"id": "codex/terra", "state": "granted", "count": 1}])
         live = write_json(self.root, "unnamed-live.json", {"rows": [
             {"platform": "codex", "repo": real, "state": "running"},
         ]})
-        one = self.plan([{"item_id": "c", "preset": "codex/luna", "session": "codex-KPR-i244-count", "prompt": "a"}])
+        one = self.plan([{"item_id": "c", "preset": "codex/terra", "session": "codex-KPR-i244-count", "prompt": "a"}])
         self.log.write_text("", encoding="utf-8")
-        payload = self.execute(one, counted, self.availability(["codex/luna"]), live=live)
+        payload = self.execute(one, counted, self.availability(["codex/terra"]), live=live)
         self.assertEqual(payload["items"][0]["reason"], "occupancy-unknown")
         named = write_json(self.root, "named-live.json", {"rows": [
-            {"preset": "codex/luna", "platform": "codex", "repo": real, "state": "running"},
+            {"preset": "codex/terra", "platform": "codex", "repo": real, "state": "running"},
         ]})
-        payload = self.execute(one, counted, self.availability(["codex/luna"]), live=named)
+        payload = self.execute(one, counted, self.availability(["codex/terra"]), live=named)
         self.assertEqual(payload["items"][0]["reason"], "count")
 
         listed = self.plan([{
-            "item_id": "listed", "preset": "codex/luna", "session": "codex-KPR-i244-list", "prompt": "a",
+            "item_id": "listed", "preset": "codex/terra", "session": "codex-KPR-i244-list", "prompt": "a",
         }])
-        payload = self.execute(listed, auth, self.availability(["codex/luna"]))
+        payload = self.execute(listed, auth, self.availability(["codex/terra"]))
         self.assertEqual(payload["items"][0]["status"], "in-flight")
         self.assertEqual(payload["items"][0]["selection"]["fields"]["model_id"]["advertised"], "unknown")
         self.assertEqual(payload["items"][0]["selection"]["comparison"], "match")
 
         rejected = self.plan([{
-            "item_id": "rejected", "preset": "codex/luna", "session": "codex-KPR-i244-reject", "prompt": "a",
+            "item_id": "rejected", "preset": "codex/terra", "session": "codex-KPR-i244-reject", "prompt": "a",
         }])
         self.log.write_text("", encoding="utf-8")
-        payload = self.execute(rejected, auth, self.availability(["codex/luna"]))
+        payload = self.execute(rejected, auth, self.availability(["codex/terra"]))
         self.assertEqual(payload["items"][0]["status"], "failed")
         self.assertEqual(payload["items"][0]["reason"], "selection-mismatch")
         self.assertIsNone(payload["items"][0]["selection"]["applied"]["model_id"])
@@ -1702,13 +1702,13 @@ class DispatchEntry(unittest.TestCase):
                                  "send": sent("fp-c")},
         })
         live = write_json(self.root, "prestarted.json", {"rows": [row_a, row_b]})
-        auth = self.authorization([{"id": "codex/luna", "state": "granted", "count": 2}])
+        auth = self.authorization([{"id": "codex/terra", "state": "granted", "count": 2}])
         plan = self.plan([
-            {"item_id": item, "preset": "codex/luna", "session": f"codex-KPR-i255-{item}", "prompt": item}
+            {"item_id": item, "preset": "codex/terra", "session": f"codex-KPR-i255-{item}", "prompt": item}
             for item in ("a", "b", "c")
         ])
         index = self.root / "held-index.json"
-        payload = self.execute(plan, auth, self.availability(["codex/luna"]), live=live, index=index)
+        payload = self.execute(plan, auth, self.availability(["codex/terra"]), live=live, index=index)
         by_id = {item["item_id"]: item for item in payload["items"]}
         for item, holder in (("a", "h-a"), ("b", "h-b")):
             self.assertEqual((by_id[item]["status"], by_id[item]["reason"]), ("in-flight", "admitted"), payload)
@@ -1727,9 +1727,9 @@ class DispatchEntry(unittest.TestCase):
         self.assertEqual(stored["c"]["reason"], "count")
 
         # With the count at one, the other live seat fills it; it is not subtracted.
-        one = self.authorization([{"id": "codex/luna", "state": "granted", "count": 1}])
+        one = self.authorization([{"id": "codex/terra", "state": "granted", "count": 1}])
         self.log.write_text("", encoding="utf-8")
-        payload = self.execute(self.plan([plan_item("a")]), one, self.availability(["codex/luna"]), live=live)
+        payload = self.execute(self.plan([plan_item("a")]), one, self.availability(["codex/terra"]), live=live)
         self.assertEqual(payload["items"][0]["reason"], "count", payload)
         self.assertNotIn("send", {row["command"] for row in commands(self.log)})
 
@@ -1783,8 +1783,8 @@ class DispatchEntry(unittest.TestCase):
 
     def test_only_an_exact_verified_unprompted_seat_is_held(self) -> None:
         install_fake(self.skills, ["codex"])
-        auth = self.authorization([{"id": "codex/luna", "state": "granted", "count": 1}])
-        avail = self.availability(["codex/luna"])
+        auth = self.authorization([{"id": "codex/terra", "state": "granted", "count": 1}])
+        avail = self.availability(["codex/terra"])
         cases = {
             "identity": ({"identity": "unknown"}, {}, {}),
             "prompted": ({"mutation_status": "completed"}, {"mutation_status": "completed"}, {}),
@@ -1994,22 +1994,22 @@ class DispatchEntry(unittest.TestCase):
             "project": {"repo": str(self.repo)},
             "authorization": {
                 "grants": [{"id": "claude-code/opus-xhigh", "state": "granted", "count": 1},
-                           {"id": "codex/luna", "state": "paused", "count": 1}],
+                           {"id": "codex/terra", "state": "paused", "count": 1}],
                 "exclusions": ["devin/default"],
             },
         }
         auth = write_json(self.root, "heartbeat.json", {"body": json.dumps(state)})
         present = [
             "claude-code/opus-xhigh", "zcode/default", "dsh/default",
-            "opencode/default", "codex/luna", "devin/default",
+            "opencode/default", "codex/terra", "devin/default",
         ]
         payload = self.project(auth, self.availability(present))
         ids = {item["id"] for item in payload["candidates"]}
         self.assertIn("claude-code/opus-xhigh", ids)
-        self.assertNotIn("codex/luna", ids)
+        self.assertNotIn("codex/terra", ids)
         self.assertNotIn("devin/default", ids)
         withheld = {row["id"]: row["reason"] for row in payload["withheld"]}
-        self.assertEqual(withheld["codex/luna"], "paused")
+        self.assertEqual(withheld["codex/terra"], "paused")
         self.assertEqual(withheld["devin/default"], "excluded")
         install_fake(self.skills, ["claude-code", "codex", "devin"])
         repo = str(self.repo)
@@ -2022,7 +2022,7 @@ class DispatchEntry(unittest.TestCase):
         })
         plan = self.plan([
             {"item_id": "elite", "preset": "claude-code/opus-xhigh", "session": "claude-code-KPR-i244-env", "prompt": "a"},
-            {"item_id": "paused", "preset": "codex/luna", "session": "codex-KPR-i244-paused", "prompt": "b"},
+            {"item_id": "paused", "preset": "codex/terra", "session": "codex-KPR-i244-paused", "prompt": "b"},
             {"item_id": "revoked", "preset": "devin/default", "session": "devin-KPR-i244-revoked", "prompt": "c"},
         ])
         payload = self.execute(plan, auth, self.availability(present))
@@ -2570,11 +2570,11 @@ class DispatchEntry(unittest.TestCase):
             },
         })
         plan = self.plan([
-            {"item_id": "luna", "preset": "codex/luna", "session": session, "prompt": "pool"},
+            {"item_id": "luna", "preset": "codex/terra", "session": session, "prompt": "pool"},
         ])
         for name, body in (
             ("null", {"authorization": None}),
-            ("string", {"authorization": "paused codex/luna is not a grant object"}),
+            ("string", {"authorization": "paused codex/terra is not a grant object"}),
         ):
             with self.subTest(shape=name):
                 if self.log.exists():
@@ -2631,7 +2631,7 @@ class DispatchEntry(unittest.TestCase):
         install_fake(self.skills, ["codex"])
         if self.log.exists(): self.log.unlink()
         session = "codex-KPR-i252-qa"
-        item = {"item_id": "qa", "platform": "codex", "preset": "codex/luna",
+        item = {"item_id": "qa", "platform": "codex", "preset": "codex/terra",
                 "repo": str(self.repo), "session": session, "holder_instance_id": "holder-252",
                 "prompt_fingerprint": "fp-252", "dispatch_event_cursor": 7, "status": "in-flight"}
         item.update(item_extra or {})
@@ -3063,12 +3063,12 @@ class DispatchEntry(unittest.TestCase):
     def test_seats_view_binds_identity_and_retains_grant_states(self):
         auth = self.authorization([
             {"id": "droid/opus", "state": "revoked", "shared_seat": "droid", "count": 1},
-            {"count": 1, "id": "codex/luna", "state": "granted"}])
+            {"count": 1, "id": "codex/terra", "state": "granted"}])
         rows = [
             {"repo": str(self.repo), "identity": "verified", "holder_instance_id": "h1",
              "platform": "droid", "preset": "droid/opus", "session": "droid-KPR-i252-qa", "state": "ready"},
             {"repo": str(self.repo), "identity": "verified", "holder_instance_id": "h2",
-             "platform": "codex", "preset": "codex/luna", "session": "codex-KPR-i252-qa", "state": "ready"},
+             "platform": "codex", "preset": "codex/terra", "session": "codex-KPR-i252-qa", "state": "ready"},
             {"repo": str(self.repo), "identity": "verified", "holder_instance_id": "host",
              "platform": "codex", "session": "codex-KPR-orchestrator-main", "host_class": True},
             {"repo": "/foreign", "identity": "verified", "holder_instance_id": "foreign",
@@ -3250,7 +3250,7 @@ class DispatchEntry(unittest.TestCase):
         repo = str(self.repo)
         real = os.path.realpath(repo)
         pool = (
-            ("codex/luna", "codex-KPR-i252-luna", started(repo, "gpt-6-luna", "max")),
+            ("codex/terra", "codex-KPR-i252-luna", started(repo, "gpt-6-luna", "max")),
             ("devin/default", "devin-KPR-i252-def", started(repo, "swe-2-max")),
             ("dsh/default", "dsh-KPR-i252-def", started(repo, "opencode-go/deepseek-v4.1-flash")),
             ("opencode/default", "opencode-KPR-i252-def", started(repo, "opencode-go/deepseek-v4.1-flash")),

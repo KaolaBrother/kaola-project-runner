@@ -84,7 +84,7 @@ Do not keep a universal model ranking, invent a complexity classifier or
 routing engine, fix per-runtime quotas, create work to fill
 capacity, or interrupt useful work.
 
-Worker-class presets are exactly: `claude-code/haiku`, `codex/terra`, `devin/default`, `dsh/commandcode`, `dsh/default`, `opencode/default`, `zcode/default`.
+Worker-class presets are exactly: `claude-code/haiku`, `codex/terra`, `devin/default`, `dsh/commandcode`, `dsh/default`, `hermes/default`, `hermes/max`, `opencode/default`, `zcode/default`.
 Each needs an explicit grant; none means no Workers. Seats do not consume Elite/Expert grants. A runtime `default` is not a grant. Limits and exclusions apply; an exclusion vetoes `unlimited`. `unlimited` is explicit, not a number. A grant is permission, not a preference over Elite. Existing grants stay valid; a Worker grant is not a model-switch grant.
 
 ## Computer interaction

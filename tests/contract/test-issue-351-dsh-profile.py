@@ -89,7 +89,7 @@ class DshProfileText(unittest.TestCase):
         self.assertIn("frontend", PROFILE)
         catalog_bytes = (PROJECT / "skills" / "kaola-project-runner" / "references"
                          / "profile-catalog.md").stat().st_size
-        self.assertLessEqual(catalog_bytes, 8130)
+        self.assertLessEqual(catalog_bytes, 10240)
         self.assertEqual(leftover_old_sentence(), [])
 
     def test_opencode_profile_is_a_different_preset(self) -> None:

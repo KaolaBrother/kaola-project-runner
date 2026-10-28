@@ -20,6 +20,7 @@ and recovery. Keep owner choice; no extra approval or automatic switch.
 | droid (`Droid`) | `droid-kaola-project-runner` | `/kaola-project-runner` | `droid-<PROJECT_CODE>-orchestrator-<purpose>` |
 | dsh (`dsh`) | `dsh-kaola-project-runner` | `/kaola-project-runner` | `dsh-<PROJECT_CODE>-orchestrator-<purpose>` |
 | grok (`Grok CLI`) | `grok-kaola-project-runner` | `/kaola-project-runner` | `grok-<PROJECT_CODE>-orchestrator-<purpose>` |
+| hermes (`Hermes Agent`) | `hermes-kaola-project-runner` | none (not a Host) | n/a |
 | kimi-cli (`Kimi CLI`) | `kimi-cli-kaola-project-runner` | `/skill:kaola-project-runner ` | `kimi-cli-<PROJECT_CODE>-orchestrator-<purpose>` |
 | opencode (`OpenCode`) | `opencode-kaola-project-runner` | `/kaola-project-runner` | `opencode-<PROJECT_CODE>-orchestrator-<purpose>` |
 | zcode (`ZCode`) | `zcode-kaola-project-runner` | `/kaola-project-runner` | `zcode-<PROJECT_CODE>-orchestrator-<purpose>` |
@@ -55,7 +56,7 @@ Relay these facts. The Host selects seats; do not load its selection policy.
 
 - **Expert**: complex thinking only. Each task needs explicit user permission. No implementation.
 - **Elite**: primary implementation and demanding execution, only inside an explicit preset/count grant.
-- **Worker**: simpler bounded work. The class is exactly: `claude-code/haiku`, `codex/terra`, `devin/default`, `dsh/commandcode`, `dsh/default`, `opencode/default`, `zcode/default`. Each needs an explicit grant and does not consume Elite/Expert grants; no grant means no Workers. Exclusions veto every grant. A grant is permission, not a preference over Elite.
+- **Worker**: simpler bounded work. The class is exactly: `claude-code/haiku`, `codex/terra`, `devin/default`, `dsh/commandcode`, `dsh/default`, `hermes/default`, `hermes/max`, `opencode/default`, `zcode/default`. Each needs an explicit grant and does not consume Elite/Expert grants; no grant means no Workers. Exclusions veto every grant. A grant is permission, not a preference over Elite.
 
 Name current grants/pauses by exact catalog preset id; remove settled revocations. Name each seat (`<platform>/<tier>`; absent `special_requirements` means none). A switch grant is per seat and stays inside that runtime. Visibility is not authorization.
 

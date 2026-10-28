@@ -660,8 +660,9 @@ class ManifestAndRegistrations(unittest.TestCase):
         # must never review; antigravity/opus keeps its #343 wording.
         self.assertEqual(self.values["default_model_profile"],
                          "Strong implementation worker for well-scoped build tasks: features, UI and 3D, "
-                         "frontend and backend code, refactors, and tests. Sometimes reports work, files, "
-                         "or results that do not exist, so every output must be independently reviewed by "
+                         "frontend and backend code, refactors, and tests. Strong language expression in English "
+                         "and Chinese. Sometimes reports work, files, or results that do not "
+                         "exist, so every output must be independently reviewed by "
                          "another seat before it is accepted. Never use as a reviewer, verifier, or for "
                          "acceptance decisions.")
         self.assertEqual(self.values["named_tiers"], "xhigh,opus")
@@ -671,9 +672,10 @@ class ManifestAndRegistrations(unittest.TestCase):
         self.assertEqual(self.values["xhigh_model_class"], "Elite")
         self.assertEqual(self.values["xhigh_model_profile"],
                          "Higher-effort Argon tier for harder or larger implementation tasks; slower and "
-                         "uses more quota. Same limits: every output must be independently reviewed by "
-                         "another seat before it is accepted, and it must never be used as a reviewer, "
-                         "verifier, or for acceptance decisions.")
+                         "uses more quota. Strong language expression in English and Chinese. Same "
+                         "limits: every output must be independently reviewed by another seat before it "
+                         "is accepted, and it must never be used as a reviewer, verifier, or for "
+                         "acceptance decisions.")
         self.assertEqual(self.values["opus_model_id"], "claude-opus-5-5-high")
         self.assertEqual(self.values["opus_model_name"], "Claude Opus 5.5")
         self.assertEqual(self.values["opus_model_parameters"], "effort=high (encoded in model ID)")
@@ -681,8 +683,9 @@ class ManifestAndRegistrations(unittest.TestCase):
         self.assertEqual(self.values["opus_model_class"], "Elite")
         self.assertEqual(self.values["opus_model_profile"],
                          "Strong at UI and 3D design implementation only; Opus level for UI and 3D work that "
-                         "needs more depth than the Argon tiers. Do not use for any other task (research, design "
-                         "docs, review, backend, debugging, investigation).")
+                         "needs more depth than the Argon tiers. Strong language expression in English and "
+                         "Chinese within UI and 3D implementation. Do not use for any other task (research, "
+                         "design docs, review, backend, debugging, investigation).")
         for tier in ("default", "xhigh"):
             profile = self.values[f"{tier}_model_profile"]
             self.assertIn("independently reviewed by another seat", profile, tier)

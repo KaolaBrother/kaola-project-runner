@@ -197,7 +197,7 @@ class RecordContract(unittest.TestCase):
         module = load_module(DISPATCH, "installed_layout_projection")
         with unittest.mock.patch.object(module, "__file__", str(entry)):
             paths = module.platform_paths(entry, None)
-            self.assertEqual(len(paths), 11)
+            self.assertEqual(len(paths), 12)
             projected = module.host_view(self.doc(), self.file)["capability"]
         self.assertEqual(projected["catalog_source"], str(installed.resolve()))
         self.assertEqual(projected["catalog_sha256"], hashlib.sha256(b"".join(p.read_bytes() for p in paths)).hexdigest())
@@ -587,7 +587,7 @@ class RecordContract(unittest.TestCase):
         self.assertEqual(limited["exclusions"], ["future/default", "unknown/worker", "zcode/default"])
         self.assertEqual(limited["grants"], [])
         self.delegator.write_text(json.dumps({"revision": 0, "authorization": {
-            "revoked": ["codex/default", "codex/astra"], "worker_pool": ["codex/default", "codex/luna"],
+            "revoked": ["codex/default", "codex/astra"], "worker_pool": ["codex/default", "codex/terra"],
             "expert_task_grants": [{"preset_id": "codex/astra", "count": 1}],
             "elite_grants": [{"preset_ids": ["codex/default", "droid/default"], "count": 2}]},
             "watch": {"stop": {"kind": "recovery", "status": "open", "source": "original-revocation",
@@ -615,7 +615,7 @@ class RecordContract(unittest.TestCase):
                    for tier in ("default", "opus", "core")]
         grants += [{"id": "codex/default", "state": "granted", "count": 1},
                    {"id": "codex/astra", "state": "granted", "count": 1, "lifetime": "standing"},
-                   {"id": "codex/luna", "state": "granted", "count": 3}]
+                   {"id": "codex/terra", "state": "granted", "count": 3}]
         self.init({"grants": [{"preset_ids": [g["id"] for g in grants[:3]], "count": 1, "state": "granted", "shared_seat": "claude-code"}, {"preset_ids": [g["id"] for g in grants[3:6]], "count": 2, "state": "granted", "shared_seat": "droid"}] + grants[6:]})
         self.update("tasks", "real-review", {"stage": "doing", "goal": "read original review", "dispatch": ["original-review"]})
         self.update("tasks", "reclaim", {"stage": "doing", "goal": "exact reclaim", "session": "droid-KPR-returned",
@@ -637,7 +637,7 @@ class RecordContract(unittest.TestCase):
             live("codex/astra", "codex-KPR-reserved", "astra-original", "not_started"),
             live("codex/default", "codex-KPR-host", "host-original", "in_progress", session_role="host"),
             live("droid/default", "droid-KPR-side", "side-original", "in_progress", session_role="sideagent"),
-            live("codex/luna", "codex-KPR-pool", "pool-original", "in_progress")]}))
+            live("codex/terra", "codex-KPR-pool", "pool-original", "in_progress")]}))
         index = self.repo / ".kaola" / "dispatch-index.json"
         index.write_text(json.dumps({"schema": "kaola-dispatch-index/1", "repo": str(self.repo), "items": [
             {"item_id": "original-review", "task_id": "real-review", "repo": str(self.repo), "status": "in-flight",
@@ -665,7 +665,7 @@ class RecordContract(unittest.TestCase):
         expert = next(g for g in groups if any(p["id"] == "codex/astra" for p in g["presets"]))
         self.assertEqual(expert["presets"][0]["lifetime"], "standing")
         self.assertEqual((expert["occupied"][0]["state"], expert["idle_available"]), ("reserved", 0))
-        self.assertNotIn("codex/luna", json.dumps(groups))
+        self.assertNotIn("codex/terra", json.dumps(groups))
         code, own = run_dispatch(["delegator", "view", "--file", str(self.delegator), *flags])
         self.assertEqual(code, 0, own)
         for key in ("groups", "expert_authorization", "occupied", "idle_available_total", "authorized_total"):

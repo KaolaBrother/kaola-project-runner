@@ -76,6 +76,13 @@ LIVE_PRESETS = {
         "default": ("GLM 5.3", "GLM-5.3", "max"),
         "named": [],
     },
+    "hermes": {
+        # Issue #416: default = high, escalation tier max (owner
+        # owner-hermes-tiers-high-max-autoescalate-20261028); effort comes
+        # from Hermes config, no ACP effort option.
+        "default": ("DeepSeek V4.1 Flash 1017", "deepseek/deepseek-flash", "high"),
+        "named": [("max", "DeepSeek V4.1 Flash 1017", "deepseek/deepseek-flash", "max")],
+    },
     "devin": {
         # Issue #342: devin/default launch effort is max, read from ACP thought_level.
         "default": ("SWE-2", "swe-2-max", "max"),

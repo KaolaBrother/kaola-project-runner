@@ -29,7 +29,7 @@ PYTHON = sys.executable
 REPO_ID = "https://github.com/example/consumer.git"
 EXPECTED_IDS = (
     "antigravity", "claude-code", "codex", "cursor-cli", "devin", "droid", "dsh",
-    "grok", "kimi-cli", "opencode", "zcode",
+    "grok", "hermes", "kimi-cli", "opencode", "zcode",
 )
 
 

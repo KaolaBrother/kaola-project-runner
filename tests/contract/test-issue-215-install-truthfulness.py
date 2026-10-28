@@ -40,6 +40,7 @@ INSTALLER = ROOT / "scripts" / "install-local.sh"
 RECEIPT_DIR = ".kaola-install-receipts"
 WORKER_NAMES = [f"{name}-kaola-project-runner" for name in (
     "antigravity", "claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok",
+    "hermes",
     "kimi-cli", "opencode", "zcode")]
 MAIN_NAME = "kaola-project-runner"
 EXTERNAL_NAME = "kaola-delegator"
@@ -244,7 +245,7 @@ def test_installer_filtered_scope_and_repeat_safe() -> None:
         check(proc.returncode == 1, "bare verify of a filtered root is incomplete")
         check(receipt["result"] == "incomplete", "filtered root: incomplete")
         check(set(receipt["missing"]) == set(WORKER_NAMES) - {"devin-kaola-project-runner"},
-              "missing = the ten unrequested workers")
+              "missing = the eleven unrequested workers")
         proc, receipt = verify(dest, "--expect",
                                "devin,kaola-project-runner,kaola-delegator")
         check(proc.returncode == 0 and receipt["scope"] == "filtered",
@@ -255,7 +256,7 @@ def test_installer_filtered_scope_and_repeat_safe() -> None:
                     "--method", "copy"], cwd=ROOT, env=env)
         check(proc.returncode == 0, f"complete install passes: {proc.stderr[-300:]}")
         check("scope: complete" in proc.stdout, "complete scope reported")
-        check("13/13 requested Skills match" in proc.stdout, "every requested Skill verified")
+        check("14/14 requested Skills match" in proc.stdout, "every requested Skill verified")
         proc2 = run(["bash", str(INSTALLER), "--skills-dir", str(dest_full),
                      "--method", "copy"], cwd=ROOT, env=env)
         check(proc2.returncode == 0, "a second identical install is repeat-safe")

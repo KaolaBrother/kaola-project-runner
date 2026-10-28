@@ -33,7 +33,7 @@ README = PROJECT / "README.md"
 
 PLATFORM_ORDER = [
     "antigravity", "claude-code", "codex", "cursor-cli", "devin", "droid",
-    "dsh", "grok", "kimi-cli", "opencode", "zcode",
+    "dsh", "grok", "hermes", "kimi-cli", "opencode", "zcode",
 ]
 TOP_KEYS = {"schema", "login_env", "platforms"}
 LOGIN_KEYS = {"shell", "shell_source", "status", "detail", "path"}

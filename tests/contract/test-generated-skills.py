@@ -92,6 +92,12 @@ PLATFORMS = {
         "prompt": "Use $antigravity-kaola-project-runner to start an exact Antigravity ACP session, read its output, and send only the input I choose.",
         "tokens": ("antigravity", "antigravity-kaola-project-runner"),
     },
+    "hermes-kaola-project-runner": {
+        "display": "Hermes Agent Kaola Project Runner",
+        "short": "Communicate with a Hermes Agent through exact ACP",
+        "prompt": "Use $hermes-kaola-project-runner to start an exact Hermes Agent ACP session, read its output, and send only the input I choose.",
+        "tokens": ("hermes", "hermes-kaola-project-runner"),
+    },
 }
 
 REQUIRED = ("SKILL.md", "agents/openai.yaml")
@@ -659,7 +665,7 @@ def check_generated_tree(assertions: Assertions, root: Path, require_check: bool
     } if generated.is_dir() else set()
     expected_ids = set(PLATFORMS) | {ORCHESTRATOR_ID, EXTERNAL_ID}
     assertions.check(
-        "test_generated_skill_inventory_is_eleven_workers_orchestrator_and_external",
+        "test_generated_skill_inventory_is_twelve_workers_orchestrator_and_external",
         actual_ids == expected_ids,
         f"generated Skill directories are {sorted(actual_ids)!r}, expected {sorted(expected_ids)!r}",
     )

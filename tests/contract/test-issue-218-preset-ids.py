@@ -7,7 +7,7 @@ so a declaration change regenerates the rows instead of leaving a handwritten
 mapping behind. This suite pins four things:
 
 * the exact catalog: the README's generated region and the installed
-  ``profile-catalog.md`` table carry the same 29 Preset ID cells in class
+  ``profile-catalog.md`` table carry the same 31 Preset ID cells in class
   grouping (Elite 19 / Worker 7 / Expert 3), each ID resolving to its
   manifest model name on the same row;
 * the similar-name pairs the IDs exist to keep apart — ``cursor-cli/default``
@@ -52,8 +52,8 @@ ELITE = [
     "grok/default", "grok/xhigh", "kimi-cli/default", "kimi-cli/kimi-k3-1-pro",
 ]
 WORKER = [
-    "claude-code/haiku", "codex/luna", "devin/default", "dsh/default",
-    "dsh/commandcode", "opencode/default", "zcode/default",
+    "claude-code/haiku", "codex/terra", "devin/default", "dsh/default",
+    "dsh/commandcode", "hermes/default", "hermes/max", "opencode/default", "zcode/default",
 ]
 EXPERT = ["claude-code/fable", "codex/astra", "devin/fable"]
 EXPECTED_ORDER = ELITE + WORKER + EXPERT
@@ -65,7 +65,7 @@ HAIKU_PROFILE = (
     "especially UI and 3D visual implementation."
 )
 SONNET_PROFILE = "All-round execution worker, especially UI and 3D visual implementation."
-LUNA_PROFILE = (
+TERRA_PROFILE = (
     "Computer-use and research worker: GUI/browser/desktop QA with screenshots "
     "and verdicts; not Expert design/planning, nor Elite substitute when a "
     "better Elite seat exists."
@@ -129,7 +129,7 @@ class PresetCatalogTest(unittest.TestCase):
         for label, rows in (("profile-catalog", self.orchestrator_rows),
                             ("README region", self.readme_rows)):
             self.assertEqual(catalog_ids(rows), EXPECTED_ORDER, label)
-            self.assertEqual(len(set(catalog_ids(rows))), 29, label)
+            self.assertEqual(len(set(catalog_ids(rows))), 31, label)
 
     def test_class_grouping_matches_issue(self) -> None:
         for rows in (self.orchestrator_rows, self.readme_rows):
@@ -190,9 +190,9 @@ class PresetCatalogTest(unittest.TestCase):
         self.assertEqual(haiku["model"].strip(), "Claude Haiku")
         self.assertEqual(haiku["parameters"].strip(), "effort=high")
         self.assertEqual(haiku["profile"].strip(), HAIKU_PROFILE)
-        self.assertEqual(rows["codex/luna"]["class"], "Worker")
-        self.assertEqual(rows["codex/luna"]["parameters"].strip(), "effort=max")
-        self.assertEqual(rows["codex/luna"]["profile"].strip(), LUNA_PROFILE)
+        self.assertEqual(rows["codex/terra"]["class"], "Worker")
+        self.assertEqual(rows["codex/terra"]["parameters"].strip(), "effort=high")
+        self.assertEqual(rows["codex/terra"]["profile"].strip(), TERRA_PROFILE)
         self.assertEqual(rows["claude-code/fable"]["class"], "Expert")
         self.assertEqual(rows["claude-code/fable"]["parameters"].strip(), "effort=high")
         self.assertEqual(rows["cursor-cli/opus"]["class"], "Elite")
@@ -209,12 +209,13 @@ class PresetCatalogTest(unittest.TestCase):
         self.assertEqual(agy_opus["parameters"].strip(), "effort=high (encoded in model ID)")
         self.assertEqual(
             agy_opus["profile"].strip(),
-            "Strong at UI and 3D design implementation only; Opus level for UI and 3D work that needs more depth than the Argon tiers. Do not use for any other task (research, design docs, review, backend, debugging, investigation).")
+            "Strong at UI and 3D design implementation only; Opus level for UI and 3D work that needs more depth than the Argon tiers. Strong language expression in English and Chinese within UI and 3D implementation. Do not use for any other task (research, design docs, review, backend, debugging, investigation).")
         agy_default = rows["antigravity/default"]["profile"].strip()
         self.assertEqual(
             agy_default,
             "Strong implementation worker for well-scoped build tasks: features, UI and 3D, "
-            "frontend and backend code, refactors, and tests. Sometimes reports work, files, "
+            "frontend and backend code, refactors, and tests. Strong language expression in English and "
+            "Chinese. Sometimes reports work, files, "
             "or results that do not exist, so every output must be independently reviewed by "
             "another seat before it is accepted. Never use as a reviewer, verifier, or for "
             "acceptance decisions.")
@@ -222,7 +223,8 @@ class PresetCatalogTest(unittest.TestCase):
         self.assertEqual(
             agy_xhigh,
             "Higher-effort Argon tier for harder or larger implementation tasks; slower and "
-            "uses more quota. Same limits: every output must be independently reviewed by "
+            "uses more quota. Strong language expression in English and Chinese. Same limits: "
+            "every output must be independently reviewed by "
             "another seat before it is accepted, and it must never be used as a reviewer, "
             "verifier, or for acceptance decisions.")
         for tier in ("default", "xhigh"):
@@ -500,7 +502,7 @@ class AuthorizationNotationTest(unittest.TestCase):
             granted = root / "granted.json"
             granted.write_text(json.dumps({"grants": [
                 {"id": "claude-code/haiku", "state": "granted", "count": 1},
-                {"id": "codex/luna", "state": "granted", "count": 1},
+                {"id": "codex/terra", "state": "granted", "count": 1},
                 {"id": "antigravity/default", "state": "granted", "count": 1},
                 {"id": "antigravity/xhigh", "state": "granted", "count": 1},
             ]}), encoding="utf-8")
@@ -516,10 +518,10 @@ class AuthorizationNotationTest(unittest.TestCase):
             self.assertEqual(haiku["selection"]["parameters"], "effort=high")
             self.assertEqual(haiku["state"], "granted")
             self.assertFalse(haiku["pool"])
-            luna = granted_ids["codex/luna"]
-            self.assertEqual(luna["class"], "Worker")
-            self.assertEqual(luna["profile"], LUNA_PROFILE)
-            self.assertEqual(luna["selection"]["effort"], "max")
+            terra = granted_ids["codex/terra"]
+            self.assertEqual(terra["class"], "Worker")
+            self.assertEqual(terra["profile"], TERRA_PROFILE)
+            self.assertEqual(terra["selection"]["effort"], "high")
             # Issue #390: the Host's dispatch projection carries the Argon
             # implementation-only and never-reviewer limits on the exact rows.
             for tier in ("default", "xhigh"):

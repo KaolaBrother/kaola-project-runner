@@ -75,7 +75,7 @@ from typing import Any
 RULE_KINDS = ("single", "provider_prefix", "native_field", "explicit")
 PLATFORM_ORDER = (
     "antigravity", "claude-code", "codex", "cursor-cli", "devin", "droid",
-    "dsh", "grok", "kimi-cli", "opencode", "zcode",
+    "dsh", "grok", "hermes", "kimi-cli", "opencode", "zcode",
 )
 PACKAGE_KEYS = {"id", "name", "binds_models", "windows", "pool"}
 TOKEN = re.compile(r"^[a-z][a-z0-9_-]*$")

@@ -8,9 +8,9 @@ owns universal engineering and lifecycle behavior. Owner content outside this re
 
 ## Project Snapshot
 
-- Purpose: KPR 是 KPM 软件开发能力的镜像，通过迭代升级跟进，并继续被维护。 runtime-neutral Agent Skills CLI communication driver for eleven AI CLI platforms via ACP, plus the generated main orchestrator Skill `kaola-project-runner` (display name Project Runner; Codex, generic, and ZCode entries) and the generated external Skill `kaola-delegator` (display name Kaola-Delegator; Grok Bot, generic, and Codex entries). Codex remains a supported consuming runtime. Grok Bot is a bridge host that receives exactly one thin generated account Skill (`hosts/grok-bot/kaola-delegator.md`) which binds an execution target, asks that target's device-local locator (`scripts/kaola-locate.py`, link `kaola-project-runner-locate`) for the verified checkout, and loads `kaola-delegator`; that Skill starts one CLI Host of any supported platform which then loads Project Runner; progressive disclosure is a locked invariant with byte budgets in `templates/budgets.json`; Grok Bot is not a worker platform, not a Project Runner host, and has no installer destination.
+- Purpose: KPR 是 KPM 软件开发能力的镜像，通过迭代升级跟进，并继续被维护。 runtime-neutral Agent Skills CLI communication driver for twelve AI CLI platforms via ACP, plus the generated main orchestrator Skill `kaola-project-runner` (display name Project Runner; Codex, generic, and ZCode entries) and the generated external Skill `kaola-delegator` (display name Kaola-Delegator; Grok Bot, generic, and Codex entries). Codex remains a supported consuming runtime. Grok Bot is a bridge host that receives exactly one thin generated account Skill (`hosts/grok-bot/kaola-delegator.md`) which binds an execution target, asks that target's device-local locator (`scripts/kaola-locate.py`, link `kaola-project-runner-locate`) for the verified checkout, and loads `kaola-delegator`; that Skill starts one CLI Host of any supported platform which then loads Project Runner; progressive disclosure is a locked invariant with byte budgets in `templates/budgets.json`; Grok Bot is not a worker platform, not a Project Runner host, and has no installer destination.
 - Stack: Bash (macOS-compatible), Python 3.
-- Architecture: shared worker template renders eleven self-contained platform Skills from YAML manifests and shell adapters; a separate orchestrator template renders the control-plane Skill (not a twelfth platform); `templates/kaola-delegator/` renders the external Kaola-Delegator Skill; every worker communicates over ACP only through one ACP holder per session (PTY retired, #130).
+- Architecture: shared worker template renders twelve self-contained platform Skills from YAML manifests and shell adapters; a separate orchestrator template renders the control-plane Skill (not a thirteenth platform); `templates/kaola-delegator/` renders the external Kaola-Delegator Skill; every worker communicates over ACP only through one ACP holder per session (PTY retired, #130).
 
 ## Commands
 
@@ -97,7 +97,7 @@ Codex and generic do not.
   session not bound this way are unchanged.
 - The generated Skill `kaola-project-runner` (display name Project Runner) is the main control-plane
   Skill: it owns intake recovery, heartbeat, dispatch, acceptance-before-finalize, and close-out
-  ownership. The eleven platform Skills remain transport-only.
+  ownership. The twelve platform Skills remain transport-only.
 - Report complete terminal, process, holder, repository, Workflow, and forge facts. Activity, editor,
   approval, decision, model, Git, Workflow, and snapshot observations never authorize or block an
   Agent-selected transport; ordinary live change is evidence, not staleness.

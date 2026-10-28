@@ -13,9 +13,9 @@ and authorization are not pooled across projects.
 
 This repository provides:
 
-- eleven self-contained **worker** Agent Skills — Claude Code, Codex CLI, Cursor CLI,
+- twelve self-contained **worker** Agent Skills — Claude Code, Codex CLI, Cursor CLI,
   Devin CLI, Grok CLI, Kimi CLI, OpenCode, ZCode, Droid CLI, dsh (DeepSeek
-  Harness), and Antigravity. A controlling agent starts a session in a Git repository, sends
+  Harness), Antigravity, and Hermes Agent. A controlling agent starts a session in a Git repository, sends
   instructions, reads replies and runtime evidence, and stops that exact owned
   session. Communication uses structured ACP (Agent Client Protocol) only.
 - the main control-plane Skill **Project Runner** (`kaola-project-runner`): recover
@@ -32,7 +32,7 @@ a recoverable path from issue to verified delivery.
 1. [Choose an entry](#choose-an-entry) — Delegator / Project Runner / Platform Runner / Workflow Next
 2. [Kaola Workflow integration](#kaola-workflow-integration) — normal path, orchestrator binding, evidence-backed exception
 3. [Install and begin](#install-and-begin)
-4. [Select workers](#select-workers) — [runtimes](#runtimes), [model selection](#model-selection), [worker classes](#worker-classes) (Expert / Worker / Elite), [preset catalog](#preset-catalog) (all 11 runtimes, 26 presets), [platform notes](#platform-notes)
+4. [Select workers](#select-workers) — [runtimes](#runtimes), [model selection](#model-selection), [worker classes](#worker-classes) (Expert / Worker / Elite), [preset catalog](#preset-catalog) (all 12 runtimes, 28 presets), [platform notes](#platform-notes)
 5. [Authorization](#authorization) — [authorization by class](#authorization-by-class), [choosing a worker](#choosing-a-worker), [seat binding and switching](#seat-binding-and-switching), [authorization before a new Host](#authorization-before-a-new-host)
 6. [What you specify and what agents own](#what-you-specify-and-what-agents-own)
 7. [Daily use](#daily-use) — session commands, steering, watching ACP sessions
@@ -65,7 +65,7 @@ second scheduler.
 **Status.** Kaola-Delegator is included in this repository and the v0.4.0 release;
 installation on a consuming machine and Grok Bot account-side live UAT still require
 separate verification. The delegated Host can be any CLI platform with a measured Host entry
-(Antigravity has none yet), chosen apart from the authorized worker platforms. Grok Bot is a bridge host for
+(Antigravity and Hermes Agent have none yet), chosen apart from the authorized worker platforms. Grok Bot is a bridge host for
 Kaola-Delegator only — not a worker platform and not a Project Runner host; see
 [Grok Bot host](docs/grok-bot-host.md).
 
@@ -100,6 +100,7 @@ measured evidence, and fill a gap only when verified.
 | Kimi CLI 2.1.1 | measured | **POSITIVE** on fixed `24a2355a`: full automatic chain, **VERIFIED** scoped checkpoint `b-e93d1a2aaa85` (explicit `/compact`) | after-turn: ACP rejects concurrent prompt (`agent_busy`) → holder queue + ordinary prompt — #263 verified the owned prompt processed ADOPTED; admission-guard proof ran on a different holder/CLI hash (not a full-byte final-holder proof) | single-run positive; background route unmeasured; earlier r1/r2 partials retained |
 | Antigravity agy 1.3.5 (adapter 0.1.0) | **none** — no measured entry, not a Host | not applicable (not a Host) | after-turn: holder queue + ordinary prompt by manifest design; agy has no native steer (`control_request` ends the session); not measured live | live one-turn, two-turn and resume verified on agy 1.3.5 (2026-10-14); steer and cancel unverified live; worker only |
 | OpenCode 2.0.23 (bridge 47a3b97d) | measured | **VERIFIED** scoped checkpoint (candidate `24a2355a`, recovery-only) | busy: V2 local adapter inbox admission (2.0.22) — #263 verified the request ended ADOPTED (admitted ≠ adopted) | numbered wrapper omits final-newline byte exposure; home propagation qualified |
+| Hermes Agent (source-read only) | **none** — not a Host | not applicable (not a Host) | unknown (pending live evidence; a busy second `session/prompt` is queued or redirected per source read and returns `end_turn` at once; #417 measures) | worker only; all cells source-read, nothing measured live yet |
 
 Every runtime also has the composite `--steer-mode interrupt` path, and
 worker events are turn-boundary prompts (notify/wake/read) independent of
@@ -206,7 +207,7 @@ survey each detected in-scope runtime once, then resolve, prepare, and verify th
 components, and report one compact row per runtime in that same result. `--runtime` is the
 Skill destination, not the only CLI to inspect. A locator attestation is not this step.
 
-The default installs all eleven worker Skills plus the main orchestrator Skill into
+The default installs all twelve worker Skills plus the main orchestrator Skill into
 `${CODEX_HOME:-$HOME/.codex}/skills` as standalone copies. `--runtime` selects the
 host's skill directory, `--platform` selects worker CLI Skills only, and
 `--no-orchestrator` skips `kaola-project-runner` (that name is not a `--platform`
@@ -291,7 +292,7 @@ Codex CLI.
 ### Runtimes
 
 Each target has its own generated **worker** Skill, platform manifest, and launch
-adapter. The main orchestrator Skill is generated separately and is not a twelfth
+adapter. The main orchestrator Skill is generated separately and is not a thirteenth
 platform.
 
 | Target runtime | Skill | CLI executable |
@@ -307,6 +308,7 @@ platform.
 | Droid CLI | `droid-kaola-project-runner` | `droid` |
 | dsh (DeepSeek Harness) | `dsh-kaola-project-runner` | `dsh` |
 | Antigravity | `antigravity-kaola-project-runner` | `agy` |
+| Hermes Agent | `hermes-kaola-project-runner` | `hermes` |
 
 Every platform communicates over ACP only, with structured replies and events;
 capabilities vary by platform. Login is a human act in a native terminal, outside the
@@ -388,6 +390,8 @@ explicit `--model` choices, not a separate Fast toggle.
 | Worker | Devin CLI | `default` | `devin/default` | SWE-2 | effort=max via ACP option thought_level | Capable full-cycle engineering worker. |
 | Worker | dsh | `default` | `dsh/default` | DeepSeek V4.1 Flash | effort=max via ACP option reasoning_effort | Fast, low-cost worker for self-contained tasks with clear goals, boundaries, acceptance criteria; strong at 3D and frontend; one-pass complete features; iterative validation, self-repair. Review each output; split long chain. |
 | Worker | dsh | `commandcode` | `dsh/commandcode` | DeepSeek V4.1 Flash (Command Code) | effort=max via ACP option reasoning_effort | Fast, low-cost worker for self-contained tasks with clear goals, boundaries, acceptance criteria; strong at 3D and frontend; one-pass complete features; iterative validation, self-repair. Review each output; split long chain. |
+| Worker | Hermes Agent | `default` | `hermes/default` | DeepSeek V4.1 Flash 1017 | effort=high (no ACP effort option) | Fast, low-cost worker for self-contained tasks with clear goals, boundaries, acceptance criteria; strong at 3D and frontend; one-pass complete features; iterative validation, self-repair. Review each output; split long chain. |
+| Worker | Hermes Agent | `max` | `hermes/max` | DeepSeek V4.1 Flash 1017 | effort=max (no ACP effort option) | Escalation level: use it when the Hermes Agent default (DeepSeek V4.1 Flash 1017 high) cannot solve the task. |
 | Worker | OpenCode | `default` | `opencode/default` | DeepSeek V4.1 Flash | effort=max via ACP option effort | Fast implementation worker for tasks with clear goals and boundaries; tends to investigate deeper root causes and reduce unrelated changes. |
 | Worker | ZCode | `default` | `zcode/default` | GLM 5.3 | thought=max | Autonomous engineering worker inclined to investigate, make decisions, iterate through failures, and carry substantial tasks toward completion with less hand-holding. |
 | Expert | Claude Code | `fable` | `claude-code/fable` | Fable | effort=high | Design, goal definition and decomposition, issue creation, and review; only under an explicit task or standing grant; no concrete implementation or execution, not a regular worker. |
@@ -433,6 +437,19 @@ and `references/acp.md`; transport and bridge internals are in the
   (`3p-weekly`, `3p-5h`). It is a worker runtime (not a Host), and the conversation id
   announced at start is provisional until the first turn (the last
   `native_session_identity` is the resumable one).
+- **Hermes Agent** (`hermes`) speaks ACP through the in-repo adapter
+  `scripts/kaola-hermes-acp.py`, which launches `hermes --yolo acp` (never
+  `--accept-hooks`; the caller's `HERMES_YOLO_MODE`/`HERMES_ACCEPT_HOOKS` are not
+  passed through) and translates the `model`/`mode` config options to
+  `session/set_model`/`session/set_mode`. `start` sets mode `dont_ask`; effort
+  comes from Hermes config, not an ACP option. Provider setup is a human act
+  (`hermes acp --setup` or `hermes model`, interactive); an uncredentialed start
+  is a recoverable `login-required` refusal. Sessions are gateway-owned, so an
+  ACP child exit is not proof a session ended (#417 measures stop). Resume uses
+  `session/load`; an unknown id is refused rather than silently creating a fresh
+  session. KPR writes nothing under `$HERMES_HOME` (KW owns native delivery
+  there), and unmeasured fields stay `unknown`/empty pending #417. Hermes is a
+  worker runtime, not a Host.
 - **dsh** runs its shipped automation-only ACP profile (`dsh --profile acp`); it
   needs no login and has no terminal UI, and the profile must already exist under
   `$DSH_HOME`. It starts with **full access by default** (`danger-full-access`, no
@@ -460,10 +477,7 @@ Workers run only under authorization, and what you authorize depends on the
 
 ### Authorization by class
 
-- **Worker presets** — the seven Worker rows of the catalog — need nothing more than an
-  authorized project task: no per-seat or per-preset approval and no priority order.
-  Their live seats use pool permission; Elite/Expert grant counts do not limit them. Membership is exactly those seven rows; `claude-code/sonnet` is
-  Elite and is not a member. Being a runtime's `default`
+- **Worker presets** — the nine Worker rows of the catalog — each need an explicit per-preset Worker grant (a `worker_grants` row naming the preset and a count); no grant means no Workers, and a catalog row grants nothing. Worker seats do not consume Elite/Expert grants and need no priority order. Membership is exactly those nine rows; `claude-code/sonnet` is Elite and is not a member. Being a runtime's `default`
   preset does not make a preset a Worker. Actual account/token/service and resource
   limits still apply (an unspecified quota is not unlimited), and any explicit owner
   restriction wins.
@@ -566,8 +580,7 @@ labeled quota or authentication.
 If a live delegated Host is confirmed stopped and its native resume id cannot restore
 it, start a new standard-named Host as a new ACP session only after current
 authorization is complete (goal, remaining work, platforms/members,
-counts/concurrency, quota, priority, delivery/stop boundary; the seven Worker
-presets need no per-seat entries). Missing key values: ask,
+counts/concurrency, quota, priority, delivery/stop boundary; Worker presets need their explicit per-preset `worker_grants` rows). Missing key values: ask,
 do not `start`, do not guess a stale quota. Quota travels in the units the user
 actually gave: a unit the user never gave is carried as unspecified and does not
 block the start, not as unlimited and not as a fourth question; a unit whose meaning
@@ -717,7 +730,7 @@ the task, interprets the output, and decides what to do next.
   sessions, linked worktrees, prunable worktree metadata, merged local
   `workflow/issue-N` branches and stale `.kaola` temporaries, and reports
   (never removes) other known residues - details in `docs/api.md`.
-- **Skill names**: `<platform>-kaola-project-runner` for each of the eleven runtimes,
+- **Skill names**: `<platform>-kaola-project-runner` for each of the twelve runtimes,
   `kaola-project-runner` (display name Project Runner) as the control plane, and
   `kaola-delegator` (display name Kaola-Delegator) for external delegation.
 - **Read the installed or [generated](skills/) `SKILL.md`** for each Skill's exact
@@ -731,7 +744,7 @@ the task, interprets the output, and decides what to do next.
 - **Host coverage**: not every host/target combination has end-to-end coverage
   (recorded: Codex and Devin); treat others as unverified until run there — see
   [development](#development).
-- The eleven worker Skills include optional Workflow guidance.
+- The twelve worker Skills include optional Workflow guidance.
 
 ## Further documentation
 

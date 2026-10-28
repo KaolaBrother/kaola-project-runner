@@ -34,10 +34,11 @@ RENDER = SCRIPTS / "render-skills.py"
 
 TERRA = "codex/terra"
 ROLE = "computer-use-only"
-DSH_CHAIN = ["claude-code/haiku", TERRA, "devin/default", "opencode/default", "zcode/default"]
+DSH_CHAIN = ["claude-code/haiku", TERRA, "devin/default", "hermes/default", "hermes/max",
+           "opencode/default", "zcode/default"]
 OTHER_WORKERS = [
     "claude-code/haiku", "devin/default", "dsh/commandcode", "dsh/default",
-    "opencode/default", "zcode/default",
+    "hermes/default", "hermes/max", "opencode/default", "zcode/default",
 ]
 
 
@@ -168,7 +169,7 @@ class ComputerUseRoles(unittest.TestCase):
         self.availability(["claude-code/haiku"])
         chain = self.carrier()._node_chain(self.binding(), ["dsh"])
         presets = [row["preset"] for row in chain]
-        self.assertEqual(presets, [TERRA, "devin/default", "opencode/default", "zcode/default"])
+        self.assertEqual(presets, [TERRA, "devin/default", "hermes/default", "hermes/max", "opencode/default", "zcode/default"])
         self.assertEqual(presets[0], TERRA)
 
     def test_only_terra_takes_the_chain_when_other_workers_are_absent(self) -> None:

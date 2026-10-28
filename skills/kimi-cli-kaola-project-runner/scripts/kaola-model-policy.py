@@ -153,6 +153,9 @@ def probes_for(platform: str) -> list[list[str]]:
         # shared catalog reader does not parse, so the probe is --version only
         # and the catalog gap is reported, not read as service denial (#323).
         "antigravity": [["--version"]],
+        # Hermes has no read-only catalog dump: the model catalog is the ACP
+        # models block in the session result. Same reporting-gap treatment.
+        "hermes": [["--version"]],
     }[platform]
 
 
@@ -303,7 +306,7 @@ def resolve(args: argparse.Namespace) -> dict[str, Any]:
     # (callers already treat catalog-missing as non-gating evidence) and
     # record the gap on the probe itself so a missing CLI catalog is not
     # read as service denial.
-    if args.platform in ("dsh", "antigravity"):
+    if args.platform in ("dsh", "antigravity", "hermes"):
         provenance["catalog_probe"]["reporting_gap"] = (
             "version-probe-does-not-list-acp-models"
         )

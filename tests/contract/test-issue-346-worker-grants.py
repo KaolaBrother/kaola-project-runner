@@ -28,8 +28,8 @@ OTHER = "dsh/default"
 ELITE = "codex/default"
 EXPERT = "codex/astra"
 ALL_WORKERS = [
-    "claude-code/haiku", "codex/luna", "devin/default", "dsh/commandcode",
-    "dsh/default", "opencode/default", "zcode/default",
+    "claude-code/haiku", "codex/terra", "devin/default", "dsh/commandcode",
+    "dsh/default", "hermes/default", "hermes/max", "opencode/default", "zcode/default",
 ]
 PAST = "2020-01-01T00:00:00+00:00"
 FUTURE = "2099-01-01T00:00:00+00:00"
@@ -330,17 +330,17 @@ class WorkerGrants(unittest.TestCase):
             "--set", json.dumps({"authorization": {"worker_grants": [
                 {"preset_ids": [preset], "count": "unlimited", "state": "granted"}
                 for preset in ALL_WORKERS
-                if preset not in ("codex/luna", "zcode/default", "dsh/default", "dsh/commandcode")
+                if preset not in ("codex/terra", "zcode/default", "dsh/default", "dsh/commandcode")
             ] + [
                 {"preset_ids": ["dsh/default"], "count": 2, "state": "granted"},
                 {"preset_ids": ["dsh/commandcode"], "count": 2, "state": "granted"},
-            ], "exclusions": ["codex/luna", "zcode/default"]}}),
+            ], "exclusions": ["codex/terra", "zcode/default"]}}),
         ])
         payload = json.loads(proc.stdout)
         self.assertEqual(payload.get("result"), "written", proc.stdout)
 
     def test_stored_scope_row_is_migrated_once_to_per_preset_rows(self) -> None:
-        excluded = ["codex/luna", "zcode/default"]
+        excluded = ["codex/terra", "zcode/default"]
         path = self.write_delegator({
             "worker_grants": [{
                 "scope": "all-worker-presets", "count": "unlimited", "state": "granted",
@@ -368,9 +368,9 @@ class WorkerGrants(unittest.TestCase):
         self.assertEqual(len(grants), len(covered))
         self.assertEqual(sorted(row["preset_ids"][0] for row in grants), covered)
         self.assertTrue(all(row["count"] == "unlimited" for row in grants))
-        reasons = self.reasons(["devin/default", "codex/luna"])
+        reasons = self.reasons(["devin/default", "codex/terra"])
         self.assertEqual(reasons["devin/default"], "dry-run")
-        self.assertEqual(reasons["codex/luna"], "excluded")
+        self.assertEqual(reasons["codex/terra"], "excluded")
 
     def test_per_preset_cap_next_to_unlimited_is_enforced(self) -> None:
         self.write_delegator({"worker_grants": [
@@ -404,7 +404,7 @@ class WorkerGrants(unittest.TestCase):
                 {"id": "codex/default", "count": 1, "state": "granted"},
                 {"id": "devin/default", "count": "unlimited", "state": "granted"},
                 {"id": "dsh/default", "count": 2, "state": "granted"},
-            ], "exclusions": ["codex/luna", "zcode/default", "grok/default", "grok/xhigh"]}),
+            ], "exclusions": ["codex/terra", "zcode/default", "grok/default", "grok/xhigh"]}),
         ])
         payload = json.loads(proc.stdout)
         self.assertEqual(payload.get("result"), "written", proc.stdout)

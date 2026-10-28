@@ -72,6 +72,7 @@ as unsupported or fully supported.
 | kimi-cli | `/skill:kaola-project-runner ` | `~/.agents/skills`, `${KIMI_CODE_HOME:-~/.kimi-code}/skills` |
 | codex | `$kaola-project-runner` | `~/.codex/skills`, `~/.agents/skills` |
 | antigravity | none (not a Host) | workspace `.agents/skills` only; the user root lives under `~/.gemini`, which the Runner never reads |
+| hermes | none (not a Host) | workspace `.agents/skills` only; the user root lives under `$HERMES_HOME` (`~/.hermes`), which the Runner never reads |
 
 Notes:
 

@@ -268,7 +268,7 @@ def test_a1_second_install_only_refers() -> None:
             sandbox.install("--runtime", first, KIMI_CODE_HOME=str(kimi_home))
             before = snapshot(sandbox.shared)
             skills = installed_skills(sandbox.shared)
-            check(len(skills) == 12, f"T-a1 {first}: all Skills installed ({skills})")
+            check(len(skills) == 13, f"T-a1 {first}: all Skills installed ({skills})")
             output = sandbox.install("--runtime", second, KIMI_CODE_HOME=str(kimi_home))
             # Issue #159: kimi-cli's shared-root install must only refer; its
             # kimi-specific root is where a fresh copy may land instead.
@@ -319,7 +319,7 @@ def test_a2_one_sided_uninstall_keeps_the_other_working() -> None:
                       and not (kimi_home / "skills" / RECEIPTS).exists(),
                       "T-a2 uninstall kimi-cli: the kimi-specific root is fully withdrawn")
             refs = {name: data.get("referrers") for name, data in receipts(sandbox.shared).items()}
-            check(len(refs) == 12 and all(v == [staying] for v in refs.values()),
+            check(len(refs) == 13 and all(v == [staying] for v in refs.values()),
                   f"T-a2 uninstall {leaving}: receipts remain with referrers [{staying}] ({refs})")
             worker_chain(sandbox, staying)
             output = sandbox.install("--runtime", staying, "--uninstall",
@@ -339,7 +339,7 @@ def test_a3_other_build_updates_in_place_and_stays_aligned() -> None:
         check(old_cli.read_bytes().endswith(b"# older build\n"), "T-a3: dsh installed the older build")
         output = sandbox.install("--runtime", "kimi-cli")
         # Only the worker Skills differ in that build; the main Skill is the same build.
-        check(output.count("update: ") == 11 and output.count("refer: ") == 1
+        check(output.count("update: ") == 12 and output.count("refer: ") == 1
               and "refer: " + str(sandbox.shared / "kaola-project-runner") in output,
               f"T-a3: a different build updates the shared copies ({output[-400:]})")
         check(old_cli.read_bytes() == (ROOT / "skills" / "dsh-kaola-project-runner" / "scripts"

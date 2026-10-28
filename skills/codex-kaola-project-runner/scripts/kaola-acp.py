@@ -155,8 +155,8 @@ SESSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
 # Session identity: sidekick is the legacy Sideagent value; never rewrite live records.
 SESSION_ROLES = frozenset({"host", "sideagent", "sidekick", "expert", "elite", "worker"})
 PLATFORMS = (
-    "antigravity", "claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok", "kimi-cli",
-    "opencode", "zcode",
+    "antigravity", "claude-code", "codex", "cursor-cli", "devin", "droid", "dsh", "grok", "hermes",
+    "kimi-cli", "opencode", "zcode",
 )
 START_WAIT = 20.0
 # Issue #146: the holder's shared session/new wait. A manifest
@@ -184,6 +184,11 @@ ACP_SKIP_MODE = {
     "codex": "agent-full-access",
     "devin": "bypass",
     "droid": "auto-high",
+    # Issue #416: Hermes `acp_adapter/modes.py` (source-read) offers
+    # default=ask, accept_edits=workspace_session, dont_ask=session; dont_ask
+    # is the most permissive edit approval (sensitive paths still ask) and
+    # matches the `--yolo` launch. #417 confirms live.
+    "hermes": "dont_ask",
     "kimi-cli": "yolo",
     "zcode": "yolo",
 }
@@ -384,6 +389,7 @@ BRIDGE_BINARY_ENV = {
     "claude-code": "CLAUDE_ACP_CLAUDE_BIN",
     "opencode": "OPENCODE_BIN",
     "dsh": "DSH_BIN",
+    "hermes": "HERMES_BIN",
 }
 # Issue #124: platforms whose `initialize` returns no `agentInfo`, so a start
 # records the launched CLI's own `--version` instead (a fact, never a gate).
@@ -450,6 +456,8 @@ HOST_SKILL_ENTRIES = {
     "droid": "/kaola-project-runner",
     "dsh": "/kaola-project-runner",
     "grok": "/kaola-project-runner",
+    # Issue #416: Hermes is a worker platform, not a Host (empty fails closed).
+    "hermes": "",
     "kimi-cli": "/skill:kaola-project-runner ",
     "opencode": "/kaola-project-runner",
     "zcode": "/kaola-project-runner",
@@ -1344,6 +1352,7 @@ SURVEY_RUNTIMES = {
     "droid": ("Droid", "droid", "DROID_BIN"),
     "dsh": ("dsh", "dsh", "DSH_BIN"),
     "grok": ("Grok CLI", "grok", "GROK_BIN"),
+    "hermes": ("Hermes Agent", "hermes", "HERMES_BIN"),
     "kimi-cli": ("Kimi CLI", "kimi", "KIMI_BIN"),
     "opencode": ("OpenCode", "opencode", "OPENCODE_BIN"),
     "zcode": ("ZCode", "zcode", "ZCODE_BIN"),
