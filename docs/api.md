@@ -826,6 +826,14 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   `state retire --stop-evidence` settles a task-named seat absent from `--live`
   from four verified durable kinds: `index-stop-receipt`, `archived-ledger`,
   `direct-dispatch`, `sweep-purge` (Host writer, accepted-done task only).
+  `maintenance-returned` inputs no longer grow one row per failure: a
+  `recovery#N` failure whose `why` is `binding-or-recipe-unavailable` coalesces
+  into the latest same-(why, next) row (`count`, `coalesced_from`, max
+  `host_revision_through`), dropping refs only folded rows named; stop duties
+  and every other why never merge. A Host task `retire` atomically removes its
+  own non-stop `host:tasks/<id>@<rev>` inputs (`settled_inputs` in the stone);
+  the alert leaves when no input remains.
+
 - With node mode, worker events are not node inputs: they reach the Host at its next idle
   boundary as without a binding. A Host holder advertising `sideagent-node/1` starts one fresh
   node per batch of Host business changes past `handled_host_revision`, selected only while the

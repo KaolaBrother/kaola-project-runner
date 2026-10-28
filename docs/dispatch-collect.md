@@ -308,6 +308,9 @@ platform/tier preset, the task's acceptance evidence naming the session), or
 Host-only, needs an accepted-done task, and verifies before it settles; the
 refusal names the failed check. Without matching evidence the absent-row
 refusal is unchanged plus a hint.
+`maintenance-returned` failure rows for `binding-or-recipe-unavailable`
+coalesce into the latest row (`count`, `coalesced_from`); a Host task retire
+also removes that task's settled non-stop `host:tasks/` inputs atomically.
 
 ### Owner-required user-facing Elite and Expert seat summary (2026-10-06)
 

@@ -703,5 +703,214 @@ class EvidenceKeys(unittest.TestCase):
             self.assertNotIn(key, body)
 
 
+record_module = load("kaola_record_contract_421",
+                     REPO / "scripts" / "kaola-record-contract.py")
+
+RETURN_NEXT = ("Host: reconcile the original node and stop receipts; "
+               "repair the binding; request a bounded check")
+
+
+class ReturnedAlertCompaction(Fixture):
+    """Issue #421 (c): maintenance-returned cannot grow one row per failure."""
+
+    def recovery_env(self) -> dict[str, str]:
+        return self.host_env()
+
+    def fail_input(self, ident: str, evidence: str, *extra: str,
+                   env: dict[str, str] | None = None) -> tuple[int, dict]:
+        return self.state("recovery-input", "--file", str(self.file),
+                          "--source", "carrier-maintenance-failure",
+                          "--fail", "binding-or-recipe-unavailable",
+                          "--input", ident, "--evidence", evidence, *extra,
+                          env=env if env is not None else self.recovery_env())
+
+    def alert(self) -> dict:
+        return (self.doc()["state"].get("alerts") or {}).get("maintenance-returned") or {}
+
+    def seed(self, inputs: dict, evidence: list | None = None,
+             summary: str = "maintenance needs Host recovery from original receipts") -> None:
+        doc = self.doc()
+        doc["state"].setdefault("alerts", {})["maintenance-returned"] = {
+            "level": "warn", "owner": "host", "summary": summary, "rev": 1,
+            "inputs": inputs,
+            **({"evidence": evidence} if evidence else {})}
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+
+    def test_repeated_binding_failures_coalesce_with_count(self) -> None:
+        self.init()
+        self.seed({"host:tasks/t9@2": {"why": "not-in-batch", "evidence": "host-ref"}},
+                  evidence=["host-added-ref"])
+        env = self.recovery_env()
+        folded = []
+        for seq in (5, 6, 7):
+            code, out = self.fail_input(f"recovery#{seq}", f"/tmp/events.jsonl#{seq}",
+                                        "--through-host-revision", "1", env=env)
+            self.assertEqual(code, 0, out)
+            folded += out.get("coalesced") or []
+        self.assertEqual(folded, ["recovery#5", "recovery#6"])
+        inputs = self.alert()["inputs"]
+        self.assertEqual(set(inputs) - {"host:tasks/t9@2"}, {"recovery#7"})
+        row = inputs["recovery#7"]
+        self.assertEqual(row["count"], 3)
+        self.assertEqual(row["coalesced_from"], "recovery#5")
+        self.assertEqual(row["evidence"], "/tmp/events.jsonl#7")
+        self.assertEqual(row["host_revision_through"], 1)
+        evidence = self.alert()["evidence"]
+        self.assertNotIn("/tmp/events.jsonl#5", evidence)
+        self.assertNotIn("/tmp/events.jsonl#6", evidence)
+        self.assertIn("/tmp/events.jsonl#7", evidence)
+        self.assertIn("host-added-ref", evidence)
+
+    def test_blow_up_shape_is_bounded(self) -> None:
+        rows = {f"recovery#{seq}": {"why": "binding-or-recipe-unavailable",
+                                  "next": RETURN_NEXT,
+                                  "evidence": f"/tmp/events.jsonl#{seq}",
+                                  "host_revision_through": seq}
+                for seq in range(1, 157)}
+        merged, folded = record_module.coalesce_returned_inputs(rows)
+        self.assertEqual(len(folded), 155)
+        self.assertEqual(set(merged), {"recovery#156"})
+        self.assertEqual(merged["recovery#156"]["count"], 156)
+        self.assertEqual(merged["recovery#156"]["coalesced_from"], "recovery#1")
+        self.assertEqual(merged["recovery#156"]["host_revision_through"], 156)
+        # A live CLI pass over the seeded 156-row alert folds one more.
+        self.init()
+        self.seed(rows)
+        code, out = self.fail_input("recovery#157", "/tmp/events.jsonl#157")
+        self.assertEqual(code, 0, out)
+        inputs = self.alert()["inputs"]
+        self.assertEqual(set(inputs), {"recovery#157"})
+        self.assertEqual(inputs["recovery#157"]["count"], 157)
+        self.assertLess(len(json.dumps(self.alert())), 4096)
+
+    def test_unsettled_inputs_are_retained_with_evidence(self) -> None:
+        self.init()
+        other = {
+            "recovery#40": {"why": "checkpoint-partial", "evidence": "events#40",
+                            "host_revision_through": 40},
+            "batch:b-1": {"why": "node-admission-failed", "evidence": "events#b1",
+                          "batch": "b-1"},
+            "host:tasks/t5@3": {"why": "not-in-batch", "evidence": "events#t5"},
+            "host:tasks/t6@7": {"why": "stop-unconfirmed", "evidence": "events#t6"},
+        }
+        self.seed(other, evidence=["events#40", "events#b1", "events#t5", "events#t6",
+                                   "host-added"])
+        code, out = self.fail_input("recovery#8", "events#8")
+        self.assertEqual(code, 0, out)
+        code, out = self.fail_input("recovery#9", "events#9")
+        self.assertEqual(code, 0, out)
+        inputs = self.alert()["inputs"]
+        for ident, row in other.items():
+            self.assertEqual(inputs[ident], row, ident)
+        self.assertEqual(inputs["recovery#9"]["count"], 2)
+        evidence = self.alert()["evidence"]
+        self.assertNotIn("events#8", evidence)
+        for ref in ("events#40", "events#t5", "events#t6", "events#9", "host-added"):
+            self.assertIn(ref, evidence)
+
+    def test_compaction_never_drops_an_unsettled_input(self) -> None:
+        different_next = {"recovery#2": {"why": "binding-or-recipe-unavailable",
+                                        "next": "Host: a different duty",
+                                        "evidence": "e2"}}
+        merged, folded = record_module.coalesce_returned_inputs({
+            **different_next,
+            "recovery#3": {"why": "binding-or-recipe-unavailable",
+                           "next": RETURN_NEXT, "evidence": "e3"},
+            "recovery#4": {"why": "binding-or-recipe-unavailable",
+                           "next": RETURN_NEXT, "evidence": "e4"},
+            "recovery#5": {"why": "stop-unconfirmed", "next": RETURN_NEXT,
+                           "evidence": "e5"},
+            "recovery#6": {"why": "stop-unconfirmed", "next": RETURN_NEXT,
+                           "evidence": "e6"},
+            "recovery#7": {"why": "binding-or-recipe-unavailable",
+                           "next": RETURN_NEXT, "evidence": "e7"},
+        })
+        self.assertEqual(folded, ["recovery#3", "recovery#4"])
+        self.assertEqual(set(merged), {"recovery#2", "recovery#5", "recovery#6", "recovery#7"})
+        self.assertEqual(merged["recovery#7"]["count"], 3)
+        # A lone row gets no count; a repeated id keeps its fold.
+        lone, folded = record_module.coalesce_returned_inputs(
+            {"recovery#9": {"why": "binding-or-recipe-unavailable", "evidence": "e9"}})
+        self.assertEqual(folded, [])
+        self.assertNotIn("count", lone["recovery#9"])
+        self.init()
+        self.seed({"recovery#3": {"why": "binding-or-recipe-unavailable",
+                                 "next": RETURN_NEXT, "count": 4,
+                                 "coalesced_from": "recovery#1",
+                                 "evidence": "e3"}})
+        code, out = self.fail_input("recovery#3", "e3")
+        self.assertEqual((code, out["result"]), (0, "unchanged"), out)
+        self.assertEqual(self.alert()["inputs"]["recovery#3"]["count"], 4)
+
+    def test_host_retire_collapses_its_settled_inputs(self) -> None:
+        self.init()
+        rev = self.add_task("t1", {"stage": "done", "goal": "g",
+                                   "verdict": {"value": "accepted"}})
+        self.add_task("t2", {"stage": "doing", "goal": "g2"})
+        self.seed({"host:tasks/t1@4": {"why": "not-in-batch", "evidence": "e4"},
+                   "host:tasks/t1@9": {"why": "unaccounted", "evidence": "e9"},
+                   "host:tasks/t2@5": {"why": "not-in-batch", "evidence": "e5"},
+                   "host:tasks/t1@11": {"why": "stop-unconfirmed", "evidence": "e11"}},
+                  evidence=["e4", "e9", "e5", "e11", "host-added"])
+        self.write_live([])
+        code, out = self.retire("t1", rev)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(sorted(out["value"]["settled_inputs"]),
+                         ["host:tasks/t1@4", "host:tasks/t1@9"])
+        inputs = self.alert()["inputs"]
+        self.assertEqual(set(inputs), {"host:tasks/t2@5", "host:tasks/t1@11"})
+        evidence = self.alert()["evidence"]
+        self.assertNotIn("e4", evidence)
+        self.assertNotIn("e9", evidence)
+        self.assertIn("e5", evidence)
+        self.assertIn("e11", evidence)
+        self.assertIn("host-added", evidence)
+        # Retiring the task whose remaining non-stop inputs are last deletes the alert.
+        rev2 = self.doc()["state"]["tasks"]["t2"]["rev"]
+        code, out = self.state("update", "--file", str(self.file), "--writer", "host",
+                               "--source", "evt", "--kind", "tasks", "--id", "t2",
+                               "--expect-rev", str(rev2),
+                               "--set", json.dumps({"stage": "done",
+                                                    "verdict": {"value": "accepted"}}),
+                               env=self.env)
+        self.assertEqual(code, 0, out)
+        doc = self.doc()
+        doc["state"]["alerts"]["maintenance-returned"]["inputs"] = {
+            "host:tasks/t2@5": {"why": "not-in-batch", "evidence": "e5"}}
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        code, out = self.retire("t2", doc["state"]["tasks"]["t2"]["rev"])
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("maintenance-returned", self.doc()["state"]["alerts"])
+
+    def test_sideagent_or_handoff_retire_does_not_collapse(self) -> None:
+        self.init()
+        rev = self.add_task("t1", {"stage": "done", "goal": "g",
+                                   "verdict": {"value": "accepted"}})
+        self.add_task("t2", {"stage": "doing", "goal": "g2"})
+        inputs = {"host:tasks/t1@4": {"why": "not-in-batch", "evidence": "e4"},
+                  "host:tasks/t2@5": {"why": "not-in-batch", "evidence": "e5"}}
+        self.seed(inputs)
+        self.write_live([])
+        code, out = self.retire("t1", rev, writer="sideagent")
+        self.assertEqual((code, out["reason"]), (2, "retire-unmet"), out)
+        self.assertIn("still reference tasks/t1", out["detail"])
+        rev = self.doc()["state"]["tasks"]["t1"]["rev"]
+        code, out = self.retire("t1", rev, "--handoff", "t2")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.alert()["inputs"], inputs)
+
+    def test_alert_row_typing(self) -> None:
+        base = {"level": "warn", "owner": "host", "summary": "s",
+                "inputs": {"recovery#1": {"why": "x", "evidence": "e"}}}
+        for bad in ({"count": 1}, {"count": "3"}, {"coalesced_from": ""}):
+            record = json.loads(json.dumps(base))
+            record["inputs"]["recovery#1"].update(bad)
+            self.assertIsNotNone(
+                record_module.record_type_problem("alerts", record), bad)
+        good = json.loads(json.dumps(base))
+        good["inputs"]["recovery#1"].update({"count": 3, "coalesced_from": "recovery#0"})
+        self.assertIsNone(record_module.record_type_problem("alerts", good))
+
+
 if __name__ == "__main__":
     unittest.main()

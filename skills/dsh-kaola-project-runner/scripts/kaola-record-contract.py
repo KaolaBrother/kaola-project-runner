@@ -700,15 +700,72 @@ def record_type_problem(kind: str, record: dict[str, Any]) -> dict[str, str] | N
             if not isinstance(inputs, dict):
                 return refusal("alerts.inputs", "object keyed by current input id", "retain original input receipts")
             for ident, item in inputs.items():
-                allowed = {"why", "batch", "evidence", "next", "host_revision_through", "missing_sources"}
+                allowed = {"why", "batch", "evidence", "next", "host_revision_through",
+                           "missing_sources", "count", "coalesced_from"}
                 if (not isinstance(item, dict) or set(item) - allowed or not isinstance(item.get("why"), str)
                         or any(not isinstance(value, str) for key, value in item.items()
-                               if key not in ("host_revision_through", "missing_sources"))
+                               if key not in ("host_revision_through", "missing_sources", "count"))
                         or ("host_revision_through" in item and not count_ok(item["host_revision_through"]))
-                        or ("missing_sources" in item and not missing_sources_ok(item["missing_sources"]))):
+                        or ("missing_sources" in item and not missing_sources_ok(item["missing_sources"]))
+                        or ("count" in item and not (count_ok(item["count"]) and item["count"] >= 2))
+                        or ("coalesced_from" in item and not (isinstance(item["coalesced_from"], str)
+                                                              and item["coalesced_from"]))):
                     return refusal(f"alerts.inputs.{ident}", ", ".join(sorted(allowed)),
                                    "use the original current failure/input receipt; the file was not changed")
     return None
+
+
+# Issue #421: failure reasons whose cause is the binding or recipe, not the
+# input. Only these coalesce; stop duties and every other why never merge.
+COALESCED_FAILURES = frozenset({"binding-or-recipe-unavailable"})
+_COALESCED_RECOVERY = re.compile(r"^recovery#[1-9][0-9]*$")
+
+
+def coalesce_returned_inputs(inputs: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """Fold repeated binding/recipe failures into their latest row.
+
+    Only `recovery#N` rows sharing one (why, next) with why in
+    COALESCED_FAILURES merge. The highest-seq row keeps its id, evidence,
+    batch and missing_sources, gains `count` (the folded total) and
+    `coalesced_from` (the lowest-seq id overall), and takes the group's max
+    `host_revision_through`. Returns (new inputs, folded-away ids); the
+    argument is not mutated."""
+    groups: dict[tuple[Any, Any], list[str]] = {}
+    for ident, row in inputs.items():
+        if (_COALESCED_RECOVERY.fullmatch(ident) and isinstance(row, dict)
+                and row.get("why") in COALESCED_FAILURES):
+            groups.setdefault((row.get("why"), row.get("next")), []).append(ident)
+    out = dict(inputs)
+    folded: list[str] = []
+    for idents in groups.values():
+        if len(idents) < 2:
+            continue
+        idents.sort(key=lambda ident: int(ident.split("#", 1)[1]))
+        kept_id = idents[-1]
+        kept = dict(out[kept_id])
+        total = 0
+        lows: list[int] = []
+        for ident in idents:
+            row = out[ident]
+            count = row.get("count")
+            total += count if count_ok(count) else 1
+            lows.append(int(ident.split("#", 1)[1]))
+            source = row.get("coalesced_from")
+            if isinstance(source, str) and _COALESCED_RECOVERY.fullmatch(source):
+                lows.append(int(source.split("#", 1)[1]))
+        kept["count"] = total
+        kept["coalesced_from"] = f"recovery#{min(lows)}"
+        revs = [out[ident].get("host_revision_through") for ident in idents]
+        revs = [rev for rev in revs if count_ok(rev)]
+        if revs:
+            kept["host_revision_through"] = max(revs)
+        else:
+            kept.pop("host_revision_through", None)
+        out[kept_id] = kept
+        for ident in idents[:-1]:
+            del out[ident]
+        folded.extend(idents[:-1])
+    return out, folded
 
 
 def _rows_problem(path: str, value: Any) -> dict[str, str] | None:

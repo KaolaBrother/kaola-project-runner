@@ -8599,6 +8599,45 @@ def retire_absent_decision(args: argparse.Namespace, doc: dict[str, Any]) -> dic
             "host_revision": doc["host_revision"]}
 
 
+def settle_retired_task_inputs(state: dict[str, Any], record_id: str) -> list[str]:
+    """Issue #421: a Host task retire settles its own non-stop returned inputs.
+
+    Every `host:tasks/<id>@<rev>` row of `alerts.maintenance-returned` whose
+    `why` is not a stop duty leaves with the task — the record leaving the
+    current set is the existing `already_settled_input` proof, applied
+    atomically inside the same locked write. The alert itself leaves when no
+    input remains, exactly as `settle_inputs` handles it."""
+    alert = (state.get("alerts") or {}).get("maintenance-returned")
+    if not isinstance(alert, dict):
+        return []
+    inputs = alert.get("inputs") if isinstance(alert.get("inputs"), dict) else {}
+    removals = [ident for ident, row in inputs.items()
+                if _OBSOLETE_HOST_TASK.fullmatch(ident) is not None
+                and host_task_input(ident)[0] == record_id
+                and not (isinstance(row, dict) and row.get("why") in STOP_DUTIES)]
+    if not removals:
+        return []
+    remaining = {ident: row for ident, row in inputs.items() if ident not in removals}
+    if not remaining:
+        del state["alerts"]["maintenance-returned"]
+        return removals
+    merged = {key: value for key, value in alert.items() if key != "inputs"}
+    merged["inputs"] = remaining
+    if isinstance(merged.get("evidence"), list):
+        merged["evidence"] = [ref for ref in merged["evidence"]
+                              if ref not in dropped_input_refs(inputs, removals, remaining)]
+        if not merged["evidence"]:
+            merged.pop("evidence")
+    if isinstance(merged.get("summary"), str) and RETURNED_SUMMARY.match(merged["summary"]):
+        merged["summary"] = RETURNED_SUMMARY.sub(
+            f"{len(remaining)} maintenance input(s) not applied by a node",
+            merged["summary"], count=1)
+    merged["rev"] = int(alert.get("rev") or 0) + 1
+    merged["updated_at"] = observed_at()
+    state["alerts"]["maintenance-returned"] = merged
+    return removals
+
+
 def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, Any]:
     state = doc["state"]
     kind, record_id = args.kind, args.id
@@ -8757,6 +8796,12 @@ def retire_record(args: argparse.Namespace, doc: dict[str, Any]) -> dict[str, An
         # This is transient command data, never a retired registry.
         args._retired_task = json.loads(json.dumps(current))
     del state[kind][record_id]
+    if kind == "tasks" and args.writer == "host" and not handoff:
+        # Issue #421: the retired record leaving the current set is the
+        # already_settled_input proof for its non-stop returned inputs.
+        settled_inputs = settle_retired_task_inputs(state, record_id)
+        if settled_inputs:
+            stone["settled_inputs"] = settled_inputs
     # The command result carries the cite. The file does not keep a settled row.
     # Seats handed to another task stay on that task. A stone stays only when
     # it still names seats or dispatch and names no receiver.
@@ -9510,6 +9555,7 @@ def command_state_recovery_input(args: argparse.Namespace) -> int:
             doc = require_current(read_state_file(path)[0], path)
             maintenance = doc["state"].setdefault("maintenance", {})
             prior = maintenance.get("recovery_input") or {}
+            folded: list[str] = []
             if args.fail:
                 ident = args.input
                 if args.through_host_revision is not None and not 0 <= args.through_host_revision <= int(doc.get("host_revision") or 0):
@@ -9544,6 +9590,12 @@ def command_state_recovery_input(args: argparse.Namespace) -> int:
                        **({"host_revision_through": args.through_host_revision}
                           if args.through_host_revision is not None else {}),
                        **({"missing_sources": missing} if missing else {})}
+                # Issue #421: a repeat of the same id keeps its fold.
+                prior_row = inputs.get(ident)
+                if isinstance(prior_row, dict):
+                    for key in ("count", "coalesced_from"):
+                        if key in prior_row:
+                            row[key] = prior_row[key]
                 # A verified checkpoint that already settled this input, or
                 # whose range is past a returned input's revision, is not
                 # reopened by a late failure record. A recovery this
@@ -9566,11 +9618,20 @@ def command_state_recovery_input(args: argparse.Namespace) -> int:
                 if inputs.get(ident) == row:
                     return emit({"result": "unchanged", "value": prior})
                 inputs[ident] = row
+                if row["why"] in RECORD.COALESCED_FAILURES:
+                    # Issue #421: binding/recipe failures share one cause; the
+                    # alert cannot grow one row per Host compaction forever.
+                    prior_inputs = dict(inputs)
+                    inputs, folded = RECORD.coalesce_returned_inputs(inputs)
+                refs = list(dict.fromkeys([*(alert.get("evidence") or []), evidence]))
+                if folded:
+                    dropped = dropped_input_refs(prior_inputs, folded, inputs)
+                    refs = [ref for ref in refs if ref not in dropped]
                 alerts["maintenance-returned"] = {**alert, "level": "warn", "owner": "host", "inputs": inputs,
                     "summary": "maintenance needs Host recovery from original receipts", "next": row["next"],
                     "source": args.source, "writer": "tool:carrier", "writer_holder": caller["holder_instance_id"],
                     "rev": int(alert.get("rev") or 0) + 1, "updated_at": observed_at(),
-                    "evidence": list(dict.fromkeys([*(alert.get("evidence") or []), evidence]))}
+                    **({"evidence": refs} if refs else {})}
                 value = row
             else:
                 last = maintenance.get("last_checkpoint") or {}
@@ -9587,6 +9648,7 @@ def command_state_recovery_input(args: argparse.Namespace) -> int:
                 maintenance.update(recovery_seq=seq, recovery_input=value)
             write_state(path, doc)
         return emit({"result": "written", "value": value, "host_revision": doc.get("host_revision", 0),
+                     **({"coalesced": folded} if folded else {}),
                      "carrier_supported": "host-compact-maintenance/1" in (record.get("holder_features") or [])})
     except StateRefusal as exc:
         return emit(exc.payload, 2)
