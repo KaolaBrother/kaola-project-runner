@@ -4,6 +4,44 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
 (see `docs/conventions.md`).
 
+## 0.9.34 — 2026-10-28 (Hermes Agent: the twelfth worker platform)
+
+Closes #416 and #417. **Hermes Agent joins as the twelfth worker platform** (owner decisions
+`owner-hermes-impl-issues-go-20261028` and the #415 card set): `platforms/hermes.yaml` declares
+`hermes/default` — Worker class, DeepSeek V4.1 Flash 1017 at `deepseek/deepseek-flash`, catalog-only
+Worker tiers `default` (high) with `max` upgrade per `owner-hermes-tiers-high-max-autoescalate-20261028`
+— behind an explicit Worker grant that this release does NOT add (Hermes worker count stays 0). The
+Option A in-repo ACP adapter ships inside the worker Skill; `--yolo` is on and `--accept-hooks` off in the
+declared launch; the quota catalog `PLATFORM_ORDER` and the static hermes package land in `kaola-quota.py`;
+`scripts/adapters/hermes.sh` matches the manifest; the new `test-issue-416-hermes-acp.py` (21 tests,
+including the no-Hermes-grant guard over real grant rows) is registered in both `validate.sh` groups;
+`reference_bytes` re-measures 9216 -> 10240 (Host decision, #413 precedent, recorded in
+`templates/budgets.json`); install/locate cover `--platform hermes`; README/api/architecture move to
+twelve worker platforms and thirteen non-platform entries.
+
+The **MacBook live measurement (#417)** is recorded, not assumed: `acp_verified_versions` is
+`cli=0.22.5;agent=hermes-agent/0.22.5;protocol=1;condition=macbook-20261028-mini-unmeasured` — the Mac
+Mini leg stays honestly unmeasured until that machine reconnects (owner-noted blocker: Cursor offline +
+SSH publickey denied). Verified live on the MacBook: `set_model deepseek:deepseek-flash` reads back
+`Provider: DeepSeek • current` (DeepSeek official route through the gateway), `set_mode dont_ask` with
+permission behavior measured (ordinary edits auto-approved, credential-file edits still permission-gated),
+busy-send refused `prompt-in-progress`, mode-less after-turn steer refused `steer-mode-required`
+(steering stays honestly not-supported), cancel -> `cancelled`, unknown-id resume -> Hermes `-32603
+not_found`, unservable model -> `-32603 model_resolution_failed`, exact stop clean. Evidence:
+`docs/hermes-live-verification-20261028.md`.
+
+**Seats: restart required.** The operator test
+`git diff v0.9.33 v0.9.34 -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
+is non-empty: `scripts/kaola-quota.py` (`PLATFORM_ORDER` adds `hermes` and the static package),
+`platforms/hermes.yaml`, and `scripts/adapters/hermes.sh`. Per-platform pins: the Grok Bot bridge re-pins
+at the pin commit P naming this content commit R with release `v0.9.34` (`--check --require-pinned` gates
+P); no other platform changed adapter or manifest this release, so their existing verification stands;
+**Hermes itself is intentionally not pinned** (self-updating git install) with the verified version and
+the unmeasured-Mini condition recorded in the manifest. Known open debt, unchanged by this release: #420
+(`test-acp-contract` 1 base-identical failure and `test-issue-244`, both failing before #416). This
+release carries no install; installing is a separate authorized act (the owner-mandated three-Mac Hermes
+install follows separately, MacBook first).
+
 ## 0.9.33 — 2026-10-28 (Worker tier swap: Codex Terra replaces Luna Max)
 
 Owner decisions `owner-worker-luna-max-to-codex-terra-20261028` and
