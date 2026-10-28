@@ -3176,7 +3176,7 @@ is the same display name Opus 5.5, preset `claude-code/opus-xhigh`, native alias
 implementation). The preset ID is not the alias. `--tier sonnet` is Sonnet (`sonnet`)
 at `effort=high` (Elite; an explicit preset and count grant, not a Worker-class preset).
 `--tier haiku` is Claude Haiku (`haiku`) at `effort=high` (Worker; usable only after an explicit Worker grant).
-Worker-class presets are exactly: `claude-code/haiku`, `codex/terra`, `devin/default`, `dsh/commandcode`, `dsh/default`, `opencode/default`, `zcode/default`. Each of those seven is usable only after an explicit Worker grant. `dsh/commandcode` is the Command Code DeepSeek V4.1 Flash preset in that class, and it needs a grant the same way. Codex's `--tier terra` is Codex Terra (`terra-6.1`) at `effort=high`
+Worker-class presets are exactly: `claude-code/haiku`, `codex/terra`, `devin/default`, `dsh/commandcode`, `dsh/default`, `opencode/default`, `zcode/default`. Each of those seven is usable only after an explicit Worker grant. `dsh/commandcode` is the Command Code DeepSeek V4.1 Flash preset in that class, and it needs a grant the same way. Codex's `--tier terra` is Codex Terra (`gpt-6.1-terra`) at `effort=high`
 (owner decision `owner-worker-luna-max-to-codex-terra-20261028`, replacing the retired Luna tier of Issue #188): a Worker good at
 computer-use and research, not Expert design or planning, and not a substitute
 for Elite work when a better Elite seat exists. Its catalog row does not set

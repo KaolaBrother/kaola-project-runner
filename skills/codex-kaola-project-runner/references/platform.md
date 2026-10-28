@@ -7,7 +7,7 @@
 - Resume: `session/resume`/`session/load` per advertised capability; Continue: the latest `session/list` entry for the canonical cwd
 - Runner default preset `codex/default` (`--tier default`): **GPT-6.1 Sol** — `gpt-6.1-sol` with `effort=high`
 - Runner astra preset `codex/astra` (`--tier astra`): **GPT-6 Astra** — `gpt-6-astra` with `effort=high`
-- Runner terra preset `codex/terra` (`--tier terra`): **Codex Terra** — `terra-6.1` with `effort=high`
+- Runner terra preset `codex/terra` (`--tier terra`): **Codex Terra** — `gpt-6.1-terra` with `effort=high`
 - Fast support: Codex fast mode via ACP `fast-mode` configId (off/on); explicit off is applied, not assumed
 
 ## Preflight
