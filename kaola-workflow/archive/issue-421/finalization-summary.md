@@ -72,6 +72,10 @@ none outside the kaola-workflow/ run-state band.
 - Consumer cleanup execution: KPM #893 (its own acceptance).
 - `profiles-20261026` citation-kind decision: owner call, recorded here.
 
+## Citation
+
+Closed by merge sink `19529c91` on main (issue #421, second finalize of the reopened L2 home; first-run archive preserved at `issue-421.archived-2026-10-29T08-13-23-000Z`). Mechanism landed across sinks `6207456f` (#421 round 1), `94d70828` (#426), `46629e47` (#427), `f5d4c3cb` (#425).
+
 ## Final readiness
 
 Ready: KPR-side L2 deliverable complete (mechanism 13/13, live proofs, honest
