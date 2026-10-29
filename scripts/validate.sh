@@ -403,6 +403,7 @@ python_suites_all=(
   "test-issue-423-devin-compaction-summary.py"
   "test-issue-264-compact-recovery.py"
   "test-issue-426-retire-legacy-seats.py"
+  "test-issue-427-collect-binding.py"
 )
 python_suites_a=(
   "test-issue-79-zcode-312.py"
@@ -577,7 +578,8 @@ python_suites_b=(
   "test-issue-421-retire-recovery.py"
   "test-issue-423-devin-compaction-summary.py"
   "test-issue-264-compact-recovery.py"
-  "test-issue-426-retire-legacy-seats.py")
+  "test-issue-426-retire-legacy-seats.py"
+  "test-issue-427-collect-binding.py")
 
 # Selectable shell contract suites: they run serially before the Python lanes.
 shell_suites=(

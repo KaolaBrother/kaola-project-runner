@@ -4893,6 +4893,12 @@ def collect_one(item: dict[str, Any], repo: str, skills_root: Path) -> dict[str,
     probe = {"session": item.get("session"), "dispatch_event_cursor": item.get("dispatch_event_cursor")}
     code, receipt, note = run_runner(script, launch_argv(probe, repo, "status"))
     kept["evidence"]["collect_status"] = evidence(receipt, code, note)
+    # Issue #427: name the session this status read addressed, so the
+    # receipt binds itself.
+    seen = receipt.get("session") if isinstance(receipt, dict) else None
+    named = seen if isinstance(seen, str) and seen else session_name(item.get("session"))
+    if named:
+        kept["evidence"]["collect_status"]["session"] = named
     unread = receipt_unreadable(code, receipt, note)
     if unread or not isinstance(receipt, dict):
         kept.update(status="unknown", reason="collect-" + (unread or "unreadable"))
@@ -7503,6 +7509,10 @@ _STOPPED_COLLECT_ROUTE_KEY = "stopped-collect-incomplete-turn"
 _COLLECT_TERMINAL_ROUTE = "collect-terminal session-gone route"
 _COLLECT_TERMINAL_ROUTE_KEY = "collect-terminal"
 _TERMINAL_MUTATIONS = ("accepted", "completed")
+# Issue #427: per-item dispositions beyond accepted/cancelled that also
+# settle the collect-terminal and dead-holder routes, reported as the item's
+# own value. `repair` and every other value still refuse.
+_SETTLED_HANDOFF_DISPOSITIONS = ("superseded", "handed-off")
 # i<N> or i<N>-... inside a task id. A bare id such as i426 embeds N; a
 # hyphen is not required. profiles-20261026 embeds no issue number.
 _TASK_ISSUE_RE = re.compile(r"(?:^|[^A-Za-z0-9])i([1-9][0-9]*)(?=-|$)")
@@ -7986,7 +7996,8 @@ _DEAD_HOLDER_UNKNOWN_REASONS = ("event-range-unavailable", "no-last-prompt",
                                 "fingerprint-differs", "session-gone")
 _DEAD_HOLDER_RETIRE_ROUTE = (
     "dead-holder unknown route: an accepted task retires this unknown row when its "
-    "per-item disposition is accepted or cancelled (reported as that disposition), --live "
+    "per-item disposition is accepted, cancelled, superseded or handed-off "
+    "(reported as that disposition), --live "
     "shows that session stopped or absent (the session is gone) and --evidence carries "
     "the original close (closed issue, archive, receipt) with --cite. A missing session "
     "link, a foreign holder, or a live session still refuses. This writes no index bytes, "
@@ -8016,12 +8027,13 @@ def dead_holder_unknown_settlement(ref: str, row: dict[str, Any], task: dict[str
     if task.get("stage") != "done" or verdict.get("value") != "accepted":
         return f"{ref} is unknown"
     dispositions = task.get("dispositions") if isinstance(task.get("dispositions"), dict) else None
-    # Issue #412: an owner-cancelled item is a truthful close of that item,
-    # not a refusal; any other value stays unresolved on this route.
+    # Issue #412/#427: an owner-cancelled or handed-over item is a truthful
+    # close of that item, not a refusal; any other value stays unresolved on
+    # this route.
     disposition = dispositions.get(ref) if dispositions is not None else "accepted"
-    if disposition not in ("accepted", "cancelled"):
-        return (f"{ref} is unknown; its per-item disposition is not accepted or cancelled "
-                f"({disposition!r}). " + _DEAD_HOLDER_RETIRE_ROUTE)
+    if disposition not in ("accepted", "cancelled") + _SETTLED_HANDOFF_DISPOSITIONS:
+        return (f"{ref} is unknown; its per-item disposition is not accepted, cancelled, "
+                f"superseded or handed-off ({disposition!r}). " + _DEAD_HOLDER_RETIRE_ROUTE)
     session = session_name(row.get("session"))
     if session is None:
         return f"{ref} is unknown; missing session link. " + _DEAD_HOLDER_RETIRE_ROUTE
@@ -8548,6 +8560,12 @@ def collect_terminal_settlement(ref: str, row: dict[str, Any], task: dict[str, A
     list no longer shows, and the stopped row the continuation gates do not
     take (no per-item disposition was recorded). A live row, or a stop under
     another holder, does not settle.
+
+    Issue #427: a tool-written collect_status names no `session` key, so the
+    session link binds through a non-empty `acp_session_id` instead; a
+    `session` key that IS present must still equal the item session. A
+    per-item `superseded` or `handed-off` disposition settles and is reported
+    as that disposition.
     """
     if row.get("status") != "unknown" or row.get("reason") != "fingerprint-differs":
         return None
@@ -8567,7 +8585,10 @@ def collect_terminal_settlement(ref: str, row: dict[str, Any], task: dict[str, A
     if not ident or row.get("task_id") != ident:
         return None
     dispositions = task.get("dispositions") if isinstance(task.get("dispositions"), dict) else None
-    if isinstance(dispositions, dict) and ref in dispositions and dispositions.get(ref) != "accepted":
+    disposition = (dispositions.get(ref)
+                   if isinstance(dispositions, dict) and ref in dispositions
+                   else "accepted")
+    if disposition not in ("accepted",) + _SETTLED_HANDOFF_DISPOSITIONS:
         return None
     session = session_name(row.get("session"))
     if session is None:
@@ -8575,8 +8596,13 @@ def collect_terminal_settlement(ref: str, row: dict[str, Any], task: dict[str, A
     holder = row.get("holder_instance_id")
     if not isinstance(holder, str) or not holder:
         return None
-    if collected.get("session") != session:
-        return None
+    if "session" in collected:
+        if collected.get("session") != session:
+            return None
+    else:
+        acp = collected.get("acp_session_id")
+        if not isinstance(acp, str) or not acp.strip():
+            return None
     collected_repo = collected.get("repo")
     if (not isinstance(collected_repo, str) or not collected_repo
             or not same_repo(collected_repo, repo)):
@@ -8605,7 +8631,7 @@ def collect_terminal_settlement(ref: str, row: dict[str, Any], task: dict[str, A
         "collect_status": "terminal", "collected": shape,
         "live": "stopped" if matches else "absent",
         "route": _COLLECT_TERMINAL_ROUTE_KEY, "evidence": evidence,
-        "disposition": "accepted",
+        "disposition": disposition,
     }
 
 

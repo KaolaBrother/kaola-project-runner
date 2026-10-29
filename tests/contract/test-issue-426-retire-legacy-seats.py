@@ -515,7 +515,7 @@ class CollectTerminal(Fixture):
 
     def test_a_disposition_that_is_not_accepted_does_not_settle(self) -> None:
         self.init()
-        rev = self.accepted({"dispatch": [ITEM], "dispositions": {ITEM: "superseded"}})
+        rev = self.accepted({"dispatch": [ITEM], "dispositions": {ITEM: "repair"}})
         self.write_index([self.item()])
         self.write_live([])
         before_state, before_index = self.file.read_bytes(), self.index.read_bytes()

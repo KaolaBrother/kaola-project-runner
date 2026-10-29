@@ -277,7 +277,8 @@ that has no collected continuation. `--live` shows that session `stopped`, or
 the session is absent because it is gone. `--evidence` carries the original
 close (closed issue, archive, receipt) and `--cite` names a retrievable path.
 The task verdict is accepted. A per-item `dispositions` entry, when the task
-has one, is `accepted` or `cancelled` for that item (Issue #412), and the
+has one, is `accepted` or `cancelled` for that item (Issue #412), or
+`superseded`/`handed-off` (Issue #427); `repair` still refuses, and the
 reconciliation reports that item as its own disposition. The command reports
 `reconciled_dispatch` and does not rewrite the unknown index row. A missing session link, a foreign
 holder, and a live session still refuse, and that refusal names the
@@ -316,7 +317,13 @@ An item whose collect finished settles its seat as `collect-terminal` when
 `mutation_status` is exactly `accepted` or `completed` (positive list), the
 collected session and repo match the item, the collected holder equals the
 recorded one, and the session is absent from `--live` or stopped under that
-holder. A new kind `refs-unindexed` (`{kind, path, commit}`, no session)
+holder. Tool-written collect receipts name no `session` key; they bind through
+a non-empty `acp_session_id` plus the same strict holder and repo equality,
+while a `session` key that IS present must still equal the item session
+(Issue #427). A per-item `superseded` or `handed-off` disposition settles
+here too and is reported as that disposition. `collect` now records the
+runner `session` on each new `collect_status` receipt; existing index rows
+are not rewritten. A new kind `refs-unindexed` (`{kind, path, commit}`, no session)
 retires a task whose every dispatch ref is absent from the supplied index:
 the task id embeds exactly one issue number N (no other `i<digits>`/`I<digits>`
 token), the path is exactly `kaola-workflow/archive/issue-N/mission-ledger.jsonl`,

@@ -831,7 +831,13 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   (`mutation_status` exactly `accepted`/`completed`, collected session, repo and
   holder all matching) then settles as `collect-terminal` with the session
   absent from `--live` or stopped under its recorded holder, and a session-gone
-  unknown item settles as `stale-collect-session-gone`. `refs-unindexed` (no
+  unknown item settles as `stale-collect-session-gone`. A tool-written
+  collect receipt names no `session` key and binds through a non-empty
+  `acp_session_id` (a present `session` key must still equal the item
+  session); per-item `superseded`/`handed-off` dispositions settle on the
+  collect-terminal and dead-holder routes and are reported as that
+  disposition, and `collect` records the runner `session` on each new
+  `collect_status` receipt (Issue #427). `refs-unindexed` (no
   session key) retires a task whose every dispatch ref is absent from the
   supplied index: the task id embeds exactly one issue number N, the citation
   is exactly that issue's committed `mission-ledger.jsonl`, that commit's

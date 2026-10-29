@@ -951,9 +951,9 @@ class CancelledDispositionRetire(unittest.TestCase):
                                        "holder_instance_id": self.HOLDER_A}])
         self.assertIn(ROUTE, out["detail"])
 
-    def test_a_superseded_item_refuses(self) -> None:
+    def test_a_repair_item_refuses(self) -> None:
         out = self._refuse("not accepted",
-                           dispositions={self.ITEM_A: "superseded", self.ITEM_B: "accepted"})
+                           dispositions={self.ITEM_A: "repair", self.ITEM_B: "accepted"})
         self.assertIn(ROUTE, out["detail"])
 
     def test_a_not_accepted_done_task_refuses(self) -> None:
