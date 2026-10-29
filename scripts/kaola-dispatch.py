@@ -7503,7 +7503,9 @@ _STOPPED_COLLECT_ROUTE_KEY = "stopped-collect-incomplete-turn"
 _COLLECT_TERMINAL_ROUTE = "collect-terminal session-gone route"
 _COLLECT_TERMINAL_ROUTE_KEY = "collect-terminal"
 _TERMINAL_MUTATIONS = ("accepted", "completed")
-_NONTERMINAL_MUTATIONS = ("in_progress", "not_started", "unknown")
+# i<N> or i<N>-... inside a task id. A bare id such as i426 embeds N; a
+# hyphen is not required. profiles-20261026 embeds no issue number.
+_TASK_ISSUE_RE = re.compile(r"(?:^|[^A-Za-z0-9])i([1-9][0-9]*)(?=-|$)")
 
 
 def _blank(value: Any) -> bool:
@@ -8152,9 +8154,9 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
                     bare.setdefault(item_id, []).append(key)
                 else:
                     key = item_id
-                if key in row_index and row_index[key] != index_path:
-                    # Issue #290: a ref in two supplied indices is not in
-                    # exactly one, so the pair proves no single closure.
+                if key in row_index:
+                    # A second sighting of the same ref, in this file or
+                    # another, is not exactly one closure.
                     ambiguous.add(key)
                 row_index[key] = index_path
                 rows[key] = index_row
@@ -8168,10 +8170,11 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
                     else:
                         bare_ambiguous[item_id] = (index_path, keys)
         # Issue #426: the task names no seat. The seat is the tool-written
-        # item for that ref in this one index. An ambiguous ref, a second
-        # index, or a KPM row does not become a seat.
+        # item for that ref, and only when exactly one index file is
+        # supplied. An ambiguous ref, a second index, or a KPM row does not
+        # become a seat.
         fallback: dict[str, list[str]] = {}
-        if not seats:
+        if not seats and len(indices) == 1:
             preset_by_session: dict[str, str | None] = {}
             for ref in refs:
                 if ref in ambiguous or ref not in rows:
@@ -8202,6 +8205,11 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
                     raise StateRefusal(
                         "invalid-input",
                         f"--stop-evidence session {entry['session']} names no seat of this task")
+        elif not seats:
+            for entry in seat_entries:
+                raise StateRefusal(
+                    "invalid-input",
+                    f"--stop-evidence session {entry['session']} names no seat of this task")
         proved: set[str] = set()
         still_open: set[str] = set()
         judged: set[str] = set()
@@ -8335,7 +8343,8 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
             if every_missing and len(ref_entries) > 1:
                 problems.append("refs-unindexed takes one archive citation")
             elif every_missing and len(ref_entries) == 1:
-                receipt, why = refs_unindexed_settle(ref_entries[0], task, args, missing_refs)
+                receipt, why = refs_unindexed_settle(
+                    ref_entries[0], task, args, missing_refs, live)
                 if receipt is not None:
                     args._stop_evidence = getattr(args, "_stop_evidence", []) + [receipt]
                     missing_refs = []
@@ -8507,20 +8516,18 @@ def _item_preset(row: dict[str, Any]) -> str | None:
 
 
 def _collect_terminal_shape(collected: Any) -> dict[str, Any] | None:
-    """The collect blob is terminal, or None when it is not this route's shape.
+    """The collect blob is terminal only for an accepted or completed mutation.
 
-    `outcome: stopped` is terminal unless the mutation is still an open value
-    (`in_progress`, `not_started`, `unknown`). `mutation_status` accepted or
-    completed is terminal on its own. An in-progress mutation is not terminal
-    even when an older outcome says stopped."""
+    Missing, null, and every other mutation_status stay off this route,
+    including a stopped outcome. `unknown` stays on the stopped-collect
+    route, which runs before this one. An in-progress mutation is not
+    terminal."""
     if not isinstance(collected, dict) or not collected:
         return None
-    outcome = collected.get("outcome")
     mutation = collected.get("mutation_status")
-    if mutation in _TERMINAL_MUTATIONS or (
-            outcome == "stopped" and mutation not in _NONTERMINAL_MUTATIONS):
-        return {"outcome": outcome, "mutation_status": mutation}
-    return None
+    if mutation not in _TERMINAL_MUTATIONS:
+        return None
+    return {"outcome": collected.get("outcome"), "mutation_status": mutation}
 
 
 def collect_terminal_settlement(ref: str, row: dict[str, Any], task: dict[str, Any],
@@ -8565,9 +8572,19 @@ def collect_terminal_settlement(ref: str, row: dict[str, Any], task: dict[str, A
     holder = row.get("holder_instance_id")
     if not isinstance(holder, str) or not holder:
         return None
-    collected_holder = collected.get("holder_instance_id")
-    if isinstance(collected_holder, str) and collected_holder and collected_holder != holder:
+    if collected.get("session") != session:
         return None
+    collected_repo = collected.get("repo")
+    if (not isinstance(collected_repo, str) or not collected_repo
+            or not same_repo(collected_repo, repo)):
+        return None
+    if "holder_instance_id" in collected:
+        collected_holder = collected.get("holder_instance_id")
+        if isinstance(collected_holder, str) and collected_holder:
+            if collected_holder != holder:
+                return None
+        elif collected_holder not in (None, ""):
+            return None
     if isinstance(row.get("repo"), str) and row.get("repo") and not same_repo(row.get("repo"), repo):
         return None
     matches = [item for item in live if item.get("session") == session]
@@ -8602,37 +8619,80 @@ def _git_show(repo: Path, *argv: str) -> subprocess.CompletedProcess | None:
         return None
 
 
-def refs_unindexed_settle(entry: dict[str, Any], task: dict[str, Any],
-                          args: argparse.Namespace, refs: list[str]
-                          ) -> tuple[dict[str, Any] | None, str | None]:
-    """A committed archive whose every line is terminal, for refs no index holds.
+def _embedded_issue_number(task_id: Any) -> str | None:
+    """Issue number a task id embeds as i<N> or i<N>-..."""
+    if not isinstance(task_id, str):
+        return None
+    match = _TASK_ISSUE_RE.search(task_id)
+    return match.group(1) if match else None
 
-    Issue #426 shape D. The proof is the archive commit, not a live row and
-    not an index row. This does not call `ledger_problem`: these ledgers name
-    missions, not seats. Pre-reboot is not required; the commit must be an
-    ancestor of HEAD that contains the path.
+
+def _workflow_state_names_issue(text: str, number: str) -> bool:
+    """Exactly one issue_number line in the committed workflow-state names N."""
+    pattern = re.compile(rf"^issue_number:\s*{re.escape(number)}\s*$", re.MULTILINE)
+    return len(pattern.findall(text)) == 1
+
+
+def refs_unindexed_settle(entry: dict[str, Any], task: dict[str, Any],
+                          args: argparse.Namespace, refs: list[str],
+                          live: list[dict[str, Any]]
+                          ) -> tuple[dict[str, Any] | None, str | None]:
+    """This task's committed archive, for refs no index holds.
+
+    Issue #426 shape D. The task id embeds issue number N (`i<N>` or
+    `i<N>-...`). The citation path is exactly
+    `kaola-workflow/archive/issue-N/mission-ledger.jsonl`, and that same
+    commit's workflow-state.md names issue_number N. The proof is that
+    commit, not the working tree and not an index row. This does not call
+    `ledger_problem`: these ledgers name missions, not seats. Pre-reboot is
+    not required; the commit must be an ancestor of HEAD.
+
+    A session the task itself names must not be live or ready in --live.
+    The receipt says whether those rows were absent or checked.
     """
     if args.writer != "host":
         return None, "refs-unindexed is a Host route; a Sideagent returns it to the Host"
     verdict = task.get("verdict") if isinstance(task.get("verdict"), dict) else {}
     if task.get("stage") != "done" or verdict.get("value") != "accepted":
         return None, "refs-unindexed settles only an accepted-done task"
+    number = _embedded_issue_number(getattr(args, "id", None))
+    if number is None:
+        return None, "refs-unindexed needs a task id that embeds its issue number"
     repo = repo_of_state_file(Path(args.file))
     commit, path = entry["commit"], entry["path"]
+    expected = f"kaola-workflow/archive/issue-{number}/mission-ledger.jsonl"
+    if path != expected:
+        return None, "the archive path is not this task's committed ledger"
     proc = _git_show(repo, "cat-file", "-e", f"{commit}:{path}")
     if proc is None or proc.returncode != 0:
         return None, "the named commit does not contain that ledger path in this repository"
     proc = _git_show(repo, "merge-base", "--is-ancestor", commit, "HEAD")
     if proc is None or proc.returncode != 0:
         return None, "the ledger commit is not an ancestor of HEAD in this repository"
+    state_path = f"kaola-workflow/archive/issue-{number}/workflow-state.md"
+    proc = _git_show(repo, "show", f"{commit}:{state_path}")
+    if proc is None or proc.returncode != 0:
+        return None, "the archive commit does not contain this task's workflow-state"
+    if not _workflow_state_names_issue(proc.stdout or "", number):
+        return None, "the archived workflow-state does not name this task's issue_number"
     proc = _git_show(repo, "show", f"{commit}:{path}")
     if proc is None or proc.returncode != 0:
         return None, "the ledger commit content is unreadable"
     problem = RECORD.ledger_terminal_problem(proc.stdout)
     if problem:
         return None, problem
+    supplied = live if isinstance(live, list) else []
+    if not supplied:
+        live_used = "absent"
+    else:
+        named = set(task_seats(task))
+        for row in supplied:
+            session = row.get("session")
+            if session in named and row.get("state") != "stopped":
+                return None, f"{session} is still live"
+        live_used = "checked"
     return {"kind": entry["kind"], "route": "refs-unindexed", "shape": "refs-unindexed",
-            "path": path, "commit": commit, "refs": list(refs), "live": "not-used"}, None
+            "path": path, "commit": commit, "refs": list(refs), "live": live_used}, None
 
 
 def seat_preset(task: dict[str, Any], session: str) -> str | None:

@@ -353,13 +353,26 @@ def _token_in(text: str, token: str) -> bool:
                      text) is not None
 
 
+def _handed_over_target(details: str) -> str | None:
+    """Non-empty text after the first handed-over marker, or None.
+
+    A bare `handed-over:` names no target. The target may be `#M` or any
+    other non-empty id."""
+    marker = "handed-over:"
+    at = details.find(marker)
+    if at < 0:
+        return None
+    target = details[at + len(marker):].strip()
+    return target or None
+
+
 def ledger_problem(text: Any, session: str, tokens: list[str]) -> tuple[str | None, int | None]:
     """An archived mission ledger that terminally names this seat.
 
     Every non-blank line is one JSON object with exactly LEDGER_KEYS; a status
-    is done, failed, or a blocked line that handed over. At least one line's
-    details names `session` and one of `tokens` (holder id or preset) as whole
-    tokens. Returns (problem, matching line n)."""
+    is done, failed, or a blocked line whose handed-over target is non-empty.
+    At least one line's details names `session` and one of `tokens` (holder id
+    or preset) as whole tokens. Returns (problem, matching line n)."""
     if not isinstance(text, str):
         return "the ledger is not text", None
     names = [token for token in tokens if isinstance(token, str) and token]
@@ -379,7 +392,7 @@ def ledger_problem(text: Any, session: str, tokens: list[str]) -> tuple[str | No
         status = entry.get("status")
         details = entry.get("details") if isinstance(entry.get("details"), str) else ""
         if status == "blocked":
-            if "handed-over:" not in details:
+            if _handed_over_target(details) is None:
                 return "a blocked ledger line names no handed-over target", None
         elif status not in ("done", "failed"):
             return "a ledger line is not done, failed, or a handed-over blocked", None
@@ -395,7 +408,7 @@ def ledger_terminal_problem(text: Any) -> str | None:
 
     Issue #426. This does not name a seat: `ledger_problem` still requires a
     session and a holder or preset on `archived-ledger`. An empty file is not
-    terminal. A blocked line still has to name its handed-over target."""
+    terminal. A blocked line still has to name a non-empty handed-over target."""
     if not isinstance(text, str):
         return "the ledger is not text"
     seen = False
@@ -413,7 +426,7 @@ def ledger_terminal_problem(text: Any) -> str | None:
         status = entry.get("status")
         details = entry.get("details") if isinstance(entry.get("details"), str) else ""
         if status == "blocked":
-            if "handed-over:" not in details:
+            if _handed_over_target(details) is None:
                 return "a blocked ledger line names no handed-over target"
         elif status not in ("done", "failed"):
             return "a ledger line is not done, failed, or a handed-over blocked"

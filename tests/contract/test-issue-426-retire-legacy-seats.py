@@ -6,12 +6,15 @@ live on the supplied kaola-dispatch-index/1 item. Four shapes:
 
 - (A) --stop-evidence binds to that item's session.
 - (B) archived-ledger reads the item's holder or preset.
-- (C) a terminal collect (outcome stopped, or mutation accepted/completed)
-  settles when the session is absent from --live or stopped under its holder.
-- (D) refs that never entered an index settle from one committed archive
-  whose every line is terminal, without a session name on the ledger.
+- (C) a terminal collect settles only when mutation_status is accepted or
+  completed, the collected session and repo match this item, and the session
+  is absent from --live or stopped under its holder.
+- (D) refs that never entered an index settle from the committed archive of
+  the issue embedded in the task id. That commit's workflow-state names the
+  same issue, and every ledger line is terminal.
 
-Neighboring refusals stay refusals. ledger_problem is unchanged.
+A blocked ledger line names a non-empty handed-over target. Neighboring
+refusals stay refusals.
 """
 from __future__ import annotations
 
@@ -155,10 +158,10 @@ class Fixture(unittest.TestCase):
         path.write_text("".join(json.dumps(line) + "\n" for line in lines), encoding="utf-8")
         return rel
 
-    def stayed(self, before_state: bytes, before_index: bytes) -> None:
+    def stayed(self, before_state: bytes, before_index: bytes, ident: str = "t1") -> None:
         self.assertEqual(self.file.read_bytes(), before_state)
         self.assertEqual(self.index.read_bytes(), before_index)
-        self.assertIn("t1", self.doc()["state"]["tasks"])
+        self.assertIn(ident, self.doc()["state"]["tasks"])
 
 
 class SeatFallback(Fixture):
@@ -254,6 +257,40 @@ class SeatFallback(Fixture):
                                 "--stop-evidence", self.evidence())
         self.assertEqual((code, out["reason"]), (2, "retire-unmet"), out)
         self.assertIn("holder", out["detail"])
+        self.stayed(before_state, before_index)
+
+    def test_seat_fallback_requires_exactly_one_supplied_index(self) -> None:
+        """Finding 5: an empty first index must not lend the second index's seat."""
+        self.init()
+        rev = self.accepted({"dispatch": [ITEM]})
+        self.write_index([])
+        second = self.repo / "index-b.json"
+        self.write_index([self.open_item()], path=second)
+        self.write_live([])
+        before_state = self.file.read_bytes()
+        code, out = self.retire("t1", rev, "--index", str(self.index), "--index", str(second),
+                                "--stop-evidence", self.evidence())
+        self.assertNotEqual(code, 0, out)
+        self.assertEqual(self.file.read_bytes(), before_state)
+        self.assertIn("t1", self.doc()["state"]["tasks"])
+
+    def test_a_kpm_row_is_not_a_fallback_seat(self) -> None:
+        self.init()
+        rev = self.accepted({"dispatch": ["it-1"]})
+        self.index.write_text(json.dumps({
+            "schema": "kpm.dispatch-index/1.7", "revision": 1,
+            "project": {"canonical_root": str(self.repo)},
+            "plans": [{"task_id": "t1", "plan_revision": 1, "items": [{
+                "id": "it-1", "state": "returned", "preset": PRESET,
+                "execution": {"holder": HOLDER,
+                              "start_input": {"session_name": SEAT, "task_id": "t1"}}}]}],
+        }), encoding="utf-8")
+        self.write_live([])
+        before_state, before_index = self.file.read_bytes(), self.index.read_bytes()
+        code, out = self.retire("t1", rev, "--index", str(self.index),
+                                "--stop-evidence", self.evidence(item_id="it-1"))
+        self.assertEqual((code, out.get("reason")), (2, "invalid-input"), out)
+        self.assertIn(f"--stop-evidence session {SEAT} names no seat of this task", out["detail"])
         self.stayed(before_state, before_index)
 
     def test_a_closed_item_whose_session_is_still_live_stays_open(self) -> None:
@@ -494,6 +531,54 @@ class CollectTerminal(Fixture):
         self.assertNotIn("collect-terminal", out["detail"])
         self.stayed(before_state, before_index)
 
+    def test_a_stopped_outcome_settles_only_accepted_or_completed(self) -> None:
+        """Finding 1: null, queued, and a non-string mutation are not terminal."""
+        for mutation in (None, "queued", {}):
+            with self.subTest(mutation=mutation):
+                if self.file.exists():
+                    self.file.unlink()
+                rev, _before = self.ready()
+                row = self.item()
+                row["evidence"]["collect_status"]["outcome"] = "stopped"
+                row["evidence"]["collect_status"]["mutation_status"] = mutation
+                self.write_index([row])
+                before_state, before_index = self.file.read_bytes(), self.index.read_bytes()
+                code, out = self.retire("t1", rev, "--index", str(self.index))
+                self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+                self.assertNotIn("collect-terminal", out["detail"])
+                self.stayed(before_state, before_index)
+
+    def test_collect_session_and_repo_must_match_this_item(self) -> None:
+        """Finding 2: a foreign collect session and repo do not settle."""
+        rev, _before = self.ready()
+        row = self.item()
+        collected = row["evidence"]["collect_status"]
+        collected["session"] = "seat-B"
+        collected["repo"] = "/foreign"
+        collected.pop("holder_instance_id", None)
+        self.write_index([row])
+        before_state, before_index = self.file.read_bytes(), self.index.read_bytes()
+        code, out = self.retire("t1", rev, "--index", str(self.index))
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertNotIn("collect-terminal", out["detail"])
+        self.stayed(before_state, before_index)
+
+    def test_a_duplicate_item_id_in_one_index_is_ambiguous(self) -> None:
+        """Finding 4: the later row must not overwrite an in-flight duplicate."""
+        self.init()
+        rev = self.accepted({"dispatch": [ITEM]})
+        running = "seat-running"
+        first = self.item(status="in-flight", session=running)
+        second = self.item()
+        self.write_index([first, second])
+        self.write_live([{"session": running, "state": "ready", "platform": "dsh",
+                          "repo": str(self.repo), "holder_instance_id": HOLDER}])
+        before_state, before_index = self.file.read_bytes(), self.index.read_bytes()
+        code, out = self.retire("t1", rev, "--index", str(self.index))
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("more than one supplied index", out["detail"])
+        self.stayed(before_state, before_index)
+
 
 class RefsUnindexed(Fixture):
     """(D) refs that never entered an index settle from a committed archive."""
@@ -510,25 +595,26 @@ class RefsUnindexed(Fixture):
     def test_a_committed_archive_settles_refs_the_index_never_held(self) -> None:
         self.init()
         self.git_init()
-        rev = self.accepted({"dispatch": self.REFS, "evidence": "original close"})
+        ident = "i426-review"
+        rev = self.accepted({"dispatch": self.REFS, "evidence": "original close"}, ident=ident)
         self.write_index([{"item_id": "unrelated", "task_id": "other", "status": "returned",
                            "acceptance": "accepted"}])
         self.write_live([{"session": "dsh-KT-still-running", "state": "ready",
                           "platform": "dsh", "repo": str(self.repo),
                           "holder_instance_id": "holder-live"}])
-        rel = self.write_ledger([self.mission(),
-                                 {"n": 2, "name": "review",
-                                  "details": "dispatched: self — review", "status": "failed"}])
-        commit = self.git_commit("archive", [rel])
+        rel, commit = self.bound_lines([
+            self.mission(),
+            {"n": 2, "name": "review", "details": "dispatched: self — review",
+             "status": "failed"}])
         before_index = self.index.read_bytes()
-        code, out = self.retire("t1", rev, "--index", str(self.index),
+        code, out = self.retire(ident, rev, "--index", str(self.index),
                                 "--stop-evidence", self.citation(commit, rel))
         self.assertEqual(code, 0, out)
         receipt = out["value"]["stop_evidence"][0]
         self.assertEqual(receipt["route"], "refs-unindexed")
         self.assertEqual(receipt["shape"], "refs-unindexed")
         self.assertEqual(receipt["refs"], self.REFS)
-        self.assertEqual(receipt["live"], "not-used")
+        self.assertEqual(receipt["live"], "checked")
         self.assertEqual(receipt["path"], rel)
         self.assertEqual(receipt["commit"], commit)
         self.assertNotIn("session", receipt)
@@ -536,37 +622,38 @@ class RefsUnindexed(Fixture):
         stored = self.index.read_text(encoding="utf-8")
         for ref in self.REFS:
             self.assertNotIn(ref, stored)
-        self.assertNotIn("t1", self.doc()["state"]["tasks"])
+        self.assertNotIn(ident, self.doc()["state"]["tasks"])
 
     def test_a_non_terminal_ledger_line_refuses(self) -> None:
         self.init()
         self.git_init()
-        rev = self.accepted({"dispatch": self.REFS})
+        ident = "i426-review"
+        rev = self.accepted({"dispatch": self.REFS}, ident=ident)
         self.write_index([])
         self.write_live([])
-        rel = self.write_ledger([self.mission(status="in-flight")])
-        commit = self.git_commit("archive", [rel])
+        rel, commit = self.bound_lines([self.mission(status="in-flight")])
         before_state, before_index = self.file.read_bytes(), self.index.read_bytes()
-        code, out = self.retire("t1", rev, "--index", str(self.index),
+        code, out = self.retire(ident, rev, "--index", str(self.index),
                                 "--stop-evidence", self.citation(commit, rel))
         self.assertEqual((code, out["reason"]), (2, "retire-unmet"), out)
         self.assertIn("done, failed, or a handed-over blocked", out["detail"])
-        self.stayed(before_state, before_index)
+        self.stayed(before_state, before_index, ident)
 
     def test_a_commit_that_lacks_the_path_refuses(self) -> None:
         self.init()
         self.git_init()
         readme = self.git_commit("readme", ["README.md"])
-        rev = self.accepted({"dispatch": self.REFS})
+        ident = "i426-review"
+        rev = self.accepted({"dispatch": self.REFS}, ident=ident)
         self.write_index([])
         self.write_live([])
         rel = self.write_ledger([self.mission()])
         before_state, before_index = self.file.read_bytes(), self.index.read_bytes()
-        code, out = self.retire("t1", rev, "--index", str(self.index),
+        code, out = self.retire(ident, rev, "--index", str(self.index),
                                 "--stop-evidence", self.citation(readme, rel))
         self.assertEqual((code, out["reason"]), (2, "retire-unmet"), out)
         self.assertIn("does not contain that ledger path", out["detail"])
-        self.stayed(before_state, before_index)
+        self.stayed(before_state, before_index, ident)
 
     def test_direct_dispatch_still_refuses_while_dispatch_refs_exist(self) -> None:
         self.init()
@@ -616,6 +703,124 @@ class RefsUnindexed(Fixture):
                                 "--stop-evidence", cite, "--stop-evidence", cite)
         self.assertEqual((code, out["reason"]), (2, "retire-unmet"), out)
         self.assertIn("refs-unindexed takes one archive citation", out["detail"])
+        self.stayed(before_state, before_index)
+
+    def bound_lines(self, lines: list[dict], number: str = "426") -> tuple[str, str]:
+        """Ledger plus the archive workflow-state, both committed together."""
+        rel = self.write_ledger(lines, folder=f"issue-{number}")
+        state = f"kaola-workflow/archive/issue-{number}/workflow-state.md"
+        path = self.repo / state
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"# state\nissue_number: {number}\n", encoding="utf-8")
+        return rel, self.git_commit("archive", [rel, state])
+
+    def test_an_unrelated_archive_does_not_settle_with_a_live_row(self) -> None:
+        """Finding 3: task t1 cannot cite issue-424, and a supplied live row is not unused."""
+        self.init()
+        self.git_init()
+        rev = self.accepted({"dispatch": ["i426-review"]})
+        self.write_index([])
+        self.write_live([{"session": "seat-A", "state": "ready", "platform": "dsh",
+                          "repo": str(self.repo), "holder_instance_id": "holder-live"}])
+        rel = self.write_ledger([self.mission()], folder="issue-424")
+        commit = self.git_commit("archive", [rel])
+        before_state, before_index = self.file.read_bytes(), self.index.read_bytes()
+        code, out = self.retire("t1", rev, "--index", str(self.index),
+                                "--stop-evidence", self.citation(commit, rel))
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertNotIn("not-used", out.get("detail", ""))
+        self.stayed(before_state, before_index)
+
+    def test_a_task_named_live_session_refuses_refs_unindexed(self) -> None:
+        """Finding 3: a session the task itself names must not be live or ready."""
+        self.init()
+        self.git_init()
+        rev = self.accepted({"dispatch": ["i426-missing"], "session": "seat-A"},
+                            ident="i426-review")
+        self.write_index([])
+        self.write_live([{"session": "seat-A", "state": "ready", "platform": "dsh",
+                          "repo": str(self.repo), "holder_instance_id": "holder-live"}])
+        rel, commit = self.bound_lines([self.mission()])
+        before_state, before_index = self.file.read_bytes(), self.index.read_bytes()
+        code, out = self.retire("i426-review", rev, "--index", str(self.index),
+                                "--stop-evidence", self.citation(commit, rel))
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("seat-A", out["detail"])
+        self.assertIn("i426-review", self.doc()["state"]["tasks"])
+        self.assertEqual(self.file.read_bytes(), before_state)
+        self.assertEqual(self.index.read_bytes(), before_index)
+
+    def test_a_bare_handed_over_marker_is_not_terminal(self) -> None:
+        """Finding 6: 'handed-over:' with no target is not a terminal blocked line."""
+        self.init()
+        self.git_init()
+        rev = self.accepted({"dispatch": ["i426-missing"]}, ident="i426-review")
+        self.write_index([])
+        self.write_live([])
+        rel, commit = self.bound_lines([
+            {"n": 1, "name": "blocked", "details": "handed-over:", "status": "blocked"}])
+        before_state, before_index = self.file.read_bytes(), self.index.read_bytes()
+        code, out = self.retire("i426-review", rev, "--index", str(self.index),
+                                "--stop-evidence", self.citation(commit, rel))
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("handed-over", out["detail"])
+        self.assertIn("i426-review", self.doc()["state"]["tasks"])
+        self.assertEqual(self.file.read_bytes(), before_state)
+        self.assertEqual(self.index.read_bytes(), before_index)
+
+    def test_a_named_handover_target_is_terminal(self) -> None:
+        """A blocked line with a non-empty target still settles."""
+        self.init()
+        self.git_init()
+        ident = "i426-review"
+        rev = self.accepted({"dispatch": ["i426-missing"]}, ident=ident)
+        self.write_index([])
+        self.write_live([])
+        rel, commit = self.bound_lines([
+            {"n": 1, "name": "blocked", "details": "handed-over: #426",
+             "status": "blocked"}])
+        before_index = self.index.read_bytes()
+        code, out = self.retire(ident, rev, "--index", str(self.index),
+                                "--stop-evidence", self.citation(commit, rel))
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["value"]["stop_evidence"][0]["live"], "absent")
+        self.assertEqual(self.index.read_bytes(), before_index)
+        self.assertNotIn(ident, self.doc()["state"]["tasks"])
+
+    def test_a_mixed_ledger_refuses_refs_unindexed(self) -> None:
+        self.init()
+        self.git_init()
+        rev = self.accepted({"dispatch": ["i426-missing"]}, ident="i426-review")
+        self.write_index([])
+        self.write_live([])
+        rel, commit = self.bound_lines([
+            self.mission(),
+            {"n": 2, "name": "open", "details": "dispatched: self — still open",
+             "status": "in-flight"}])
+        before_state, before_index = self.file.read_bytes(), self.index.read_bytes()
+        code, out = self.retire("i426-review", rev, "--index", str(self.index),
+                                "--stop-evidence", self.citation(commit, rel))
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("done, failed, or a handed-over blocked", out["detail"])
+        self.assertIn("i426-review", self.doc()["state"]["tasks"])
+        self.assertEqual(self.file.read_bytes(), before_state)
+        self.assertEqual(self.index.read_bytes(), before_index)
+
+    def test_a_partial_missing_ref_set_refuses_refs_unindexed(self) -> None:
+        self.init()
+        self.git_init()
+        rev = self.accepted({"dispatch": [ITEM, "i426-missing"]})
+        self.write_index([self.item(status="returned", acceptance="accepted", evidence={})])
+        self.write_live([])
+        rel = self.write_ledger([self.mission()])
+        commit = self.git_commit("archive", [rel])
+        before_state, before_index = self.file.read_bytes(), self.index.read_bytes()
+        code, out = self.retire("t1", rev, "--index", str(self.index),
+                                "--stop-evidence", self.citation(commit, rel))
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("refs-unindexed applies only when every dispatch ref is absent",
+                      out["detail"])
+        self.assertIn("i426-missing is not in the index", out["detail"])
         self.stayed(before_state, before_index)
 
     def test_a_task_that_is_not_accepted_done_refuses(self) -> None:
