@@ -468,6 +468,50 @@ class DutyBounds(Fixture):
         self.assertTrue(any(item.get("code") == "field-too-large" and item.get("path") == "tasks.t1.next"
                             for item in out["problems"]), out)
 
+    def test_a_touched_dispatch_entry_is_refused_at_its_merged_index(self) -> None:
+        self.init()
+        rev = self.add_task("t1", {"stage": "doing", "goal": "g", "dispatch": ["old"]})
+        before = self.file.read_bytes()
+        code, out = self.update("tasks", "t1", {"dispatch": ["x" * 513]},
+                                "--expect-rev", str(rev))
+        self.assertEqual(code, 2, out)
+        self.assertEqual(out["reason"], "field-too-large")
+        self.assertEqual(out["path"], "tasks.t1.dispatch[1]")
+        self.assertEqual(out["bytes"], 513)
+        self.assertEqual(out["limit"], 512)
+        self.assertEqual(self.file.read_bytes(), before)
+
+    def test_an_untouched_dispatch_over_limit_entry_stays(self) -> None:
+        self.init()
+        self.add_task("t1", {"stage": "doing", "goal": "g", "dispatch": ["old"]})
+        self.plant("t1", dispatch=[exact_bytes(600)])
+        rev = self.doc()["state"]["tasks"]["t1"]["rev"]
+        code, out = self.update("tasks", "t1", {"dispatch": ["new"]},
+                                "--expect-rev", str(rev))
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.doc()["state"]["tasks"]["t1"]["dispatch"],
+                         [exact_bytes(600), "new"])
+        code, out = self.check()
+        self.assertTrue(any(item.get("code") == "field-too-large"
+                            and item.get("path") == "tasks.t1.dispatch[0]"
+                            for item in out["problems"]), out)
+
+    def test_a_resubmitted_dispatch_entry_is_refused_at_its_stored_index(self) -> None:
+        self.init()
+        self.add_task("t1", {"stage": "doing", "goal": "g", "dispatch": ["old"]})
+        self.plant("t1", dispatch=["old", "x" * 600])
+        rev = self.doc()["state"]["tasks"]["t1"]["rev"]
+        before = self.file.read_bytes()
+        code, out = self.update("tasks", "t1",
+                                {"dispatch": ["x" * 600], "goal": "changed"},
+                                "--expect-rev", str(rev))
+        self.assertEqual(code, 2, out)
+        self.assertEqual(out["reason"], "field-too-large")
+        self.assertEqual(out["path"], "tasks.t1.dispatch[1]")
+        self.assertEqual(out["bytes"], 600)
+        self.assertEqual(out["limit"], 512)
+        self.assertEqual(self.file.read_bytes(), before)
+
 
 class Dispositions(Fixture):
     def test_orphan_is_refused_and_null_repair_removes_it(self) -> None:

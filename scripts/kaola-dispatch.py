@@ -7302,8 +7302,13 @@ def _orphan_disposition_path(record_id: str, current: dict[str, Any] | None,
     return found[0] if found else None
 
 
-def _touched_duty_strings(kind: str, ident: str, patch: Any) -> set[str]:
-    """String paths the patch sets. Null removes a path and does not touch it."""
+def _touched_duty_strings(kind: str, ident: str, patch: Any, preview: dict[str, Any]) -> set[str]:
+    """String paths the patch sets. Null removes a path and does not touch it.
+
+    A task dispatch list is unioned with the stored list, so a patch index is
+    not a merged position. Each merged dispatch entry equal to a patch entry is
+    touched at its merged position.
+    """
     found: set[str] = set()
 
     def walk(path: str, value: Any) -> None:
@@ -7324,6 +7329,12 @@ def _touched_duty_strings(kind: str, ident: str, patch: Any) -> set[str]:
         for key, item in patch.items():
             if item is None:
                 continue
+            merged = preview.get(key)
+            if kind == "tasks" and key == "dispatch" and isinstance(item, list) and isinstance(merged, list):
+                for index, value in enumerate(merged):
+                    if value is not None and value in item:
+                        walk(f"{kind}.{ident}.{key}[{index}]", value)
+                continue
             walk(f"{kind}.{ident}.{key}", item)
     return found
 
@@ -7331,7 +7342,7 @@ def _touched_duty_strings(kind: str, ident: str, patch: Any) -> set[str]:
 def _refuse_touched_duty_strings(kind: str, ident: str, patch: dict[str, Any],
                                  preview: dict[str, Any]) -> None:
     offenses = RECORD.duty_string_offenses(kind, ident, preview)
-    touched = _touched_duty_strings(kind, ident, patch)
+    touched = _touched_duty_strings(kind, ident, patch, preview)
     limit = RECORD.DUTY_STRING_MAX_BYTES
     for path in sorted(offenses):
         if path not in touched:
