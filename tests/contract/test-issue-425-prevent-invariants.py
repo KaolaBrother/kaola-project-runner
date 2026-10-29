@@ -7,16 +7,17 @@ dispatch ref with its disposition. P5 keeps those checks row-scoped and
 independent of Sideagent maintenance.
 
 NOT RUN here (settle §4, not this writer's fixture):
-- P6 J prose/history under the cap, shrink-as-PASS, omitted review,
-  in-flight correction versus steer consumption (Delegator #902).
+- P6 J prose/history under the cap, omitted review, and in-flight
+  correction versus steer consumption (Delegator #902). Sham retention of
+  a settled dispatch ref is J, not a machine refusal.
 - P4 KPM native Host-role record and the L2 `tasks: []` alias removal.
 - L2 legacy cleanup acceptance (#421 / KPM #893).
 
-A non-terminal `stage: done` update is still stored. Sideagent retire of
-those legacy rows is unchanged; this suite does not clear them by itself.
-A new row may still store a dispatch ref with a settled disposition so
-that retire keeps the ref. Settling an id already on the task removes the
-ref and the disposition together.
+A new write whose merged task has `stage: done` is refused. A legacy done
+row is planted in the file, not written by `state update`. Sideagent retire
+of that row is unchanged. Settling an id already on the task removes the
+ref and the disposition together. Creating a row, or re-adding a ref, may
+still store a settled disposition; that retention is not a writer code.
 """
 from __future__ import annotations
 
@@ -126,6 +127,12 @@ class Fixture(unittest.TestCase):
 
     def check(self, *extra: str) -> tuple[int, dict]:
         return self.state("check", "--file", str(self.file), *extra)
+
+    def plant(self, ident: str, **fields: object) -> None:
+        """A legacy value the writer would now refuse to store."""
+        doc = self.doc()
+        doc["state"]["tasks"][ident].update(fields)
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
 
 
 class TerminalDelete(Fixture):
@@ -273,8 +280,9 @@ class TerminalDelete(Fixture):
     def test_legacy_done_stays_until_an_explicit_terminal_write(self) -> None:
         self.init()
         self.write_live([])
-        rev = self.add_task("legacy", {"stage": "done", "goal": "old",
+        rev = self.add_task("legacy", {"stage": "doing", "goal": "old",
                                        "verdict": {"value": "accepted"}})
+        self.plant("legacy", stage="done")
         self.assertEqual(self.doc()["state"]["tasks"]["legacy"]["stage"], "done")
         code, out = self.check()
         self.assertEqual(code, 0, out)
@@ -296,10 +304,33 @@ class TerminalDelete(Fixture):
         self.assertNotIn("legacy", self.doc()["state"]["tasks"])
         self.assertEqual(self.doc()["state"]["tasks"]["open"]["rev"], other)
 
+    def test_a_merged_done_stage_is_refused(self) -> None:
+        self.init()
+        before = self.file.read_bytes()
+        code, out = self.update("tasks", "fresh", {
+            "stage": "done", "goal": "g", "verdict": {"value": "accepted"},
+        })
+        self.assertEqual(code, 2, out)
+        self.assertEqual(out["reason"], "stage-done-refused")
+        self.assertIn("--cite", out["detail"])
+        self.assertIn("accepted", out["detail"])
+        self.assertIn("cancelled", out["detail"])
+        self.assertEqual(self.file.read_bytes(), before)
+        self.assertNotIn("fresh", self.doc()["state"]["tasks"])
+
+        rev = self.add_task("t1", {"stage": "doing", "goal": "g", "next": "stay"})
+        before = self.file.read_bytes()
+        code, out = self.update("tasks", "t1", {"stage": "done"}, "--expect-rev", str(rev))
+        self.assertEqual(code, 2, out)
+        self.assertEqual(out["reason"], "stage-done-refused")
+        self.assertEqual(self.file.read_bytes(), before)
+        self.assertEqual(self.doc()["state"]["tasks"]["t1"]["stage"], "doing")
+
     def test_sideagent_retire_of_a_legacy_done_row_still_deletes_it(self) -> None:
         self.init()
-        rev = self.add_task("legacy", {"stage": "done", "goal": "old",
+        rev = self.add_task("legacy", {"stage": "doing", "goal": "old",
                                        "verdict": {"value": "accepted"}})
+        self.plant("legacy", stage="done")
         code, out = self.state(
             "retire", "--file", str(self.file), "--writer", "host",
             "--source", "legacy retire", "--kind", "tasks", "--id", "legacy",
@@ -402,6 +433,41 @@ class DutyBounds(Fixture):
         code, out = self.check()
         self.assertFalse(any(row.get("code") == "field-too-large" for row in out["problems"]), out)
 
+    def test_a_touched_over_limit_value_is_refused_and_an_untouched_one_stays(self) -> None:
+        self.init()
+        self.add_task("t1", {"stage": "doing", "goal": "g", "next": "short"})
+        self.plant("t1", next=exact_bytes(600))
+        rev = self.doc()["state"]["tasks"]["t1"]["rev"]
+        before = self.file.read_bytes()
+        code, out = self.update("tasks", "t1", {"next": "b" * 600}, "--expect-rev", str(rev))
+        self.assertEqual(code, 2, out)
+        self.assertEqual(out["reason"], "field-too-large")
+        self.assertEqual(out["path"], "tasks.t1.next")
+        self.assertEqual(out["bytes"], 600)
+        self.assertEqual(out["limit"], 512)
+        self.assertEqual(self.file.read_bytes(), before)
+
+        code, out = self.update("tasks", "t1", {"next": "b" * 513}, "--expect-rev", str(rev))
+        self.assertEqual(code, 2, out)
+        self.assertEqual(out["reason"], "field-too-large")
+        self.assertEqual(out["bytes"], 513)
+        self.assertEqual(self.file.read_bytes(), before)
+
+        code, out = self.update("tasks", "t1", {"next": exact_bytes(512)}, "--expect-rev", str(rev))
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.doc()["state"]["tasks"]["t1"]["next"], exact_bytes(512))
+
+        self.plant("t1", next=exact_bytes(600))
+        rev = self.doc()["state"]["tasks"]["t1"]["rev"]
+        code, out = self.update("tasks", "t1", {"goal": "wider"}, "--expect-rev", str(rev))
+        self.assertEqual(code, 0, out)
+        row = self.doc()["state"]["tasks"]["t1"]
+        self.assertEqual(row["goal"], "wider")
+        self.assertEqual(row["next"], exact_bytes(600))
+        code, out = self.check()
+        self.assertTrue(any(item.get("code") == "field-too-large" and item.get("path") == "tasks.t1.next"
+                            for item in out["problems"]), out)
+
 
 class Dispositions(Fixture):
     def test_orphan_is_refused_and_null_repair_removes_it(self) -> None:
@@ -430,6 +496,15 @@ class Dispositions(Fixture):
         self.assertEqual(row["dispositions"]["live-item"], "repair")
         self.assertEqual(row["dispatch"], ["live-item"])
 
+        rev = row["rev"]
+        before = self.file.read_bytes()
+        code, out = self.update("tasks", "t1", {"dispatch": None}, "--expect-rev", str(rev))
+        self.assertEqual(code, 2, out)
+        self.assertEqual(out["reason"], "disposition-orphan")
+        self.assertEqual(out["path"], "tasks.t1.dispositions.live-item")
+        self.assertEqual(self.file.read_bytes(), before)
+        self.assertEqual(self.doc()["state"]["tasks"]["t1"]["dispatch"], ["live-item"])
+
     def test_settled_item_drops_ref_and_disposition_together(self) -> None:
         self.init()
         self.write_index([{"item_id": "item-a", "task_id": "t1", "status": "returned",
@@ -451,17 +526,28 @@ class Dispositions(Fixture):
         self.assertEqual(json.loads(before)["items"][0]["acceptance"], "pending")
 
         rev = row["rev"]
-        before = self.file.read_bytes()
-        before_index = self.index.read_bytes()
+        code, out = self.update(
+            "tasks", "fresh",
+            {"stage": "doing", "goal": "g", "dispatch": ["new-item"],
+             "dispositions": {"new-item": "accepted"}, "next": "record it"})
+        self.assertEqual(code, 0, out)
+        created = self.doc()["state"]["tasks"]["fresh"]
+        self.assertEqual(created["dispatch"], ["new-item"])
+        self.assertEqual(created["dispositions"]["new-item"], "accepted")
+
         code, out = self.update(
             "tasks", "t1",
             {"dispatch": ["item-a"], "dispositions": {"item-a": "accepted"}},
             "--expect-rev", str(rev), "--index", str(self.index))
-        self.assertEqual(code, 2, out)
-        self.assertEqual(out["reason"], "disposition-sham")
-        self.assertEqual(self.file.read_bytes(), before)
-        self.assertEqual(self.index.read_bytes(), before_index)
-        self.assertEqual(self.doc()["state"]["tasks"]["t1"]["dispatch"], ["item-b"])
+        self.assertEqual(code, 0, out)
+        self.assertNotEqual(out.get("reason"), "disposition-sham")
+        row = self.doc()["state"]["tasks"]["t1"]
+        self.assertEqual(row["dispatch"], ["item-b", "item-a"])
+        self.assertEqual(row["dispositions"]["item-a"], "accepted")
+        self.assertEqual(row["dispositions"]["item-b"], "repair")
+        stored = json.loads(self.index.read_text(encoding="utf-8"))
+        self.assertEqual(stored["items"][0]["item_id"], "item-a")
+        self.assertEqual(stored["items"][0]["status"], "returned")
 
     def test_missing_index_does_not_excuse_an_orphan(self) -> None:
         self.init()

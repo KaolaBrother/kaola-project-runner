@@ -306,11 +306,14 @@ class StoppedCollectIncomplete(Fixture):
         self.init()
         code, out = run(["state", "update", "--file", str(self.file), "--writer", "host",
                          "--source", "evt", "--kind", "tasks", "--id", "i398", "--set",
-                         json.dumps({"stage": "done", "goal": "fix routes",
+                         json.dumps({"stage": "doing", "goal": "fix routes",
                                      "verdict": {"value": "accepted"},
                                      "dispatch": [row["item_id"]],
                                      "dispositions": {row["item_id"]: "accepted"}})], self.env)
         self.assertEqual(code, 0, out)
+        doc = self.doc()
+        doc["state"]["tasks"]["i398"]["stage"] = "done"
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
         task = self.doc()["state"]["tasks"]["i398"]
         self.index = self.repo / "index.json"
         self.live = self.repo / "live.json"

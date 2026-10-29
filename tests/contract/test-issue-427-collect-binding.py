@@ -87,10 +87,20 @@ class Fixture(unittest.TestCase):
         self.assertEqual(code, 0, out)
 
     def add_task(self, ident: str, patch: dict) -> int:
+        stored = dict(patch)
+        # The writer never stores stage done. Plant that legacy stage after a
+        # legal create so retire still sees the row it is testing.
+        legacy_done = stored.get("stage") == "done"
+        if legacy_done:
+            stored["stage"] = "doing"
         code, out = self.state("update", "--file", str(self.file), "--writer", "host",
                                "--source", "evt", "--kind", "tasks", "--id", ident,
-                               "--set", json.dumps(patch), env=self.env)
+                               "--set", json.dumps(stored), env=self.env)
         self.assertEqual(code, 0, out)
+        if legacy_done:
+            doc = self.doc()
+            doc["state"]["tasks"][ident]["stage"] = "done"
+            self.file.write_text(json.dumps(doc), encoding="utf-8")
         return self.doc()["state"]["tasks"][ident]["rev"]
 
     def accepted(self, patch: dict | None = None, ident: str = "t1") -> int:

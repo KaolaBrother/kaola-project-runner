@@ -7080,10 +7080,10 @@ def settle_inputs(args: argparse.Namespace, doc: dict[str, Any], current: dict[s
     return {**merged, "settled_inputs": removals}
 
 
-# Issue #425. A settled item disposition drops that current dispatch ref.
-# repair is not settled. Creating a row may still store both: Sideagent retire
-# of a legacy done row reads them. Re-adding a settled pair onto an existing
-# task is disposition-sham.
+# Issue #425. Settling an id already on the task drops that ref and its
+# disposition. repair is not settled. A new row, and a ref that was not
+# already on the task, may keep a settled disposition: that retention is
+# Host judgment, not a machine refusal.
 SETTLED_ITEM_DISPOSITIONS = frozenset({"accepted", "cancelled", "superseded", "handed-off"})
 _DUTY_STAMP_KEYS = frozenset({
     "rev", "created_at", "updated_at", "writer", "writer_holder",
@@ -7239,26 +7239,6 @@ def _closeout_duty(merged: dict[str, Any]) -> bool:
     return isinstance(action, str) and bool(action.strip())
 
 
-def _sham_disposition_path(record_id: str, current: dict[str, Any] | None,
-                           patch: dict[str, Any]) -> str | None:
-    """An existing task re-adding a dispatch id together with a settled disposition."""
-    if not isinstance(current, dict):
-        return None
-    raw = patch.get("dispatch")
-    if isinstance(raw, str):
-        added = [raw] if raw else []
-    elif isinstance(raw, list):
-        added = [item for item in raw if isinstance(item, str) and item]
-    else:
-        return None
-    current_ids = set(_dispatch_id_list(current))
-    dispositions = patch.get("dispositions") if isinstance(patch.get("dispositions"), dict) else {}
-    for item in added:
-        if item not in current_ids and dispositions.get(item) in SETTLED_ITEM_DISPOSITIONS:
-            return f"tasks.{record_id}.dispositions.{item}"
-    return None
-
-
 def _settle_current_items(current: dict[str, Any] | None, merged: dict[str, Any],
                           patch: dict[str, Any]) -> list[str]:
     """Drop dispatch refs the Host just settled. A new row is left intact."""
@@ -7302,35 +7282,66 @@ def _drop_empty_relation(merged: dict[str, Any]) -> None:
         merged.pop("dispatch", None)
 
 
-def _orphan_disposition_path(record_id: str, patch: dict[str, Any], merged: dict[str, Any],
-                             settled: list[str]) -> str | None:
-    dispositions = patch.get("dispositions")
-    if not isinstance(dispositions, dict):
-        return None
-    dispatch_ids = set(_dispatch_id_list(merged))
-    skip = set(settled)
-    found = [f"tasks.{record_id}.dispositions.{key}"
-             for key, value in dispositions.items()
-             if value is not None and key not in skip and key not in dispatch_ids]
-    if not found:
-        return None
-    return sorted(found)[0]
+def _orphan_disposition_path(record_id: str, current: dict[str, Any] | None,
+                             patch: dict[str, Any], merged: dict[str, Any]) -> str | None:
+    """An orphan in the merged relation that this write introduces or re-asserts.
+
+    A disposition already stored, and absent from this patch, stays for the
+    read-only check. Clearing dispatch, or naming a key the merged dispatch
+    does not contain, refuses.
+    """
+    current_orphans = set(RECORD.disposition_orphan_paths(record_id, current or {}))
+    merged_orphans = set(RECORD.disposition_orphan_paths(record_id, merged))
+    dispositions = patch.get("dispositions") if isinstance(patch.get("dispositions"), dict) else {}
+    reasserted = {
+        f"tasks.{record_id}.dispositions.{key}"
+        for key, value in dispositions.items()
+        if value is not None and f"tasks.{record_id}.dispositions.{key}" in merged_orphans
+    }
+    found = sorted((merged_orphans - current_orphans) | reasserted)
+    return found[0] if found else None
 
 
-def _refuse_enlarged_duty_strings(kind: str, ident: str, current: dict[str, Any] | None,
-                                  preview: dict[str, Any]) -> None:
-    old = RECORD.duty_string_offenses(kind, ident, current or {})
-    new = RECORD.duty_string_offenses(kind, ident, preview)
+def _touched_duty_strings(kind: str, ident: str, patch: Any) -> set[str]:
+    """String paths the patch sets. Null removes a path and does not touch it."""
+    found: set[str] = set()
+
+    def walk(path: str, value: Any) -> None:
+        if isinstance(value, str):
+            found.add(path)
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                if item is None:
+                    continue
+                walk(f"{path}.{key}", item)
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                if item is None:
+                    continue
+                walk(f"{path}[{index}]", item)
+
+    if isinstance(patch, dict):
+        for key, item in patch.items():
+            if item is None:
+                continue
+            walk(f"{kind}.{ident}.{key}", item)
+    return found
+
+
+def _refuse_touched_duty_strings(kind: str, ident: str, patch: dict[str, Any],
+                                 preview: dict[str, Any]) -> None:
+    offenses = RECORD.duty_string_offenses(kind, ident, preview)
+    touched = _touched_duty_strings(kind, ident, patch)
     limit = RECORD.DUTY_STRING_MAX_BYTES
-    for path in sorted(new):
-        size = new[path]
-        previous = old.get(path)
-        if previous is None or size > previous:
-            raise StateRefusal(
-                "field-too-large",
-                f"{path} is {size} UTF-8 bytes; the limit is {limit}. The file was not changed.",
-                path=path, bytes=size, limit=limit, recovery=_FIELD_TOO_LARGE_RECOVERY,
-            )
+    for path in sorted(offenses):
+        if path not in touched:
+            continue
+        size = offenses[path]
+        raise StateRefusal(
+            "field-too-large",
+            f"{path} is {size} UTF-8 bytes; the limit is {limit}. The file was not changed.",
+            path=path, bytes=size, limit=limit, recovery=_FIELD_TOO_LARGE_RECOVERY,
+        )
 
 
 def _terminal_delete(args: argparse.Namespace, record_id: str, current: dict[str, Any],
@@ -7381,15 +7392,6 @@ def prevent_record_write(args: argparse.Namespace, kind: str, record_id: str,
             "cite belongs to a Host terminal task write with verdict accepted or cancelled. "
             "The file was not changed.",
         )
-    if kind == "tasks":
-        sham = _sham_disposition_path(record_id, current, patch)
-        if sham:
-            raise StateRefusal(
-                "disposition-sham",
-                f"{sham} adds a dispatch ref and a settled disposition in the same write. "
-                "Record the item, then settle it in a later write. The file was not changed.",
-                path=sham,
-            )
     if terminal:
         if not isinstance(current, dict):
             raise StateRefusal(
@@ -7398,13 +7400,20 @@ def prevent_record_write(args: argparse.Namespace, kind: str, record_id: str,
             )
         return _terminal_delete(args, record_id, current, merged, records, cite or {},
                                 _terminal_verdict(patch) or "")
+    if kind == "tasks" and merged.get("stage") == "done":
+        raise StateRefusal(
+            "stage-done-refused",
+            "the writer never stores stage done. A Host terminal write is state update "
+            "with verdict accepted or cancelled and exactly one --cite; that write deletes "
+            "the row. The file was not changed.",
+        )
     settled: list[str] = []
     if kind == "tasks":
         settled = _settle_current_items(current, merged, patch)
         if settled:
             args._preserve_index = True
         _drop_empty_relation(merged)
-        orphan = _orphan_disposition_path(record_id, patch, merged, settled)
+        orphan = _orphan_disposition_path(record_id, current, patch, merged)
         if orphan:
             raise StateRefusal(
                 "disposition-orphan",
@@ -7420,7 +7429,7 @@ def prevent_record_write(args: argparse.Namespace, kind: str, record_id: str,
     if isinstance(source, str):
         preview["source"] = source
     preview["writer"] = writer_trace(args, caller)
-    _refuse_enlarged_duty_strings(kind, record_id, current, preview)
+    _refuse_touched_duty_strings(kind, record_id, patch, preview)
     return None
 
 

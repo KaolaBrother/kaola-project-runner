@@ -77,16 +77,22 @@ The Host gets outcomes, capacity and pending decisions.
   `dispatch` (index item ids), `evidence`, `next`, `verdict`, `dispositions`
   (per item). A repair keeps the task id; one returned branch is not
   completion. A task needs no issue; Workflow owners keep claim/ledger/finalize.
-  A terminal write does not store `done`. A real closeout duty stays
-  `closeout` with its owner, ref, and one `next` (`wait` when a blocker is
-  present). `next` is one current action; `wait` is one present blocker or
-  absent. Every string value on a task, hold, alert, or decision, including
-  nested values and array elements, is at most 512 UTF-8 bytes. `project` and
-  `authorization` are outside that bound. Over the limit, the write is
-  `field-too-large` (`path`, `bytes`, `limit`) and is not truncated. A
-  `dispositions` key names that task's `dispatch` (`disposition-orphan`);
-  `null` removes an orphan key. Settling an item removes its ref and
-  disposition in the same write.
+  The writer never stores `stage` `done` (`stage-done-refused`). A Host
+  terminal write (`verdict` `accepted` or `cancelled` and exactly one cite)
+  deletes the row in that revision. A legacy `done` row stays until that
+  write or Sideagent retire. A real closeout duty stays `closeout` with its
+  owner, ref, and one `next` (`wait` when a blocker is present). `next` is
+  one current action; `wait` is one present blocker or absent. Every string
+  value on a task, hold, alert, or decision, including nested values and
+  array elements, is at most 512 UTF-8 bytes. `project` and `authorization`
+  are outside that bound. A string the write sets must land within that
+  bound or be removed (`field-too-large`, with `path`, `bytes`, `limit`);
+  it is not truncated. An untouched over-limit value stays for `check`.
+  After a write, each `dispositions` key names that task's merged `dispatch`
+  (`disposition-orphan`); `null` removes an orphan key, and clearing
+  `dispatch` while a disposition remains is the same refusal. An orphan the
+  write does not touch stays for `check`. Settling an id already on the task
+  removes its ref and disposition in the same write.
 - `holds` (`scope`, `reason`): active restrictions with `evidence`, `impact`,
   `owner`, `resume_when`, `next`. A hold keeps the grant.
 - `alerts` (`level` `watch|warn|severe`, `summary`): applicable unresolved

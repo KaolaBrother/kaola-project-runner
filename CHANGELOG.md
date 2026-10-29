@@ -41,12 +41,17 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   in that revision. The receipt keeps the outcome, the cite, and any dispatch ref
   the index does not show (`unknown`); it does not store `stage` `done`, a tombstone,
   or a completion list, and it does not rewrite the index. `keep_open` does not keep
-  the row. A real closeout duty stays. Every string value on a task, hold, alert, or
-  decision is at most 512 UTF-8 bytes, nested values included; `project` and
-  `authorization` stay outside that bound. A `dispositions` key must name that task's
-  `dispatch`; settling an item removes the ref and the disposition together, and
-  putting that settled pair back is refused. The checks are row-scoped and do not
-  depend on Sideagent maintenance. Contract suite `test-issue-425-prevent-invariants.py`.
+  the row. Any other create or update whose merged task has `stage` `done` is
+  refused (`stage-done-refused`); a legacy done row stays until terminal deletion
+  or Sideagent retire. A real closeout duty stays. Every string value on a task,
+  hold, alert, or decision is at most 512 UTF-8 bytes, nested values included;
+  `project` and `authorization` stay outside that bound. A string the write sets
+  must land within the bound (`field-too-large`); an untouched over-limit value
+  stays visible to `check`. A `dispositions` key must name that task's merged
+  `dispatch`; settling an id already on the task removes the ref and the
+  disposition together. Re-adding a settled pair is not a machine refusal. The
+  checks are row-scoped and do not depend on Sideagent maintenance. Contract suite
+  `test-issue-425-prevent-invariants.py`.
   **Seats: restart required** (`scripts/kaola-record-contract.py` changed; the operator
   `git diff` test covers it).
 

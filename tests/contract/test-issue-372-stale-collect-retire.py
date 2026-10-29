@@ -87,11 +87,14 @@ class Fixture:
         assert code == 0, out
         code, out = run(["state", "update", "--file", str(self.file), "--writer", "host",
                          "--source", "evt", "--kind", "tasks", "--id", "t1", "--set",
-                         json.dumps({"stage": "done", "goal": "g",
+                         json.dumps({"stage": "doing", "goal": "g",
                                      "verdict": {"value": "accepted"},
                                      "dispatch": [ITEM],
                                      "dispositions": {ITEM: "accepted"}})])
         assert code == 0, out
+        doc = self.doc()
+        doc["state"]["tasks"]["t1"]["stage"] = "done"
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
         self.rev = str(self.doc()["state"]["tasks"]["t1"]["rev"])
         evidence: dict = {}
         if include_status:

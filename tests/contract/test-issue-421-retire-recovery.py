@@ -92,10 +92,20 @@ class Fixture(unittest.TestCase):
         self.assertEqual(code, 0, out)
 
     def add_task(self, ident: str, patch: dict) -> int:
+        stored = dict(patch)
+        # The writer never stores stage done. Plant that legacy stage after a
+        # legal create so retire still sees the row it is testing.
+        legacy_done = stored.get("stage") == "done"
+        if legacy_done:
+            stored["stage"] = "doing"
         code, out = self.state("update", "--file", str(self.file), "--writer", "host",
                                "--source", "evt", "--kind", "tasks", "--id", ident,
-                               "--set", json.dumps(patch), env=self.env)
+                               "--set", json.dumps(stored), env=self.env)
         self.assertEqual(code, 0, out)
+        if legacy_done:
+            doc = self.doc()
+            doc["state"]["tasks"][ident]["stage"] = "done"
+            self.file.write_text(json.dumps(doc), encoding="utf-8")
         return self.doc()["state"]["tasks"][ident]["rev"]
 
     def write_live(self, rows: list[dict]) -> None:
@@ -539,20 +549,19 @@ class StopEvidenceInput(Fixture):
         code, out = self.state("update", "--file", str(self.file), "--writer", "host",
                                "--source", "evt", "--kind", "tasks", "--id", "t1",
                                "--expect-rev", str(self.doc()["state"]["tasks"]["t1"]["rev"]),
-                               "--set", json.dumps({"stage": "done",
-                                                    "verdict": {"value": "cancelled"}}),
+                               "--set", json.dumps({"verdict": {"value": "cancelled"}}),
                                env=self.env)
         self.assertEqual(code, 0, out)
+        doc = self.doc()
+        doc["state"]["tasks"]["t1"]["stage"] = "done"
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
         rev = self.doc()["state"]["tasks"]["t1"]["rev"]
         code, out = self.retire("t1", rev, "--stop-evidence", entry)
         self.assertEqual((code, out["reason"]), (2, "retire-unmet"), out)
         self.assertIn("accepted-done", out["detail"])
-        code, out = self.state("update", "--file", str(self.file), "--writer", "host",
-                               "--source", "evt", "--kind", "tasks", "--id", "t1",
-                               "--expect-rev", str(self.doc()["state"]["tasks"]["t1"]["rev"]),
-                               "--set", json.dumps({"verdict": {"value": "accepted"}}),
-                               env=self.env)
-        self.assertEqual(code, 0, out)
+        doc = self.doc()
+        doc["state"]["tasks"]["t1"]["verdict"] = {"value": "accepted", "by": "host"}
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
         rev = self.doc()["state"]["tasks"]["t1"]["rev"]
         code, out = self.retire("t1", rev, "--stop-evidence", entry, writer="sideagent")
         self.assertEqual((code, out["reason"]), (2, "retire-unmet"), out)
@@ -870,11 +879,11 @@ class ReturnedAlertCompaction(Fixture):
         code, out = self.state("update", "--file", str(self.file), "--writer", "host",
                                "--source", "evt", "--kind", "tasks", "--id", "t2",
                                "--expect-rev", str(rev2),
-                               "--set", json.dumps({"stage": "done",
-                                                    "verdict": {"value": "accepted"}}),
+                               "--set", json.dumps({"verdict": {"value": "accepted"}}),
                                env=self.env)
         self.assertEqual(code, 0, out)
         doc = self.doc()
+        doc["state"]["tasks"]["t2"]["stage"] = "done"
         doc["state"]["alerts"]["maintenance-returned"]["inputs"] = {
             "host:tasks/t2@5": {"why": "not-in-batch", "evidence": "e5"}}
         self.file.write_text(json.dumps(doc), encoding="utf-8")

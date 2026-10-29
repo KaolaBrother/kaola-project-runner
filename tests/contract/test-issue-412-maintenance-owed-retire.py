@@ -766,13 +766,16 @@ class Kw1116Shape(unittest.TestCase):
         code, out = fx.state("update", "--file", str(fx.file), "--writer", "host",
                              "--source", "evt", "--kind", "tasks", "--id", "kw1116",
                              "--set", json.dumps({
-                                 "stage": "done", "goal": "structural copy of kw1116",
+                                 "stage": "doing", "goal": "structural copy of kw1116",
                                  "evidence": "original close; do not rewrite cancelled to accepted",
                                  "verdict": {"value": verdict},
                                  "dispatch": [item["item_id"] for item in self.ITEMS],
                                  "dispositions": {item["item_id"]: item["disposition"]
                                                   for item in self.ITEMS}}))
         assert code == 0, out
+        doc = fx.doc()
+        doc["state"]["tasks"]["kw1116"]["stage"] = "done"
+        fx.file.write_text(json.dumps(doc), encoding="utf-8")
         rev = str(fx.doc()["state"]["tasks"]["kw1116"]["rev"])
         index = root / "index.json"
         index.write_text(json.dumps({
@@ -883,7 +886,7 @@ class CancelledDispositionRetire(unittest.TestCase):
         root = Path(self.tmp.name) / f"case-{self.case}"
         root.mkdir()
         fx = Fixture(root)
-        patch = {"stage": "done", "goal": "g", "verdict": {"value": "accepted"},
+        patch = {"stage": "doing", "goal": "g", "verdict": {"value": "accepted"},
                  "dispatch": [self.ITEM_A, self.ITEM_B]}
         if dispositions is not None:
             patch["dispositions"] = dispositions
@@ -893,6 +896,9 @@ class CancelledDispositionRetire(unittest.TestCase):
                              "--source", "evt", "--kind", "tasks", "--id", "t1",
                              "--set", json.dumps(patch))
         assert code == 0, out
+        doc = fx.doc()
+        doc["state"]["tasks"]["t1"]["stage"] = "done"
+        fx.file.write_text(json.dumps(doc), encoding="utf-8")
         rev = str(fx.doc()["state"]["tasks"]["t1"]["rev"])
         index = root / "index.json"
         index.write_text(json.dumps({
