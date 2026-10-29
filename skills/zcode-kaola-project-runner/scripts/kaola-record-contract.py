@@ -36,6 +36,9 @@ finally:
 HOST_SCHEMA = "kaola-heartbeat-prompt/2"
 DELEGATOR_SCHEMA = "kaola-delegator-heartbeat/1"
 HOST_VIEW_MAX_BYTES = 65536
+# Issue #425: one bound for every decoded string value on a task, hold, alert,
+# or decision, including nested values. project and authorization are not walked.
+DUTY_STRING_MAX_BYTES = 512
 COMMIT_RE = re.compile(r"^[0-9a-f]{7,40}$")
 BACKUP_RE = re.compile(r"^(?P<stem>.+)\.v(?P<gen>[0-9]+)-(?P<digest>[0-9a-f]{12})\.json$")
 
@@ -761,6 +764,48 @@ def record_type_problem(kind: str, record: dict[str, Any]) -> dict[str, str] | N
                     return refusal(f"alerts.inputs.{ident}", ", ".join(sorted(allowed)),
                                    "use the original current failure/input receipt; the file was not changed")
     return None
+
+
+def duty_string_offenses(kind: str, ident: str, record: dict[str, Any]) -> dict[str, int]:
+    """UTF-8 byte sizes of string values over DUTY_STRING_MAX_BYTES.
+
+    Measures the decoded value, not JSON escapes, character count, or the row.
+    Walks nested objects and array elements. The caller invokes this only for
+    a task, hold, alert, or decision row.
+    """
+    found: dict[str, int] = {}
+
+    def walk(path: str, value: Any) -> None:
+        if isinstance(value, str):
+            size = len(value.encode("utf-8"))
+            if size > DUTY_STRING_MAX_BYTES:
+                found[path] = size
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                walk(f"{path}.{key}", item)
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                walk(f"{path}[{index}]", item)
+
+    if isinstance(record, dict):
+        for key, item in record.items():
+            walk(f"{kind}.{ident}.{key}", item)
+    return found
+
+
+def disposition_orphan_paths(ident: str, record: dict[str, Any]) -> list[str]:
+    """Disposition keys that do not name an entry in this task's dispatch."""
+    dispositions = record.get("dispositions") if isinstance(record, dict) else None
+    if not isinstance(dispositions, dict):
+        return []
+    dispatch = record.get("dispatch")
+    if isinstance(dispatch, str) and dispatch:
+        named = {dispatch}
+    elif isinstance(dispatch, list):
+        named = {item for item in dispatch if isinstance(item, str)}
+    else:
+        named = set()
+    return [f"tasks.{ident}.dispositions.{key}" for key in dispositions if key not in named]
 
 
 # Issue #421: failure reasons whose cause is the binding or recipe, not the

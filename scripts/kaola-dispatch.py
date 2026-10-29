@@ -5360,6 +5360,14 @@ class StateRefusal(Exception):
         self.payload = {"result": "refused", "reason": reason, "detail": detail, **extra}
 
 
+class StateUnchanged(Exception):
+    """The duty facts are already stored. Do not bump a revision or write."""
+
+    def __init__(self, value: Any) -> None:
+        super().__init__("unchanged")
+        self.value = value
+
+
 def json_arg(raw: str) -> Any:
     text = Path(raw[1:]).read_text(encoding="utf-8") if raw.startswith("@") else raw
     try:
@@ -7072,6 +7080,350 @@ def settle_inputs(args: argparse.Namespace, doc: dict[str, Any], current: dict[s
     return {**merged, "settled_inputs": removals}
 
 
+# Issue #425. A settled item disposition drops that current dispatch ref.
+# repair is not settled. Creating a row may still store both: Sideagent retire
+# of a legacy done row reads them. Re-adding a settled pair onto an existing
+# task is disposition-sham.
+SETTLED_ITEM_DISPOSITIONS = frozenset({"accepted", "cancelled", "superseded", "handed-off"})
+_DUTY_STAMP_KEYS = frozenset({
+    "rev", "created_at", "updated_at", "writer", "writer_holder",
+    "host_revision", "source", "observed_at",
+})
+_FIELD_TOO_LARGE_RECOVERY = (
+    "retain the current fact, action, or blocker and a locator to existing evidence. "
+    "Do not truncate, split the text across fields, or add an overflow store."
+)
+
+
+def _dispatch_id_list(task: dict[str, Any] | None) -> list[str]:
+    if not isinstance(task, dict):
+        return []
+    raw = task.get("dispatch")
+    if isinstance(raw, str) and raw:
+        return [raw]
+    if isinstance(raw, list):
+        return [item for item in raw if isinstance(item, str) and item]
+    return []
+
+
+def _duty_facts(record: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(record, dict):
+        return {}
+    return {key: value for key, value in record.items() if key not in _DUTY_STAMP_KEYS}
+
+
+def _read_update_cite(args: argparse.Namespace) -> dict[str, Any] | None:
+    raw = getattr(args, "cite", None)
+    if raw in (None, ""):
+        return None
+    try:
+        cite = json.loads(raw) if isinstance(raw, str) else raw
+    except ValueError as exc:
+        raise StateRefusal("invalid-input", f"cite is one JSON object: {exc}") from exc
+    if not isinstance(cite, dict):
+        raise StateRefusal("invalid-input", "cite is exactly one object")
+    problem = RECORD.cite_problem(cite)
+    if problem:
+        raise StateRefusal("invalid-input", problem)
+    missing = cite_retrievable(repo_of_state_file(Path(args.file)), cite)
+    if missing:
+        raise StateRefusal("invalid-input", missing)
+    return cite
+
+
+def _terminal_verdict(patch: dict[str, Any]) -> str | None:
+    verdict = patch.get("verdict")
+    if not isinstance(verdict, dict):
+        return None
+    value = verdict.get("value")
+    if value in ("accepted", "cancelled"):
+        return value
+    return None
+
+
+def _is_terminal_write(args: argparse.Namespace, kind: str, patch: dict[str, Any]) -> bool:
+    if getattr(args, "cite", None) in (None, ""):
+        return False
+    if args.writer != "host" or kind != "tasks":
+        return False
+    if patch.get("stage") == "closeout":
+        return False
+    return _terminal_verdict(patch) is not None
+
+
+def _terminal_live_rows(path: str | None) -> list[dict[str, Any]]:
+    """A readable seat list, or live-unreadable. An unreadable list is not empty."""
+    if not isinstance(path, str) or not path:
+        raise StateRefusal(
+            "live-unreadable",
+            "the live list was omitted, so it does not show that no seat of this task is live. "
+            "The file was not changed.",
+        )
+    try:
+        document = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raise StateRefusal(
+            "live-unreadable",
+            "the live list does not parse as JSON. An unreadable list is not an empty seat list. "
+            "The file was not changed.",
+        ) from None
+    rows = document.get("rows") if isinstance(document, dict) else None
+    if (not isinstance(document, dict) or document.get("schema") != "kaola-acp-list/1"
+            or not isinstance(rows, list)):
+        raise StateRefusal(
+            "live-unreadable",
+            "the live list does not declare schema kaola-acp-list/1 with a rows array. "
+            "The file was not changed.",
+        )
+    return [row for row in rows if isinstance(row, dict)]
+
+
+def _terminal_index_items(path: str | None) -> list[dict[str, Any]] | None:
+    """Items of a readable kaola-dispatch-index/1, or None. Never creates the file."""
+    if not isinstance(path, str) or not path:
+        return None
+    try:
+        document = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(document, dict) or document.get("schema") != "kaola-dispatch-index/1":
+        return None
+    items = document.get("items")
+    if not isinstance(items, list):
+        return None
+    return [row for row in items if isinstance(row, dict)]
+
+
+def _terminal_seat_names(task: dict[str, Any], items: list[dict[str, Any]] | None,
+                         record_id: str) -> set[str]:
+    names = set(task_seats(task))
+    if not items:
+        return names
+    ids = set(_dispatch_id_list(task))
+    for row in items:
+        if row.get("item_id") not in ids and row.get("task_id") != record_id:
+            continue
+        session = row.get("session")
+        if isinstance(session, str) and session:
+            names.add(session)
+    return names
+
+
+def _row_is_live_seat(rows: list[dict[str, Any]], names: set[str]) -> bool:
+    if not names:
+        return False
+    return any(isinstance(row, dict) and row.get("session") in names and row.get("state") != "stopped"
+               for row in rows)
+
+
+def _index_unknown_effect(items: list[dict[str, Any]] | None, ids: list[str], record_id: str) -> bool:
+    if items is None:
+        return False
+    named = set(ids)
+    return any(row.get("status") == "unknown"
+               and (row.get("item_id") in named or row.get("task_id") == record_id)
+               for row in items)
+
+
+def _unknown_dispatch_refs(items: list[dict[str, Any]] | None, ids: list[str]) -> list[str]:
+    if items is None:
+        return list(ids)
+    known = {row.get("item_id") for row in items}
+    return [ident for ident in ids if ident not in known]
+
+
+def _closeout_duty(merged: dict[str, Any]) -> bool:
+    if merged.get("stage") != "closeout":
+        return False
+    action = merged.get("next")
+    return isinstance(action, str) and bool(action.strip())
+
+
+def _sham_disposition_path(record_id: str, current: dict[str, Any] | None,
+                           patch: dict[str, Any]) -> str | None:
+    """An existing task re-adding a dispatch id together with a settled disposition."""
+    if not isinstance(current, dict):
+        return None
+    raw = patch.get("dispatch")
+    if isinstance(raw, str):
+        added = [raw] if raw else []
+    elif isinstance(raw, list):
+        added = [item for item in raw if isinstance(item, str) and item]
+    else:
+        return None
+    current_ids = set(_dispatch_id_list(current))
+    dispositions = patch.get("dispositions") if isinstance(patch.get("dispositions"), dict) else {}
+    for item in added:
+        if item not in current_ids and dispositions.get(item) in SETTLED_ITEM_DISPOSITIONS:
+            return f"tasks.{record_id}.dispositions.{item}"
+    return None
+
+
+def _settle_current_items(current: dict[str, Any] | None, merged: dict[str, Any],
+                          patch: dict[str, Any]) -> list[str]:
+    """Drop dispatch refs the Host just settled. A new row is left intact."""
+    if not isinstance(current, dict):
+        return []
+    dispositions = patch.get("dispositions")
+    if not isinstance(dispositions, dict):
+        return []
+    current_ids = _dispatch_id_list(current)
+    current_set = set(current_ids)
+    settled = [key for key, value in dispositions.items()
+               if isinstance(key, str) and key in current_set and value in SETTLED_ITEM_DISPOSITIONS]
+    if not settled:
+        return []
+    drop = set(settled)
+    dispatch = merged.get("dispatch")
+    if isinstance(dispatch, list):
+        kept = [item for item in dispatch if item not in drop]
+        if kept:
+            merged["dispatch"] = kept
+        else:
+            merged.pop("dispatch", None)
+    elif isinstance(dispatch, str) and dispatch in drop:
+        merged.pop("dispatch", None)
+    stored = merged.get("dispositions")
+    if isinstance(stored, dict):
+        copied = dict(stored)
+        for key in settled:
+            copied.pop(key, None)
+        if copied:
+            merged["dispositions"] = copied
+        else:
+            merged.pop("dispositions", None)
+    return settled
+
+
+def _drop_empty_relation(merged: dict[str, Any]) -> None:
+    if merged.get("dispositions") == {}:
+        merged.pop("dispositions", None)
+    if merged.get("dispatch") == []:
+        merged.pop("dispatch", None)
+
+
+def _orphan_disposition_path(record_id: str, patch: dict[str, Any], merged: dict[str, Any],
+                             settled: list[str]) -> str | None:
+    dispositions = patch.get("dispositions")
+    if not isinstance(dispositions, dict):
+        return None
+    dispatch_ids = set(_dispatch_id_list(merged))
+    skip = set(settled)
+    found = [f"tasks.{record_id}.dispositions.{key}"
+             for key, value in dispositions.items()
+             if value is not None and key not in skip and key not in dispatch_ids]
+    if not found:
+        return None
+    return sorted(found)[0]
+
+
+def _refuse_enlarged_duty_strings(kind: str, ident: str, current: dict[str, Any] | None,
+                                  preview: dict[str, Any]) -> None:
+    old = RECORD.duty_string_offenses(kind, ident, current or {})
+    new = RECORD.duty_string_offenses(kind, ident, preview)
+    limit = RECORD.DUTY_STRING_MAX_BYTES
+    for path in sorted(new):
+        size = new[path]
+        previous = old.get(path)
+        if previous is None or size > previous:
+            raise StateRefusal(
+                "field-too-large",
+                f"{path} is {size} UTF-8 bytes; the limit is {limit}. The file was not changed.",
+                path=path, bytes=size, limit=limit, recovery=_FIELD_TOO_LARGE_RECOVERY,
+            )
+
+
+def _terminal_delete(args: argparse.Namespace, record_id: str, current: dict[str, Any],
+                     merged: dict[str, Any], records: dict[str, Any], cite: dict[str, Any],
+                     outcome: str) -> dict[str, Any]:
+    rows = _terminal_live_rows(getattr(args, "live", None))
+    items = _terminal_index_items(getattr(args, "index", None))
+    ids = _dispatch_id_list(current)
+    if _row_is_live_seat(rows, _terminal_seat_names(current, items, record_id)):
+        raise StateRefusal(
+            "live-seat",
+            "the live list still shows a seat of this task that is not stopped. The file was not changed.",
+        )
+    if _index_unknown_effect(items, ids, record_id):
+        raise StateRefusal(
+            "unknown-effect",
+            "the dispatch index shows an item of this task with status unknown. "
+            "Recover that effect before a terminal write. The file was not changed.",
+        )
+    if _closeout_duty(merged):
+        raise StateRefusal(
+            "duty-remains",
+            "this task is still a closeout duty with a next action. "
+            "Clear that duty in this write or keep the row. The file was not changed.",
+        )
+    del records[record_id]
+    args._preserve_index = True
+    return {
+        "kind": "tasks",
+        "id": record_id,
+        "removed": True,
+        "outcome": outcome,
+        "cite": cite,
+        "unknown_refs": _unknown_dispatch_refs(items, ids),
+    }
+
+
+def prevent_record_write(args: argparse.Namespace, kind: str, record_id: str,
+                         current: dict[str, Any] | None, patch: dict[str, Any],
+                         merged: dict[str, Any], records: dict[str, Any],
+                         caller: dict[str, str] | None) -> dict[str, Any] | None:
+    """P1, P3/A2, A1, and P5 for one merged record write. None means store merged."""
+    cite = _read_update_cite(args)
+    terminal = _is_terminal_write(args, kind, patch)
+    if cite is not None and not terminal:
+        raise StateRefusal(
+            "invalid-input",
+            "cite belongs to a Host terminal task write with verdict accepted or cancelled. "
+            "The file was not changed.",
+        )
+    if kind == "tasks":
+        sham = _sham_disposition_path(record_id, current, patch)
+        if sham:
+            raise StateRefusal(
+                "disposition-sham",
+                f"{sham} adds a dispatch ref and a settled disposition in the same write. "
+                "Record the item, then settle it in a later write. The file was not changed.",
+                path=sham,
+            )
+    if terminal:
+        if not isinstance(current, dict):
+            raise StateRefusal(
+                "record-missing",
+                "a terminal write removes an existing task; it creates no row. The file was not changed.",
+            )
+        return _terminal_delete(args, record_id, current, merged, records, cite or {},
+                                _terminal_verdict(patch) or "")
+    settled: list[str] = []
+    if kind == "tasks":
+        settled = _settle_current_items(current, merged, patch)
+        if settled:
+            args._preserve_index = True
+        _drop_empty_relation(merged)
+        orphan = _orphan_disposition_path(record_id, patch, merged, settled)
+        if orphan:
+            raise StateRefusal(
+                "disposition-orphan",
+                f"{orphan} names no entry in this task's dispatch. "
+                "Set the key to null to remove it, or name a current dispatch ref. "
+                "The file was not changed.",
+                path=orphan,
+            )
+    if isinstance(current, dict) and _duty_facts(merged) == _duty_facts(current):
+        raise StateUnchanged(current)
+    preview = dict(merged)
+    source = getattr(args, "source", None)
+    if isinstance(source, str):
+        preview["source"] = source
+    preview["writer"] = writer_trace(args, caller)
+    _refuse_enlarged_duty_strings(kind, record_id, current, preview)
+    return None
+
+
 def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: dict[str, Any],
                         caller: dict[str, str] | None) -> dict[str, Any]:
     state = doc["state"]
@@ -7242,6 +7594,11 @@ def apply_record_update(args: argparse.Namespace, doc: dict[str, Any], patch: di
             current if isinstance(current, dict) else None, merged, patch, args.writer,
             state.get("authorization") if isinstance(state.get("authorization"), dict) else None,
             record_id, index_items, catalog)
+    removed = prevent_record_write(
+        args, kind, record_id, current if isinstance(current, dict) else None,
+        patch, merged, records, caller)
+    if removed is not None:
+        return removed
     merged["rev"] = int((current or {}).get("rev") or 0) + 1
     merged["updated_at"] = observed_at()
     merged["source"] = args.source
@@ -9329,6 +9686,8 @@ def state_mutation(args: argparse.Namespace, change, limit_removal: dict[str, An
             changed = change(doc, caller)
             sizes = write_state(path, doc, owner_stop=_owner_stop(args))
             mirrored = mirror_dispositions(args, doc, path)
+    except StateUnchanged as unchanged:
+        return emit({"result": "unchanged", "revision": before, "value": unchanged.value})
     except StateRefusal as refusal:
         code = STATE_EXIT_CONFLICT if refusal.payload["reason"] == "conflict" else 2
         return emit(refusal.payload, code)
@@ -9348,6 +9707,8 @@ def mirror_dispositions(args: argparse.Namespace, doc: dict[str, Any], path: Pat
     Issue #290: a retire closure proof may span several indices, so the mirror
     writes each supplied file. One supplied file keeps the single-object
     result every existing reader expects; several return one result per file."""
+    if getattr(args, "_preserve_index", False):
+        return None
     paths = supplied_index_paths(args)
     if not paths or getattr(args, "kind", None) != "tasks" or getattr(args, "command", "") != "state":
         return None
@@ -10443,6 +10804,29 @@ def state_problems(doc: dict[str, Any], path: Path, index: dict[str, Any] | None
                 note("record-invalid", "warn", problem, kind, ident)
             if not record.get("source"):
                 note("source-missing", "watch", "no source names where this came from", kind, ident)
+            limit = RECORD.DUTY_STRING_MAX_BYTES
+            for field_path, size in sorted(RECORD.duty_string_offenses(kind, ident, record).items()):
+                problems.append({
+                    "code": "field-too-large",
+                    "level": "warn",
+                    "detail": (f"{field_path} is {size} UTF-8 bytes; the limit is {limit}. "
+                               "Retain the current fact and a locator to existing evidence."),
+                    "kind": kind,
+                    "id": ident,
+                    "path": field_path,
+                    "bytes": size,
+                    "limit": limit,
+                })
+            if kind == "tasks":
+                for offense in RECORD.disposition_orphan_paths(ident, record):
+                    problems.append({
+                        "code": "disposition-orphan",
+                        "level": "warn",
+                        "detail": f"{offense} names no dispatch entry of this task",
+                        "kind": "tasks",
+                        "id": ident,
+                        "path": offense,
+                    })
     for ident, task in (state.get("tasks") or {}).items():
         if not isinstance(task, dict):
             continue
@@ -12536,6 +12920,8 @@ def build_parser() -> argparse.ArgumentParser:
     retire.add_argument("--handoff", help="current task that takes over its seats and dispatch")
     retire.set_defaults(func=command_state_retire)
 
+    update.add_argument("--cite", help="JSON {path, locator?, commit?}: one cite for a Host terminal "
+                        "task write (verdict accepted or cancelled) that removes the row")
     update.add_argument("--index", help="JSON file path: dispatch index: mirror dispositions, and the only "
                         "handoff locator this update reads; also this project's kaola-dispatch-index/1 "
                         "when --evidence is closed:issue/N")

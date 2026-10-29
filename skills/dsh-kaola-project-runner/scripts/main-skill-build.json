@@ -1,5 +1,9 @@
 {
+<<<<<<< HEAD
   "build": "1f91c20f2880",
+=======
+  "build": "1c92f87c1865",
+>>>>>>> 4f6f0b3c (fix(#425): delete a Host terminal task and bound duty strings)
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "16c500471d627178b76c94117fbf6f20471101b2519f8a205c66f7cf17b5ca8d",
@@ -7,11 +11,11 @@
     "references/dispatch-collect.md": "b77b7a1c5c95378e64135733612df7a023847cabcfa43bb6961c34d7c0812454",
     "references/doc-maintenance.md": "11bbe20631ea279b528377c31579d4eed42270c09c4ed0b27ace435ab1b7888e",
     "references/duty-reconcile.md": "301803fbba1cd024e38678e1d8bd396a99b6d494dec0f451b075b93ae1770bf8",
-    "references/heartbeat-skeleton.md": "907a5212300eeede00e6e039731f7f3aa71bf7b07e0067471399e661b789f9c8",
+    "references/heartbeat-skeleton.md": "cc28b2c74816e085c283d117565213693423b66c6880115c81fcf740d6acb2c2",
     "references/host-entry-matrix.md": "85251f9bea8285479cf973a17724d8ca93435379e81202e8c46afd3b3846ae5f",
     "references/host-startup.md": "6ef0d244349b2cc54f2a7570d7bb2d4cafb9f7783f46cf2b110d0d20369b4842",
     "references/issue-dispatch.md": "6407f91879482c6645c37eb439bd5ec09285bbe1f4860fbaf260ac9b715a4bda",
-    "references/lifecycle-state.md": "a444ba5c48c5104ca5681d06f2ed339e6392d168ad267f7fcaa16cb317405de3",
+    "references/lifecycle-state.md": "1972bf86fe58441fe01ac91f5edb8803d9c3a6e0477636845b13490be2e66509",
     "references/profile-catalog.md": "732e4ac296441e57772112759ed8f04d596f408e2e9d5c90b2eca4624ad4f7a7",
     "references/public-research.md": "86e2ad1cd11840fd58900cde429e9b45457f149b67fa91a32e5fe6429a58407c",
     "references/qa-evidence.md": "bf9c3beff60f4407d0bf951ce7a67da4450ac6cca96062a960cd009c38daae7a",
@@ -25,8 +29,13 @@
     "scripts/kaola-acp-paths.py": "124bd8fb908857bb2c7df8bc33797f69df6ef513e859f365c9270724d4eb5402",
     "scripts/kaola-compact-recovery.py": "f34a58affc095f7b9d8e29958bf237639ffe2c66728db2377d0f74dda11675d1",
     "scripts/kaola-cwd-guard.py": "975be54b05f4aa8e08f18f1eb47da2c9999774639a7df092fe67365312e8c8af",
+<<<<<<< HEAD
     "scripts/kaola-dispatch.py": "4cc614bf12c47ebe244330473e68868b29d5fd05d037d746e9d91607369fd434",
     "scripts/kaola-record-contract.py": "ea6e2ea71c6fd5e888e63c336fc26536eadb4cea6ec17580a3bd89d6fbc7e2d2",
+=======
+    "scripts/kaola-dispatch.py": "adb03f6df3b3f6e6af27acc64e4eae3df1b6b28708576f230e96cbe45447007c",
+    "scripts/kaola-record-contract.py": "72552ded6c1a5080c8d1122799d95d0a1d415c2cd495ba76aab0b307b6e7ba5d",
+>>>>>>> 4f6f0b3c (fix(#425): delete a Host terminal task and bound duty strings)
     "scripts/kaola-recovery-routes.py": "794ff808640376682f7d827947ceab6689a7ecef79593de2975f009e9a3991d0",
     "scripts/kaola-session-names.py": "772f2d729e61763851b78ab9d440c664df225bc4f08dc71f8ba0102ead411316"
   },

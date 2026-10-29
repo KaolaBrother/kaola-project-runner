@@ -36,6 +36,20 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   `scripts/kaola-dispatch.py` (not in the operator `git diff` list); the Unreleased
   **Seats: restart required** from #426 (`kaola-record-contract.py`) still applies.
 
+- **Heartbeat prevent invariants (#425).** A Host terminal write (`state update`
+  with verdict `accepted` or `cancelled` and exactly one `--cite`) deletes the task
+  in that revision. The receipt keeps the outcome, the cite, and any dispatch ref
+  the index does not show (`unknown`); it does not store `stage` `done`, a tombstone,
+  or a completion list, and it does not rewrite the index. `keep_open` does not keep
+  the row. A real closeout duty stays. Every string value on a task, hold, alert, or
+  decision is at most 512 UTF-8 bytes, nested values included; `project` and
+  `authorization` stay outside that bound. A `dispositions` key must name that task's
+  `dispatch`; settling an item removes the ref and the disposition together, and
+  putting that settled pair back is refused. The checks are row-scoped and do not
+  depend on Sideagent maintenance. Contract suite `test-issue-425-prevent-invariants.py`.
+  **Seats: restart required** (`scripts/kaola-record-contract.py` changed; the operator
+  `git diff` test covers it).
+
 ## 0.9.34 — 2026-10-28 (Hermes Agent: the twelfth worker platform)
 
 Closes #416 and #417. **Hermes Agent joins as the twelfth worker platform** (owner decisions

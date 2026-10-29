@@ -33,6 +33,16 @@ The Host gets outcomes, capacity and pending decisions.
   [--expect-rev N]`: JSON merge patch of one record (`null` deletes a key;
   `@path` reads a file). An existing record needs `--expect-rev`; a stale one
   exits 3 with `current` and `unapplied`. `--coalesce` counts a repeated alert.
+  Unchanged duty facts do not write.
+- `$S update --kind tasks --id ID --expect-rev N --live L --cite CITE --set
+  '{"verdict":{"value":"accepted"|"cancelled"}}'`: Host terminal write, also
+  the Workflow finalize duty write. The row leaves in that revision. The
+  receipt keeps `outcome`, `cite`, and any dispatch ref the index does not
+  show (`unknown`). It does not store `stage` `done`, a tombstone, or a
+  completion list, and it does not rewrite the index. `keep_open` does not
+  keep the row. An unreadable live list, a live seat, an index item of this
+  task at status `unknown`, or a `closeout` row that still has `next` refuses
+  and leaves the previous stage. A missing index is not rebuilt.
 - `$S update --section project|authorization|sideagent|recovery|unverified
   --expect-revision N --set PATCH`: first three Host-only.
 - `$S retire --kind K --id ID --expect-rev N --evidence REF [--outcome T]
@@ -43,14 +53,17 @@ The Host gets outcomes, capacity and pending decisions.
 - `$S view --role host|sideagent|delegator [--repo ROOT]` (read-only).
 - `$S checkpoint`, `update --index`: [sideagent-node.md](sideagent-node.md).
 - `$S check [--index I] [--live L] [--repo R]`: read-only. Problems:
-  `doing-untraced`, `done-not-retired`, `transcription-unechoed`,
-  `sideagent-not-live`, `sideagent-failed`, `carrier-unproven`, `state-bloat`.
+  `doing-untraced`, `done-not-retired`, `field-too-large`, `disposition-orphan`,
+  `transcription-unechoed`, `sideagent-not-live`, `sideagent-failed`,
+  `carrier-unproven`, `state-bloat`.
   `state-bloat` lists accepted-done/cancelled tasks, settled decisions, empty-`inputs`
   alerts, and shell tasks (evidence only `retired:tasks/ID`, duty fields
   empty). Each names kind, id, rev and its `state retire` command when
   runnable; a large row is a `diagnosis` hint, not a gate.
   `done-not-retired` stays watch until `maintenance.handled_host_revision`
-  covers it, then warns without refusing writes. `carrier-unproven` names
+  covers it, then warns without refusing writes. That coverage does not clear
+  the finding, and it does not clear `field-too-large` or `disposition-orphan`.
+  `carrier-unproven` names
   `state migrate --live`. A row lacking `rev` is `record-versionless`:
   open rows name `migrate` (`--write` assigns rev 1); closed rows name
   `retire --expect-rev 0 --evidence`.
@@ -64,6 +77,16 @@ The Host gets outcomes, capacity and pending decisions.
   `dispatch` (index item ids), `evidence`, `next`, `verdict`, `dispositions`
   (per item). A repair keeps the task id; one returned branch is not
   completion. A task needs no issue; Workflow owners keep claim/ledger/finalize.
+  A terminal write does not store `done`. A real closeout duty stays
+  `closeout` with its owner, ref, and one `next` (`wait` when a blocker is
+  present). `next` is one current action; `wait` is one present blocker or
+  absent. Every string value on a task, hold, alert, or decision, including
+  nested values and array elements, is at most 512 UTF-8 bytes. `project` and
+  `authorization` are outside that bound. Over the limit, the write is
+  `field-too-large` (`path`, `bytes`, `limit`) and is not truncated. A
+  `dispositions` key names that task's `dispatch` (`disposition-orphan`);
+  `null` removes an orphan key. Settling an item removes its ref and
+  disposition in the same write.
 - `holds` (`scope`, `reason`): active restrictions with `evidence`, `impact`,
   `owner`, `resume_when`, `next`. A hold keeps the grant.
 - `alerts` (`level` `watch|warn|severe`, `summary`): applicable unresolved
