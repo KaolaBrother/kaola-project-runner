@@ -117,6 +117,7 @@ Files this branch changed outside the kaola-workflow/ run-state band:
 
 ## Follow-Up Items
 
+- **#427 (P2, filed post-sink):** the merged collect-terminal route requires a `session` key the `collect` tool never writes (only `acp_session_id`), so tool-collected terminal items cannot settle — this run's own `i426` task row is the repro (three items stopped/dead under their recorded holders, terminal collects, still `retire-unmet`). Also names the `superseded`-disposition settle gap. The `i426` heartbeat row stays done+accepted, done-not-retired (warn-level) until #427 lands.
 - #421 (Layer-2 cleanup umbrella) stays OPEN per owner decision
   `owner-hb-two-layers-issues-do-sync-20261029`: not advanced this run; the
   merged #426 mechanism is available to it when the owner clears path-B.
