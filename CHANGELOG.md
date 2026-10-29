@@ -6,6 +6,12 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+## 0.9.35 — 2026-10-29 (Heartbeat prevent + cleanup; stale-quota; Devin summary gate)
+
+Closes #419, #420, #421, #423, #425, #426, and #427 (#424 is validate-registration only and
+carries no CHANGELOG bullet). **Seats: restart required** — `scripts/kaola-record-contract.py`
+and `scripts/kaola-compact-recovery.py` changed since v0.9.34 (operator `git diff` test).
+
 - **Heartbeat retire routes for legacy done rows (#426).** `state retire` now settles
   accepted-done task rows whose dispatch sessions are gone from `--live`: a task row that
   names no seat binds its seats from the single supplied dispatch index (unique item ids
@@ -53,6 +59,37 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   checks are row-scoped and do not depend on Sideagent maintenance. Contract suite
   `test-issue-425-prevent-invariants.py`.
   **Seats: restart required** (`scripts/kaola-record-contract.py` changed; the operator
+  `git diff` test covers it).
+
+- **Seat stale-quota rule (#419).** Owner HARD `owner-seat-stale-quota-revoke-5h-20261028`
+  (KPM mirror #892): typed optional grant-row members `quota_stall` (5h clock) and
+  `quota_hold` (expiry tag) in both durable authorization records; agent patches carry them
+  forward or are refused. Pure `quota_verdicts` and reduce-only `quota_rule_apply` on existing
+  beats (`collect` / `execute` / `state check` / `delegator view`); no timer. Revoke removes
+  the row like an owner revocation and writes one `quota-revoked-<preset>` warn alert; re-add
+  only through the owner grant route. Contract suite `test-issue-419-quota-stall.py` (36 tests).
+  **Seats: restart required** (`scripts/kaola-record-contract.py` changed; the operator
+  `git diff` test covers it).
+
+- **Stale direct-model pins retargeted to Codex Terra (#420).** Docs and contract fixtures that
+  still named GPT-6 Luna after the #419/#0.9.33 catalog move now use `--model gpt-6.1-terra`
+  with effort max and display name Codex Terra. No holder/compact/golden change; Hermes
+  untouched. **Seats: restart not required** (docs and tests only).
+
+- **Heartbeat Layer-2 cleanup gate (#421).** Fail-closed retire evidence routes and failed
+  Sideagent recovery: `state ensure-sideagent --recover-failed`; `kpm.dispatch-index/1.x`
+  retire compat; stop-evidence kinds `index-stop-receipt` / `archived-ledger` /
+  `direct-dispatch` / `sweep-purge`; `maintenance-returned` coalescing by construction.
+  Paired with KPM #893 under `owner-hb-two-layers-issues-do-sync-20261029`. Live proof on this
+  repo retired legacy accepted-done rows through the new routes (with #426/#427). **Seats:
+  restart required** (`scripts/kaola-record-contract.py` changed).
+
+- **Devin compaction requires a written summary (#423).** Devin 3000.11.92 summary-less
+  `_cognition.ai/compaction` pairs on ordinary agent steps are no longer treated as
+  compact-reload signals. Only a completed notification with non-empty `params.summary`
+  counts. Census and suite `test-issue-423-devin-compaction-summary.py` (6 tests);
+  `scripts/kaola-compact-recovery.py` added to the operator restart `git diff` list.
+  **Seats: restart required** (`scripts/kaola-compact-recovery.py` changed; the operator
   `git diff` test covers it).
 
 ## 0.9.34 — 2026-10-28 (Hermes Agent: the twelfth worker platform)
