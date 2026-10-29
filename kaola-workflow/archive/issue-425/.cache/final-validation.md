@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: ./scripts/validate.sh --suite test-issue-425-prevent-invariants.py && ./scripts/validate.sh --suite test-issue-427-collect-binding.py && ./scripts/validate.sh --suite test-issue-426-retire-legacy-seats.py && ./scripts/validate.sh --suite test-issue-421-retire-recovery.py && ./scripts/validate.sh --suite test-issue-412-maintenance-owed-retire.py && ./scripts/validate.sh --suite test-issue-372-stale-collect-retire.py && ./scripts/validate.sh --suite test-issue-397-retire-deadlocks.py
+validated_candidate_hash: 606a6c10652088eec22c6a7c19d5a094d5533b0efeb9bde32ad94d6512092d47
