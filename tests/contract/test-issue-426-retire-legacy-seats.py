@@ -898,6 +898,24 @@ class RefsUnindexed(Fixture):
                 self.assertIn("none", out["detail"])
                 self.stayed(before_state, before_index, ident)
 
+    def test_a_backtick_inside_the_info_string_does_not_open(self) -> None:
+        """A backtick in a backtick fence's info string leaves the next fence open."""
+        self.init()
+        self.git_init()
+        ident = "i421-review"
+        rev = self.accepted({"dispatch": ["i421-missing"]}, ident=ident)
+        self.write_index([])
+        self.write_live([])
+        rel, commit = self.bound_lines(
+            [self.mission()], number="421",
+            state_text="# state\n```yaml`bad\n```\nissue_number: 421\n")
+        before_state, before_index = self.file.read_bytes(), self.index.read_bytes()
+        code, out = self.retire(ident, rev, "--index", str(self.index),
+                                "--stop-evidence", self.citation(commit, rel))
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("unterminated", out["detail"])
+        self.stayed(before_state, before_index, ident)
+
     def test_a_task_id_with_two_issue_numbers_refuses(self) -> None:
         for ident in ("repair-i421-for-i426", "i421-i426-review"):
             with self.subTest(ident=ident):

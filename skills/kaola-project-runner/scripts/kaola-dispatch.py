@@ -8651,9 +8651,10 @@ def _workflow_state_issue_numbers(text: str) -> list[str] | None:
     """Column-0 issue_number declarations outside fenced code, in order.
 
     A fence opens on at most three leading spaces, then three or more
-    backticks or tildes, and may carry an info string. It closes only on at
-    most three leading spaces, then at least as many of that same character,
-    then only spaces. None when a fence never closes.
+    backticks or tildes, and may carry an info string. A backtick fence's
+    info string may not contain a backtick; that line is ordinary. It closes
+    only on at most three leading spaces, then at least as many of that same
+    character, then only spaces. None when a fence never closes.
     """
     declared: list[str] = []
     fence: tuple[str, int] | None = None
@@ -8662,8 +8663,10 @@ def _workflow_state_issue_numbers(text: str) -> list[str] | None:
             opened = _FENCE_OPEN_RE.match(line)
             if opened:
                 run = opened.group(1)
-                fence = (run[0], len(run))
-                continue
+                # CommonMark: a backtick fence's info string cannot contain `.
+                if run[0] != "`" or "`" not in line[opened.end():]:
+                    fence = (run[0], len(run))
+                    continue
             match = _ISSUE_NUMBER_LINE_RE.match(line)
             if match:
                 declared.append(match.group(1).strip())
