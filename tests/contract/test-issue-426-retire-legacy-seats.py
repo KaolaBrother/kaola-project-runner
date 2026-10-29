@@ -38,6 +38,7 @@ HOLDER = "holder-426"
 PRESET = "dsh/default"
 ITEM = "i426-review"
 STALE_KEY = "stale-collect-session-gone"
+REAL_421 = REPO / "kaola-workflow" / "archive" / "issue-421"
 
 for _name in CALLER_ENV:
     os.environ.pop(_name, None)
@@ -738,6 +739,132 @@ class RefsUnindexed(Fixture):
         path.write_text(state_text, encoding="utf-8")
         return rel, self.git_commit("archive", [rel, state])
 
+    def real_421_archive(self) -> tuple[str, str]:
+        """The repo's real committed #421 archive, copied into the temp repo."""
+        rel = "kaola-workflow/archive/issue-421/mission-ledger.jsonl"
+        state = "kaola-workflow/archive/issue-421/workflow-state.md"
+        for rel_path, source in ((rel, REAL_421 / "mission-ledger.jsonl"),
+                                 (state, REAL_421 / "workflow-state.md")):
+            path = self.repo / rel_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(source.read_bytes())
+        return rel, self.git_commit("archive", [rel, state])
+
+    def test_an_id_with_a_capital_second_issue_refuses(self) -> None:
+        self.init()
+        self.git_init()
+        ident = "repair-i421-for-I426"
+        rev = self.accepted({"dispatch": ["i421-missing"]}, ident=ident)
+        self.write_index([])
+        self.write_live([])
+        rel, commit = self.real_421_archive()
+        before_state, before_index = self.file.read_bytes(), self.index.read_bytes()
+        code, out = self.retire(ident, rev, "--index", str(self.index),
+                                "--stop-evidence", self.citation(commit, rel))
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("ambiguous", out["detail"])
+        self.assertIn("I426", out["detail"])
+        self.stayed(before_state, before_index, ident)
+
+    def test_an_id_with_an_underscored_second_issue_refuses(self) -> None:
+        self.init()
+        self.git_init()
+        ident = "i421-i426_review"
+        rev = self.accepted({"dispatch": ["i421-missing"]}, ident=ident)
+        self.write_index([])
+        self.write_live([])
+        rel, commit = self.real_421_archive()
+        before_state, before_index = self.file.read_bytes(), self.index.read_bytes()
+        code, out = self.retire(ident, rev, "--index", str(self.index),
+                                "--stop-evidence", self.citation(commit, rel))
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("ambiguous", out["detail"])
+        self.assertIn("i426", out["detail"])
+        self.stayed(before_state, before_index, ident)
+
+    def test_the_real_421_archive_settles_an_unambiguous_421_id(self) -> None:
+        self.init()
+        self.git_init()
+        ident = "i421-review"
+        rev = self.accepted({"dispatch": ["i421-missing"]}, ident=ident)
+        self.write_index([])
+        self.write_live([])
+        rel, commit = self.real_421_archive()
+        code, out = self.retire(ident, rev, "--index", str(self.index),
+                                "--stop-evidence", self.citation(commit, rel))
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["value"]["stop_evidence"][0]["route"], "refs-unindexed")
+        self.assertNotIn(ident, self.doc()["state"]["tasks"])
+
+    def test_a_fenced_example_declaration_does_not_count(self) -> None:
+        self.init()
+        self.git_init()
+        ident = "i421-review"
+        rev = self.accepted({"dispatch": ["i421-missing"]}, ident=ident)
+        self.write_index([])
+        self.write_live([])
+        rel, commit = self.bound_lines(
+            [self.mission()], number="421",
+            state_text="# state\nname: issue-421\n```yaml\nissue_number: 421\n```\n")
+        before_state, before_index = self.file.read_bytes(), self.index.read_bytes()
+        code, out = self.retire(ident, rev, "--index", str(self.index),
+                                "--stop-evidence", self.citation(commit, rel))
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("must declare exactly one issue_number", out["detail"])
+        self.assertIn("none", out["detail"])
+        self.stayed(before_state, before_index, ident)
+
+    def test_an_indented_lone_declaration_does_not_count(self) -> None:
+        self.init()
+        self.git_init()
+        ident = "i421-review"
+        rev = self.accepted({"dispatch": ["i421-missing"]}, ident=ident)
+        self.write_index([])
+        self.write_live([])
+        rel, commit = self.bound_lines(
+            [self.mission()], number="421",
+            state_text="# state\n  issue_number: 421\n")
+        before_state, before_index = self.file.read_bytes(), self.index.read_bytes()
+        code, out = self.retire(ident, rev, "--index", str(self.index),
+                                "--stop-evidence", self.citation(commit, rel))
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("must declare exactly one issue_number", out["detail"])
+        self.assertIn("none", out["detail"])
+        self.stayed(before_state, before_index, ident)
+
+    def test_an_unterminated_fence_refuses(self) -> None:
+        self.init()
+        self.git_init()
+        ident = "i421-review"
+        rev = self.accepted({"dispatch": ["i421-missing"]}, ident=ident)
+        self.write_index([])
+        self.write_live([])
+        rel, commit = self.bound_lines(
+            [self.mission()], number="421",
+            state_text="# state\nissue_number: 421\n```\nissue_number: 426\n")
+        before_state, before_index = self.file.read_bytes(), self.index.read_bytes()
+        code, out = self.retire(ident, rev, "--index", str(self.index),
+                                "--stop-evidence", self.citation(commit, rel))
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("unterminated", out["detail"])
+        self.stayed(before_state, before_index, ident)
+
+    def test_a_fence_hiding_an_example_keeps_the_real_declaration(self) -> None:
+        self.init()
+        self.git_init()
+        ident = "i421-review"
+        rev = self.accepted({"dispatch": ["i421-missing"]}, ident=ident)
+        self.write_index([])
+        self.write_live([])
+        rel, commit = self.bound_lines(
+            [self.mission()], number="421",
+            state_text="# state\nissue_number: 421\n```yaml\nissue_number: 999\n```\n")
+        code, out = self.retire(ident, rev, "--index", str(self.index),
+                                "--stop-evidence", self.citation(commit, rel))
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["value"]["stop_evidence"][0]["route"], "refs-unindexed")
+        self.assertNotIn(ident, self.doc()["state"]["tasks"])
+
     def test_a_task_id_with_two_issue_numbers_refuses(self) -> None:
         for ident in ("repair-i421-for-i426", "i421-i426-review"):
             with self.subTest(ident=ident):
@@ -777,7 +904,7 @@ class RefsUnindexed(Fixture):
 
     def test_conflicting_issue_number_declarations_refuse(self) -> None:
         for state_text in ("# state\nissue_number: 426\nissue_number: 421\n",
-                           "# state\nissue_number: 421\n  issue_number: 426\n"):
+                           "# state\nissue_number: 421\nname: x\nissue_number: 426\n"):
             with self.subTest(state_text=state_text):
                 if self.file.exists():
                     self.file.unlink()

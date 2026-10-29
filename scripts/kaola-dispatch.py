@@ -7506,6 +7506,9 @@ _TERMINAL_MUTATIONS = ("accepted", "completed")
 # i<N> or i<N>-... inside a task id. A bare id such as i426 embeds N; a
 # hyphen is not required. profiles-20261026 embeds no issue number.
 _TASK_ISSUE_RE = re.compile(r"(?:^|[^A-Za-z0-9])i([1-9][0-9]*)(?=-|$)")
+# Any i<digits> or I<digits> anywhere in a task id. refs-unindexed accepts
+# only when the strict pattern accounts for exactly that one token.
+_TASK_ISSUE_LIKE_RE = re.compile(r"[iI][0-9]+")
 
 
 def _blank(value: Any) -> bool:
@@ -8621,12 +8624,26 @@ def _embedded_issue_numbers(task_id: Any) -> list[str]:
     return _TASK_ISSUE_RE.findall(task_id)
 
 
-_ISSUE_NUMBER_LINE_RE = re.compile(r"^[ \t]*issue_number[ \t]*:(.*)$", re.MULTILINE)
+_ISSUE_NUMBER_LINE_RE = re.compile(r"issue_number[ \t]*:(.*)$")
 
 
-def _workflow_state_issue_numbers(text: str) -> list[str]:
-    """Every issue_number declaration in a committed workflow-state, in order."""
-    return [value.strip() for value in _ISSUE_NUMBER_LINE_RE.findall(text)]
+def _workflow_state_issue_numbers(text: str) -> list[str] | None:
+    """Column-0 issue_number declarations outside ``` fences, in order.
+
+    None when a fence never closes: what follows it is not readable.
+    """
+    declared: list[str] = []
+    fenced = False
+    for line in text.splitlines():
+        if line.strip().startswith("```"):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        match = _ISSUE_NUMBER_LINE_RE.match(line)
+        if match:
+            declared.append(match.group(1).strip())
+    return None if fenced else declared
 
 
 def refs_unindexed_settle(entry: dict[str, Any], task: dict[str, Any],
@@ -8636,10 +8653,11 @@ def refs_unindexed_settle(entry: dict[str, Any], task: dict[str, Any],
     """This task's committed archive, for refs no index holds.
 
     Issue #426 shape D. The task id embeds exactly one issue number N
-    (`i<N>` or `i<N>-...`). The citation path is exactly
+    (`i<N>` or `i<N>-...`), and no other i<digits>/I<digits> token may
+    appear in it. The citation path is exactly
     `kaola-workflow/archive/issue-N/mission-ledger.jsonl`, and that same
     commit's workflow-state.md declares exactly one issue_number, equal to
-    N. The proof is that
+    N, at column 0 outside any ``` fence. The proof is that
     commit, not the working tree and not an index row. This does not call
     `ledger_problem`: these ledgers name missions, not seats. Pre-reboot is
     not required; the commit must be an ancestor of HEAD.
@@ -8656,9 +8674,10 @@ def refs_unindexed_settle(entry: dict[str, Any], task: dict[str, Any],
     numbers = _embedded_issue_numbers(ident)
     if not numbers:
         return None, "refs-unindexed needs a task id that embeds its issue number"
-    if len(numbers) != 1:
+    seen = _TASK_ISSUE_LIKE_RE.findall(ident)
+    if len(numbers) != 1 or seen != ["i" + numbers[0]]:
         return None, ("refs-unindexed needs a task id that embeds exactly one issue number; "
-                      f"{ident} embeds {', '.join('i' + n for n in numbers)}, which is ambiguous")
+                      f"{ident} contains {', '.join(seen)}, which is ambiguous")
     number = numbers[0]
     repo = repo_of_state_file(Path(args.file))
     commit, path = entry["commit"], entry["path"]
@@ -8676,6 +8695,8 @@ def refs_unindexed_settle(entry: dict[str, Any], task: dict[str, Any],
     if proc is None or proc.returncode != 0:
         return None, "the archive commit does not contain this task's workflow-state"
     declared = _workflow_state_issue_numbers(proc.stdout or "")
+    if declared is None:
+        return None, "the archived workflow-state has an unterminated ``` fence"
     if declared != [number]:
         return None, ("the archived workflow-state must declare exactly one issue_number, "
                       f"{number}; it declares {', '.join(declared) if declared else 'none'}")
