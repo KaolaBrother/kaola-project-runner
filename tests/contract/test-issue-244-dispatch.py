@@ -351,7 +351,7 @@ class DispatchEntry(unittest.TestCase):
         self.use_spec({
             "codex-KPR-i244-tier": {
                 "status": absent(repo),
-                "start": started(repo, "gpt-6-luna", "high"),
+                "start": started(repo, "gpt-6.1-terra", "max"),
                 "send": sent("fp-tier"),
             }
         })
@@ -363,19 +363,19 @@ class DispatchEntry(unittest.TestCase):
             "preset": "codex/terra",
             "session": "codex-KPR-i244-tier",
             "prompt": "read only",
-            "overrides": {"effort": "high"},
+            "overrides": {"effort": "max"},
         }])
         payload = self.execute(plan, auth, self.availability(["codex/terra"]))
         item = payload["items"][0]
         self.assertEqual(item["status"], "in-flight")
         self.assertEqual(item["reason"], "admitted")
         self.assertEqual(item["acceptance"], "pending")
-        self.assertEqual(item["selection"]["requested"]["tier"], "luna")
-        self.assertEqual(item["selection"]["requested"]["effort"], "high")
-        self.assertEqual(item["selection"]["requested"]["model_id"], "gpt-6-luna")
+        self.assertEqual(item["selection"]["requested"]["tier"], "terra")
+        self.assertEqual(item["selection"]["requested"]["effort"], "max")
+        self.assertEqual(item["selection"]["requested"]["model_id"], "gpt-6.1-terra")
         start = next(row for row in commands(self.log) if row["command"] == "start")
-        self.assertEqual(start["argv"][start["argv"].index("--tier") + 1], "luna")
-        self.assertEqual(start["argv"][start["argv"].index("--effort") + 1], "high")
+        self.assertEqual(start["argv"][start["argv"].index("--tier") + 1], "terra")
+        self.assertEqual(start["argv"][start["argv"].index("--effort") + 1], "max")
         self.assertNotIn("--model", start["argv"])
 
     def test_sideagent_role_reaches_start_argv(self) -> None:
@@ -384,7 +384,7 @@ class DispatchEntry(unittest.TestCase):
         self.use_spec({
             "codex-KPR-i245-role": {
                 "status": absent(repo),
-                "start": started(repo, "gpt-6-luna", "max"),
+                "start": started(repo, "gpt-6.1-terra", "high"),
                 "send": sent("fp-role"),
             }
         })
@@ -489,7 +489,7 @@ class DispatchEntry(unittest.TestCase):
         self.use_spec({
             "codex-KPR-i244-adv": {
                 "status": absent(repo),
-                "start": started(repo, "gpt-6-luna", "max", advertised="something-else"),
+                "start": started(repo, "gpt-6.1-terra", "high", advertised="something-else"),
                 "send": sent("fp-adv"),
             }
         })
@@ -1301,7 +1301,7 @@ class DispatchEntry(unittest.TestCase):
             },
             "codex-KPR-i244-owner": {
                 "status": absent(repo),
-                "start": started(repo, "gpt-6-luna", "high"),
+                "start": started(repo, "gpt-6.1-terra", "high"),
                 "send": sent("fp-owner"),
             },
             "codex-KPR-i244-bare": {
@@ -1493,7 +1493,7 @@ class DispatchEntry(unittest.TestCase):
         self.use_spec({
             "codex-KPR-i244-link": {
                 "status": absent(real),
-                "start": started(real, "gpt-6-luna", "max"),
+                "start": started(real, "gpt-6.1-terra", "high"),
                 "send": sent("fp-link"),
             },
             "codex-KPR-i244-hold": {
@@ -1518,7 +1518,7 @@ class DispatchEntry(unittest.TestCase):
             "codex-KPR-i244-list": {
                 "status": absent(real),
                 "start": {
-                    **started(real, "gpt-6-luna", "max"),
+                    **started(real, "gpt-6.1-terra", "high"),
                     "effective_selection": {"effective_model": ["opencode-go", "deepseek-v4.1-flash"], "effective_effort": "max"},
                 },
                 "send": sent("fp-list"),
@@ -1693,8 +1693,8 @@ class DispatchEntry(unittest.TestCase):
     def test_a_prestarted_unprompted_named_seat_is_the_items_own_occupancy(self) -> None:
         install_fake(self.skills, ["codex"])
         repo = str(self.repo)
-        row_a, status_a = self.prestarted("codex-KPR-i255-a", "gpt-6-luna", "max", "h-a")
-        row_b, status_b = self.prestarted("codex-KPR-i255-b", "gpt-6-luna", "max", "h-b")
+        row_a, status_a = self.prestarted("codex-KPR-i255-a", "gpt-6.1-terra", "high", "h-a")
+        row_b, status_b = self.prestarted("codex-KPR-i255-b", "gpt-6.1-terra", "high", "h-b")
         self.use_spec({
             "codex-KPR-i255-a": {"status": status_a, "send": sent("fp-a")},
             "codex-KPR-i255-b": {"status": status_b, "send": sent("fp-b")},
@@ -1797,7 +1797,7 @@ class DispatchEntry(unittest.TestCase):
         for name, (row_change, status_change, item_change) in cases.items():
             with self.subTest(name):
                 session = "codex-KPR-i255-a"
-                row, status = self.prestarted(session, "gpt-6-luna", "max", "h-a")
+                row, status = self.prestarted(session, "gpt-6.1-terra", "high", "h-a")
                 row.update(row_change)
                 status.update(status_change)
                 self.use_spec({session: {"status": status, "send": sent("fp-a")}})
@@ -1812,7 +1812,7 @@ class DispatchEntry(unittest.TestCase):
 
         # Prompted between the list and the send: the first-send path sends nothing.
         session = "codex-KPR-i255-a"
-        row, status = self.prestarted(session, "gpt-6-luna", "max", "h-a")
+        row, status = self.prestarted(session, "gpt-6.1-terra", "high", "h-a")
         raced = {**status, "mutation_status": "in_progress", "last_prompt": {"fingerprint": "fp-host"}}
         self.use_spec({session: {"status": status, "status_second": raced, "send": sent("fp-a")}})
         self.log.write_text("", encoding="utf-8")
@@ -2048,7 +2048,7 @@ class DispatchEntry(unittest.TestCase):
         install_fake(self.skills, ["codex", "devin", "claude-code", "zcode", "droid"])
         repo = str(self.repo)
         self.use_spec({
-            "codex-KPR-i244-live-luna": {"status": started(repo, "gpt-6-luna", "max")},
+            "codex-KPR-i244-live-luna": {"status": started(repo, "gpt-6.1-terra", "high")},
             "devin-KPR-i244-live-devin": {"status": started(repo, "swe-2-max", "")},
             "claude-code-KPR-i244-live-opus": {"status": started(repo, "opus", "xhigh")},
             "droid-KPR-i244-live-opus": {"status": started(repo, "claude-opus-5-5", "high")},
@@ -3250,7 +3250,7 @@ class DispatchEntry(unittest.TestCase):
         repo = str(self.repo)
         real = os.path.realpath(repo)
         pool = (
-            ("codex/terra", "codex-KPR-i252-luna", started(repo, "gpt-6-luna", "max")),
+            ("codex/terra", "codex-KPR-i252-luna", started(repo, "gpt-6.1-terra", "high")),
             ("devin/default", "devin-KPR-i252-def", started(repo, "swe-2-max")),
             ("dsh/default", "dsh-KPR-i252-def", started(repo, "opencode-go/deepseek-v4.1-flash")),
             ("opencode/default", "opencode-KPR-i252-def", started(repo, "opencode-go/deepseek-v4.1-flash")),

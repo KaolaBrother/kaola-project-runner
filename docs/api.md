@@ -3260,10 +3260,10 @@ is `role` `main`. Do not label `high` as the sidekick effort or as `current_effo
 {"name": "Fable Fusion", "preset_id": "devin/fable", "preset_effort": null, "components": [{"role": "main", "name": "Fable 5.1", "effort": "high"}, {"role": "sidekick", "name": "SWE-2", "effort": "medium"}]}
 ```
 
-Direct `--model gpt-6-luna --effort high` on Codex: `model_display.name` is `GPT-6 Luna`,
+Direct `--model gpt-6.1-terra --effort max` on Codex: `model_display.name` is `Codex Terra`,
 `preset_id` and `preset_effort` are null, `requested_effort` and
-`model_selection.resolved_effort` are `high` (the explicit `high`, not a preset tier effort), and
-`resolved_runtime_model_id` is `gpt-6-luna`.
+`model_selection.resolved_effort` are `max` (the explicit `max`, not a preset tier effort), and
+`resolved_runtime_model_id` is `gpt-6.1-terra`.
 
 Direct `--model custom-model-max`: `model_display.name` is null,
 `resolved_runtime_model_id` is `custom-model-max`, and `requested_effort` is null. The `-max`
@@ -3271,11 +3271,11 @@ suffix is not an effort. A preserved resume uses that same null `model_display`.
 `start_evidence.inherited` is the previous start.
 
 After a launch whose `start_evidence.model_display.name` is `GPT-6.1 Sol`, a later live
-`configOptions` value of `model=gpt-6-luna` and `reasoning_effort=max` leaves
+`configOptions` value of `model=gpt-6.1-terra` and `reasoning_effort=max` leaves
 `view.model.model_display.name` as `GPT-6.1 Sol` and sets:
 
 ```json
-{"name": "GPT-6 Luna", "native_id": "gpt-6-luna", "effort": "max", "name_provenance": "catalog-declared"}
+{"name": "Codex Terra", "native_id": "gpt-6.1-terra", "effort": "max", "name_provenance": "catalog-declared"}
 ```
 
 That object is `view.model.current`. A preserved resume with no live `currentValue` keeps

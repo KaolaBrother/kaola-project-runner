@@ -1726,19 +1726,19 @@ class Issue34ModelSelectionAcpTests(AcpSessionFixture, unittest.TestCase):
         self.assertEqual(receipt.get("resolved_runtime_model_id"), "gpt-6-astra")
 
     def test_codex_known_direct_model_keeps_requested_effort(self) -> None:
-        receipt = self.start("codex", "--model", "gpt-6-luna", "--effort", "high")
+        receipt = self.start("codex", "--model", "gpt-6.1-terra", "--effort", "max")
         self.assertIsNone(receipt.get("error"), f"start failed: {receipt}")
-        self.assertIn(("model", "gpt-6-luna"), self.config_events())
-        self.assertIn(("reasoning_effort", "high"), self.config_events())
-        self.assertNotIn(("reasoning_effort", "max"), self.config_events())
+        self.assertIn(("model", "gpt-6.1-terra"), self.config_events())
+        self.assertIn(("reasoning_effort", "max"), self.config_events())
+        self.assertNotIn(("reasoning_effort", "high"), self.config_events())
         display = receipt["model_display"]
-        self.assertEqual(display["name"], "GPT-6 Luna")
+        self.assertEqual(display["name"], "Codex Terra")
         self.assertIsNone(display["preset_id"])
         self.assertIsNone(display["preset_effort"])
         self.assertIsNone(display["components"])
-        self.assertEqual(receipt["requested_effort"], "high")
-        self.assertEqual(receipt["model_selection"]["resolved_effort"], "high")
-        self.assertEqual(receipt["resolved_runtime_model_id"], "gpt-6-luna")
+        self.assertEqual(receipt["requested_effort"], "max")
+        self.assertEqual(receipt["model_selection"]["resolved_effort"], "max")
+        self.assertEqual(receipt["resolved_runtime_model_id"], "gpt-6.1-terra")
 
     def test_rejected_effort_stays_distinct_from_preset_and_current(self) -> None:
         """Issue #237: an explicit effort that the agent rejects is not effective."""
