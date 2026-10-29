@@ -1,7 +1,7 @@
 # Document docking of issue #425
 - format: kpm.workflow-doc-docking/1.0
 - issue: 425
-- candidate:
+- candidate: 4f6f0b3c51259d396e6daf1fcffdda334b3a26c7
 - checked_by:
 - checked_at:
 - verdict:
