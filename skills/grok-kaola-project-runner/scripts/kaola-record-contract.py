@@ -287,6 +287,9 @@ STOP_EVIDENCE_KINDS = {
     "archived-ledger": frozenset({"kind", "session", "path", "commit"}),
     "sweep-purge": frozenset({"kind", "session", "id"}),
     "direct-dispatch": frozenset({"kind", "session"}),
+    # Issue #426: dispatch refs that never entered an index. No session key —
+    # the task names none, and the citation is the committed archive.
+    "refs-unindexed": frozenset({"kind", "path", "commit"}),
 }
 LEDGER_KEYS = ("n", "name", "details", "status")
 
@@ -301,9 +304,9 @@ def stop_evidence_problem(obj: Any) -> str | None:
     keys = STOP_EVIDENCE_KINDS[kind]
     if set(obj) != keys:
         return f"{kind} takes exactly {', '.join(sorted(keys))}"
-    if not isinstance(obj.get("session"), str) or not obj["session"]:
+    if "session" in keys and (not isinstance(obj.get("session"), str) or not obj["session"]):
         return "session must be a non-empty string"
-    if kind == "archived-ledger":
+    if kind in ("archived-ledger", "refs-unindexed"):
         path = obj.get("path")
         if (not isinstance(path, str) or path.startswith("/") or ".." in path.split("/")
                 or not path.startswith("kaola-workflow/archive/")
@@ -385,6 +388,38 @@ def ledger_problem(text: Any, session: str, tokens: list[str]) -> tuple[str | No
     if matched is None:
         return "no ledger line names this session with its holder or preset", None
     return None, matched
+
+
+def ledger_terminal_problem(text: Any) -> str | None:
+    """Every archived ledger line is terminal. None when the file is.
+
+    Issue #426. This does not name a seat: `ledger_problem` still requires a
+    session and a holder or preset on `archived-ledger`. An empty file is not
+    terminal. A blocked line still has to name its handed-over target."""
+    if not isinstance(text, str):
+        return "the ledger is not text"
+    seen = False
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        seen = True
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            return "a ledger line is not JSON"
+        if not isinstance(entry, dict) or sorted(entry) != sorted(LEDGER_KEYS):
+            return "a ledger line is not {n, name, details, status}"
+        status = entry.get("status")
+        details = entry.get("details") if isinstance(entry.get("details"), str) else ""
+        if status == "blocked":
+            if "handed-over:" not in details:
+                return "a blocked ledger line names no handed-over target"
+        elif status not in ("done", "failed"):
+            return "a ledger line is not done, failed, or a handed-over blocked"
+    if not seen:
+        return "the ledger names no terminal line"
+    return None
 
 
 def machine_stone(stone: dict[str, Any]) -> dict[str, Any]:

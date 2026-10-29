@@ -7497,6 +7497,13 @@ _STALE_COLLECT_ROUTE = "stale-collect session-gone route"
 _STALE_COLLECT_ROUTE_KEY = "stale-collect-session-gone"
 _STOPPED_COLLECT_ROUTE = "stopped-collect incomplete-turn route"
 _STOPPED_COLLECT_ROUTE_KEY = "stopped-collect-incomplete-turn"
+# Issue #426: a collected proof that already finished, whose session is gone
+# from --live (or stopped under the recorded holder). The continuation route
+# still owns that shape when a matching stopped live row is present.
+_COLLECT_TERMINAL_ROUTE = "collect-terminal session-gone route"
+_COLLECT_TERMINAL_ROUTE_KEY = "collect-terminal"
+_TERMINAL_MUTATIONS = ("accepted", "completed")
+_NONTERMINAL_MUTATIONS = ("in_progress", "not_started", "unknown")
 
 
 def _blank(value: Any) -> bool:
@@ -8075,17 +8082,34 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
         if problem:
             raise StateRefusal("invalid-input", f"--stop-evidence {problem}")
         entries.append(entry)
-    for entry in entries:
-        if entry["session"] not in seats:
+    # Issue #426: refs-unindexed cites an archive and names no session. Every
+    # other kind still has to name a seat. A task that already names seats
+    # binds here. A task that names none binds from the supplied index below.
+    seat_entries = [entry for entry in entries if entry.get("kind") != "refs-unindexed"]
+    ref_entries = [entry for entry in entries if entry.get("kind") == "refs-unindexed"]
+    if seats:
+        for entry in seat_entries:
+            if entry["session"] not in seats:
+                raise StateRefusal(
+                    "invalid-input",
+                    f"--stop-evidence session {entry['session']} names no seat of this task")
+    args._stop_evidence_input = seat_entries
+    args._refs_unindexed_input = ref_entries
+    args._index_seat_presets = {}
+    if not refs and not seats:
+        for entry in seat_entries:
             raise StateRefusal(
                 "invalid-input",
                 f"--stop-evidence session {entry['session']} names no seat of this task")
-    args._stop_evidence_input = entries
-    if not refs and not seats:
         return []
     problems: list[str] = []
     indices = supplied_index_paths(args)
     if refs and (not indices or not getattr(args, "live", None)):
+        if not seats:
+            for entry in seat_entries:
+                raise StateRefusal(
+                    "invalid-input",
+                    f"--stop-evidence session {entry['session']} names no seat of this task")
         problems.append(f"dispatch {', '.join(refs)} needs --index and --live to show it closed and stopped")
     if seats and not getattr(args, "live", None):
         problems.append(f"seat {', '.join(sorted(seats))} needs --live to show it stopped, or "
@@ -8093,6 +8117,10 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
     if problems:
         return problems
     live = live_rows_of(args.live) or []
+    fallback: dict[str, list[str]] = {}
+    open_fallback: dict[str, list[str]] = {}
+    proved: set[str] = set()
+    pending: list[tuple[str, str, str]] = []
     if refs:
         repo = str(repo_of_state_file(Path(args.file)))
         rows: dict[str, dict[str, Any]] = {}
@@ -8139,6 +8167,56 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
                         rows[item_id] = rows[keys[0]]
                     else:
                         bare_ambiguous[item_id] = (index_path, keys)
+        # Issue #426: the task names no seat. The seat is the tool-written
+        # item for that ref in this one index. An ambiguous ref, a second
+        # index, or a KPM row does not become a seat.
+        fallback: dict[str, list[str]] = {}
+        if not seats:
+            preset_by_session: dict[str, str | None] = {}
+            for ref in refs:
+                if ref in ambiguous or ref not in rows:
+                    continue
+                item = rows[ref]
+                if item.get("index_schema") is not None:
+                    continue
+                seat_name = session_name(item.get("session"))
+                if seat_name is None:
+                    continue
+                holder_id = item.get("holder_instance_id")
+                holder_id = holder_id if isinstance(holder_id, str) and holder_id else None
+                found_holders = fallback.setdefault(seat_name, [])
+                if holder_id and holder_id not in found_holders:
+                    found_holders.append(holder_id)
+                preset = _item_preset(item)
+                if preset:
+                    previous = preset_by_session.get(seat_name, "")
+                    if previous == "":
+                        preset_by_session[seat_name] = preset
+                    elif previous != preset:
+                        preset_by_session[seat_name] = None
+            args._index_seat_presets = {
+                key: value for key, value in preset_by_session.items()
+                if isinstance(value, str) and value}
+            for entry in seat_entries:
+                if entry["session"] not in fallback:
+                    raise StateRefusal(
+                        "invalid-input",
+                        f"--stop-evidence session {entry['session']} names no seat of this task")
+        proved: set[str] = set()
+        still_open: set[str] = set()
+        judged: set[str] = set()
+        pending: list[tuple[str, str, str]] = []
+        missing_refs: list[str] = []
+
+        def note_closed(name: str | None) -> None:
+            if name and name not in still_open:
+                proved.add(name)
+
+        def note_open(name: str | None) -> None:
+            if name:
+                still_open.add(name)
+                proved.discard(name)
+
         for ref in refs:
             row = rows.get(ref)
             if row is None:
@@ -8147,7 +8225,7 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
                     problems.append(f"{ref} is ambiguous in {index_path}; name it "
                                     + " or ".join(sorted(keys)))
                     continue
-                problems.append(f"{ref} is not in the index")
+                missing_refs.append(ref)
                 continue
             if ref in ambiguous:
                 problems.append(f"{ref} is in more than one supplied index; closure needs exactly "
@@ -8159,16 +8237,20 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
                 # reconciliation route applies (its rows carry no collect
                 # evidence), so every other state stays open as-is.
                 if status in RECORD.KPM_CLOSED_STATUS:
+                    note_closed(session_name(row.get("session")))
                     continue
                 problems.append(f"{ref} is {status}")
+                note_open(session_name(row.get("session")))
                 continue
             if status in CLOSED_COVERAGE:
+                note_closed(session_name(row.get("session")))
                 continue
             if status not in ("in-flight", "unknown"):
                 # Issue #286 (G6): one allow-list shared with the mirror. A
                 # status this vocabulary does not know is still a duty; a
                 # missing or renamed value never proves closure.
                 problems.append(f"{ref} status {status!r} is not a known closed value")
+                note_open(session_name(row.get("session")))
                 continue
             evidence_rows = row.get("evidence") if isinstance(row.get("evidence"), dict) else {}
             collected = evidence_rows.get("collect_status")
@@ -8201,6 +8283,7 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
                     {"item_id": ref, "session": session, "holder_instance_id": holder,
                      "collect_status": "unknown", "reason": "fingerprint-differs",
                      "disposition": "accepted"}]
+                note_closed(session)
             else:
                 # Issue #354: collected outcome is absent and the session record
                 # is gone. That shape is not the continuation route (it needs
@@ -8222,18 +8305,95 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
                     # reconciliation and leaves the unknown index bytes alone.
                     settlement = dead_holder_unknown_settlement(
                         ref, row, task, live, getattr(args, "evidence", None))
+                if settlement is None:
+                    # Issue #426: the collect already finished and the session is
+                    # gone from --live, or stopped under the recorded holder.
+                    settlement = collect_terminal_settlement(
+                        ref, row, task, live, getattr(args, "evidence", None), args, repo)
                 if isinstance(settlement, dict):
                     args._reconciled_dispatch = getattr(args, "_reconciled_dispatch", []) + [settlement]
+                    note_closed(session)
                 elif isinstance(settlement, str):
                     problems.append(settlement)
+                    note_open(session)
+                    if _COLLECT_TERMINAL_ROUTE in settlement:
+                        judged.add(session)
                 else:
-                    problems.append(f"{ref} is {row.get('status')}")
+                    supplied = bool(session) and any(
+                        entry.get("session") == session for entry in seat_entries)
+                    if not seats and supplied:
+                        pending.append((ref, session, f"{ref} is {row.get('status')}"))
+                        note_open(session)
+                    else:
+                        problems.append(f"{ref} is {row.get('status')}")
+                        note_open(session)
+        if missing_refs:
+            every_missing = len(missing_refs) == len(refs) and not ambiguous
+            if ref_entries and not every_missing:
+                problems.append("refs-unindexed applies only when every dispatch ref is "
+                                "absent from the supplied index")
+            if every_missing and len(ref_entries) > 1:
+                problems.append("refs-unindexed takes one archive citation")
+            elif every_missing and len(ref_entries) == 1:
+                receipt, why = refs_unindexed_settle(ref_entries[0], task, args, missing_refs)
+                if receipt is not None:
+                    args._stop_evidence = getattr(args, "_stop_evidence", []) + [receipt]
+                    missing_refs = []
+                else:
+                    for ref in missing_refs:
+                        problems.append(f"{ref} is not in the index; {why}")
+                    missing_refs = []
+            for ref in missing_refs:
+                problems.append(f"{ref} is not in the index")
+        elif ref_entries:
+            # Every ref was found or was ambiguous. The archive citation is
+            # not a substitute for a row the supplied index already holds.
+            problems.append("refs-unindexed applies only when every dispatch ref is "
+                            "absent from the supplied index")
+        evidence_sessions = {entry["session"] for entry in seat_entries}
+        open_fallback = {
+            name: sorted(holders) for name, holders in fallback.items()
+            if name in evidence_sessions and name not in proved and name not in judged}
+        # A closed item whose session is still live stays open. Proved seats
+        # are not removed from that check. open_fallback and a collect-terminal
+        # refusal already name the session.
         sessions = {rows[ref].get("session") for ref in refs
-                    if ref in rows and ref not in ambiguous} - set(seats)
+                    if ref in rows and ref not in ambiguous} - set(seats) - set(open_fallback) - judged
         for row in live:
             if row.get("state") != "stopped" and row.get("session") in sessions:
                 problems.append(f"{row.get('session')} is still live")
-    return problems + open_seats_settled(seats, live, task, args)
+    else:
+        open_fallback = {}
+        proved = set()
+        pending = []
+    open_for_seats = dict(seats)
+    for name, holders in open_fallback.items():
+        open_for_seats.setdefault(name, holders)
+    problems.extend(open_seats_settled(open_for_seats, live, task, args))
+    # A seat the collect or a closed status already proved does not need
+    # stop evidence. Evidence the caller did supply still has to verify.
+    recorded = {item.get("session") for item in getattr(args, "_stop_evidence", []) or []}
+    for entry in seat_entries:
+        name = entry["session"]
+        if name in recorded or name in open_for_seats:
+            continue
+        if name not in proved:
+            continue
+        holders = list(fallback.get(name) or seats.get(name) or [])
+        receipt, why = verify_stop_evidence(entry, name, holders, task, args)
+        if receipt is not None:
+            args._stop_evidence = getattr(args, "_stop_evidence", []) + [receipt]
+            recorded.add(name)
+        else:
+            problems.append(why or f"--stop-evidence for {name} does not verify")
+    settled_sessions = {item.get("session") for item in getattr(args, "_stop_evidence", []) or []}
+    for ref, name, message in pending:
+        if name in settled_sessions:
+            continue
+        if any(name in problem for problem in problems):
+            continue
+        problems.append(message)
+    return problems
 
 
 # Issue #421: durable stop evidence settles a task-named seat only when no
@@ -8327,6 +8487,154 @@ def boot_epoch() -> float | None:
     return None
 
 
+def _item_preset(row: dict[str, Any]) -> str | None:
+    """Preset the dispatch tool wrote on an index item, not task prose."""
+    preset = row.get("preset")
+    if isinstance(preset, str) and preset:
+        return preset
+    selection = row.get("selection")
+    if not isinstance(selection, dict):
+        return None
+    direct = selection.get("preset")
+    if isinstance(direct, str) and direct:
+        return direct
+    requested = selection.get("requested")
+    if isinstance(requested, dict):
+        value = requested.get("preset")
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def _collect_terminal_shape(collected: Any) -> dict[str, Any] | None:
+    """The collect blob is terminal, or None when it is not this route's shape.
+
+    `outcome: stopped` is terminal unless the mutation is still an open value
+    (`in_progress`, `not_started`, `unknown`). `mutation_status` accepted or
+    completed is terminal on its own. An in-progress mutation is not terminal
+    even when an older outcome says stopped."""
+    if not isinstance(collected, dict) or not collected:
+        return None
+    outcome = collected.get("outcome")
+    mutation = collected.get("mutation_status")
+    if mutation in _TERMINAL_MUTATIONS or (
+            outcome == "stopped" and mutation not in _NONTERMINAL_MUTATIONS):
+        return {"outcome": outcome, "mutation_status": mutation}
+    return None
+
+
+def collect_terminal_settlement(ref: str, row: dict[str, Any], task: dict[str, Any],
+                                live: list[dict[str, Any]], evidence: Any,
+                                args: argparse.Namespace, repo: str
+                                ) -> dict[str, Any] | str | None:
+    """Settle one unknown fingerprint-differs item whose collect already finished.
+
+    Issue #426. None means this row is not that shape, so older routes keep
+    their refusal text. A string names this route and refuses. A dict is the
+    reconciliation. The index row is not rewritten.
+
+    The continuation route still owns the same collect when a stopped --live
+    row matches the holder, platform and repo. This route is the session that
+    list no longer shows, and the stopped row the continuation gates do not
+    take (no per-item disposition was recorded). A live row, or a stop under
+    another holder, does not settle.
+    """
+    if row.get("status") != "unknown" or row.get("reason") != "fingerprint-differs":
+        return None
+    if row.get("index_schema") is not None:
+        return None
+    if args.writer != "host":
+        return None
+    evidence_rows = row.get("evidence") if isinstance(row.get("evidence"), dict) else {}
+    collected = evidence_rows.get("collect_status") if isinstance(evidence_rows, dict) else None
+    shape = _collect_terminal_shape(collected)
+    if shape is None or not isinstance(collected, dict):
+        return None
+    verdict = task.get("verdict") if isinstance(task.get("verdict"), dict) else {}
+    if task.get("stage") != "done" or verdict.get("value") != "accepted":
+        return None
+    ident = getattr(args, "id", None)
+    if not ident or row.get("task_id") != ident:
+        return None
+    dispositions = task.get("dispositions") if isinstance(task.get("dispositions"), dict) else None
+    if isinstance(dispositions, dict) and ref in dispositions and dispositions.get(ref) != "accepted":
+        return None
+    session = session_name(row.get("session"))
+    if session is None:
+        return None
+    holder = row.get("holder_instance_id")
+    if not isinstance(holder, str) or not holder:
+        return None
+    collected_holder = collected.get("holder_instance_id")
+    if isinstance(collected_holder, str) and collected_holder and collected_holder != holder:
+        return None
+    if isinstance(row.get("repo"), str) and row.get("repo") and not same_repo(row.get("repo"), repo):
+        return None
+    matches = [item for item in live if item.get("session") == session]
+    if any(item.get("state") != "stopped" for item in matches):
+        return _route_refusal(ref, task, args, f"{session} is still live", _COLLECT_TERMINAL_ROUTE)
+    if matches and any(item.get("holder_instance_id") != holder for item in matches):
+        other = next((item.get("holder_instance_id") for item in matches
+                      if item.get("holder_instance_id") != holder), None)
+        return _route_refusal(
+            ref, task, args,
+            f"{session} is stopped under holder {other}, not the recorded {holder}; foreign holder",
+            _COLLECT_TERMINAL_ROUTE)
+    # A listed row that names no repo, or another repo, does not show this
+    # project's seat. Leave it unresolved so the older "is unknown" text stays.
+    if matches and any(not isinstance(item.get("repo"), str) or not item.get("repo")
+                       or not same_repo(item.get("repo"), repo) for item in matches):
+        return None
+    return {
+        "item_id": ref, "session": session, "holder_instance_id": holder,
+        "collect_status": "terminal", "collected": shape,
+        "live": "stopped" if matches else "absent",
+        "route": _COLLECT_TERMINAL_ROUTE_KEY, "evidence": evidence,
+        "disposition": "accepted",
+    }
+
+
+def _git_show(repo: Path, *argv: str) -> subprocess.CompletedProcess | None:
+    try:
+        return subprocess.run(["git", "-C", str(repo), *argv],
+                              capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+def refs_unindexed_settle(entry: dict[str, Any], task: dict[str, Any],
+                          args: argparse.Namespace, refs: list[str]
+                          ) -> tuple[dict[str, Any] | None, str | None]:
+    """A committed archive whose every line is terminal, for refs no index holds.
+
+    Issue #426 shape D. The proof is the archive commit, not a live row and
+    not an index row. This does not call `ledger_problem`: these ledgers name
+    missions, not seats. Pre-reboot is not required; the commit must be an
+    ancestor of HEAD that contains the path.
+    """
+    if args.writer != "host":
+        return None, "refs-unindexed is a Host route; a Sideagent returns it to the Host"
+    verdict = task.get("verdict") if isinstance(task.get("verdict"), dict) else {}
+    if task.get("stage") != "done" or verdict.get("value") != "accepted":
+        return None, "refs-unindexed settles only an accepted-done task"
+    repo = repo_of_state_file(Path(args.file))
+    commit, path = entry["commit"], entry["path"]
+    proc = _git_show(repo, "cat-file", "-e", f"{commit}:{path}")
+    if proc is None or proc.returncode != 0:
+        return None, "the named commit does not contain that ledger path in this repository"
+    proc = _git_show(repo, "merge-base", "--is-ancestor", commit, "HEAD")
+    if proc is None or proc.returncode != 0:
+        return None, "the ledger commit is not an ancestor of HEAD in this repository"
+    proc = _git_show(repo, "show", f"{commit}:{path}")
+    if proc is None or proc.returncode != 0:
+        return None, "the ledger commit content is unreadable"
+    problem = RECORD.ledger_terminal_problem(proc.stdout)
+    if problem:
+        return None, problem
+    return {"kind": entry["kind"], "route": "refs-unindexed", "shape": "refs-unindexed",
+            "path": path, "commit": commit, "refs": list(refs), "live": "not-used"}, None
+
+
 def seat_preset(task: dict[str, Any], session: str) -> str | None:
     """The preset recorded for this seat on the task or its assignment/session row."""
     preset = task.get("preset")
@@ -8406,6 +8714,12 @@ def archived_ledger_settle(entry: dict[str, Any], session: str, holders: list[st
     """A committed, pre-reboot archived mission ledger that names the seat (c2)."""
     holder = holders[0] if len(holders) == 1 else None
     preset = seat_preset(task, session)
+    if not isinstance(preset, str) or not preset:
+        indexed = getattr(args, "_index_seat_presets", None)
+        if isinstance(indexed, dict):
+            value = indexed.get(session)
+            if isinstance(value, str) and value:
+                preset = value
     tokens = [token for token in (holder, preset) if token]
     if not tokens:
         return None, "archived-ledger needs a recorded holder or a platform/tier preset"
@@ -12067,7 +12381,8 @@ def build_parser() -> argparse.ArgumentParser:
     retire.add_argument("--stop-evidence", action="append",
                         help="durable stop evidence for a task-named seat absent from --live: "
                              "--stop-evidence {\"kind\": \"index-stop-receipt\"|\"archived-ledger\"|"
-                             "\"sweep-purge\"|\"direct-dispatch\", \"session\": ...}; repeatable")
+                             "\"sweep-purge\"|\"direct-dispatch\", \"session\": ...}; repeatable. "
+                             "refs-unindexed cites a committed archive and names no session")
     retire.add_argument("--handoff", help="current task that takes over its seats and dispatch")
     retire.set_defaults(func=command_state_retire)
 
