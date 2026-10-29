@@ -8578,13 +8578,8 @@ def collect_terminal_settlement(ref: str, row: dict[str, Any], task: dict[str, A
     if (not isinstance(collected_repo, str) or not collected_repo
             or not same_repo(collected_repo, repo)):
         return None
-    if "holder_instance_id" in collected:
-        collected_holder = collected.get("holder_instance_id")
-        if isinstance(collected_holder, str) and collected_holder:
-            if collected_holder != holder:
-                return None
-        elif collected_holder not in (None, ""):
-            return None
+    if collected.get("holder_instance_id") != holder:
+        return None
     if isinstance(row.get("repo"), str) and row.get("repo") and not same_repo(row.get("repo"), repo):
         return None
     matches = [item for item in live if item.get("session") == session]
@@ -8619,18 +8614,19 @@ def _git_show(repo: Path, *argv: str) -> subprocess.CompletedProcess | None:
         return None
 
 
-def _embedded_issue_number(task_id: Any) -> str | None:
-    """Issue number a task id embeds as i<N> or i<N>-..."""
+def _embedded_issue_numbers(task_id: Any) -> list[str]:
+    """Every issue number a task id embeds as i<N> or i<N>-..."""
     if not isinstance(task_id, str):
-        return None
-    match = _TASK_ISSUE_RE.search(task_id)
-    return match.group(1) if match else None
+        return []
+    return _TASK_ISSUE_RE.findall(task_id)
 
 
-def _workflow_state_names_issue(text: str, number: str) -> bool:
-    """Exactly one issue_number line in the committed workflow-state names N."""
-    pattern = re.compile(rf"^issue_number:\s*{re.escape(number)}\s*$", re.MULTILINE)
-    return len(pattern.findall(text)) == 1
+_ISSUE_NUMBER_LINE_RE = re.compile(r"^[ \t]*issue_number[ \t]*:(.*)$", re.MULTILINE)
+
+
+def _workflow_state_issue_numbers(text: str) -> list[str]:
+    """Every issue_number declaration in a committed workflow-state, in order."""
+    return [value.strip() for value in _ISSUE_NUMBER_LINE_RE.findall(text)]
 
 
 def refs_unindexed_settle(entry: dict[str, Any], task: dict[str, Any],
@@ -8639,10 +8635,11 @@ def refs_unindexed_settle(entry: dict[str, Any], task: dict[str, Any],
                           ) -> tuple[dict[str, Any] | None, str | None]:
     """This task's committed archive, for refs no index holds.
 
-    Issue #426 shape D. The task id embeds issue number N (`i<N>` or
-    `i<N>-...`). The citation path is exactly
+    Issue #426 shape D. The task id embeds exactly one issue number N
+    (`i<N>` or `i<N>-...`). The citation path is exactly
     `kaola-workflow/archive/issue-N/mission-ledger.jsonl`, and that same
-    commit's workflow-state.md names issue_number N. The proof is that
+    commit's workflow-state.md declares exactly one issue_number, equal to
+    N. The proof is that
     commit, not the working tree and not an index row. This does not call
     `ledger_problem`: these ledgers name missions, not seats. Pre-reboot is
     not required; the commit must be an ancestor of HEAD.
@@ -8655,9 +8652,14 @@ def refs_unindexed_settle(entry: dict[str, Any], task: dict[str, Any],
     verdict = task.get("verdict") if isinstance(task.get("verdict"), dict) else {}
     if task.get("stage") != "done" or verdict.get("value") != "accepted":
         return None, "refs-unindexed settles only an accepted-done task"
-    number = _embedded_issue_number(getattr(args, "id", None))
-    if number is None:
+    ident = getattr(args, "id", None)
+    numbers = _embedded_issue_numbers(ident)
+    if not numbers:
         return None, "refs-unindexed needs a task id that embeds its issue number"
+    if len(numbers) != 1:
+        return None, ("refs-unindexed needs a task id that embeds exactly one issue number; "
+                      f"{ident} embeds {', '.join('i' + n for n in numbers)}, which is ambiguous")
+    number = numbers[0]
     repo = repo_of_state_file(Path(args.file))
     commit, path = entry["commit"], entry["path"]
     expected = f"kaola-workflow/archive/issue-{number}/mission-ledger.jsonl"
@@ -8673,8 +8675,10 @@ def refs_unindexed_settle(entry: dict[str, Any], task: dict[str, Any],
     proc = _git_show(repo, "show", f"{commit}:{state_path}")
     if proc is None or proc.returncode != 0:
         return None, "the archive commit does not contain this task's workflow-state"
-    if not _workflow_state_names_issue(proc.stdout or "", number):
-        return None, "the archived workflow-state does not name this task's issue_number"
+    declared = _workflow_state_issue_numbers(proc.stdout or "")
+    if declared != [number]:
+        return None, ("the archived workflow-state must declare exactly one issue_number, "
+                      f"{number}; it declares {', '.join(declared) if declared else 'none'}")
     proc = _git_show(repo, "show", f"{commit}:{path}")
     if proc is None or proc.returncode != 0:
         return None, "the ledger commit content is unreadable"

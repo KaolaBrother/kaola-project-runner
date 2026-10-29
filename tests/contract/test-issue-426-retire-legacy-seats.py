@@ -7,11 +7,11 @@ live on the supplied kaola-dispatch-index/1 item. Four shapes:
 - (A) --stop-evidence binds to that item's session.
 - (B) archived-ledger reads the item's holder or preset.
 - (C) a terminal collect settles only when mutation_status is accepted or
-  completed, the collected session and repo match this item, and the session
-  is absent from --live or stopped under its holder.
+  completed, the collected session, repo and holder match this item, and the
+  session is absent from --live or stopped under its holder.
 - (D) refs that never entered an index settle from the committed archive of
-  the issue embedded in the task id. That commit's workflow-state names the
-  same issue, and every ledger line is terminal.
+  the one issue the task id embeds. That commit's workflow-state declares
+  exactly that one issue_number, and every ledger line is terminal.
 
 A blocked ledger line names a non-empty handed-over target. Neighboring
 refusals stay refusals.
@@ -579,6 +579,27 @@ class CollectTerminal(Fixture):
         self.assertIn("more than one supplied index", out["detail"])
         self.stayed(before_state, before_index)
 
+    def test_a_collected_holder_that_is_absent_null_or_empty_does_not_settle(self) -> None:
+        for shape in ("absent", None, ""):
+            with self.subTest(shape=shape):
+                if self.file.exists():
+                    self.file.unlink()
+                rev, _before = self.ready()
+                row = self.item()
+                collected = row["evidence"]["collect_status"]
+                if shape == "absent":
+                    collected.pop("holder_instance_id", None)
+                else:
+                    collected["holder_instance_id"] = shape
+                self.write_index([row])
+                before_state, before_index = (self.file.read_bytes(),
+                                              self.index.read_bytes())
+                code, out = self.retire("t1", rev, "--index", str(self.index))
+                self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+                self.assertIn(f"{ITEM} is unknown", out["detail"])
+                self.assertNotIn("collect-terminal", out["detail"])
+                self.stayed(before_state, before_index)
+
 
 class RefsUnindexed(Fixture):
     """(D) refs that never entered an index settle from a committed archive."""
@@ -705,14 +726,93 @@ class RefsUnindexed(Fixture):
         self.assertIn("refs-unindexed takes one archive citation", out["detail"])
         self.stayed(before_state, before_index)
 
-    def bound_lines(self, lines: list[dict], number: str = "426") -> tuple[str, str]:
+    def bound_lines(self, lines: list[dict], number: str = "426",
+                    state_text: str | None = None) -> tuple[str, str]:
         """Ledger plus the archive workflow-state, both committed together."""
         rel = self.write_ledger(lines, folder=f"issue-{number}")
         state = f"kaola-workflow/archive/issue-{number}/workflow-state.md"
         path = self.repo / state
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(f"# state\nissue_number: {number}\n", encoding="utf-8")
+        if state_text is None:
+            state_text = f"# state\nissue_number: {number}\n"
+        path.write_text(state_text, encoding="utf-8")
         return rel, self.git_commit("archive", [rel, state])
+
+    def test_a_task_id_with_two_issue_numbers_refuses(self) -> None:
+        for ident in ("repair-i421-for-i426", "i421-i426-review"):
+            with self.subTest(ident=ident):
+                if self.file.exists():
+                    self.file.unlink()
+                self.init()
+                self.git_init()
+                rev = self.accepted({"dispatch": ["i421-missing"]}, ident=ident)
+                self.write_index([])
+                self.write_live([])
+                rel, commit = self.bound_lines(
+                    [dict(self.mission(), details=f"dispatched: {ident} — done")],
+                    number="421")
+                before_state, before_index = (self.file.read_bytes(),
+                                              self.index.read_bytes())
+                code, out = self.retire(
+                    ident, rev, "--index", str(self.index),
+                    "--stop-evidence", self.citation(commit, rel))
+                self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+                self.assertIn("exactly one issue number", out["detail"])
+                self.assertIn("ambiguous", out["detail"])
+                self.stayed(before_state, before_index, ident)
+
+    def test_a_task_id_with_no_issue_number_refuses_refs_unindexed(self) -> None:
+        self.init()
+        self.git_init()
+        rev = self.accepted({"dispatch": ["i426-missing"]})
+        self.write_index([])
+        self.write_live([])
+        rel, commit = self.bound_lines([self.mission()])
+        before_state, before_index = self.file.read_bytes(), self.index.read_bytes()
+        code, out = self.retire("t1", rev, "--index", str(self.index),
+                                "--stop-evidence", self.citation(commit, rel))
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("embeds its issue number", out["detail"])
+        self.stayed(before_state, before_index)
+
+    def test_conflicting_issue_number_declarations_refuse(self) -> None:
+        for state_text in ("# state\nissue_number: 426\nissue_number: 421\n",
+                           "# state\nissue_number: 421\n  issue_number: 426\n"):
+            with self.subTest(state_text=state_text):
+                if self.file.exists():
+                    self.file.unlink()
+                self.init()
+                self.git_init()
+                rev = self.accepted({"dispatch": ["i421-missing"]}, ident="i421-review")
+                self.write_index([])
+                self.write_live([])
+                rel, commit = self.bound_lines(
+                    [dict(self.mission(), details=f"dispatched: {state_text!r} — done")],
+                    number="421", state_text=state_text)
+                before_state, before_index = (self.file.read_bytes(),
+                                              self.index.read_bytes())
+                code, out = self.retire(
+                    "i421-review", rev, "--index", str(self.index),
+                    "--stop-evidence", self.citation(commit, rel))
+                self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+                self.assertIn("must declare exactly one issue_number", out["detail"])
+                self.stayed(before_state, before_index, "i421-review")
+
+    def test_a_workflow_state_without_issue_number_refuses(self) -> None:
+        self.init()
+        self.git_init()
+        rev = self.accepted({"dispatch": ["i426-missing"]}, ident="i426-review")
+        self.write_index([])
+        self.write_live([])
+        rel, commit = self.bound_lines([self.mission()],
+                                       state_text="# state\nname: issue-426\n")
+        before_state, before_index = self.file.read_bytes(), self.index.read_bytes()
+        code, out = self.retire("i426-review", rev, "--index", str(self.index),
+                                "--stop-evidence", self.citation(commit, rel))
+        self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+        self.assertIn("must declare exactly one issue_number", out["detail"])
+        self.assertIn("none", out["detail"])
+        self.stayed(before_state, before_index, "i426-review")
 
     def test_an_unrelated_archive_does_not_settle_with_a_live_row(self) -> None:
         """Finding 3: task t1 cannot cite issue-424, and a supplied live row is not unused."""
