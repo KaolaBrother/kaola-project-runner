@@ -865,6 +865,39 @@ class RefsUnindexed(Fixture):
         self.assertEqual(out["value"]["stop_evidence"][0]["route"], "refs-unindexed")
         self.assertNotIn(ident, self.doc()["state"]["tasks"])
 
+    def test_a_declaration_inside_a_matched_fence_does_not_count(self) -> None:
+        """A matched fence hides the declaration: tildes, length, and info text."""
+        shapes = {
+            "tilde fence": "~~~yaml\nissue_number: 421\n~~~\n",
+            "indented tilde fence": "   ~~~yaml\nissue_number: 421\n   ~~~\n",
+            "shorter inner fence":
+                "````markdown\n```yaml\nissue_number: 421\n```\n````\n",
+            "four backtick outer": "````\n```\nissue_number: 421\n```\n````\n",
+            "closer with trailing text":
+                "```yaml\n```example\nissue_number: 421\n```example\n```\n",
+        }
+        for name, body in shapes.items():
+            with self.subTest(name=name):
+                if self.file.exists():
+                    self.file.unlink()
+                self.init()
+                self.git_init()
+                ident = "i421-review"
+                rev = self.accepted({"dispatch": ["i421-missing"]}, ident=ident)
+                self.write_index([])
+                self.write_live([])
+                rel, commit = self.bound_lines(
+                    [self.mission()], number="421", state_text="# state\n" + body)
+                before_state, before_index = (self.file.read_bytes(),
+                                              self.index.read_bytes())
+                code, out = self.retire(
+                    ident, rev, "--index", str(self.index),
+                    "--stop-evidence", self.citation(commit, rel))
+                self.assertEqual((code, out.get("reason")), (2, "retire-unmet"), out)
+                self.assertIn("must declare exactly one issue_number", out["detail"])
+                self.assertIn("none", out["detail"])
+                self.stayed(before_state, before_index, ident)
+
     def test_a_task_id_with_two_issue_numbers_refuses(self) -> None:
         for ident in ("repair-i421-for-i426", "i421-i426-review"):
             with self.subTest(ident=ident):

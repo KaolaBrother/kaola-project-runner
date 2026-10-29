@@ -8625,25 +8625,53 @@ def _embedded_issue_numbers(task_id: Any) -> list[str]:
 
 
 _ISSUE_NUMBER_LINE_RE = re.compile(r"issue_number[ \t]*:(.*)$")
+_FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+
+
+def _fence_closes(line: str, char: str, length: int) -> bool:
+    """True when `line` closes a fence of `char` repeated `length` times.
+
+    At most three leading spaces, then at least `length` of that same
+    character, then only spaces. A shorter run, the other fence character,
+    or any trailing text is content and leaves the fence open.
+    """
+    indent = len(line) - len(line.lstrip(" "))
+    if indent > 3:
+        return False
+    body = line[indent:]
+    run = 0
+    for item in body:
+        if item != char:
+            break
+        run += 1
+    return run >= length and body[run:].strip(" ") == ""
 
 
 def _workflow_state_issue_numbers(text: str) -> list[str] | None:
-    """Column-0 issue_number declarations outside ``` fences, in order.
+    """Column-0 issue_number declarations outside fenced code, in order.
 
-    None when a fence never closes: what follows it is not readable.
+    A fence opens on at most three leading spaces, then three or more
+    backticks or tildes, and may carry an info string. It closes only on at
+    most three leading spaces, then at least as many of that same character,
+    then only spaces. None when a fence never closes.
     """
     declared: list[str] = []
-    fenced = False
+    fence: tuple[str, int] | None = None
     for line in text.splitlines():
-        if line.strip().startswith("```"):
-            fenced = not fenced
+        if fence is None:
+            opened = _FENCE_OPEN_RE.match(line)
+            if opened:
+                run = opened.group(1)
+                fence = (run[0], len(run))
+                continue
+            match = _ISSUE_NUMBER_LINE_RE.match(line)
+            if match:
+                declared.append(match.group(1).strip())
             continue
-        if fenced:
-            continue
-        match = _ISSUE_NUMBER_LINE_RE.match(line)
-        if match:
-            declared.append(match.group(1).strip())
-    return None if fenced else declared
+        char, length = fence
+        if _fence_closes(line, char, length):
+            fence = None
+    return None if fence is not None else declared
 
 
 def refs_unindexed_settle(entry: dict[str, Any], task: dict[str, Any],
@@ -8657,7 +8685,7 @@ def refs_unindexed_settle(entry: dict[str, Any], task: dict[str, Any],
     appear in it. The citation path is exactly
     `kaola-workflow/archive/issue-N/mission-ledger.jsonl`, and that same
     commit's workflow-state.md declares exactly one issue_number, equal to
-    N, at column 0 outside any ``` fence. The proof is that
+    N, at column 0 outside any fenced code block. The proof is that
     commit, not the working tree and not an index row. This does not call
     `ledger_problem`: these ledgers name missions, not seats. Pre-reboot is
     not required; the commit must be an ancestor of HEAD.
@@ -8696,7 +8724,7 @@ def refs_unindexed_settle(entry: dict[str, Any], task: dict[str, Any],
         return None, "the archive commit does not contain this task's workflow-state"
     declared = _workflow_state_issue_numbers(proc.stdout or "")
     if declared is None:
-        return None, "the archived workflow-state has an unterminated ``` fence"
+        return None, "the archived workflow-state has an unterminated code fence"
     if declared != [number]:
         return None, ("the archived workflow-state must declare exactly one issue_number, "
                       f"{number}; it declares {', '.join(declared) if declared else 'none'}")
