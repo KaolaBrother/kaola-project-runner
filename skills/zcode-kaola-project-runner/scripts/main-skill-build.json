@@ -1,5 +1,5 @@
 {
-  "build": "879fce622c38",
+  "build": "227549214518",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "16c500471d627178b76c94117fbf6f20471101b2519f8a205c66f7cf17b5ca8d",
@@ -23,7 +23,7 @@
     "references/zcode-host-dispatch.md": "908322680edf4dba8650b806c4847d5a56a888ccf164e0d95abc774eb0c9ea3c",
     "references/zcode-native-skill-entry.md": "22f5e4ce50d92a0e264c71252616a9c2db8473817be1c5eb99d0a415f814918f",
     "scripts/kaola-acp-paths.py": "124bd8fb908857bb2c7df8bc33797f69df6ef513e859f365c9270724d4eb5402",
-    "scripts/kaola-compact-recovery.py": "c45662a4297047bd860a46157e950b4aac460b3e9df1a889abe99ca687e90f27",
+    "scripts/kaola-compact-recovery.py": "f34a58affc095f7b9d8e29958bf237639ffe2c66728db2377d0f74dda11675d1",
     "scripts/kaola-cwd-guard.py": "975be54b05f4aa8e08f18f1eb47da2c9999774639a7df092fe67365312e8c8af",
     "scripts/kaola-dispatch.py": "8e8198f12833d1cee9c7879b505941f8c5e556cff2b9c62ca3e92424bc72e88b",
     "scripts/kaola-record-contract.py": "b2a2a604b0b73902e1809c8d77cec4593123da781d64135c4f39594ae415f334",

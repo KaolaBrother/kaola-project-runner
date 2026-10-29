@@ -32,7 +32,10 @@ Accepted shapes and their positive source locators:
   replay is the reason the holder also needs a ready-state guard.
 * Devin 3000.11.3 emits the ACP notification ``_cognition.ai/compaction`` with
   ``params.sessionId`` and ``params.status``; the measured completed value is
-  ``completed``.
+  ``completed``. Devin 3000.11.92 also emits summary-less started/completed
+  pairs on ordinary agent steps with no context reduction; only a completed
+  notification carrying a non-empty ``params.summary`` is a compaction
+  (Issue #423, see docs/evidence/issue-423-devin-compaction-census.md).
 * Grok 1.0.46 emits ``x.ai/session_notification`` (wire
   ``_x.ai/session_notification``) with ``params.update.sessionUpdate ==
   "auto_compact_completed"``. The installed binary proves the notification is
@@ -78,6 +81,9 @@ KIMI_COMPLETED_RE = re.compile(
 
 # Native notification methods that carry a compact completion.
 DEVIN_COMPACTION_METHOD = "_cognition.ai/compaction"
+# Issue #423: a real Devin compaction carries the written summary. Summary-less
+# per-step pairs are ordinary agent steps, not compactions.
+DEVIN_SUMMARY_KEY = "summary"
 GROK_NOTIFICATION_METHODS = ("_x.ai/session_notification", "x.ai/session_notification")
 
 # The OpenCode marker key inside ``session_info_update._meta``.
@@ -253,6 +259,9 @@ def _from_notification(message: Mapping[str, Any]) -> Optional[CompactSignal]:
 
     if method == DEVIN_COMPACTION_METHOD:
         if not _completed(params):
+            return None
+        summary = params.get(DEVIN_SUMMARY_KEY)
+        if not isinstance(summary, str) or not summary.strip():
             return None
         return CompactSignal("devin-compaction", session_id, None)
 

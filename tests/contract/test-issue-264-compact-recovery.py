@@ -82,7 +82,10 @@ class ClassifyTests(unittest.TestCase):
     def test_devin_completed_notification(self) -> None:
         signal = self.cr.classify({
             "method": "_cognition.ai/compaction",
-            "params": {"sessionId": "luxurious-seed", "status": "completed"}})
+            "params": {"sessionId": "luxurious-seed", "status": "completed",
+                       "summary": "Full conversation history saved at "
+                                  "/tmp/history_x.md.\nSummary:\n<summary>\n"
+                                  "1. Request and Intent: ...</summary>"}})
         self.assertEqual(signal, self.cr.CompactSignal(
             "devin-compaction", "luxurious-seed", None))
 
@@ -138,7 +141,10 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(self.cr.classify(record).occurrence_id, "c9")
         note = {"kind": "notification",
                 "method": "_cognition.ai/compaction",
-                "params": {"sessionId": "s1", "status": "completed"}}
+                "params": {"sessionId": "s1", "status": "completed",
+                           "summary": "Full conversation history saved at "
+                                      "/tmp/history_x.md.\nSummary:\n<summary>\n"
+                                      "1. Request and Intent: ...</summary>"}}
         self.assertEqual(self.cr.classify(note).source, "devin-compaction")
 
     def test_non_completed_and_prose_never_match(self) -> None:

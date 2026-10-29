@@ -356,11 +356,13 @@ startup (Issue #162), so a running seat only picks up its new bytes by
 restarting. The holder also pins `scripts/kaola-record-contract.py` at startup
 (Issue #259). A running seat picks up a new projection only by restarting.
 The holder also loads `scripts/kaola-acp-paths.py` at startup (Issue #278),
-so a helper update requires a safe-boundary seat restart. The operator test
-includes both modules:
+so a helper update requires a safe-boundary seat restart. The holder also pins
+`scripts/kaola-compact-recovery.py` at startup (Issue #264), so a classifier
+change requires a safe-boundary seat restart (Issue #423). The operator test
+includes these modules:
 
 ```bash
-git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py
+git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py scripts/kaola-compact-recovery.py
 ```
 
 `OLD` and `NEW` are the previous release tag and the commit being released.

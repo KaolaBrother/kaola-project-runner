@@ -2521,9 +2521,11 @@ The holder reads completed compaction signals for its exact ACP session through 
 `kaola-compact-recovery.py` helper. Supported carriers are `compaction_update`, OpenCode's
 completed `_meta["opencode/compaction"]`, Devin and Grok native notifications, and Kimi's exact
 four-line completed text. The Claude bridge forwards a native `compact_boundary` with object
-metadata; the ZCode bridge maps its native completed compact events. Start, failure, cancel,
-foreign-session and startup history signals do not trigger a reminder. Kimi's wire does not
-mark the text as runtime-local; identical model text can cause a harmless reminder.
+metadata; the ZCode bridge maps its native completed compact events. A Devin completed
+notification counts only when it carries a non-empty `summary`; Devin's summary-less per-step
+started/completed pairs are not compactions and trigger no reminder (Issue #423). Start,
+failure, cancel, foreign-session and startup history signals do not trigger a reminder. Kimi's
+wire does not mark the text as runtime-local; identical model text can cause a harmless reminder.
 
 The holder uses its existing prompt path at a turn boundary. A Host uses its measured entry;
 a worker reads its current installed platform Skill and active role/task Skills, then continues

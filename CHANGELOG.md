@@ -1,7 +1,7 @@
 # Changelog
 
 Every release section states whether running seats must restart. The operator
-test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py`
+test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py scripts/kaola-compact-recovery.py`
 (see `docs/conventions.md`).
 
 ## 0.9.34 — 2026-10-28 (Hermes Agent: the twelfth worker platform)
