@@ -4,6 +4,22 @@ Every release section states whether running seats must restart. The operator
 test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py scripts/kaola-compact-recovery.py`
 (see `docs/conventions.md`).
 
+## Unreleased
+
+- **Heartbeat retire routes for legacy done rows (#426).** `state retire` now settles
+  accepted-done task rows whose dispatch sessions are gone from `--live`: a task row that
+  names no seat binds its seats from the single supplied dispatch index (unique item ids
+  only), a finished collect settles as `collect-terminal` (positive terminal list; collected
+  session, repo and holder must all match), and the new `refs-unindexed` stop-evidence kind
+  retires never-indexed runs through an issue-number-bound, committed, fence-aware archive
+  citation (CommonMark fence matching; exactly one `issue_number` declaration). Fail-closed
+  throughout; both ledger helpers now require a non-empty handed-over target. Contract suite
+  `test-issue-426-retire-legacy-seats.py` (53 tests) registered in both validate.sh groups;
+  verified over six bounded Expert review rounds (final PASS) and on 10 real accepted-done
+  rows on this repo's heartbeat. **Seats: restart required**
+  (`scripts/kaola-record-contract.py` and dispatch tooling changed; the operator `git diff`
+  test covers it).
+
 ## 0.9.34 — 2026-10-28 (Hermes Agent: the twelfth worker platform)
 
 Closes #416 and #417. **Hermes Agent joins as the twelfth worker platform** (owner decisions

@@ -308,6 +308,24 @@ platform/tier preset, the task's acceptance evidence naming the session), or
 Host-only, needs an accepted-done task, and verifies before it settles; the
 refusal names the failed check. Without matching evidence the absent-row
 refusal is unchanged plus a hint.
+Issue #426 adds the legacy shapes. A task row that names no seat binds its
+seats from the single supplied `kaola-dispatch-index/1` (exactly one index
+file; a second sighting of a ref — in one file or two — is ambiguous and
+refuses): the item's recorded session, holder and preset become the seat.
+An item whose collect finished settles its seat as `collect-terminal` when
+`mutation_status` is exactly `accepted` or `completed` (positive list), the
+collected session and repo match the item, the collected holder equals the
+recorded one, and the session is absent from `--live` or stopped under that
+holder. A new kind `refs-unindexed` (`{kind, path, commit}`, no session)
+retires a task whose every dispatch ref is absent from the supplied index:
+the task id embeds exactly one issue number N (no other `i<digits>`/`I<digits>`
+token), the path is exactly `kaola-workflow/archive/issue-N/mission-ledger.jsonl`,
+the commit contains it and is an ancestor of HEAD, every ledger line is
+terminal (a `blocked` line names a non-empty handover target), that commit's
+`workflow-state.md` declares exactly one `issue_number: N` at column 0 outside
+a CommonMark code fence (backtick openers carry no backtick in their info
+string; unterminated fences refuse), and no session the task itself names is
+live/ready in `--live`. The receipt records how `--live` was used.
 `maintenance-returned` failure rows for `binding-or-recipe-unavailable`
 coalesce into the latest row (`count`, `coalesced_from`); a Host task retire
 also removes that task's settled non-stop `host:tasks/` inputs atomically.

@@ -824,8 +824,19 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   `state retire --index` also accepts this project's `kpm.dispatch-index/1.x`
   (KPM items addressed `<task_id>/<id>`; the mirror never writes it), and
   `state retire --stop-evidence` settles a task-named seat absent from `--live`
-  from four verified durable kinds: `index-stop-receipt`, `archived-ledger`,
-  `direct-dispatch`, `sweep-purge` (Host writer, accepted-done task only).
+  from five verified durable kinds: `index-stop-receipt`, `archived-ledger`,
+  `direct-dispatch`, `sweep-purge`, `refs-unindexed` (Host writer, accepted-done
+  task only). A task row that names no seat binds its seats from the single
+  supplied `kaola-dispatch-index/1` items (Issue #426); a finished collect
+  (`mutation_status` exactly `accepted`/`completed`, collected session, repo and
+  holder all matching) then settles as `collect-terminal` with the session
+  absent from `--live` or stopped under its recorded holder, and a session-gone
+  unknown item settles as `stale-collect-session-gone`. `refs-unindexed` (no
+  session key) retires a task whose every dispatch ref is absent from the
+  supplied index: the task id embeds exactly one issue number N, the citation
+  is exactly that issue's committed `mission-ledger.jsonl`, that commit's
+  `workflow-state.md` declares exactly one `issue_number: N` at column 0
+  outside a code fence, and no task-named session is live/ready.
   `maintenance-returned` inputs no longer grow one row per failure: a
   `recovery#N` failure whose `why` is `binding-or-recipe-unavailable` coalesces
   into the latest same-(why, next) row (`count`, `coalesced_from`, max
