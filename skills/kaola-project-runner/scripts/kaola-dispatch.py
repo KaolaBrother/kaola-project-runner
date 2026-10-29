@@ -3214,6 +3214,12 @@ def command_execute(args: argparse.Namespace) -> int:
     ))):
         return refuse_all("scope-outside-bounded")
     try:
+        # Issue #427: a plan-level task_id links every item that names none.
+        plan_task = plan.get("task_id")
+        if isinstance(plan_task, str) and plan_task:
+            for item in items:
+                if isinstance(item, dict) and item.get("task_id") is None:
+                    item["task_id"] = plan_task
         assemble_prompts(plan, items)
         lifecycle = load_object(Path(args.state)) if getattr(args, "state", None) else None
     except ValueError as exc:
@@ -8286,7 +8292,7 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
                 args.writer == "host" and task.get("stage") == "done"
                 and verdict.get("value") == "accepted"
                 and (task.get("dispositions") or {}).get(ref) == "accepted"
-                and row.get("task_id") == args.id
+                and row.get("task_id") in (None, args.id)
                 and row.get("status") == "unknown" and row.get("reason") == "fingerprint-differs"
                 and isinstance(holder, str) and bool(holder) and session is not None
                 and collected.get("holder_instance_id") == holder
@@ -8565,7 +8571,9 @@ def collect_terminal_settlement(ref: str, row: dict[str, Any], task: dict[str, A
     session link binds through a non-empty `acp_session_id` instead; a
     `session` key that IS present must still equal the item session. A
     per-item `superseded` or `handed-off` disposition settles and is reported
-    as that disposition.
+    as that disposition. An index row with no `task_id` is unlinked (legacy
+    plans dropped the plan-level link), not foreign; a present different
+    `task_id` still refuses.
     """
     if row.get("status") != "unknown" or row.get("reason") != "fingerprint-differs":
         return None
@@ -8582,7 +8590,7 @@ def collect_terminal_settlement(ref: str, row: dict[str, Any], task: dict[str, A
     if task.get("stage") != "done" or verdict.get("value") != "accepted":
         return None
     ident = getattr(args, "id", None)
-    if not ident or row.get("task_id") != ident:
+    if not ident or row.get("task_id") not in (None, ident):
         return None
     dispositions = task.get("dispositions") if isinstance(task.get("dispositions"), dict) else None
     disposition = (dispositions.get(ref)

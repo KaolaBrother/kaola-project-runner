@@ -321,9 +321,12 @@ holder. Tool-written collect receipts name no `session` key; they bind through
 a non-empty `acp_session_id` plus the same strict holder and repo equality,
 while a `session` key that IS present must still equal the item session
 (Issue #427). A per-item `superseded` or `handed-off` disposition settles
-here too and is reported as that disposition. `collect` now records the
-runner `session` on each new `collect_status` receipt; existing index rows
-are not rewritten. A new kind `refs-unindexed` (`{kind, path, commit}`, no session)
+here too and is reported as that disposition. An index row with no `task_id`
+(legacy plans dropped the plan-level link) is unlinked, not foreign, and is
+accepted by the continuation and collect-terminal routes; a present different
+`task_id` still refuses. `execute` now inherits a plan-level `task_id` onto
+every item that names none, and `collect` records the runner `session` on
+each new `collect_status` receipt; existing index rows are not rewritten. A new kind `refs-unindexed` (`{kind, path, commit}`, no session)
 retires a task whose every dispatch ref is absent from the supplied index:
 the task id embeds exactly one issue number N (no other `i<digits>`/`I<digits>`
 token), the path is exactly `kaola-workflow/archive/issue-N/mission-ledger.jsonl`,

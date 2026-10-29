@@ -140,6 +140,20 @@ class Fixture(unittest.TestCase):
         row.update(overrides)
         return row
 
+    def unlinked_item(self, task_id_marker: str = "absent", **overrides) -> dict:
+        """A tool-shaped row with no task linkage (legacy, plan-level task_id
+        was dropped before #427). `task_id_marker` "absent" removes the key;
+        "null" leaves an explicit None."""
+        row = self.item()
+        if task_id_marker == "absent":
+            row.pop("task_id", None)
+        elif task_id_marker == "null":
+            row["task_id"] = None
+        else:
+            row["task_id"] = task_id_marker
+        row.update(overrides)
+        return row
+
     def stopped_live(self) -> dict:
         return {"session": SEAT, "state": "stopped", "platform": "dsh",
                 "repo": str(self.repo), "holder_instance_id": HOLDER}
@@ -282,6 +296,93 @@ class DeadHolderDispositions(Fixture):
         self.stayed(before_state, before_index)
 
 
+class TaskLinkage(Fixture):
+    """An index row with no `task_id` is unlinked (legacy), not foreign."""
+
+    def test_unlinked_row_settles_superseded_on_collect_terminal(self) -> None:
+        for marker in ("absent", "null"):
+            with self.subTest(task_id=marker):
+                self.reset()
+                entry = self.entry({"dispositions": {ITEM: "superseded"}},
+                                   row=self.unlinked_item(marker),
+                                   live=[self.stopped_live()])
+                self.assertEqual(entry["route"], "collect-terminal")
+                self.assertEqual(entry["disposition"], "superseded")
+                self.assertEqual(entry["live"], "stopped")
+
+    def test_unlinked_row_settles_accepted_on_the_continuation_gate(self) -> None:
+        for marker in ("absent", "null"):
+            with self.subTest(task_id=marker):
+                self.reset()
+                entry = self.entry({"dispositions": {ITEM: "accepted"}},
+                                   row=self.unlinked_item(marker),
+                                   live=[self.stopped_live()])
+                self.assertNotIn("route", entry)
+                self.assertEqual(entry["collect_status"], "unknown")
+                self.assertEqual(entry["reason"], "fingerprint-differs")
+                self.assertEqual(entry["disposition"], "accepted")
+
+    def test_unlinked_row_settles_accepted_when_the_session_is_absent(self) -> None:
+        for marker in ("absent", "null"):
+            with self.subTest(task_id=marker):
+                self.reset()
+                entry = self.entry(row=self.unlinked_item(marker), live=[])
+                self.assertEqual(entry["route"], "collect-terminal")
+                self.assertEqual(entry["disposition"], "accepted")
+                self.assertEqual(entry["live"], "absent")
+
+    def test_a_foreign_task_id_still_refuses(self) -> None:
+        for dispositions, live in (
+                ({"dispositions": {ITEM: "superseded"}}, [self.stopped_live()]),
+                ({"dispositions": {ITEM: "accepted"}}, [self.stopped_live()])):
+            with self.subTest(dispositions=dispositions):
+                self.reset()
+                self.refuse(dispositions,
+                            row=self.unlinked_item("t-other"),
+                            live=live)
+
+    def test_execute_persists_a_plan_level_task_id(self) -> None:
+        auth = self.repo / "auth.json"
+        auth.write_text(json.dumps({"grants": []}), encoding="utf-8")
+        live = self.repo / "exec-live.json"
+        live.write_text(json.dumps({"rows": []}), encoding="utf-8")
+
+        def plan(body: dict, name: str) -> Path:
+            path = self.repo / name
+            path.write_text(json.dumps(body), encoding="utf-8")
+            return path
+
+        item_a = {"item_id": "a", "preset": "dsh/ungranted",
+                  "session": "dsh-KT-i427-a", "prompt": "a"}
+        item_b = {"item_id": "b", "preset": "dsh/ungranted", "task_id": "t2",
+                  "session": "dsh-KT-i427-b", "prompt": "b"}
+
+        index = self.repo / "exec-index.json"
+        code, out = run([
+            "execute", "--plan", str(plan({
+                "scope": "research", "repo": str(self.repo), "task_id": "t1",
+                "items": [item_a, item_b]}, "plan-linked.json")),
+            "--authorization", str(auth), "--platforms", str(REPO / "platforms"),
+            "--skills-root", str(self.repo / "skills"),
+            "--index", str(index), "--live", str(live)], self.env)
+        self.assertEqual(code, 0, out)
+        rows = {row["item_id"]: row for row in json.loads(index.read_text())["items"]}
+        self.assertEqual(rows["a"].get("task_id"), "t1")
+        self.assertEqual(rows["b"].get("task_id"), "t2")
+
+        index2 = self.repo / "exec-index-2.json"
+        code, out = run([
+            "execute", "--plan", str(plan({
+                "scope": "research", "repo": str(self.repo),
+                "items": [dict(item_a)]}, "plan-bare.json")),
+            "--authorization", str(auth), "--platforms", str(REPO / "platforms"),
+            "--skills-root", str(self.repo / "skills"),
+            "--index", str(index2), "--live", str(live)], self.env)
+        self.assertEqual(code, 0, out)
+        rows2 = json.loads(index2.read_text())["items"]
+        self.assertNotIn("task_id", rows2[0])
+
+
 class CollectWritesSession(Fixture):
     """collect records the runner session on each new collect_status receipt."""
 
@@ -317,6 +418,14 @@ class CollectWritesSession(Fixture):
                    "outcome": "stopped", "session": SEAT}
         kept = self.collect(module, self.in_flight(), receipt)
         self.assertEqual(kept["evidence"]["collect_status"]["session"], SEAT)
+
+    def test_collect_preserves_an_existing_task_id(self) -> None:
+        module = self.module()
+        receipt = {"repo": str(self.repo), "holder_instance_id": HOLDER,
+                   "prompt_fingerprint": "sha256:bbb", "mutation_status": "completed",
+                   "outcome": "stopped"}
+        kept = self.collect(module, self.in_flight(task_id="t1"), receipt)
+        self.assertEqual(kept.get("task_id"), "t1")
 
     def test_collect_leaves_a_non_in_flight_item_untouched(self) -> None:
         module = self.module()

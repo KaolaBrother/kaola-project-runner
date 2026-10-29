@@ -25,9 +25,13 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   `acp_session_id` plus the existing strict collected-holder and repo equality, while a
   `session` key that IS present must still equal the item session. Per-item `superseded` and
   `handed-off` dispositions now settle on both the collect-terminal and dead-holder routes
-  and are reported as that disposition; `repair` still refuses. `collect` records the runner
-  `session` on each new `collect_status` receipt (existing index rows are not rewritten).
-  Fail-closed throughout. Contract suite `test-issue-427-collect-binding.py` (15 tests)
+  and are reported as that disposition; `repair` still refuses. `execute` persists a
+  plan-level `task_id` onto every item that names none (item-level wins), and the
+  continuation and collect-terminal retire gates accept an index row with no `task_id`
+  (legacy, unlinked) while a present different `task_id` still refuses. `collect` records
+  the runner `session` on each new `collect_status` receipt (existing index rows are not
+  rewritten). Fail-closed throughout. Contract suite
+  `test-issue-427-collect-binding.py` (21 tests)
   registered in both validate.sh groups. This change touches only
   `scripts/kaola-dispatch.py` (not in the operator `git diff` list); the Unreleased
   **Seats: restart required** from #426 (`kaola-record-contract.py`) still applies.

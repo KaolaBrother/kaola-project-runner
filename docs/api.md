@@ -662,7 +662,8 @@ other field and every row another writer added stay as on disk.
 
 Plan items may carry `task_id`, `output`, `requires` (`{"class": ..., "presets": [...]}`, a
 requirement the Host stated for that item), and `issue` (a positive integer, or a decimal
-string of one). `task_id`, `output`, `requires`, and a normalized `issue` are copied onto
+string of one). A plan-level `task_id` applies to every item that names none (Issue #427;
+item-level wins). `task_id`, `output`, `requires`, and a normalized `issue` are copied onto
 the index row. `issue` does not admit or refuse the item. An
 unmet `requires` is `not-run` / `requirement-unmet` before any Runner call; an item without
 one is not compared. The index records `dispatcher` (the caller's `KAOLA_ACP_DISPATCHER`)
@@ -836,8 +837,10 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   `acp_session_id` (a present `session` key must still equal the item
   session); per-item `superseded`/`handed-off` dispositions settle on the
   collect-terminal and dead-holder routes and are reported as that
-  disposition, and `collect` records the runner `session` on each new
-  `collect_status` receipt (Issue #427). `refs-unindexed` (no
+  disposition; an index row with no `task_id` (legacy, unlinked) is accepted
+  by the continuation and collect-terminal routes while a present different
+  `task_id` still refuses; and `collect` records the runner `session` on each
+  new `collect_status` receipt (Issue #427). `refs-unindexed` (no
   session key) retires a task whose every dispatch ref is absent from the
   supplied index: the task id embeds exactly one issue number N, the citation
   is exactly that issue's committed `mission-ledger.jsonl`, that commit's
