@@ -111,3 +111,9 @@ archived_paths:
 - kaola-workflow/archive/issue-429/finalization-summary.md
 - kaola-workflow/archive/issue-429/mission-ledger.jsonl
 - kaola-workflow/archive/issue-429/workflow-state.md
+
+## Sink Citation
+
+Workflow merge sink published `e183e4ff122b2f8836335fb791f1f1ac0d0a337c` (`chore: archive issue-429 [sink]`) containing integrated candidate `2e39dbf67d7e4535dc799ca665daeee7efc29c69`. Independent `git ls-remote origin refs/heads/main` confirmed that SHA before this citation commit. Sink reported `publication: published`; its automatic issue and label operations were omitted to preserve the no-label-change boundary. After publication, #429's [acceptance evidence comment](https://github.com/KaolaBrother/kaola-project-runner/issues/429#issuecomment-6516820059) was posted and #429 closed; GitHub readback returned CLOSED at `2026-10-30T06:51:43Z`, with no labels. #430 remained OPEN.
+
+Offline finalize's skipped claim-release finding describes its transaction, not an outstanding claim: this run was claimed offline and no claim marker or in-progress label was created. The sink initially retained the local worktree because of a recorded worker cwd; read-only `lsof` found no actual cwd holder and the clean worktree and local branch were subsequently removed without stopping any session. The remote run branch was deleted by the sink. The two detached `/private/tmp/kpr429-*` worktrees were not owned by this run and remain untouched.

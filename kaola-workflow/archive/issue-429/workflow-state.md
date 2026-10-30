@@ -25,3 +25,12 @@ claim_label_removed: skipped_offline
 worktree_removed: kept
 closure_invariants: ok
 issues_closed: 1
+
+## Post-sink verification
+published_sink: e183e4ff122b2f8836335fb791f1f1ac0d0a337c
+issue_closed_at: 2026-10-30T06:51:43Z
+issue_closure: verified-after-publication
+claim_release: offline-claim-no-label-or-marker
+worktree_removed_after_sink: true
+local_branch_removed_after_sink: true
+remote_branch_removed: true
