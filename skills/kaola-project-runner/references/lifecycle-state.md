@@ -3,8 +3,7 @@
 `<project>/.kaola/heartbeat-prompt.json` (`kaola-heartbeat-prompt/2`) holds
 current tasks, authorization, Sideagent binding, holds, alerts and decisions.
 `body` is the generated Host view. Write through `kaola-dispatch.py
-state` for revision checks. Keep references and current duties here, never a
-copied backlog, ledger, or history.
+state` for revision checks. Keep current duties and references, not backlog, ledger or history.
 
 ## Roles
 
@@ -15,11 +14,11 @@ copied backlog, ledger, or history.
 - Sideagent: one maintenance role per project, outside every Class seat; a
   fresh node per meaningful batch. It reconciles current duties/conflicts and exact-stops finished workers. It assigns, grants
   and accepts nothing. Launches use bypass permissions; residual prompts and user decisions stay pending.
-- Research, QA or implementation helpers are counted authorized items.
+- Research, QA and implementation helpers count as authorized items.
 - Workers never write state (`writer-refused`).
 
 No synchronous Sideagent round trip. Coalesce updates and reuse evidence.
-The Host gets outcomes, capacity and pending decisions.
+The Host gets outcomes, capacity and decisions.
 
 ## Commands
 
@@ -76,7 +75,7 @@ The Host gets outcomes, capacity and pending decisions.
   `source`, `scope`, `needs`, `depends`, `acceptance`, `keep_open`, `wait`,
   `dispatch` (index item ids), `evidence`, `next`, `verdict`, `dispositions`
   (per item). A repair keeps the task id; one returned branch is not
-  completion. A task needs no issue; Workflow owners keep claim/ledger/finalize.
+  completion. Tasks need no issue; Workflow owners keep claim/ledger/finalize.
   The writer never stores `stage` `done` (`stage-done-refused`). A Host
   terminal write (`verdict` `accepted` or `cancelled` and exactly one cite)
   deletes the row in that revision. A legacy `done` row stays until that
@@ -107,16 +106,9 @@ The Host gets outcomes, capacity and pending decisions.
   `retire --kind decisions --id ID --absent --evidence E` (receipt; stores nothing).
 
 Views use the stored current collection. Keep no handled row elsewhere.
-Unfinished effects stay current duties. A stopped process does not finish a
-task. Refusals name id, revision and the removal command. Do not create an
+Unfinished effects stay current duties. A stopped process does not finish a task. Refusals name id, revision and the removal command. Do not create an
 absent row. Unresolved evidence stays on the current decision route. Unknown
 is not resolved.
-
-## Touchpoints
-
-Update at dispatch (`doing`), result/verdict, goal/grant/fault change, recovery
-and closeout. `check` detects omissions. Link each result to its task goal and
-next action or sourced blocker.
 
 ## Host verdicts
 
@@ -129,50 +121,12 @@ unfinished scope open; a `repair`/`partial` task moved back to `review`
 keeps that verdict as `prior_verdict`. A `closeout`/`done` task without
 `accepted`/`partial`/`cancelled` stays under `attention` (`verdict-missing`).
 
-## Sideagent binding
+## Recovery and continuity
 
-The Host starts the Sideagent, then sets `--section sideagent`
-`{"platform","session","preset","state":"active"}`; it may add
-`holder_instance_id` once. To replace, the Host marks `replacing`/`failed`,
-starts and binds a successor. The successor continues from state and
-receipts and replays no admitted work. A stop spares workers it dispatched. A
-superseded seat's late write is `binding-superseded`. The Host repairs a
-failed Sideagent record; if both fail, the Delegator recovers the Host first.
-
-## Events
-
-`execute` records the real dispatcher (`KAOLA_ACP_DISPATCHER`) apart from the
-notify target. Workers report to the live Host holder (`sideagent-host`). A
-Host advertising `sideagent-relay/1` relays them to the bound Sideagent and
-wakes the Host only when attention changed. A dead, failed, or cancelled turn
-returns them. Delivery is at-least-once. `"mode": "node"` keeps events with
-the Host ([sideagent-node.md](sideagent-node.md)). After a Host stop kept its
-seats, the new Host runs `rebind-host` for that seat only. `unknown-op`:
-`drain-restart` the seat at idle.
-
-## Size
-
-Rewriting an id replaces it; settled records leave in that write; an old
-revision is `record-retired`. Never drop a duty. Host view max 64 KiB
-(`host-view-too-large`). 1 MiB needs a recorded `carrier` advertising
-`heartbeat-state/2`, else 64 KiB (`carrier-limit`); every write, `migrate
---write` included, uses it; only an owner stop uses the current bound. A
-refusal names `$S migrate --live LIVE --write`. An unknown row with no
-outcome retires on the stale-collect route (session absent or
-stopped under the holder); `outcome: stopped` with `mutation_status: unknown`
-retires on `stopped-collect-incomplete-turn` (Host; accepted task,
-disposition, holder, platform, repo, stopped `L` rows match).
-Neither writes index bytes.
-
-## Migration
-
-After a Skill update run `$S migrate --index I --live L` at a safe point;
-without `--write` it plans only. `--write` migrates `active`/`pending` rows,
-maps `body.alerts` rows per nameable id, and keeps
-`recovery.protected_untracked`. Other legacy names leave as `unverified`
-locators; a critical mapping writes nothing. Migration uses that bound;
-`--live` with a capable Host records `carrier`. Never write
-`heartbeat-prompt.v1-<sha12>.json`. An unknown schema refuses. Repeats
-report `current`. Migration grants nothing.
-
-Live: Codex and ZCode, `rebind-host`.
+[Lifecycle recovery and continuity](lifecycle-recovery.md) covers Sideagent
+binding and `binding-superseded`, event relay (`sideagent-relay/1`), size and
+migration. The Host carrier advertises `heartbeat-state/2` for the larger
+limit (`carrier-limit`); Host view refusal is `host-view-too-large`. An old
+revision of a removed row is `record-retired`. Migrating
+never writes `heartbeat-prompt.v1-<sha12>.json`; unmapped facts stay `unverified`.
+See [sideagent-node.md](sideagent-node.md) for node-mode checkpoints.

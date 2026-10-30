@@ -181,6 +181,20 @@ class StateProject(unittest.TestCase):
     def doc(self) -> dict:
         return json.loads(self.file.read_text(encoding="utf-8"))
 
+    def legacy_done_update(self, writer: str, ident: str, patch: dict, *extra: str,
+                           env: dict | None = None) -> tuple[int, dict]:
+        """Seed/update a historical done row for legacy retirement coverage.
+
+        #425 current writes reject done. Exercise the revisioned write with a
+        review row, then restore the pre-upgrade on-disk stage as fixture data.
+        """
+        code, out = self.update(writer, "tasks", ident, {**patch, "stage": "review"}, *extra, env=env)
+        if code == 0:
+            doc = self.doc()
+            doc["state"]["tasks"][ident]["stage"] = "done"
+            self.file.write_text(json.dumps(doc), encoding="utf-8")
+        return code, out
+
     def caller_env(self, session: str, holder: str) -> dict[str, str]:
         env = {k: v for k, v in os.environ.items() if k not in CALLER_ENV}
         env["KAOLA_ACP_DISPATCHER"] = json.dumps({"holder_instance_id": holder, "platform": "zcode",
@@ -257,7 +271,11 @@ class StateTool(StateProject):
         body = json.loads(self.doc()["body"])
         echo = [row for row in body["attention"] if row["why"] == "transcribed-check"]
         self.assertEqual(echo[0]["host_turn"], "host-turn-9", "the Host sees what was transcribed")
+        before = self.file.read_bytes()
         code, out = self.update("host", "tasks", "t1", {"stage": "done"}, "--expect-rev", "3")
+        self.assertEqual((code, out["reason"]), (2, "stage-done-refused"))
+        self.assertEqual(self.file.read_bytes(), before)
+        code, out = self.update("host", "tasks", "t1", {"stage": "doing"}, "--expect-rev", "3")
         self.assertEqual(code, 0, out)
         self.assertNotIn("transcribed", self.doc()["state"]["tasks"]["t1"])
         code, out = self.update("host", "tasks", "t1", {"stage": "shipped"}, "--expect-rev", "4")
@@ -269,15 +287,15 @@ class StateTool(StateProject):
         code, out = self.state("retire", "--file", str(self.file), "--writer", "sideagent", "--source", "s",
                                "--kind", "tasks", "--id", "t1", "--expect-rev", "1", "--evidence", "c1")
         self.assertEqual(out["reason"], "retire-unmet", "unfinished work is not retired")
-        self.update("sideagent", "tasks", "t1", {"stage": "done"}, "--expect-rev", "1")
+        self.legacy_done_update("sideagent", "t1", {}, "--expect-rev", "1")
         code, out = self.state("retire", "--file", str(self.file), "--writer", "sideagent", "--source", "s",
                                "--kind", "tasks", "--id", "t1", "--expect-rev", "2", "--evidence", "commit c1")
         self.assertEqual(out["reason"], "retire-unmet", "done without a Host verdict does not retire")
-        self.update("host", "tasks", "t1", {"verdict": {"value": "partial"}}, "--expect-rev", "2")
+        self.legacy_done_update("host", "t1", {"verdict": {"value": "partial"}}, "--expect-rev", "2")
         code, out = self.state("retire", "--file", str(self.file), "--writer", "sideagent", "--source", "s",
                                "--kind", "tasks", "--id", "t1", "--expect-rev", "3", "--evidence", "commit c1")
         self.assertEqual(out["reason"], "retire-unmet", "a partial verdict does not retire")
-        self.update("host", "tasks", "t1", {"verdict": {"value": "accepted"}}, "--expect-rev", "3")
+        self.legacy_done_update("host", "t1", {"verdict": {"value": "accepted"}}, "--expect-rev", "3")
         code, out = self.state("retire", "--file", str(self.file), "--writer", "sideagent", "--source", "s",
                                "--kind", "tasks", "--id", "t1", "--expect-rev", "4", "--evidence", "commit c1",
                                "--cite", CITE)
@@ -361,7 +379,7 @@ class StateTool(StateProject):
 
     def test_retirement_needs_dispatched_work_closed_and_stopped(self) -> None:
         self.init()
-        self.update("host", "tasks", "t2", {"stage": "done", "goal": "g", "dispatch": ["i7"],
+        self.legacy_done_update("host", "t2", {"goal": "g", "dispatch": ["i7"],
                                              "verdict": {"value": "accepted"}})
         index = self.repo / "index.json"
         live = self.repo / "live.json"
@@ -393,7 +411,7 @@ class StateTool(StateProject):
 
     def test_a_live_seat_can_be_handed_to_a_continuing_task_with_its_evidence(self) -> None:
         self.init()
-        self.update("host", "tasks", "t5", {"stage": "done", "goal": "g", "dispatch": ["i7"],
+        self.legacy_done_update("host", "t5", {"goal": "g", "dispatch": ["i7"],
                                              "sessions": ["codex-KT-i7-a"], "verdict": {"value": "accepted"}})
         self.update("host", "tasks", "t6", {"stage": "doing", "goal": "next", "dispatch": ["i8"]})
         index = self.repo / "index.json"
@@ -426,7 +444,7 @@ class StateTool(StateProject):
         receiver = doc["state"]["tasks"]["t6"]
         self.assertEqual((receiver["dispatch"], receiver["sessions"], receiver["rev"]),
                          (["i8", "i7"], ["codex-KT-i7-a"], 2), "the receiver owns the seat now")
-        self.update("host", "tasks", "t6", {"stage": "done", "verdict": {"value": "accepted"}},
+        self.legacy_done_update("host", "t6", {"verdict": {"value": "accepted"}},
                     "--expect-rev", "2")
         code, out = self.state("retire", "--file", str(self.file), "--writer", "sideagent", "--source", "s",
                                "--kind", "tasks", "--id", "t6", "--expect-rev", "3", "--evidence", "e",
@@ -440,9 +458,9 @@ class StateTool(StateProject):
             {"session": name, "state": "stopped", "holder_instance_id": holder}
             for name in ("worker-a", "worker-b")]}), encoding="utf-8")
         accepted = {"stage": "done", "goal": "g", "verdict": {"value": "accepted"}}
-        self.update("host", "tasks", "direct", {**accepted, "session": "worker-a",
+        self.legacy_done_update("host", "direct", {**accepted, "session": "worker-a",
                                                 "holder_instance_id": "owned-a"})
-        self.update("host", "tasks", "object", {**accepted, "sessions": [
+        self.legacy_done_update("host", "object", {**accepted, "sessions": [
             {"session": "worker-b", "holder_instance_id": "owned-b", "evidence": "start-receipt"}]})
         self.update("host", "tasks", "next", {"stage": "doing", "goal": "continue"})
         retire = lambda ident, rev, *extra: self.state(
@@ -460,13 +478,13 @@ class StateTool(StateProject):
                        "handed_from": "object"}, receiver["sessions"])
         self.assertIn({"session": "worker-a", "holder_instance_id": "owned-a", "handed_from": "direct"},
                       receiver["sessions"])
-        self.update("host", "tasks", "next", accepted, "--expect-rev", str(receiver["rev"]))
+        self.legacy_done_update("host", "next", accepted, "--expect-rev", str(receiver["rev"]))
         rev = str(self.doc()["state"]["tasks"]["next"]["rev"])
         code, out = retire("next", rev, "--live", str(live))
         self.assertEqual(out["reason"], "retire-unmet", "a handoff keeps each recorded holder")
         self.assertIn("worker-a is stopped under holder foreign", out["detail"])
         self.assertIn("worker-b is stopped under holder foreign", out["detail"])
-        self.update("host", "tasks", "next", {"sessions": receiver["sessions"] + [
+        self.legacy_done_update("host", "next", {"sessions": receiver["sessions"] + [
             {"session": "worker-a", "holder_instance_id": "other-a"}]}, "--expect-rev", rev)
         rev = str(self.doc()["state"]["tasks"]["next"]["rev"])
         live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": [
@@ -476,7 +494,7 @@ class StateTool(StateProject):
         self.assertIn("conflicting recorded holders other-a, owned-a", out.get("detail", ""),
                       "two recorded holders stay unresolved, never a name-only match")
         receiver = self.doc()["state"]["tasks"]["next"]
-        self.update("host", "tasks", "next", {"sessions": receiver["sessions"][:-1]}, "--expect-rev", rev)
+        self.legacy_done_update("host", "next", {"sessions": receiver["sessions"][:-1]}, "--expect-rev", rev)
         rev = str(self.doc()["state"]["tasks"]["next"]["rev"])
         code, out = retire("next", rev, "--live", str(live))
         self.assertEqual(code, 0, out)
@@ -487,17 +505,29 @@ class StateTool(StateProject):
         rev = lambda: str(self.doc()["state"]["tasks"]["t7"]["rev"])
         self.update("host", "tasks", "t7", {"stage": "review", "goal": "g"})
         self.assertEqual(why(), [("t7", "awaiting-verdict")])
-        for stage in ("closeout", "done"):
-            code, out = self.update("sideagent", "tasks", "t7", {"stage": stage}, "--expect-rev", rev())
-            self.assertEqual(code, 0, out)
-            self.assertEqual(why(), [("t7", "verdict-missing")], stage)
+        code, out = self.update("sideagent", "tasks", "t7", {"stage": "closeout"}, "--expect-rev", rev())
+        self.assertEqual(code, 0, out)
+        self.assertEqual(why(), [("t7", "verdict-missing")])
+        before = self.file.read_bytes()
+        code, out = self.update("sideagent", "tasks", "t7", {"stage": "done"}, "--expect-rev", rev())
+        self.assertEqual((code, out["reason"]), (2, "stage-done-refused"))
+        self.assertEqual(self.file.read_bytes(), before)
         self.update("host", "tasks", "t7", {"verdict": {"value": "repair"}}, "--expect-rev", rev())
-        self.assertEqual(why(), [("t7", "verdict-missing"), ("t7", "delivery-open")],
-                         "repair does not close a done task, and the goal stays open")
-        for value, stage in (("partial", "closeout"), ("cancelled", "done"), ("accepted", "done")):
-            self.update("host", "tasks", "t7", {"stage": stage, "verdict": {"value": value}},
-                        "--expect-rev", rev())
-            self.assertEqual(why(), [], f"{value} at {stage} is a judgment")
+        self.assertEqual(why(), [("t7", "verdict-missing"), ("t7", "delivery-open")])
+        self.update("host", "tasks", "t7", {"verdict": {"value": "partial"}}, "--expect-rev", rev())
+        self.assertEqual(why(), [], "partial is a Host judgment")
+        live = self.repo / "live.json"
+        live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": []}))
+        code, out = self.update("host", "tasks", "t7", {"verdict": {"value": "accepted"}},
+                                "--expect-rev", rev(), "--cite", CITE, "--live", str(live))
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("t7", self.doc()["state"]["tasks"])
+        code, out = self.update("host", "tasks", "t8", {"stage": "review", "goal": "g"})
+        self.assertEqual(code, 0, out)
+        code, out = self.update("host", "tasks", "t8", {"verdict": {"value": "cancelled"}},
+                                "--expect-rev", "1", "--cite", CITE, "--live", str(live))
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("t8", self.doc()["state"]["tasks"])
 
     def test_a_sideagent_settles_a_decision_only_as_transcribed_evidence(self) -> None:
         self.init()
@@ -602,7 +632,8 @@ class StateTool(StateProject):
         code, out = self.update("sideagent", "tasks", "t4", {"evidence": ["c4"]}, "--expect-rev", rev())
         self.assertEqual(code, 0, out)
         self.assertEqual(fingerprint(), seen[-1], "a rewrite of the same result is metadata only")
-        self.assertEqual(self.doc()["state"]["tasks"]["t4"]["rev"], 11)
+        self.assertEqual(out["result"], "unchanged")
+        self.assertEqual(self.doc()["state"]["tasks"]["t4"]["rev"], 10)
         code, out = self.update("sideagent", "tasks", "t4", {}, "--expect-rev", rev())
         self.assertEqual((code, fingerprint()), (0, seen[-1]), "an empty update stays quiet")
 
@@ -677,12 +708,12 @@ class StateTool(StateProject):
 
     def test_host_view_marks_omitted_text_and_keeps_judgment_text_whole(self) -> None:
         self.init()
-        long = "q" * 600
-        self.update("host", "tasks", "t1", {"stage": "review", "goal": "g" * 600, "acceptance": long})
+        long = "q" * 512
+        self.update("host", "tasks", "t1", {"stage": "review", "goal": "g" * 512, "acceptance": long})
         self.update("sideagent", "decisions", "d1", {"owner": "host", "question": long})
         body = json.loads(self.doc()["body"])
         task = body["tasks"][0]
-        self.assertIn("+360 chars omitted", task["goal"])
+        self.assertIn("+272 chars omitted", task["goal"])
         self.assertEqual(task["acceptance"], long)
         self.assertEqual(body["decisions"][0]["question"], long)
 
@@ -954,11 +985,10 @@ class StateTool(StateProject):
                         "--coalesce")
             self.update("sideagent", "tasks", task, {"next": "collect", "evidence": [f"index:{task}"]},
                         "--expect-rev", "1")
-            self.update("host", "tasks", task, {"stage": "done", "verdict": {"value": "accepted"}},
-                        "--expect-rev", "2")
-            code, out = self.state("retire", "--file", str(self.file), "--writer", "sideagent",
-                                   "--source", "closeout", "--kind", "tasks", "--id", task,
-                                   "--expect-rev", "3", "--evidence", f"commit c{cycle}", "--cite", CITE)
+            live = self.repo / "live.json"
+            live.write_text(json.dumps({"schema": "kaola-acp-list/1", "rows": []}))
+            code, out = self.update("host", "tasks", task, {"verdict": {"value": "accepted"}},
+                                    "--expect-rev", "2", "--cite", CITE, "--live", str(live))
             self.assertEqual(code, 0, out)
             sizes.append(len(self.file.read_bytes()))
         doc = self.doc()
@@ -1195,8 +1225,8 @@ class Migration(StateProject):
         self.assertEqual(code, 0, out)
         task = self.doc()["state"]["tasks"]["#255"]
         self.assertNotIn("dispatch", task, "no index associates the seat")
-        code, out = self.update("host", "tasks", "#255", {"stage": "done", "verdict": {"value": "accepted"}},
-                                "--expect-rev", "1")
+        code, out = self.legacy_done_update("host", "#255", {"verdict": {"value": "accepted"}},
+                                            "--expect-rev", "1")
         self.assertEqual(code, 0, out)
         live = self.repo / "live.json"
         retire = lambda *extra: self.state("retire", "--file", str(self.file), "--writer", "sideagent",
@@ -2686,7 +2716,7 @@ class ConsolidatedDispatch(StateProject):
                                  "w3": ("capture", True, []), "w4": ("file", False, ["output-absent"]),
                                  "w5": ("file", False, ["output-absent"])})
 
-    def test_a_disposition_mirrored_during_a_collect_survives_it(self) -> None:
+    def test_settlement_during_collect_preserves_the_index(self) -> None:
         self.init()
         self.update("host", "tasks", "t1", {"stage": "review", "goal": "g", "dispatch": ["w1", "w2"]})
         gate = Path(self.tmp.name) / "gate"
@@ -2710,21 +2740,24 @@ class ConsolidatedDispatch(StateProject):
             rows = {row["item_id"]: row for row in json.loads(self.index.read_text())["items"]}
             self.assertEqual(rows["w1"]["status"], "returned", "the collect published its first return")
             self.assertIsNone(collect.poll(), "the collect is still waiting on w2")
+            index_before = self.index.read_bytes()
             code, out = self.update("host", "tasks", "t1", {"dispositions": {"w1": "accepted"}},
                                     "--expect-rev", "1", "--index", str(self.index))
-            self.assertEqual((code, out["index_mirror"]["changed"]), (0, {"w1": "accepted"}), out)
+            self.assertEqual(code, 0, out)
+            self.assertNotIn("index_mirror", out)
+            self.assertEqual(self.index.read_bytes(), index_before, "settling does not rewrite the index")
+            self.assertEqual(self.doc()["state"]["tasks"]["t1"]["dispatch"], ["w2"])
         finally:
             gate.write_text("go", encoding="utf-8")
             stdout, stderr = collect.communicate(timeout=30)
         self.assertEqual(collect.returncode, 0, stderr)
         rows = {row["item_id"]: row for row in json.loads(self.index.read_text())["items"]}
-        self.assertEqual((rows["w1"]["acceptance"], rows["w1"]["acceptance_source"]["task_id"]), ("accepted", "t1"),
-                         "the Host's disposition is not overwritten by the collect's earlier read")
+        self.assertEqual(rows["w1"]["acceptance"], "pending", "collect retains its index fact")
         self.assertEqual((rows["w2"]["status"], rows["w2"]["acceptance"]), ("returned", "pending"))
         self.assertEqual({row["item_id"]: row["acceptance"] for row in json.loads(stdout)["items"]},
-                         {"w1": "accepted", "w2": "pending"})
+                         {"w1": "pending", "w2": "pending"})
 
-    def test_per_assignment_dispositions_are_mirrored_never_left_pending(self) -> None:
+    def test_settled_dispositions_remove_current_links_without_index_write(self) -> None:
         self.init()
         self.update("host", "tasks", "t1", {"stage": "review", "goal": "g", "dispatch": ["w1", "w2"]})
         rows = [dict(self.index_row("w1", "zcode-KT-i1-a"), status="returned"),
@@ -2732,27 +2765,28 @@ class ConsolidatedDispatch(StateProject):
                 dict(self.index_row("w3", "zcode-KT-i1-c"), task_id="t9", status="returned")]
         self.index.write_text(json.dumps({"schema": "kaola-dispatch-index/1", "repo": str(self.repo),
                                           "items": rows}), encoding="utf-8")
+        index_before = self.index.read_bytes()
         code, out = self.update("host", "tasks", "t1", {"verdict": {"value": "partial"},
                                                         "dispositions": {"w1": "accepted"}},
                                 "--expect-rev", "1", "--index", str(self.index))
         self.assertEqual(code, 0, out)
-        self.assertEqual(out["index_mirror"]["changed"], {"w1": "accepted", "w2": "undecided"})
-        index = {row["item_id"]: row for row in json.loads(self.index.read_text())["items"]}
-        self.assertEqual(index["w1"]["acceptance"], "accepted")
-        self.assertEqual(index["w1"]["acceptance_source"]["task_id"], "t1")
-        self.assertEqual(index["w2"]["acceptance"], "undecided")
-        self.assertIn("without a disposition", index["w2"]["acceptance_note"])
-        self.assertEqual(index["w3"]["acceptance"], "pending", "another task's item is untouched")
+        self.assertNotIn("index_mirror", out)
+        self.assertEqual(self.index.read_bytes(), index_before)
+        task = self.doc()["state"]["tasks"]["t1"]
+        self.assertEqual(task["dispatch"], ["w2"])
+        self.assertNotIn("dispositions", task)
         code, out = self.update("host", "tasks", "t1", {"dispositions": {"w2": "cancelled"}},
                                 "--expect-rev", "2", "--index", str(self.index))
-        index = {row["item_id"]: row for row in json.loads(self.index.read_text())["items"]}
-        self.assertEqual(index["w2"]["acceptance"], "cancelled")
-        self.assertNotIn("acceptance_note", index["w2"])
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.index.read_bytes(), index_before)
+        task = self.doc()["state"]["tasks"]["t1"]
+        self.assertNotIn("dispatch", task)
+        self.assertNotIn("dispositions", task)
+        before = self.file.read_bytes()
         code, out = self.update("host", "tasks", "t1", {"dispositions": {"w2": "maybe"}},
                                 "--expect-rev", "3")
         self.assertEqual(out["reason"], "invalid-input")
-        view = json.loads(self.doc()["body"])
-        self.assertEqual(view["tasks"][0]["dispositions"], {"w1": "accepted", "w2": "cancelled"})
+        self.assertEqual(self.file.read_bytes(), before)
 
     def test_retire_reads_the_index_execute_and_collect_wrote(self) -> None:
         # G7: retire's --index is the file execute created and collect rewrote, not a hand-written row.
@@ -2793,8 +2827,8 @@ class ConsolidatedDispatch(StateProject):
         closed = {row["item_id"]: row for row in json.loads(self.index.read_text(encoding="utf-8"))["items"]}
         self.assertEqual(closed["w1"]["status"], "returned", closed["w1"])
         task = self.doc()["state"]["tasks"]["t1"]
-        code, out = self.update("host", "tasks", "t1", {"stage": "done", "verdict": {"value": "accepted"}},
-                                "--expect-rev", str(task["rev"]))
+        code, out = self.legacy_done_update("host", "t1", {"verdict": {"value": "accepted"}},
+                                            "--expect-rev", str(task["rev"]))
         self.assertEqual(code, 0, out)
         rev = str(self.doc()["state"]["tasks"]["t1"]["rev"])
         live = self.repo / "stopped-live.json"
@@ -2918,8 +2952,8 @@ class MaintenanceCheckpoint(StateProject):
     def test_host_retirement_preserves_an_earlier_sent_checkpoint_range(self) -> None:
         self.init()
         self.bind()
-        code, out = self.update("host", "tasks", "t1", {
-            "stage": "done", "goal": "a", "verdict": {"value": "accepted"}})
+        code, out = self.legacy_done_update("host", "t1", {
+            "goal": "a", "verdict": {"value": "accepted"}})
         self.assertEqual(code, 0, out)
         through = self.doc()["host_revision"]
         node = self.node("node-1")
@@ -4553,6 +4587,12 @@ class RenderedGuidance(unittest.TestCase):
         generated = (self.ORCH / "references/lifecycle-state.md").read_bytes()
         self.assertEqual(template, generated)
         self.assertLessEqual(len(generated), 8192)
+        recovery = (self.ORCH / "references/lifecycle-recovery.md").read_bytes()
+        self.assertEqual(recovery, (REPO / "templates/orchestrator/references/lifecycle-recovery.md").read_bytes())
+        self.assertLessEqual(len(recovery), 8192)
+        self.assertIn(b"[Lifecycle recovery and continuity](lifecycle-recovery.md)", generated)
+        for term in (b"## Sideagent binding", b"## Events", b"## Size", b"## Migration", b"## Touchpoints"):
+            self.assertIn(term, recovery)
         text = generated.decode()
         for term in ("kaola-heartbeat-prompt/2", "--expect-rev", "exits 3", "--host-turn",
                      "`attention`", "binding-superseded", "sideagent-relay/1", "heartbeat-state/2",
@@ -4702,9 +4742,17 @@ class SideagentTaskRetire(StateProject):
                              encoding="utf-8")
 
     def host_task(self, ident: str, patch: dict) -> tuple[int, int]:
-        code, out = self.update("host", "tasks", ident, patch)
+        # #356 retire covers pre-#425 persisted done rows. Current writers reject
+        # new done rows; construct the historical on-disk input explicitly.
+        legacy_done = patch.get("stage") == "done"
+        current_patch = {**patch, "stage": "review"} if legacy_done else patch
+        code, out = self.update("host", "tasks", ident, current_patch)
         self.assertEqual(code, 0, out)
-        task = self.doc()["state"]["tasks"][ident]
+        doc = self.doc()
+        task = doc["state"]["tasks"][ident]
+        if legacy_done:
+            task["stage"] = "done"
+            self.file.write_text(json.dumps(doc), encoding="utf-8")
         return task["rev"], task["host_revision"]
 
     def retire(self, ident: str, rev: int, *extra: str, env: dict | None = None) -> tuple[int, dict]:
@@ -4879,8 +4927,8 @@ class SideagentTaskRetire(StateProject):
         node = self.node("node-1")
         # The node transcribes the Host verdict; until the Host sees that echo
         # the row stays current.
-        code, out = self.update("sideagent", "tasks", "t1", {"verdict": {"value": "accepted"}},
-                                "--expect-rev", str(rev), "--host-turn", "host-turn-3", env=node)
+        code, out = self.legacy_done_update("sideagent", "t1", {"verdict": {"value": "accepted"}},
+                                       "--expect-rev", str(rev), "--host-turn", "host-turn-3", env=node)
         self.assertEqual(code, 0, out)
         task = self.doc()["state"]["tasks"]["t1"]
         self.assertIsInstance(task.get("transcribed"), dict)
@@ -4892,7 +4940,7 @@ class SideagentTaskRetire(StateProject):
         self.refused_then_returned("t1", rev, hr, "retire-unmet", detail="waits")
         rev, hr = self.host_task("t2", {"stage": "done", "goal": "g", "keep_open": True,
                                         "verdict": {"value": "cancelled"}})
-        code, out = self.update("host", "tasks", "t2", {"keep_open": True}, "--expect-rev", "1")
+        code, out = self.legacy_done_update("host", "t2", {"keep_open": True}, "--expect-rev", "1")
         self.assertEqual(code, 0, out)
         rev = self.doc()["state"]["tasks"]["t2"]["rev"]
         hr = self.doc()["state"]["tasks"]["t2"]["host_revision"]
@@ -4963,7 +5011,7 @@ class SideagentTaskRetire(StateProject):
                                         "verdict": {"value": "cancelled"}})
         self.update("host", "decisions", "d1", {"owner": "host", "question": "retry tasks/t2?"})
         node = self.node("node-1")
-        code, out = self.update("sideagent", "tasks", "t1", {"next": "recheck"},
+        code, out = self.legacy_done_update("sideagent", "t1", {"next": "recheck"},
                                 "--expect-rev", str(rev), env=node)
         self.assertEqual(code, 0, out)
         before = self.file.read_bytes()
@@ -5000,7 +5048,7 @@ class SideagentTaskRetire(StateProject):
                                         "verdict": {"value": "cancelled"}})
         node = self.node("node-1")
         for round_no in (1, 2):
-            code, out = self.update("sideagent", "tasks", "t1", {"next": f"recheck {round_no}"},
+            code, out = self.legacy_done_update("sideagent", "t1", {"next": f"recheck {round_no}"},
                                     "--expect-rev", str(rev), env=node)
             self.assertEqual(code, 0, out)
             code, out = self.retire("t1", rev, env=node)
@@ -5044,7 +5092,7 @@ class SideagentTaskRetire(StateProject):
                 # An injected mid-batch conflict: the node re-reads and retries
                 # once; a second conflict in the last round is returned.
                 for attempt in (1, 2 if round_no == 11 else 1):
-                    code, out = self.update("sideagent", "tasks", ident, {"next": "recheck"},
+                    code, out = self.legacy_done_update("sideagent", ident, {"next": "recheck"},
                                             "--expect-rev", str(rev), env=node)
                     self.assertEqual(code, 0, out)
                     code, out = self.retire(ident, rev, "--cite",

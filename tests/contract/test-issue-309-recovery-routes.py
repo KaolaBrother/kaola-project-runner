@@ -132,6 +132,24 @@ class RecoveryRoutes(unittest.TestCase):
             self.assertIn("original", route)
             self.assertNotIn("notice", route)
 
+    def test_terminal_write_recovery_preserves_current_duties(self) -> None:
+        required = {
+            "disposition-orphan": ("dispatch", "revision"),
+            "duty-remains": ("duty", "retain"),
+            "field-too-large": ("byte limit", "evidence"),
+            "live-seat": ("live", "stopped"),
+            "live-unreadable": ("readable", "not proof"),
+            "stage-done-refused": ("--cite", "deletes"),
+            "unknown-effect": ("original evidence", "blindly"),
+        }
+        for code, terms in required.items():
+            with self.subTest(code=code):
+                kind, route = self.routes.lookup(code)
+                self.assertIn(kind, {"route", "self-route"})
+                for term in terms:
+                    self.assertIn(term, route)
+                self.assertNotIn(self.routes.FALLBACK, route)
+
     def test_stamp_attaches_the_table_text(self) -> None:
         stamp = self.routes.stamp
         for code, (kind, text) in self.routes.ROUTES.items():

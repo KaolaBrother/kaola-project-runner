@@ -6,6 +6,8 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- Complete recovery routes for terminal-state refusals and align lifecycle contract fixtures with current and legacy state semantics; split lifecycle recovery guidance while retaining its 8192-byte reference bound (#430). **Seats: restart not required** (the #430 operator diff does not touch holder, bridge, quota, record contract, ACP paths, compact recovery, adapters or platforms).
+
 - Maintenance checkpoints require the bound Host carrier's admitted batch and matching current node prompt, including ordinary checkpoints. The sent range and recovery selection govern accounting; unsupported worker events cannot be supplied as node inputs. Carrier settlement also binds the node session. **Seats: restart required** (`scripts/kaola-dispatch.py` and `scripts/kaola-acp-holder.py` changed).
 
 - **Codex Terra profile text (owner decisions `owner-codex-terra-profile-20261030`

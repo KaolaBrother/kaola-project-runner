@@ -38,6 +38,13 @@ WAKE_SPAWN_FAILED = (
 _WEBHOOK_DELIVERY_ERRORS = frozenset({"http-status", "connection", "timeout"})
 
 ROUTES: dict[str, tuple[str, str]] = {
+    "disposition-orphan": ("route", "Read the named task and dispatch; remove the orphan disposition key or link it to a current dispatch reference, then retry with the current revision."),
+    "duty-remains": ("self-route", "Read the task's remaining closeout duty and next action. Complete or hand over that duty before clearing it in the terminal write; otherwise retain the task."),
+    "field-too-large": ("route", "Shorten the named current field within the reported byte limit, retaining the fact and a locator to original evidence; retry with the current revision."),
+    "live-seat": ("self-route", "Inspect the task's linked seats and live list. Reconcile the live seat and its work before a terminal write; do not assume it stopped."),
+    "live-unreadable": ("route", "Obtain a readable current kaola-acp-list/1 live list and pass it to the terminal write; an omitted or unreadable list is not proof of no live seat."),
+    "stage-done-refused": ("route", "Do not store stage done. For an existing task, a Host terminal update with an accepted or cancelled verdict, one --cite and current live evidence deletes the row; otherwise keep it current."),
+    "unknown-effect": ("self-route", "Inspect the task's dispatch index and reconcile the unknown effect from original evidence before attempting a terminal write; do not replay an unknown mutation blindly."),
     "accepted-revision-superseded": ("route", "A newer revision is accepted. Remove the registration receipt before rolling back, then register."),
     "acp-bridge-missing": ("route", "Install the named runtime or bridge binary, then rerun. Do not start a session without it."),
     "acp-initialize-failed": ("route", "Exact-stop this session (stop --repo REPO --session SESSION --expected-holder-instance-id ID), attest, then start --resume NATIVE_ID. If resume still fails, start a fresh Host session and hand it the summary from status, capture --lines 200, list --repo --include-dead, and delegator view (goals, decisions, in-flight tasks, live seats and holders, pending items). The new Host re-adopts live seats from that list. Do not retry the dead session. This build does not auto-reap an unowned exited job."),
