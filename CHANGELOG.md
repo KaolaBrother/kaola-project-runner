@@ -6,6 +6,15 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Codex Terra profile text (owner decision `owner-codex-terra-profile-20261030`).**
+  `codex/terra` (class Worker, effort=high unchanged) now reads: "Computer-use worker:
+  GUI/browser/desktop ops with screenshots and verdicts; visual QA and scoped writing
+  from given materials; scoped code fixes for well-bounded tasks." Rendered copies
+  (profile catalog, README tier table, generated `platform.yaml`, build ids) resynced
+  via `render-skills.py --write`; `--check` PASS (content stage). No other model named.
+  **Seats: restart required** (`platforms/codex.yaml` changed; the operator `git diff`
+  test covers it).
+
 ## 0.9.35 — 2026-10-29 (Heartbeat prevent + cleanup; stale-quota; Devin summary gate)
 
 Closes #419, #420, #421, #423, #425, #426, and #427 (#424 is validate-registration only and
