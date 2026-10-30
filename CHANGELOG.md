@@ -8,14 +8,15 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 - Maintenance checkpoints require the bound Host carrier's admitted batch and matching current node prompt, including ordinary checkpoints. The sent range and recovery selection govern accounting; unsupported worker events cannot be supplied as node inputs. Carrier settlement also binds the node session. **Seats: restart required** (`scripts/kaola-dispatch.py` and `scripts/kaola-acp-holder.py` changed).
 
-- **Codex Terra profile text (owner decision `owner-codex-terra-profile-20261030`).**
-  `codex/terra` (class Worker, effort=high unchanged) now reads: "Computer-use worker:
-  GUI/browser/desktop ops with screenshots and verdicts; visual QA and scoped writing
-  from given materials; scoped code fixes for well-bounded tasks." Rendered copies
-  (profile catalog, README tier table, generated `platform.yaml`, build ids) resynced
-  via `render-skills.py --write`; `--check` PASS (content stage). No other model named.
-  **Seats: restart required** (`platforms/codex.yaml` changed; the operator `git diff`
-  test covers it).
+- **Codex Terra profile text (owner decisions `owner-codex-terra-profile-20261030`
+  ~14:02 and ~14:04 supplement).** `codex/terra` (class Worker, effort=high unchanged)
+  now reads: "Computer-use worker: GUI/browser/desktop ops with screenshots and
+  verdicts; visual QA, explore, and scoped writing from given materials; scoped code
+  fixes for well-bounded tasks." The ~14:04 text (adds explore) supersedes the ~14:02
+  wording before any release or install. Rendered copies (profile catalog, README tier
+  table, generated `platform.yaml`, build ids) resynced via `render-skills.py --write`;
+  `--check` PASS (content stage). No other model named. **Seats: restart required**
+  (`platforms/codex.yaml` changed; the operator `git diff` test covers it).
 
 ## 0.9.35 — 2026-10-29 (Heartbeat prevent + cleanup; stale-quota; Devin summary gate)
 
