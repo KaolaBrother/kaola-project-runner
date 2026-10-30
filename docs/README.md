@@ -1,5 +1,8 @@
 # Documentation Index
 
+- [Carrier-native recovery checkpoint design (#428)](recovery-checkpoint-carrier-path.md):
+  design pending Host acceptance; native batch/node provenance, checkpoint refusal
+  contract, KW recovery runbook, implementation regression plan and forge/runtime evidence join.
 - [Lifecycle and state maintenance design (2026-10-04)](designs/lifecycle-state-2026-10-04/design.md):
   proposed role boundaries, structured current state, Sideagent dispatch, recovery, JSON growth
   control and migration; implementation authorized in [#255](https://github.com/KaolaBrother/kaola-project-runner/issues/255), candidate under joint review.
