@@ -26,7 +26,7 @@ agent validation recorded and bound to this tree
 
 ## Changed Paths
 
-none outside the kaola-workflow/ run-state band.
+The finalize measurement saw no branch delta because the content had already been fast-forwarded to main. The actual content changes are the files in `git diff --name-only aa0c0378 85ff0d08`, including the recovery route, lifecycle templates and rendered copies, contract tests, and CHANGELOG.
 
 ## Follow-Up Items
 
@@ -34,7 +34,7 @@ None discovered by this run. Live Host/node integration was outside this task's 
 
 ## Readiness
 
-Host accepted; content published. Archive, closure and cleanup are in progress.
+Host accepted; content published at `85ff0d08fa391dc7439d55a44d747c2e0b6554d3`. Archive sink commit `0e4f301fa946ffe4de1bd2b8e95205cbbcca2ed4` published; issue #430 closed, and the run worktree and local/remote branches were removed after a clear guard.
 
 ## Sink Findings
 

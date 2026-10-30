@@ -20,8 +20,11 @@ worktree_path: /Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees
 
 ## Closure
 archived_at: 2026-10-30T09:33:14.229Z
-issue_disposition: close-pending
+issue_disposition: closed
 claim_label_removed: removed
-worktree_removed: kept
+worktree_removed: removed
 closure_invariants: ok
 issues_closed: 1
+branch_removed: removed
+sink_citation: 0e4f301fa946ffe4de1bd2b8e95205cbbcca2ed4
+content_commit: 85ff0d08fa391dc7439d55a44d747c2e0b6554d3
