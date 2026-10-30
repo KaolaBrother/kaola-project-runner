@@ -63,3 +63,24 @@ archived_paths:
 - kaola-workflow/archive/issue-428/finalization-summary.md
 - kaola-workflow/archive/issue-428/mission-ledger.jsonl
 - kaola-workflow/archive/issue-428/workflow-state.md
+
+## Sink Citation
+
+Published by Workflow merge sink at `b62adaaef1961a60baec700b3e7d5ae658fd191d`
+(`chore: archive issue-428 [sink]`), containing accepted design
+`40a3d3d03f84d5cdf033b39b3654dcce03d9eb51` and content-stage bridge commit
+`c4af74e4eb6746706c18038aa4190ea391bb4919`. The sink integrated the branch by
+fast-forward ancestry; it did not create a separate two-parent merge commit.
+`git ls-remote origin refs/heads/main` independently returned the published SHA.
+
+Sink receipt: result=ok, status=sinked, publication=published,
+remote_closed_after_publish=verified, closed_issues=[428]. GitHub readback:
+#428 CLOSED at `2026-10-30T01:47:52Z`; #429 OPEN, untouched since its creation.
+The main checkout advanced; `.kw/worktrees/issue-428` and the integration worktree
+were removed, and both local and remote `workflow/issue-428` branches were deleted.
+The ledger moved verbatim to this archive; the active workflow-state folder is gone.
+Scoped closure audit: current_project_clean=true, all five scoped drift counts=0.
+Outside-scope historical archive findings were observed and left untouched.
+
+Final outcome: Host-accepted design finalized and published, no tag or release,
+no implementation of #429, no consumer-runtime change. Stop at the Host boundary.
