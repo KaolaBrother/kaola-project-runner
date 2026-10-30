@@ -1,10 +1,12 @@
 # Changelog
 
 Every release section states whether running seats must restart. The operator
-test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py scripts/kaola-compact-recovery.py`
+test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/kaola-dispatch.py scripts/adapters platforms scripts/kaola-acp-paths.py scripts/kaola-compact-recovery.py`
 (see `docs/conventions.md`).
 
 ## Unreleased
+
+- Maintenance checkpoints require the bound Host carrier's admitted batch and matching current node prompt, including ordinary checkpoints. The sent range and recovery selection govern accounting; unsupported worker events cannot be supplied as node inputs. Carrier settlement also binds the node session. **Seats: restart required** (`scripts/kaola-dispatch.py` and `scripts/kaola-acp-holder.py` changed).
 
 - **Codex Terra profile text (owner decision `owner-codex-terra-profile-20261030`).**
   `codex/terra` (class Worker, effort=high unchanged) now reads: "Computer-use worker:

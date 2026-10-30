@@ -5,12 +5,7 @@
 
 ## Implementation items
 
-`scope: implementation` is the only scope that admits `mutation: true`.
-`execute` claims nothing, makes no worktree, touches no forge: the worker's
-Workflow owns that. Each item sends its `prompt` exactly, or the
-plan's `core` (with `core_revision`) plus its `worker_scope`, joined by
-a blank line; never both. The index row's `prompt_source` keeps the kind,
-core revision and `sha256:` of core, scope and sent prompt.
+`mutation: true` requires `scope: implementation`. The worker Workflow owns claim, worktree and forge. Each item sends its exact `prompt`, or the plan `core` (`core_revision`) plus `worker_scope`, joined by a blank line; never both. The index `prompt_source` keeps the kind, core revision and `sha256:` of core, scope and sent prompt.
 
 With `--state FILE`, an item's `task_id` adds its id to that task's
 `dispatch` (writer `tool:execute`, no Host revision); an unknown task
@@ -20,17 +15,11 @@ reconciled prior item stays reconciled.
 
 ## Results
 
-`collect` gives a 480-char `excerpt` with
-`excerpt_truncated`/`reply_chars`; `turn` (holder, prompt fingerprint);
-`locator` (the Runner `capture` argv `--since <cursor> --full --inline` and
-the event log);
+`collect` gives a 480-char `excerpt`, `excerpt_truncated`/`reply_chars`; `turn` (holder, prompt fingerprint); `locator` (Runner `capture --since <cursor> --full --inline` argv and event log);
 `output` with its `kind`: `file` (a path or `{"path": ...}`; checked
 present), `capture` (the reply), `remote` (a URL) or
 `description` (text); an explicit `{"kind":...}` wins; `gaps`:
-`reply-text-absent`, `capture-truncated`, `output-absent` (file only). A gap is evidence,
-not a transport failure. Read the full reply via `locator` before a
-verdict. A new return resets `acceptance` to `pending` and keeps the earlier
-value as `prior_acceptance`.
+`reply-text-absent`, `capture-truncated`, `output-absent` (file only). A gap is evidence, not a transport failure. Read the full reply via `locator` before a verdict. A new return resets `acceptance` to `pending`, keeping `prior_acceptance`.
 
 ## Per-assignment dispositions
 
@@ -54,9 +43,9 @@ retirement input or tombstone.
 On `state init` and startup, a record listing `sideagent-node/1` binds node mode: Delegator `authorization.sideagent.preset` if eligible, else the first eligible by id. Skip `computer-use-only`. An existing binding stays across resume and does not raise `host_revision`. Otherwise `sideagent` stays unset; `state check` reports `sideagent-default-unbound` with `state ensure-sideagent`. The next boundary retries.
 
 Bind `--section sideagent` with `"mode": "node"` and `"recipe": {"runner": "<absolute Runner>", "argv": ["start", "--repo", "<root>", "--session", "<bound>", "--role", "sideagent", ...]}` (checkout `kaola-tmux.sh` takes the platform first). No `--continue`/`--resume`. Optional absolute `state_tool` when `kaola-dispatch.py` is not beside the holder or sibling Skill. `runner`/`state_tool` are a pinned Skill root or accepted checkout, never a mutable dev checkout.
-Worker returns are not node inputs. A holder advertising `sideagent-node/1` selects Host business changes past the handled revision; `host-compact-maintenance/1` adds one pending recovery input after the Host turn. One fresh node per batch (no shell), one prompt (batch id, revision range, role limits: source pointers only; exact-stop a recorded reclaim), then the node's checkpoint. A turn end alone acknowledges nothing. A missing Runner, failed start or unadmitted batch moves to the next eligible Worker (`computer-use-only` skipped), never back. A refused recipe or empty chain reaches both views and wakes the Host. An idle binding with nothing owed stays quiet. Retirement alone starts nothing and advances no checkpoint. A node whose input disappeared during startup is exact-stopped after the Host turn. An assigned batch keeps its range. Older bundles keep revision-only selection.
+Worker returns are not node inputs. A holder advertising `sideagent-node/1` selects Host business changes past the handled revision; `host-compact-maintenance/1` adds one pending recovery input after the Host turn. One fresh node per batch (no shell), one prompt (batch id, revision range, role limits: source pointers only; exact-stop a recorded reclaim), then the node's checkpoint. A turn end alone acknowledges nothing. A missing Runner, failed start or unadmitted batch moves forward to the next eligible Worker (`computer-use-only` skipped). A refused recipe or empty chain reaches both views and wakes the Host. An idle binding with nothing owed stays quiet. Retirement alone starts nothing and advances no checkpoint. A node whose input disappeared during startup is exact-stopped after the Host turn. An assigned batch keeps its range. Older bundles keep revision-only selection.
 
-Ordinary inputs: write the selected ids once. Recovery-source task ids are not extra inputs. A recovery-only batch has none.
+Every checkpoint requires its original admitted carrier batch, bound node, current prompt and sent through revision. Direct prompts and copied ids are not receipts. Write selected ordinary ids once; recovery-source task ids are not inputs. A recovery-only batch has none.
 
 ```bash
 $S checkpoint --writer sideagent --source B --batch B --through-host-revision R \

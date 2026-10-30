@@ -6341,6 +6341,12 @@ def check_writer(args: argparse.Namespace, state: dict[str, Any]) -> dict[str, s
         return dict(caller, role=caller_role(caller))
     if (args.writer == "sideagent" and caller and node_binding(binding)
             and caller["session"] == binding.get("session")):
+        if getattr(args, "action", None) == "checkpoint":
+            try:
+                caller_record(caller)
+            except StateRefusal as exc:
+                if exc.payload.get("reason") == "identity-unavailable":
+                    raise
         raise StateRefusal("binding-superseded", f"caller {caller['session']} ({caller['holder_instance_id']}) "
                            "is not the node holder the bound session's record names now")
     if args.writer == "sideagent" and caller:
@@ -10501,19 +10507,31 @@ def command_state_recovery_input(args: argparse.Namespace) -> int:
         return fail("invalid-input", str(exc))
 
 
-def recovery_batch(caller: dict[str, str], batch: str, through: int) -> dict[str, Any]:
+def maintenance_receipt(caller: dict[str, str], batch: str, through: int) -> dict[str, Any]:
     _, node = caller_record(caller)
+    if (node.get("platform") != caller["platform"] or node.get("session") != caller["session"]
+            or not same_repo(node.get("repo"), caller["repo"])):
+        raise StateRefusal("identity-mismatch", "node record names another platform, session or repository")
     carrier = node.get("dispatcher")
-    if not isinstance(carrier, dict) or caller_role(carrier) != "host" or not same_repo(carrier["repo"], caller["repo"]):
-        raise StateRefusal("batch-unverified", "node has no original bound Host carrier")
-    directory, _ = caller_record(carrier)
+    if (not isinstance(carrier, dict) or any(not isinstance(carrier.get(key), str) or not carrier[key]
+            for key in ("platform", "session", "repo", "holder_instance_id"))
+            or not same_repo(carrier["repo"], caller["repo"])):
+        raise StateRefusal("batch-unverified", "node has no original bound Host carrier in this repository")
+    directory, host = caller_record(carrier)
+    if (host.get("session_role") != "host" or host.get("platform") != carrier["platform"]
+            or host.get("session") != carrier["session"] or not same_repo(host.get("repo"), caller["repo"])):
+        raise StateRefusal("identity-mismatch", "carrier record does not identify this Host and repository")
     event = next((row for row in original_events(directory)
                   if row.get("kind") == "sideagent_node_batch" and row.get("batch") == batch
                   and row.get("target_holder") == caller["holder_instance_id"]
                   and row.get("host_holder") == carrier["holder_instance_id"]
                   and row.get("host_revision_through") == through), None)
-    if event is None or not isinstance(event.get("recovery_input"), dict):
-        raise StateRefusal("batch-unverified", "no original sent recovery input for this batch and node holder")
+    prompt = node.get("last_prompt") or {}
+    fingerprint = event.get("prompt_fingerprint") if event else None
+    if (event is None or event.get("sweep") is not None
+            or not isinstance(fingerprint, str) or not fingerprint
+            or not isinstance(prompt, dict) or prompt.get("fingerprint") != fingerprint):
+        raise StateRefusal("batch-unverified", "no matching admitted maintenance batch and current node prompt")
     return event
 
 
@@ -10594,6 +10612,10 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
         raise StateRefusal("node-identity-required", "a checkpoint is written by the bound Sideagent "
                            "node from inside its own session, so its holder is known")
     holder = caller["holder_instance_id"]
+    if not same_repo(caller["repo"], str(repo_of_state_file(Path(args.file)))):
+        raise StateRefusal("batch-unverified", "node and state belong to different canonical repositories")
+    if not node_binding(state.get("sideagent")) or caller_role(caller) not in SIDEAGENT_ROLES:
+        raise StateRefusal("binding-superseded", "checkpoint requires the currently bound node session")
     try:
         entries = json_arg(args.entries)
         events = json_arg(args.events) if args.events else []
@@ -10608,18 +10630,25 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
     through = args.through_host_revision if args.through_host_revision is not None else handled
     if through < handled or through > current:
         raise StateRefusal("invalid-input", f"--through-host-revision must be within {handled}..{current}")
-    recovery = None
+    receipt = maintenance_receipt(caller, args.batch, through)
+    if events:
+        raise StateRefusal("batch-unverified", "worker events are not selected node maintenance inputs")
+    recovery = receipt.get("recovery_input")
     recovery_ids = set()
-    if getattr(args, "recovery_seq", None) is not None or any(
-            isinstance(entry, dict) and str(entry.get("input", "")).startswith("recovery#") for entry in entries):
-        receipt = recovery_batch(caller, args.batch, through)
-        recovery = receipt["recovery_input"]
-        if args.recovery_seq != recovery["seq"]:
+    if recovery is not None:
+        if (not isinstance(recovery, dict) or not isinstance(recovery.get("seq"), int)
+                or isinstance(recovery.get("seq"), bool) or recovery["seq"] <= 0
+                or args.recovery_seq != recovery.get("seq")):
             raise StateRefusal("batch-unverified", "checkpoint must name the actual selected recovery sequence")
         recovery_ids.add(f"recovery#{recovery['seq']}")
-        current_alerts = ((state.get("alerts") or {}).get("maintenance-returned") or {}).get("inputs") or {}
-        recovery_ids.update(ident for ident, value in (receipt.get("recovery_alerts") or {}).items()
-                            if ident.startswith("recovery#") and current_alerts.get(ident) == value)
+    elif getattr(args, "recovery_seq", None) is not None:
+        raise StateRefusal("batch-unverified", "no recovery input was selected for this batch")
+    current_alerts = ((state.get("alerts") or {}).get("maintenance-returned") or {}).get("inputs") or {}
+    receipt_alerts = receipt.get("recovery_alerts") or {}
+    if not isinstance(receipt_alerts, dict):
+        raise StateRefusal("batch-unverified", "original carrier recovery selection is unreadable")
+    recovery_ids.update(ident for ident, value in receipt_alerts.items()
+                        if ident.startswith("recovery#") and current_alerts.get(ident) == value)
     selected = host_changes(doc, handled, through)
     # A batch input the Host rewrote after this batch was selected shows
     # only its later change, which is past `through` and so in the next
@@ -10634,6 +10663,8 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
         ident, problem = checkpoint_entry(state, entry, holder)
         if ident is None:
             raise StateRefusal("invalid-input", "each entry names its `input`")
+        if not ident.startswith(("host:", "recovery#")) and "/" in ident:
+            raise StateRefusal("batch-unverified", "entry is not a selected node maintenance input")
         # A wrong verb on a present, owned, unchanged Host record is not
         # "not applied". Only a selected input settles this way. An explicit
         # `returned` is the node's own reason, never settled over (#356).
@@ -10644,10 +10675,10 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
         revision = revision_of(ident)
         if ident.startswith("recovery#") and ident not in recovery_ids:
             raise StateRefusal("batch-unverified", "recovery entry is not in the original selected batch")
-        elif problem and not already_settled_input(state, ident):
+        elif problem and not (revision is not None and handled < revision <= through and already_settled_input(state, ident)):
             returned[ident] = problem
-        elif (ident in selected or ident in recovery_ids or already_settled_input(state, ident)
-              or (ident in events and ident not in still_returned)):
+        elif (ident in selected or ident in recovery_ids
+              or (revision is not None and handled < revision <= through and already_settled_input(state, ident))):
             # A returned input was handed to the Host; only a batch that
             # actually carried it settles it, never a self-named event.
             settled.append(ident)

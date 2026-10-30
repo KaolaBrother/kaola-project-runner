@@ -187,6 +187,49 @@ class StateProject(unittest.TestCase):
                                                   "repo": str(self.repo), "session": session})
         return env
 
+    def fixture_ordinary_batch(self, env: dict | None, through: int) -> str | None:
+        """Exercise carrier selection and admitted send in this isolated record root."""
+        if not env or "KAOLA_ACP_DISPATCHER" not in env or not hasattr(self, "records"):
+            return None
+        caller = json.loads(env["KAOLA_ACP_DISPATCHER"])
+        if caller.get("session") != getattr(self, "SESSION", None):
+            return None
+        digest = hashlib.sha256(str(self.repo).encode()).hexdigest()[:16]
+        node_path = self.records / "zcode" / caller["session"] / digest / "record.json"
+        if not node_path.exists():
+            return None
+        record = json.loads(node_path.read_text())
+        if record.get("holder_instance_id") != caller.get("holder_instance_id"):
+            return None
+        host = {"platform": "zcode", "session": "zcode-KT-orchestrator-main", "repo": str(self.repo),
+                "holder_instance_id": "fixture-host"}
+        directory = self.records / "zcode" / host["session"] / digest
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "record.json").write_text(json.dumps({**host, "session_role": "host"}))
+        fingerprint = "fixture-admitted-turn"
+        record.update(dispatcher=host, last_prompt={"fingerprint": fingerprint})
+        node_path.write_text(json.dumps(record))
+        class Events:
+            def append(self, event):
+                with (directory / "events.jsonl").open("a") as stream:
+                    stream.write(json.dumps(event) + "\n")
+        carrier = holder_module.Holder.__new__(holder_module.Holder)
+        carrier.stop_requested = False
+        carrier.node = {"phase": "running", "holder": caller["holder_instance_id"]}
+        carrier.pending_worker_events = []
+        carrier.turn = {"active": False}
+        carrier.holder_instance_id = host["holder_instance_id"]
+        carrier.events = Events()
+        carrier._lifecycle_state = lambda: self.doc()
+        carrier._node_host_pending = lambda doc, **kwargs: through
+        carrier._node_recovery_pending = lambda doc: None
+        carrier._sideagent_relay_target = lambda: {"holder_instance_id": caller["holder_instance_id"], "attention": None}
+        carrier._sweep_overdue = lambda doc: False
+        carrier._node_prompt = lambda *args: "fixture prompt"
+        carrier._relay_send = lambda target, prompt: {"outcome": "in_progress", "prompt_fingerprint": fingerprint}
+        result = carrier._node_relay_pass({"platform": "zcode", "session": caller["session"]})
+        return result["receipt"]["batch"]
+
 
 class StateTool(StateProject):
     def test_record_updates_conflicts_and_role_rules(self) -> None:
@@ -2794,8 +2837,8 @@ class MaintenanceCheckpoint(StateProject):
         digest = hashlib.sha256(str(self.repo).encode()).hexdigest()[:16]
         directory = self.records / "zcode" / self.SESSION / digest
         directory.mkdir(parents=True, exist_ok=True)
-        (directory / "record.json").write_text(json.dumps({"holder_instance_id": holder,
-                                                           "session_role": "sideagent"}), encoding="utf-8")
+        (directory / "record.json").write_text(json.dumps({"holder_instance_id": holder, "platform": "zcode", "session": self.SESSION,
+                                                           "repo": str(self.repo), "session_role": "sideagent"}), encoding="utf-8")
         return self.caller_env(self.SESSION, holder)
 
     def bind(self) -> None:
@@ -2807,6 +2850,7 @@ class MaintenanceCheckpoint(StateProject):
 
     def checkpoint(self, env: dict | None, batch: str, through: int, entries: list,
                    events: list | None = None) -> tuple[int, dict]:
+        batch = self.fixture_ordinary_batch(env, through) or batch
         return self.state("checkpoint", "--file", str(self.file), "--writer", "sideagent", "--source", batch,
                           "--batch", batch, "--through-host-revision", str(through),
                           "--entries", json.dumps(entries), *(["--events", json.dumps(events)] if events else []),
@@ -2840,13 +2884,14 @@ class MaintenanceCheckpoint(StateProject):
         code, out = self.checkpoint(node1, "b-1", first, entries)
         self.assertEqual(code, 0, out)
         self.assertTrue(out["value"]["verified"], out)
+        first_batch = out["value"]["batch"]
         maintenance = self.doc()["state"]["maintenance"]
         self.assertEqual(maintenance["last_verified"]["node"]["holder_instance_id"], "node-1")
         self.assertEqual((maintenance["acked_host_revision"], maintenance["handled_host_revision"]),
                          (first, first))
         self.assertEqual(self.sideagent_view()["pending_host_changes"], [])
         view = json.loads(self.doc()["body"])
-        self.assertEqual(view["maintenance"]["last_verified"]["batch"], "b-1",
+        self.assertEqual(view["maintenance"]["last_verified"]["batch"], first_batch,
                          "the last verified checkpoint sits beside current obligations")
 
         # A later Host change and a worker event make the next batch.
@@ -2855,37 +2900,20 @@ class MaintenanceCheckpoint(StateProject):
         node2 = self.node("node-2")
         code, out = self.update("sideagent", "tasks", "t1", {"wait": "late"}, "--expect-rev", "2", env=node1)
         self.assertEqual(out["reason"], "binding-superseded", "the old node is no longer a writer")
+        before = self.file.read_bytes()
         code, out = self.checkpoint(node2, "b-2", later,
                                     [{"input": "codex/codex-KT-i1-a/idle/5", "applied": ["tasks/t1"]}],
                                     events=["codex/codex-KT-i1-a/idle/5"])
+        self.assertEqual((code, out.get("reason")), (2, "batch-unverified"), out)
+        self.assertEqual(self.file.read_bytes(), before)
+        code, out = self.checkpoint(node2, "b-2", later, [])
         self.assertEqual(code, 0, out)
         record = out["value"]
-        self.assertFalse(record["verified"], "a partial checkpoint is never verified")
-        self.assertIn("not a current record this node wrote",
-                      record["returned_to_host"]["codex/codex-KT-i1-a/idle/5"],
-                      "older evidence cannot settle a new input")
+        self.assertFalse(record["verified"])
         self.assertEqual(record["returned_to_host"][f"host:tasks/t3@{later}"], "unaccounted")
-        self.assertEqual(record["missing_sources"]["codex/codex-KT-i1-a/idle/5"], "other")
-        self.assertEqual(record["missing_sources"][f"host:tasks/t3@{later}"], "unaccounted")
         maintenance = self.doc()["state"]["maintenance"]
-        self.assertEqual(maintenance["acked_host_revision"], later - 1,
-                         "the acknowledgment does not pass an unaccounted change")
-        self.assertEqual(maintenance["handled_host_revision"], later)
-        self.assertEqual(maintenance["last_verified"]["batch"], "b-1")
-        alert = self.doc()["state"]["alerts"]["maintenance-returned"]
-        self.assertEqual(alert["owner"], "host")
-        self.assertEqual(sorted(alert["inputs"]), sorted(record["returned_to_host"]))
-        event_row = alert["inputs"]["codex/codex-KT-i1-a/idle/5"]
-        self.assertEqual(event_row["why"], "other")
-        self.assertIn("not a current record this node wrote", event_row["evidence"])
-        self.assertEqual(event_row["host_revision_through"], later)
-        task_row = alert["inputs"][f"host:tasks/t3@{later}"]
-        self.assertEqual(task_row["why"], "unaccounted")
-        self.assertEqual(task_row["host_revision_through"], later)
-        self.assertEqual(self.sideagent_view()["pending_host_changes"], [],
-                         "returned inputs are the Host's, never re-sent to another node")
-        attention = json.loads(self.doc()["body"])["attention"]
-        self.assertIn("maintenance-returned", [row["id"] for row in attention])
+        self.assertEqual((maintenance["acked_host_revision"], maintenance["handled_host_revision"]), (later - 1, later))
+        self.assertEqual(maintenance["last_verified"]["batch"], first_batch)
 
     def test_host_retirement_preserves_an_earlier_sent_checkpoint_range(self) -> None:
         self.init()
@@ -2958,7 +2986,7 @@ class MaintenanceCheckpoint(StateProject):
         directory = self.records / "zcode" / host["session"] / hashlib.sha256(str(self.repo).encode()).hexdigest()[:16]
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "record.json").write_text(json.dumps({"holder_instance_id": host["holder_instance_id"],
-            "session_role": "host", "acp_session_id": "original-host", "holder_features": ["host-compact-maintenance/1"]}))
+            "session_role": "host", "platform": "zcode", "session": host["session"], "repo": str(self.repo), "acp_session_id": "original-host", "holder_features": ["host-compact-maintenance/1"]}))
         env = self.caller_env(host["session"], host["holder_instance_id"])
         return directory, env
 
@@ -2975,6 +3003,7 @@ class MaintenanceCheckpoint(StateProject):
         env = self.node(holder)
         node_dir = self.records / "zcode" / self.SESSION / directory.name
         record = json.loads((node_dir / "record.json").read_text())
+        record["last_prompt"] = {"fingerprint": "native-fingerprint"}
         record["dispatcher"] = {"platform": "zcode", "session": "zcode-KT-orchestrator-main",
                                 "holder_instance_id": "host-recovery", "repo": str(self.repo)}
         (node_dir / "record.json").write_text(json.dumps(record))
@@ -2982,8 +3011,89 @@ class MaintenanceCheckpoint(StateProject):
         (directory / "events.jsonl").write_text(json.dumps({"kind": "sideagent_node_batch", "batch": batch,
             "target_holder": holder, "host_holder": "host-recovery",
             "host_revision_through": self.doc()["host_revision"] if through is None else through,
-            "recovery_input": item, "recovery_alerts": alerts}) + "\n")
+            "recovery_input": item, "recovery_alerts": alerts, "prompt_fingerprint": "native-fingerprint"}) + "\n")
         return env
+
+    def test_direct_forged_maintenance_batches_do_not_write(self) -> None:
+        self.init(); self.bind(); item = self.recovery_request()
+        env = self.node("node-recovery")
+        digest = hashlib.sha256(str(self.repo).encode()).hexdigest()[:16]
+        node_path = self.records / "zcode" / self.SESSION / digest / "record.json"
+        node = json.loads(node_path.read_text())
+        node["last_prompt"] = {"fingerprint": "copied-native-header-fingerprint"}
+        node_path.write_text(json.dumps(node))
+        through = self.doc()["host_revision"]
+        native_shaped = "b-" + hashlib.sha256(json.dumps(["node-recovery", through, None]).encode()).hexdigest()[:12]
+        before = self.file.read_bytes()
+        for batch in ("b-invented", native_shaped):
+            for entries, events in (([], []), ([], ["worker/event"]), ([self.scoped_entry(item["seq"])], [])):
+                args = ["checkpoint", "--file", str(self.file), "--writer", "sideagent", "--source", batch,
+                        "--batch", batch, "--through-host-revision", str(through), "--entries", json.dumps(entries),
+                        "--events", json.dumps(events)]
+                for flag in ([], ["--recovery-seq", str(item["seq"]) ]):
+                    code, out = self.state(*args, *flag, env=env)
+                    self.assertEqual((code, out.get("reason")), (2, "batch-unverified"), out)
+                    self.assertEqual(self.file.read_bytes(), before)
+
+    def test_native_receipt_mismatches_refuse_without_writes(self) -> None:
+        self.init(); self.bind(); env = self.recovery_receipt(None, batch="b-ordinary")
+        through = self.doc()["host_revision"]
+        digest = hashlib.sha256(str(self.repo).encode()).hexdigest()[:16]
+        directory = self.records / "zcode" / "zcode-KT-orchestrator-main" / digest
+        event_path = directory / "events.jsonl"
+        event = json.loads(event_path.read_text())
+        before = self.file.read_bytes()
+        for patch in ({"target_holder": "other"}, {"host_holder": "other"},
+                      {"host_revision_through": through + 1}, {"prompt_fingerprint": "other"},
+                      {"sweep": {"key": "fixture"}}):
+            event_path.write_text(json.dumps({**event, **patch}) + "\n")
+            code, out = self.state("checkpoint", "--file", str(self.file), "--writer", "sideagent",
+                                   "--source", "b-ordinary", "--batch", "b-ordinary",
+                                   "--through-host-revision", str(through), "--entries", "[]", env=env)
+            self.assertEqual((code, out.get("reason")), (2, "batch-unverified"), (patch, out))
+            self.assertEqual(self.file.read_bytes(), before)
+        event_path.write_text(json.dumps(event) + "\n")
+        (directory / "record.json").unlink()
+        code, out = self.state("checkpoint", "--file", str(self.file), "--writer", "sideagent",
+                               "--source", "b-ordinary", "--batch", "b-ordinary",
+                               "--through-host-revision", str(through), "--entries", "[]", env=env)
+        self.assertEqual((code, out.get("reason")), (2, "identity-unavailable"), out)
+        self.assertEqual(self.file.read_bytes(), before)
+
+    def test_reused_native_id_on_later_direct_turn_is_refused(self) -> None:
+        self.init(); self.bind()
+        env = self.node("node-recovery")
+        through = self.doc()["host_revision"]
+        earlier_batch = self.fixture_ordinary_batch(env, through)
+        self.assertTrue(earlier_batch)
+        digest = hashlib.sha256(str(self.repo).encode()).hexdigest()[:16]
+        node_path = self.records / "zcode" / self.SESSION / digest / "record.json"
+        node = json.loads(node_path.read_text())
+        node["last_prompt"] = {"fingerprint": "later-direct-turn"}
+        node_path.write_text(json.dumps(node))
+        before = self.file.read_bytes()
+        code, out = self.state("checkpoint", "--file", str(self.file), "--writer", "sideagent",
+                               "--source", "copied header", "--batch", earlier_batch,
+                               "--through-host-revision", str(through), "--entries", "[]", env=env)
+        self.assertEqual((code, out.get("reason")), (2, "batch-unverified"), out)
+        self.assertEqual(self.file.read_bytes(), before)
+
+    def test_sent_recovery_requires_matching_flag_and_omission_is_partial(self) -> None:
+        self.init(); self.bind(); item = self.recovery_request()
+        env = self.recovery_receipt(item)
+        through = self.doc()["host_revision"]
+        before = self.file.read_bytes()
+        base = ["checkpoint", "--file", str(self.file), "--writer", "sideagent", "--source", "b-recovery",
+                "--batch", "b-recovery", "--through-host-revision", str(through), "--entries", "[]"]
+        for flag in ([], ["--recovery-seq", str(item["seq"] + 1)]):
+            code, out = self.state(*base, *flag, env=env)
+            self.assertEqual((code, out.get("reason")), (2, "batch-unverified"), out)
+            self.assertEqual(self.file.read_bytes(), before)
+        code, out = self.state(*base, "--recovery-seq", str(item["seq"]), env=env)
+        self.assertEqual(code, 0, out)
+        self.assertFalse(out["value"]["verified"])
+        self.assertEqual(out["value"]["returned_to_host"][f"recovery#{item['seq']}"], "unaccounted")
+        self.assertEqual(self.doc()["state"]["maintenance"]["recovery_input"], item)
 
     def recovery_checkpoint(self, env: dict, item: dict, entries: list, batch: str = "b-recovery",
                             through: int | None = None, events: list | None = None) -> tuple[int, dict]:
@@ -3175,19 +3285,20 @@ class MaintenanceCheckpoint(StateProject):
         self.checkpoint(self.node("node-real"), "b-real", failed,
                         [{"input": f"host:tasks/t1@{failed}", "retained": "tasks/t1"}])
         before = self.file.read_bytes()
+        checkpoint_batch = self.doc()["state"]["maintenance"]["last_checkpoint"]["batch"]
         code, out = self.settle("batch:absent", "--expect-rev", "3")
         self.assertEqual((code, out["reason"]), (2, "input-missing"), out)
         self.assertIn("batch:b-failed", out["recovery"])
         self.assertIn("Do not create", out["recovery"])
         self.assertEqual(self.file.read_bytes(), before)
         for ident, evidence in (("batch:b-failed", None), ("batch:b-failed", "checkpoint:b-foreign"),
-                                ("batch:b-failed", "README.md"), ("batch:b-stop", "checkpoint:b-real"),
-                                ("batch:b-norange", "checkpoint:b-real"), ("recovery#4", "checkpoint:b-real")):
+                                ("batch:b-failed", "README.md"), ("batch:b-stop", f"checkpoint:{checkpoint_batch}"),
+                                ("batch:b-norange", f"checkpoint:{checkpoint_batch}"), ("recovery#4", f"checkpoint:{checkpoint_batch}")):
             code, out = self.settle(ident, "--expect-rev", "3", evidence=evidence)
             self.assertEqual((code, out["reason"]), (2, "input-unproven"), (ident, evidence, out))
             self.assertEqual(out["path"], f"alerts.maintenance-returned.inputs.{ident}")
             self.assertIn("state update", out["recovery"])
-            self.assertIn("--evidence checkpoint:b-real", out["recovery"])
+            self.assertIn(f"--evidence checkpoint:{checkpoint_batch}", out["recovery"])
             self.assertIn(json.dumps({"inputs": {ident: None}}), out["recovery"])
             self.assertIn("state recovery-input --kind request", out["recovery"])
             self.assertIn("Do not retire the whole alert while 5 other input(s) remain", out["recovery"])
@@ -3208,7 +3319,7 @@ class MaintenanceCheckpoint(StateProject):
         doc["state"]["alerts"]["maintenance-returned"]["inputs"][f"host:tasks/t0@{failed - 1}"] = {
             "why": "not-in-batch", "batch": "b-old"}
         self.file.write_text(json.dumps(doc)); before = self.file.read_bytes()
-        code, out = self.settle("batch:b-failed", "--expect-rev", "3")
+        code, out = self.settle("batch:b-failed", "--expect-rev", "3", evidence=f"checkpoint:{checkpoint_batch}")
         self.assertEqual((code, out["reason"]), (2, "input-unproven"), out)
         self.assertIn(f"host:tasks/t0@{failed - 1}", out["detail"])
         self.assertEqual(self.file.read_bytes(), before)
@@ -3219,11 +3330,12 @@ class MaintenanceCheckpoint(StateProject):
         item = self.recovery_request()
         # The carrier sent a recovery-only batch: through the handled revision, below the failed range.
         env = self.recovery_receipt(item, through=failed - 1)
-        code, out = self.recovery_checkpoint(
-            env, item, [self.scoped_entry(item["seq"]),
-                        {"input": "batch:b-failed", "retained": "tasks/t1"},
-                        {"input": f"host:tasks/t1@{failed}", "retained": "tasks/t1"}],
-            through=failed - 1, events=["batch:b-failed"])
+        before = self.file.read_bytes()
+        code, out = self.recovery_checkpoint(env, item, [self.scoped_entry(item["seq"])],
+                                              through=failed - 1, events=["batch:b-failed"])
+        self.assertEqual((code, out.get("reason")), (2, "batch-unverified"), out)
+        self.assertEqual(self.file.read_bytes(), before)
+        code, out = self.recovery_checkpoint(env, item, [self.scoped_entry(item["seq"])], through=failed - 1)
         self.assertEqual(code, 0, out)
         record = out["value"]
         self.assertIn(f"recovery#{item['seq']}", record["settled"])
@@ -3398,7 +3510,7 @@ FAKE_NODE_RUNNER = textwrap.dedent("""\
     Path(os.environ["FAKE_NODE_ARGV"]).write_text(json.dumps(sys.argv[1:]))
     holder = f"node-{n}"
     Path(os.environ["FAKE_NODE_RECORD"]).write_text(json.dumps({
-        "session_role": "sideagent", "repo": os.environ["FAKE_NODE_REPO"], "state": "ready",
+        "session_role": "sideagent", "platform": "zcode", "session": "zcode-KT-sideagent", "repo": os.environ["FAKE_NODE_REPO"], "state": "ready",
         "holder_instance_id": holder, "holder_pid": int(os.environ["FAKE_NODE_PID"]),
         "dispatcher": json.loads(os.environ.get("KAOLA_ACP_DISPATCHER") or "null"),
         "holder_features": ["heartbeat-state/2", "sideagent-relay/1", "sideagent-node/1"]}))
@@ -3456,9 +3568,14 @@ class FakeNode(FakeSideagent):
                         self.record.write_text(json.dumps(record))
                     connection.sendall(json.dumps({"stopped": not self.ignore_stop}).encode() + b"\n")
                     continue
-                self.prompts.append(message)
+                fingerprint = f"sha256:{len(self.prompts) + 1}"
                 reply = ({"error": {"code": "prompt-refused"}} if self.refuse else
-                         {"outcome": "in_progress", "prompt_fingerprint": f"sha256:{len(self.prompts)}"})
+                         {"outcome": "in_progress", "prompt_fingerprint": fingerprint})
+                if not self.refuse:
+                    record = json.loads(self.record.read_text())
+                    record["last_prompt"] = {"fingerprint": fingerprint}
+                    self.record.write_text(json.dumps(record))
+                self.prompts.append(message)
                 connection.sendall(json.dumps(reply).encode() + b"\n")
 
 
@@ -3568,7 +3685,7 @@ class HolderNodeMode(HolderFixture):
         (the Host's)."""
         handled = getattr(self, "handled", 0)
         through = handled if through is None else through
-        self.write_node_state({"last_checkpoint": {"batch": batch, "node": {"holder_instance_id": holder},
+        self.write_node_state({"last_checkpoint": {"batch": batch, "node": {"holder_instance_id": holder, "session": "zcode-KT-sideagent"},
                                                    "host_revision": {"from": handled, "through": through,
                                                                      "current": self.rev},
                                                    "verified": verified},
@@ -4265,9 +4382,31 @@ class HolderNodeMode(HolderFixture):
         self.assertNotIn("sideagent_node_started", self.log_kinds())
         self.assertEqual(len(self.agent.prompts()), 1, "the event still reaches the session it names")
 
+    def test_admitted_ordinary_batch_checkpoints_and_carrier_settles(self) -> None:
+        self.prepare_recovery_host()
+        batch = self.first_node(4)
+        env = dict(os.environ); env["KAOLA_ACP_RECORD_ROOT"] = str(self.records)
+        env["KAOLA_ACP_DISPATCHER"] = json.dumps({"platform": "zcode", "session": "zcode-KT-sideagent",
+            "repo": str(self.repo), "holder_instance_id": "node-1"})
+        path = self.repo / ".kaola" / "heartbeat-prompt.json"
+        code, out = run(["state", "checkpoint", "--file", str(path), "--writer", "sideagent",
+            "--source", batch, "--batch", batch, "--through-host-revision", "4",
+            "--entries", json.dumps([{"input": "host:section/project@4", "retained": "section/project"}])], env)
+        self.assertEqual(code, 0, out)
+        self.assertTrue(out["value"]["verified"])
+        self.sideagent_end(9, 1, holder="node-1")
+        self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "ordinary batch exact stop")
+        rows = [json.loads(line) for line in (Path(self.holder.args.record_dir) / "events.jsonl").read_text().splitlines()]
+        settled = [row for row in rows if row.get("kind") == "sideagent_node_settled" and row.get("batch") == batch]
+        self.assertEqual(len(settled), 1)
+        self.assertEqual(settled[0]["checkpoint"], "verified")
+        self.assertEqual(self.fake.stops[0]["params"]["expected_holder_instance_id"], "node-1")
+
     def test_a_partial_checkpoint_names_its_missing_sources_to_the_host(self) -> None:
         """#310: the settled event, the Host wake, and the carrier alert name
         not-in-batch rather than only checkpoint-partial."""
+        self.holder.session_role = "host"
+        self.holder.write_record()
         self.write_node_state()
         batch = self.first_node()
         path = self.repo / ".kaola" / "heartbeat-prompt.json"
@@ -4530,8 +4669,8 @@ class SideagentTaskRetire(StateProject):
         digest = hashlib.sha256(str(self.repo).encode()).hexdigest()[:16]
         directory = self.records / "zcode" / self.SESSION / digest
         directory.mkdir(parents=True, exist_ok=True)
-        (directory / "record.json").write_text(json.dumps({"holder_instance_id": holder,
-                                                           "session_role": "sideagent"}), encoding="utf-8")
+        (directory / "record.json").write_text(json.dumps({"holder_instance_id": holder, "platform": "zcode", "session": self.SESSION,
+                                                           "repo": str(self.repo), "session_role": "sideagent"}), encoding="utf-8")
         return self.caller_env(self.SESSION, holder)
 
     def bind(self) -> None:
@@ -4543,6 +4682,7 @@ class SideagentTaskRetire(StateProject):
 
     def checkpoint(self, env: dict | None, batch: str, through: int, entries: list,
                    events: list | None = None) -> tuple[int, dict]:
+        batch = self.fixture_ordinary_batch(env, through) or batch
         return self.state("checkpoint", "--file", str(self.file), "--writer", "sideagent", "--source", batch,
                           "--batch", batch, "--through-host-revision", str(through),
                           "--entries", json.dumps(entries), *(["--events", json.dumps(events)] if events else []),

@@ -119,6 +119,19 @@ class RecoveryRoutes(unittest.TestCase):
             self.assertTrue(text.strip(), code)
             self.assertNotIn("\n", text, code)
 
+    def test_checkpoint_routes_refer_to_original_sources(self) -> None:
+        routes = self.routes.ROUTES
+        batch = routes["batch-unverified"][1].lower()
+        self.assertIn("carrier", batch)
+        self.assertNotRegex(batch, r"\b(init|migrate|retire)\b")
+        node = routes["node-identity-required"][1].lower()
+        self.assertIn("node", node)
+        for reason in ("recovery-originals-unavailable", "recovery-scope-conflict",
+                       "recovery-scopes-missing", "recovery-sources-empty", "recovery-unavailable-unreadable"):
+            route = routes[reason][1].lower()
+            self.assertIn("original", route)
+            self.assertNotIn("notice", route)
+
     def test_stamp_attaches_the_table_text(self) -> None:
         stamp = self.routes.stamp
         for code, (kind, text) in self.routes.ROUTES.items():

@@ -64,6 +64,7 @@ class StateRecordRoot(unittest.TestCase):
         for root in self.planted:
             session_dir = root / "zcode" / self.SESSION
             shutil.rmtree(session_dir, ignore_errors=True)
+            shutil.rmtree(root / "codex" / self.HOST_SESSION, ignore_errors=True)
             for parent in (session_dir.parent,):
                 try:
                     parent.rmdir()
@@ -79,6 +80,7 @@ class StateRecordRoot(unittest.TestCase):
             "repo": self.repo_text,
             "holder_instance_id": self.NODE_HOLDER,
             "holder_pid": os.getpid(),
+            "last_prompt": {"fingerprint": "fixture-native-batch"},
             "dispatcher": {
                 "holder_instance_id": self.HOST_HOLDER,
                 "platform": "codex",
@@ -91,6 +93,15 @@ class StateRecordRoot(unittest.TestCase):
         directory = root / "zcode" / self.SESSION / self.digest()
         acp_paths.prepare_record_directory(directory, root)
         (directory / "record.json").write_text(json.dumps(self.node_record()))
+        host_dir = root / "codex" / self.HOST_SESSION / self.digest()
+        acp_paths.prepare_record_directory(host_dir, root)
+        (host_dir / "record.json").write_text(json.dumps({"holder_instance_id": self.HOST_HOLDER,
+                                                           "session_role": "host", "platform": "codex", "session": self.HOST_SESSION,
+                                                           "repo": self.repo_text}))
+        (host_dir / "events.jsonl").write_text(json.dumps({
+            "kind": "sideagent_node_batch", "batch": "b-1", "target_holder": self.NODE_HOLDER,
+            "host_holder": self.HOST_HOLDER, "host_revision_through": self.doc()["host_revision"],
+            "recovery_input": None, "prompt_fingerprint": "fixture-native-batch"}) + "\n")
         self.planted.append(root)
         return directory
 
@@ -160,7 +171,7 @@ class StateRecordRoot(unittest.TestCase):
         self.init_bound()
         code, out = self.checkpoint(self.caller_env())
         self.assertNotEqual(code, 0, out)
-        self.assertEqual(out.get("reason"), "binding-superseded", out)
+        self.assertEqual(out.get("reason"), "identity-unavailable", out)
 
     def test_view_reports_a_node_running_from_the_fixed_root(self) -> None:
         self.init_bound()
@@ -183,7 +194,7 @@ class StateRecordRoot(unittest.TestCase):
         code, out = self.checkpoint(
             self.caller_env({"KAOLA_ACP_RECORD_ROOT": str(elsewhere)}))
         self.assertNotEqual(code, 0, out)
-        self.assertEqual(out.get("reason"), "binding-superseded", out)
+        self.assertEqual(out.get("reason"), "identity-unavailable", out)
 
 
 if __name__ == "__main__":

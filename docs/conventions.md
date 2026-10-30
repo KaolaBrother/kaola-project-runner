@@ -362,7 +362,7 @@ change requires a safe-boundary seat restart (Issue #423). The operator test
 includes these modules:
 
 ```bash
-git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/adapters platforms scripts/kaola-acp-paths.py scripts/kaola-compact-recovery.py
+git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp.py scripts/kaola-quota.py scripts/kaola-record-contract.py scripts/kaola-dispatch.py scripts/adapters platforms scripts/kaola-acp-paths.py scripts/kaola-compact-recovery.py
 ```
 
 `OLD` and `NEW` are the previous release tag and the commit being released.

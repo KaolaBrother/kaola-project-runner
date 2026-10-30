@@ -121,7 +121,7 @@ Invent, accept and judge no tasks. Add `--recovery-seq N` to the sent checkpoint
 ```
 
 Use `unavailable:{scope:reason}` for unread originals.
-Missing/empty sources cannot PASS and stay visible Host duties. A Host decision row is `retained`, or `retired:decisions/<id>` when the row is gone, never `applied`. Optional `applied` needs records this node wrote. Settlement requires the original sent batch,
+Missing/empty sources cannot PASS and stay visible Host duties. A Host decision row is `retained`, or `retired:decisions/<id>` when the row is gone, never `applied`. Optional `applied` needs records this node wrote. Every maintenance checkpoint requires the original admitted carrier batch, its sent range and matching current node prompt. A selected recovery sequence must be named; an omitted scoped entry remains partial. Settlement requires the original sent batch,
 selected input and node holder. Revision-only checkpoints and `last_verified`
 cannot settle it. Related alerts need separate scoped entries and unchanged
 selection evidence. Keep newer/unrelated inputs; checkpoint N leaves N+1 pending.

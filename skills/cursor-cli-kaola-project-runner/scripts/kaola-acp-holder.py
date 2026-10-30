@@ -7036,7 +7036,7 @@ class Holder:
         error = receipt.get("error") if isinstance(receipt.get("error"), dict) else None
         if (error is None and receipt.get("outcome") == "in_progress"
                 and isinstance(receipt.get("prompt_fingerprint"), str)):
-            node.update(batch=batch, fingerprint=receipt["prompt_fingerprint"], sent_through=through,
+            node.update(batch=batch, session=session, fingerprint=receipt["prompt_fingerprint"], sent_through=through,
                         # Issue #336: what a move to another runtime restores.
                         sent_prior={"sent_through": node.get("sent_through"),
                                     "recovery_sent": node.get("recovery_sent")},
@@ -7508,7 +7508,8 @@ class Holder:
                 continue
             last = (((doc or {}).get("state") or {}).get("maintenance") or {}).get("last_checkpoint")
             ours = (isinstance(last, dict) and last.get("batch") == node["batch"]
-                    and (last.get("node") or {}).get("holder_instance_id") == node["holder"])
+                    and (last.get("node") or {}).get("holder_instance_id") == node["holder"]
+                    and (last.get("node") or {}).get("session") == node.get("session"))
             covered = ((last.get("host_revision") or {}).get("through") if ours else None)
             sent = node.get("sent_through") or 0
             # The range comes from the node's own flag; the batch it was sent

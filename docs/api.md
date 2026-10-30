@@ -862,7 +862,7 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   `--session` and `--repo`, `--role sideagent`, never `--continue`/`--resume`; an optional absolute `state_tool`), sends it
   one batch prompt naming the Host revision range, the exact `state checkpoint` command and
   state file, and the node's role limits (source pointers only, no restated result, no
-  dispatch, session control, task authoring or Host decision). At that node's turn end it
+  dispatch, session control, task authoring or Host decision). Each maintenance checkpoint requires the original admitted carrier event matching its node holder, sent range and current prompt fingerprint; a direct prompt or sweep is not a maintenance receipt. Recovery selection comes from that event. At that node's turn end it
   settles the batch from the node's checkpoint: verified, the node's turn end reaches the Host
   once (`verified; Host attention changed`) only when an attention item is a record that node
   wrote and the Host view's attention fingerprint differs both from what the Host last saw and
