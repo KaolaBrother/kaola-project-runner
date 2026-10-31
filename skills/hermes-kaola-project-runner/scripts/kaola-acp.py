@@ -558,7 +558,7 @@ LAUNCH_BINARY_ENV_PLATFORMS = frozenset({"dsh"})
 # entries; the Runner's own process environment is never modified.
 LOOPBACK_NO_PROXY_PLATFORMS = frozenset({"opencode"})
 # Issue #435: forward proxies are omitted unless the platform opts in.
-FORWARD_PROXY_ENV = ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy")
+FORWARD_PROXY_ENV = ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy")
 NO_PROXY_ENV = ("NO_PROXY", "no_proxy")
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost")
 ZCODE_ENTRY_ENV = "KAOLA_ZCODE_ENTRY"
@@ -783,8 +783,8 @@ def loopback_no_proxy(env: dict[str, str]) -> dict[str, str]:
     extended in place (existing bytes kept, never removed or reordered) with
     only the loopback hosts it lacks; ``*`` already excludes everything. When
     neither name is set, both are set, because clients differ on which one
-    they read. ``scripts/adapters/opencode.sh`` applies the same rule to the
-    PTY child, and one contract test runs both over the same cases.
+    they read. ``scripts/adapters/opencode.sh`` applies the HTTP(S) rule to
+    the PTY child, and one contract test runs both over those cases.
 
     #112's host set is exactly 127.0.0.1/localhost — the same list the shell
     adapter carries and test-issue-24 asserts. #299's IPv6 ``::1`` belongs to

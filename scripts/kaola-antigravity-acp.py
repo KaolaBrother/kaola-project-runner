@@ -519,7 +519,7 @@ class AntigravityAcpAgent:
                     or error_text.startswith("stream input cancelled")
                 ))
             )
-            if status == "SUCCESS" and not incomplete and not session.cancelled and session.queued_steers > 0:
+            if status == "SUCCESS" and not incomplete and not interrupted and not session.cancelled and session.queued_steers > 0:
                 session.queued_steers -= 1
                 session.step_epoch += 1
                 streamed = session.streamed

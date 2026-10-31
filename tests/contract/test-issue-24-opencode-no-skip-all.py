@@ -360,9 +360,9 @@ class Issue112LoopbackProxyBypass(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("broker435", PROJECT / "scripts/kaola-launchd-broker.py")
         broker = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(broker)
-        keys = ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy")
-        cases = (keys[:1] + keys[2:3], keys[1:2] + keys[3:], keys,
-                 ("HTTP_PROXY", "https_proxy"))
+        keys = ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy")
+        cases = (keys[::2], keys[1::2], keys, ("HTTP_PROXY", "https_proxy", "all_proxy"),
+                 ("ALL_PROXY",), ("all_proxy",))
         platforms = module.PLATFORMS
         for case in cases:
             original = {key: "http://proxy.invalid:8888" for key in case}

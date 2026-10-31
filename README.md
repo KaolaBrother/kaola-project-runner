@@ -413,7 +413,7 @@ See [choosing a worker](#choosing-a-worker).
 
 KPR's Host/seat launch contract keeps seat configuration with the seat: Host
 environment and business parameters are not a substitute for the seat's own
-configuration or Worker start semantics. KPR strips inherited HTTP(S) forward
+configuration or Worker start semantics. KPR strips inherited HTTP, HTTPS and ALL forward
 proxy variables at ACP spawn unless a platform manifest explicitly opts in;
 Claude Code opts in, while Antigravity uses its own configuration.
 

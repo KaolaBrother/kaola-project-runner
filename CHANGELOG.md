@@ -6,7 +6,7 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
-- KPR's Host/seat launch contract removes inherited HTTP(S) forward proxy variables by default; Claude Code opts in via its platform manifest and Antigravity uses seat-native configuration (#435). The adapter reports native timeout/incomplete results without presenting them as successful turns. **Seats: restart required (spawn env change)**: existing holder and agent processes retain their original environment and must be respawned to apply it; the platform manifest also appears in the operator diff list.
+- KPR's Host/seat launch contract removes inherited HTTP, HTTPS and ALL forward proxy variables in both cases by default; Claude Code opts in via its platform manifest and Antigravity uses seat-native configuration (#435). The adapter reports native timeout/incomplete results without presenting them as successful turns and settles interrupted turns even with a queued steer. **Seats: restart required (spawn env change)**: existing holder and agent processes retain their original environment and must be respawned to apply it; the platform manifest also appears in the operator diff list.
 
 - Complete recovery routes for terminal-state refusals and align lifecycle contract fixtures with current and legacy state semantics; split lifecycle recovery guidance while retaining its 8192-byte reference bound (#430). **Seats: restart not required** (the #430 operator diff does not touch holder, bridge, quota, record contract, ACP paths, compact recovery, adapters or platforms).
 

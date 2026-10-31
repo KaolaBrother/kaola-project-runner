@@ -263,6 +263,20 @@ class WrapperProtocol(unittest.TestCase):
         self.assertEqual(reply["result"]["stopReason"], "cancelled")
         self.assertEqual(reply["result"]["_meta"]["antigravity"]["finished_reason"], "interrupted")
 
+    def test_interrupted_success_with_queued_steer_is_cancelled(self) -> None:
+        w = Wrapper(self, scenario="interrupted-steer")
+        sid = w.new_session()
+        pending = w.send("session/prompt", {"sessionId": sid, "prompt": "first"})
+        deadline = time.monotonic() + 5
+        while not w.events("user") and time.monotonic() < deadline:
+            time.sleep(0.02)
+        steer = w.call("_session/steering", {"sessionId": sid, "prompt": "later",
+                      "_meta": {"steering": {"expectedTurnId": pending}}})
+        self.assertEqual(steer["result"]["outcome"], "written")
+        reply = w.wait(pending, timeout=3)
+        self.assertEqual(reply["result"]["stopReason"], "cancelled")
+        self.assertEqual(reply["result"]["_meta"]["antigravity"]["finished_reason"], "interrupted")
+
     def test_a_failed_tool_is_reported_failed(self) -> None:
         w = Wrapper(self)
         sid = w.new_session()
@@ -915,7 +929,7 @@ class RealRunnerIntegration(unittest.TestCase):
 
     def test_inherited_forward_proxy_never_reaches_real_runner_child(self) -> None:
         self.proxy_env = {key: "http://proxy.invalid:8888" for key in
-                          ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy")}
+                          ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy")}
         self.assertEqual(self.acp("start")["state"], "ready")
         self.assertEqual(self.acp("send", "--text", "proxy test", "--timeout", "30")["final_text"], "echo: proxy test")
         spawns = [e for e in map(json.loads, self.log.read_text().splitlines()) if e["event"] == "spawn"]
