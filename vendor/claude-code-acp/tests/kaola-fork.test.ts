@@ -117,6 +117,9 @@ describe("per-session launch options", () => {
     const dir = mkdtempSync(join(tmpdir(), "kaola-child-record-"));
     const record = join(dir, "children.jsonl");
     process.env.KAOLA_ACP_CHILD_RECORD = record;
+    process.env.CLAUDE_CODE_ENTRYPOINT = "sdk-cli";
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    process.env.ANTHROPIC_AUTH_TOKEN = "test-token";
     try {
       const runner = new ClaudeRunner(config());
       mockSpawn.mockReturnValue(streamProcess([JSON.stringify({ type: "result", result: "ok", session_id: "s1" })]));
@@ -135,8 +138,17 @@ describe("per-session launch options", () => {
       mockSpawn.mockReturnValue(streamProcess([]));
       await runner.continueSessionStreaming("s1", "two", () => {}, "t1", undefined, "/tmp");
       expect(readFileSync(record, "utf-8").trim().split("\n")).toHaveLength(2);
+      for (const call of mockSpawn.mock.calls) {
+        const env = (call[2] as any).env;
+        expect(env.CLAUDE_CODE_ENTRYPOINT).toBe("custom");
+        expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+        expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+      }
     } finally {
       delete process.env.KAOLA_ACP_CHILD_RECORD;
+      delete process.env.CLAUDE_CODE_ENTRYPOINT;
+      delete process.env.ANTHROPIC_API_KEY;
+      delete process.env.ANTHROPIC_AUTH_TOKEN;
       rmSync(dir, { recursive: true, force: true });
     }
   });

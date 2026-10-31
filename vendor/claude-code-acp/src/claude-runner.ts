@@ -431,6 +431,7 @@ export class ClaudeRunner {
 
   private sanitizeEnv(): NodeJS.ProcessEnv {
     const env = { ...process.env };
+    env.CLAUDE_CODE_ENTRYPOINT = "custom";
     delete env.ANTHROPIC_API_KEY;
     delete env.ANTHROPIC_AUTH_TOKEN;
     // Kaola fork: the spawn record is a contract between the supervising
