@@ -420,6 +420,11 @@ NODE_STOP_CONFIRM_SECONDS = 30.0
 # Issue #336: how long a carrier waits for its own still-starting node holder
 # (the Runner gave up first) before it exact-stops it and moves on.
 NODE_ADOPT_READY_SECONDS = 60.0
+# Issue #437: after a main-skill-build-skew start refusal the carrier waits at
+# least this long before retrying the same start, so a live Host that reloads
+# (aligning its loaded build) admits at the next boundary without a retry
+# storm while it has not.
+BUILD_SKEW_RETRY_SECONDS = 60.0
 # A carrier's own stop waits this long for a node start in flight and for the
 # node stop, inside the Runner's 30 s stop request.
 NODE_RECLAIM_SECONDS = 8.0
@@ -6903,6 +6908,7 @@ class Holder:
         def record_failure(encoded: str | None = encoded) -> None:
             receipt = self._maintenance_tool(["--source", "carrier-maintenance-failure", "--fail", why,
                                               "--input", ident, "--evidence", evidence,
+                                              "--rearm",
                                               *(["--through-host-revision", str(through)]
                                                 if isinstance(through, int) else []),
                                               *(["--missing-sources", encoded] if encoded else [])])
@@ -6994,6 +7000,14 @@ class Holder:
         if failed or node.get("stop_unconfirmed"):
             # No competing writer and no retry storm.
             return result
+        skew = node.get("build_skew")
+        if isinstance(skew, dict) and isinstance(skew.get("at"), (int, float)):
+            # Issue #437: a main-skill-build-skew refusal is a condition, not a
+            # binding failure. Cool down, then retry the same start; the
+            # runner re-checks alignment before spawning, so an aligned disk
+            # admits and a still-skewed disk refuses cheaply.
+            if time.monotonic() - skew["at"] < BUILD_SKEW_RETRY_SECONDS:
+                return result
         if node.get("phase") in ("starting", "stopping") or node.get("batch"):
             return result
         if self.turn["active"]:
@@ -7790,6 +7804,7 @@ class Holder:
                                                     if key in stop_receipt}})
             if ok:
                 self.node.update(phase="running", holder=holder, batch=None, fingerprint=None)
+                self.node.pop("build_skew", None)
                 self.node.setdefault("holders", []).append(holder)
                 del self.node["holders"][:-8]
                 self.events.append({"kind": "sideagent_node_started", "holder": holder,
@@ -7839,7 +7854,24 @@ class Holder:
                     self.events.append({"kind": "sideagent_node_start_failed",
                                         "session": binding["session"], "code": code,
                                         "receipt": receipt if isinstance(receipt, dict) else None})
-                    if self._node_fallback(binding, binding["platform"], f"start-failed:{code}") is not None:
+                    if isinstance(receipt, dict) and receipt.get("reason") == "main-skill-build-skew":
+                        # Issue #437: the refusal is the Host process being
+                        # older than the installed bytes, not a broken binding.
+                        # No permanent failed latch (#324 stays for other
+                        # classes): the next boundary retries after a cooldown
+                        # and the runner re-checks alignment pre-spawn, so an
+                        # aligned disk admits without a binding change.
+                        self.node.update(phase="stopped",
+                                         build_skew={"at": time.monotonic(),
+                                                     "build": receipt.get("main_skill_build")})
+                        self._maintenance_failure(
+                            "main-skill-build-skew", self._node_host_pending(self._lifecycle_state()),
+                            self._node_recovery_pending(self._lifecycle_state()))
+                        self._node_to_host(binding, "sideagent node start refused: main-skill-build-skew "
+                                                    "(the running Host loaded a different main Skill build); "
+                                                    "reload kaola-project-runner in this Host, then the next "
+                                                    "boundary retries the same start")
+                    elif self._node_fallback(binding, binding["platform"], f"start-failed:{code}") is not None:
                         # Issue #324: the next eligible runtime starts at the
                         # next boundary; this runtime is not tried again.
                         self.node.update(phase="stopped")

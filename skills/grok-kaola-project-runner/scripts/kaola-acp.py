@@ -6531,7 +6531,22 @@ REPORTED_DRIFT_VALUES = (
     "cli-drift",
     "recorded-path-missing",
     "checkout-drift",
+    "loaded-build-skew",
 )
+
+
+def _baseline_record_build() -> str | None:
+    """Issue #437: the build id of the main-Skill record beside the current
+    runner baseline (the bytes a disk refresh installed), or None when no
+    readable record applies."""
+    baseline = skew_baseline_dir()
+    record_path = main_skill_record_file(baseline) if baseline else None
+    try:
+        record = json.loads(record_path.read_text(encoding="utf-8")) if record_path else None
+    except (OSError, ValueError):
+        return None
+    files = record.get("files") if isinstance(record, dict) else None
+    return main_skill_build(files) if isinstance(files, dict) and files else None
 
 
 def _restart_required_name(name: str) -> bool:
@@ -6662,6 +6677,13 @@ def seat_freshness(facts: dict[str, Any]) -> dict[str, Any]:
     pin = registration_pin()
     if pin and revision != pin:
         reported.append("pin-drift" if revision else "revision-unrecorded")
+    # Issue #437: a matching disk pin says nothing about what this seat
+    # loaded. The build recorded at start is the in-process proxy; a newer
+    # installed record means a disk refresh happened under the live seat and
+    # main-Skill-build checks will refuse node starts until it reloads.
+    current_record_build = _baseline_record_build()
+    if known and isinstance(current_record_build, str) and build != current_record_build:
+        reported.append("loaded-build-skew")
     return {
         "runner_build": build if known else None,
         "accepted_revision": revision,

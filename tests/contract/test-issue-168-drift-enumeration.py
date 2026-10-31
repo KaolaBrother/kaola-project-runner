@@ -49,6 +49,8 @@ class DriftVocabularyTests(unittest.TestCase):
         """
         acp = load_module(CLI, "acp179")
         self.assertIsInstance(acp.REPORTED_DRIFT_VALUES, tuple)
+        # Issue #437: isolate the installed-record read like the locator pin.
+        acp._baseline_record_build = lambda: "d" * 12
         self.assertEqual(len(set(acp.REPORTED_DRIFT_VALUES)),
                          len(acp.REPORTED_DRIFT_VALUES),
                          acp.REPORTED_DRIFT_VALUES)
