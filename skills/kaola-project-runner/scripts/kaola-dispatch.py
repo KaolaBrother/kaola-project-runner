@@ -10533,20 +10533,37 @@ def command_state_recovery_input(args: argparse.Namespace) -> int:
                 # revision, is still recorded: the range has not moved past it.
                 if args.fail not in STOP_DUTIES and last.get("verified"):
                     if ident in (last.get("settled") or []):
-                        return emit({"result": "unchanged", "value": prior,
-                                     "reason": "scoped-checkpoint-already-settled"})
-                    if ident in RECORD.superseded_returned_inputs({**inputs, ident: row}, last):
+                        if not args.rearm:
+                            return emit({"result": "unchanged", "value": prior,
+                                         "reason": "scoped-checkpoint-already-settled"})
+                    elif ident in RECORD.superseded_returned_inputs({**inputs, ident: row}, last):
                         span = last.get("host_revision") if isinstance(last.get("host_revision"), dict) else {}
                         checkpoint_through = span.get("through")
                         same_range_recovery = (
                             ident.startswith("recovery#") and ident not in (last.get("settled") or [])
                             and isinstance(checkpoint_through, int) and not isinstance(checkpoint_through, bool)
                             and row.get("host_revision_through") == checkpoint_through)
-                        if not same_range_recovery:
+                        if not same_range_recovery and not args.rearm:
                             return emit({"result": "unchanged", "value": prior,
                                          "reason": "verified-past-revision"})
-                if inputs.get(ident) == row:
+                if inputs.get(ident) == row and not args.rearm:
                     return emit({"result": "unchanged", "value": prior})
+                existing = inputs.get(ident)
+                if args.rearm and isinstance(existing, dict) and existing.get("why") == row.get("why"):
+                    # Issue #437: a fresh carrier failure of the same class must
+                    # not stay silent behind the dedupe. Refresh the blocking
+                    # alert row (one row, rev+1); the input itself keeps its
+                    # fold and is not duplicated.
+                    inputs[ident] = row
+                    refs = list(dict.fromkeys([*(alert.get("evidence") or []), evidence]))
+                    alerts["maintenance-returned"] = {**alert, "level": "warn", "owner": "host",
+                        "inputs": {**inputs}, "summary": "maintenance needs Host recovery from original receipts",
+                        "next": row["next"], "source": args.source, "writer": "tool:carrier",
+                        "writer_holder": caller["holder_instance_id"],
+                        "rev": int(alert.get("rev") or 0) + 1, "updated_at": observed_at(),
+                        **({"evidence": refs} if refs else {})}
+                    write_state(path, doc)
+                    return emit({"result": "rearmed", "value": row})
                 inputs[ident] = row
                 if row["why"] in RECORD.COALESCED_FAILURES:
                     # Issue #421: binding/recipe failures share one cause; the
@@ -13065,6 +13082,9 @@ def build_parser() -> argparse.ArgumentParser:
     recovery.add_argument("--fail")
     recovery.add_argument("--input")
     recovery.add_argument("--through-host-revision", type=int)
+    recovery.add_argument("--rearm", action="store_true",
+                          help="Issue #437: a fresh same-class failure refreshes the blocking "
+                               "maintenance-returned alert instead of returning unchanged")
     recovery.add_argument("--missing-sources",
                           help="JSON object: unsettled input id to recovery-sources-empty, "
                                "not-in-batch, unaccounted, or other")

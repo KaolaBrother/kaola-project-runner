@@ -82,6 +82,9 @@ owner-aware refresh route and verify command (stale siblings: a complete-root
 refresh); retry is safe — `mutation_status=not_started`. A Host that cannot
 install sends that route to the Delegator or operator and keeps its task and
 seat; it never deletes a foreign path.
+After refreshing Skill files under a live Host, reload `kaola-project-runner`
+in that Host before starting Sideagent nodes or workers that check the main
+Skill build. A matching disk pin alone does not establish what the Host loaded.
 `host-exists` refuses a Host-named `start` while another
 Host-named holder of this canonical root may be live (only a dead or reused PID
 frees it) — any

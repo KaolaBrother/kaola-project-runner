@@ -101,7 +101,9 @@ Notes:
   same-named older main Skill in a user root wins over a project copy (seen on
   cursor-cli), so the start also compares every main Skill in those roots
   and refuses `main-skill-build-skew` naming the stale path. Reinstall
-  every root the Host reads.
+  every root the Host reads. After a disk refresh under a live Host, reload
+  `kaola-project-runner` in that Host before Sideagent or worker starts that
+  check the main Skill build; a matching disk pin does not prove its loaded build.
 - **opencode** - every ACP `start` receipt carries `effective_selection`
   (`effective_model`, `effective_effort`): the agent's own advertised
   `currentValue`. An explicit `--model` / `--effort` the agent does not report

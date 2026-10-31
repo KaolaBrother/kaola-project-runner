@@ -97,6 +97,7 @@ ROUTES: dict[str, tuple[str, str]] = {
     "child-record-failed": ("route", "This attempt stopped its own holder. Read child_record_error. Fix the child record path and submit again. Do not adopt this attempt's session."),
     "cite-required": ("route", "Read detail and the current revision. Run the state command detail names (init, migrate, update, or retire) with that revision. Do not write a second file or retry the same patch unchanged."),
     "cli-drift": ("route", "Run ./scripts/render-skills.py --write, then start that worker again so it loads the new bytes. Do not treat the skewed skill as current."),
+    "loaded-build-skew": ("route", "The seat started with an older main Skill build than the installed record (Issue #437: a matching disk pin does not prove what it loaded). Reload kaola-project-runner in that Host, then let the next boundary retry the Sideagent/worker start that checks the main Skill build; the carrier re-checks alignment before spawning."),
     "client-message-id-conflict": ("self-route", "Read the original turn bound to this client message id. Use a new id for a different op, text or session; do not resend this one under the same id."),
     "client-message-id-empty": ("route", "Pass a non-empty --client-message-id value with the same send or steer command, then rerun. Nothing was written."),
     "client-message-id-invalid": ("route", "Pass a --client-message-id value of at most 200 UTF-8 bytes with no C0/C1 control characters, then rerun. Nothing was written."),

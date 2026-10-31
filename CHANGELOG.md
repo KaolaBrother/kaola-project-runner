@@ -6,6 +6,21 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- **Sideagent outages no longer stay silent (#437).** A carrier failure of the
+  same class refreshes the blocking `maintenance-returned` alert
+  (`state recovery-input --rearm`, carrier caller) instead of returning
+  `unchanged` behind the dedupe; a `main-skill-build-skew` node start refusal
+  is a condition of the live Host, not a broken binding — no permanent failed
+  latch, a bounded cooldown then the same start retries and admits once the
+  disk aligns, and the refusal raises the blocking alert and an actionable
+  Host wake; `seat_freshness` now reports `main-skill-build-skew` when the
+  build a seat started with differs from the installed record, so a matching
+  disk pin cannot mask a stale in-process Host; canonical guidance documents
+  that a Skill refresh under a live Host requires a Host reload before
+  Sideagent/worker starts that check the main Skill build. **Seats: restart
+  required** (`scripts/kaola-acp-holder.py`, `scripts/kaola-dispatch.py` and
+  `scripts/kaola-acp.py` are in the operator diff).
+
 - Force `CLAUDE_CODE_ENTRYPOINT=custom` on Claude ACP child turns while preserving subscription credential sanitization (#436). **Seats: restart required** (bridge and platform manifest change).
 
 ## 0.9.37 — 2026-10-31 (never-indexed settlement; OpenCode 2.2.5 ACP)

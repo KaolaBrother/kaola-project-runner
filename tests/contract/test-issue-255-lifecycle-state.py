@@ -3541,6 +3541,12 @@ FAKE_NODE_RUNNER = textwrap.dedent("""\
     counter = Path(os.environ["FAKE_NODE_COUNTER"])
     n = int(counter.read_text()) + 1 if counter.exists() else 1
     counter.write_text(str(n))
+    refuse = os.environ.get("FAKE_NODE_REFUSE_JSON")
+    if refuse:
+        # Issue #437: a refused start leaves no record, so the carrier's
+        # retry is not entangled with adopt/old-holder paths.
+        print(refuse)
+        sys.exit(1)
     Path(os.environ["FAKE_NODE_ARGV"]).write_text(json.dumps(sys.argv[1:]))
     holder = f"node-{n}"
     Path(os.environ["FAKE_NODE_RECORD"]).write_text(json.dumps({
@@ -3636,7 +3642,7 @@ class HolderNodeMode(HolderFixture):
         self.runner.chmod(0o755)
         self.saved_env = {key: os.environ.get(key) for key in
                           ("FAKE_NODE_COUNTER", "FAKE_NODE_ARGV", "FAKE_NODE_RECORD", "FAKE_NODE_REPO",
-                           "FAKE_NODE_PID", "FAKE_NODE_DELAY")}
+                           "FAKE_NODE_PID", "FAKE_NODE_DELAY", "FAKE_NODE_REFUSE_JSON")}
         os.environ.update(FAKE_NODE_COUNTER=str(root / "count"), FAKE_NODE_ARGV=str(root / "argv"),
                           FAKE_NODE_RECORD=str(self.side_dir / "record.json"),
                           FAKE_NODE_REPO=str(self.repo), FAKE_NODE_PID=str(os.getpid()))
@@ -4395,6 +4401,54 @@ class HolderNodeMode(HolderFixture):
         self.wait_still(0.3)
         self.assertEqual(self.node_count(), 1, "one recorded failure, no retry storm")
         self.assertEqual(len(self.agent.prompts()), 2)
+
+    def test_a_build_skew_refusal_is_not_a_permanent_latch(self) -> None:
+        # Issue #437: a main-skill-build-skew start refusal is a condition of
+        # the live Host, not a broken binding. The blocking alert surfaces, no
+        # permanent failed latch is set, and once the disk aligns the same
+        # start admits at the next boundary without a binding change.
+        holder_module.BUILD_SKEW_RETRY_SECONDS = 0.0
+        self.write_node_state(host_revision=2)
+        os.environ["FAKE_NODE_REFUSE_JSON"] = json.dumps(
+            {"result": "refused", "reason": "main-skill-build-skew", "action": "start",
+             "main_skill_build": "aaaaaaaaaaaa", "mutation_performed": False,
+             "mutation_status": "not_started",
+             "detail": "1 installed kaola-project-runner main Skill(s) do not match this Host build"})
+        self.host_change(4)
+        self.boundary()
+        self.wait_for(lambda: "sideagent_node_start_failed" in self.log_kinds(), "the skew refusal")
+        self.wait_for(lambda: "sideagent_maintenance_failure_recorded" in self.log_kinds(),
+                      "the failure is recorded, not silent")
+        with self.holder.worker_events_lock:
+            self.assertIsNone(self.holder.node.get("failed"),
+                              "a skew refusal is not a #324 permanent latch")
+            self.assertIsInstance(self.holder.node.get("build_skew"), dict)
+        # The failure's wake opened a Host turn; settle it like the Host does
+        # before the next boundary can act.
+        self.wait_for(lambda: len(self.agent.prompts()) >= 1, "the failure notice")
+        self.finish_host_turn()
+        # The same start is scheduled again at the next boundary with a
+        # cleared cooldown: the condition, not the binding, gates the retry.
+        self.host_change(6)
+        self.boundary()
+        self.wait_for(lambda: self.node_count() == 2, "the same start retries after the cooldown")
+        with self.holder.worker_events_lock:
+            self.assertIsNone(self.holder.node.get("failed"),
+                              "a retried skew refusal still sets no permanent latch")
+        os.environ.pop("FAKE_NODE_REFUSE_JSON", None)
+        self.host_change(8)
+        self.wait_for(lambda: len(self.agent.prompts()) >= 2, "the retry failure notice")
+        self.wait_still(0.3)
+        self.finish_host_turn()
+        with self.holder.worker_events_lock:
+            self.holder._relay_pass()
+            self.assertEqual(self.holder.node.get("phase"), "starting",
+                             "an aligned disk admits the same start at the next boundary")
+        self.wait_for(lambda: self.node_count() == 3, "the admitted start runs")
+        self.wait_for(lambda: "sideagent_node_started" in self.log_kinds(), "the aligned start admits")
+        with self.holder.worker_events_lock:
+            self.assertNotIn("build_skew", self.holder.node,
+                             "an admitted start clears the skew condition")
 
     def test_the_checkout_entrypoint_recipe_names_the_bound_platform_first(self) -> None:
         tail = ["start", "--repo", str(self.repo), "--session", "zcode-KT-sideagent", "--role", "sideagent"]
@@ -5451,7 +5505,7 @@ class DefaultSideagentNode(HolderFixture):
         self.runner.chmod(0o755)
         self.saved_env = {key: os.environ.get(key) for key in
                           ("FAKE_NODE_COUNTER", "FAKE_NODE_ARGV", "FAKE_NODE_RECORD", "FAKE_NODE_REPO",
-                           "FAKE_NODE_PID", "FAKE_NODE_DELAY")}
+                           "FAKE_NODE_PID", "FAKE_NODE_DELAY", "FAKE_NODE_REFUSE_JSON")}
         os.environ.update(FAKE_NODE_COUNTER=str(root / "count"), FAKE_NODE_ARGV=str(root / "argv"),
                           FAKE_NODE_RECORD=str(self.side_dir / "record.json"),
                           FAKE_NODE_REPO=str(self.repo), FAKE_NODE_PID=str(os.getpid()))
