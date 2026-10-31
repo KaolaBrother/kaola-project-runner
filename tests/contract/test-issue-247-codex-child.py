@@ -50,15 +50,15 @@ class CodexChildPathTests(unittest.TestCase):
     def test_manifest_keeps_the_three_facts_apart(self) -> None:
         self.assertEqual(
             self.manifest["acp_command"],
-            "npx --yes --package @agentclientprotocol/codex-acp@2.0.1 codex-acp",
+            "npx --yes --package @agentclientprotocol/codex-acp@2.5.0 codex-acp",
         )
         self.assertNotIn("@openai/codex@", self.manifest["acp_command"])
-        self.assertEqual(self.manifest["acp_wrapper_pin"], "2.0.1")
-        self.assertEqual(self.manifest["acp_requested_cli"], "0.160.0")
+        self.assertEqual(self.manifest["acp_wrapper_pin"], "2.5.0")
+        self.assertEqual(self.manifest["acp_requested_cli"], "0.165.0")
         versions = dict(part.split("=", 1)
                         for part in self.manifest["acp_verified_versions"].split(";"))
-        self.assertEqual(versions["adapter"], "2.0.1")
-        self.assertEqual(versions["cli"], "0.160.0")
+        self.assertEqual(versions["adapter"], "2.5.0")
+        self.assertEqual(versions["cli"], "0.165.0")
         self.assertNotIn("requested_cli", versions)
 
     def test_absolute_codex_path_is_kept_and_path_is_not_consulted(self) -> None:

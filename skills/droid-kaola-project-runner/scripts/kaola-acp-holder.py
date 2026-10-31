@@ -3312,6 +3312,7 @@ class Holder:
                         "terminal": False}
         if self.args.platform == "codex":
             capabilities["session"] = {"compaction": {}}
+            capabilities["subagents"] = {}
         if self.init_meta:
             capabilities["_meta"] = self.init_meta
         request_id = self.agent.send_request(
@@ -3625,6 +3626,10 @@ class Holder:
                     for opt in params.get("options") or []
                 ],
             }
+            permission_session = params.get("sessionId")
+            if (self.args.platform == "codex" and permission_session
+                    and permission_session != self.acp_session_id):
+                entry["session_id"] = permission_session
             key = normalize_id(request_id)
             is_new = key not in self.pending_permissions
             self.pending_permissions[key] = entry
@@ -4437,6 +4442,18 @@ class Holder:
         update = params.get("update") or {}
         variant = update.get("sessionUpdate", "unknown")
         received_at = round(time.time(), 3)
+        # Standard Codex subagent updates have their own session identity.
+        # Keep the original event visible without merging the child's text,
+        # tools or activity into the parent turn or its live projection.
+        session_id = params.get("sessionId")
+        parent_session_id = self.acp_session_id or self.resume_target_id
+        if (self.args.platform == "codex" and parent_session_id and session_id
+                and session_id != parent_session_id):
+            self.events.append({"kind": "session_update", "sessionId": session_id,
+                                "update": update}, ts=received_at)
+            self.write_record()
+            self.fanout_follow_delta()
+            return
         opened_agent_turn: dict[str, Any] | None = None
         with self.lock:
             # Issue #385: the session identity and the prompt identity this
@@ -10935,6 +10952,7 @@ def run_probe(args: argparse.Namespace) -> int:
                     "terminal": False}
     if args.platform == "codex":
         capabilities["session"] = {"compaction": {}}
+        capabilities["subagents"] = {}
     result["client_capabilities"] = capabilities
     init_meta = parse_init_meta(getattr(args, "init_meta", "") or "")
     if init_meta:

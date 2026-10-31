@@ -6,6 +6,8 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- Upgrade Codex ACP adapter to 2.5.0 with verified Codex 0.165.0 / protocol 1; expose standard child-session events without merging their replies into the parent and identify child permission requests. Bare resume may read back a different effort; inspect the continuity receipt or choose a tier explicitly (#432). **Seats: restart required** (`platforms/codex.yaml` and `scripts/kaola-acp-holder.py` changed).
+
 - Complete recovery routes for terminal-state refusals and align lifecycle contract fixtures with current and legacy state semantics; split lifecycle recovery guidance while retaining its 8192-byte reference bound (#430). **Seats: restart not required** (the #430 operator diff does not touch holder, bridge, quota, record contract, ACP paths, compact recovery, adapters or platforms).
 
 - Maintenance checkpoints require the bound Host carrier's admitted batch and matching current node prompt, including ordinary checkpoints. The sent range and recovery selection govern accounting; unsupported worker events cannot be supplied as node inputs. Carrier settlement also binds the node session. **Seats: restart required** (`scripts/kaola-dispatch.py` and `scripts/kaola-acp-holder.py` changed).

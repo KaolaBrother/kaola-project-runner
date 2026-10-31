@@ -258,6 +258,39 @@ class CodexSystemErrorTurn(unittest.TestCase):
         self.assertEqual(self.holder.pending_worker_events, [],
                          "a child thread's failure must not fail the parent turn")
 
+    def test_child_text_and_tools_remain_in_raw_events_not_parent_turn(self) -> None:
+        self.holder.op_prompt({"text": "work", "wait": False})
+        child = "ses-host-173:subagent:child"
+        self.holder.on_session_update({"sessionId": child, "update": {
+            "sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "CHILD"}}})
+        self.holder.on_session_update({"sessionId": child, "update": {
+            "sessionUpdate": "tool_call", "toolCallId": "child-tool", "kind": "execute"}})
+        self.holder.on_session_update({"sessionId": self.holder.acp_session_id, "update": {
+            "sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "PARENT"}}})
+        self.end_turn()
+        self.assertEqual(self.holder.turn_receipt()["final_text"], "PARENT")
+        self.assertEqual(self.holder.turn_receipt()["tool_calls"]["count"], 0)
+        events = [e for e in self.log_kinds("session_update") if e.get("sessionId") == child]
+        self.assertEqual(len(events), 2)
+        self.assertEqual(events[0]["update"]["content"]["text"], "CHILD")
+
+    def test_child_permission_exposes_its_session_id(self) -> None:
+        child = "ses-host-173:subagent:child"
+        self.holder.on_agent_request({"id": 42, "method": "session/request_permission", "params": {
+            "sessionId": child, "toolCall": {"toolCallId": "child-tool"}, "options": []}})
+        entry = next(iter(self.holder.pending_permissions.values()))
+        self.assertEqual(entry["request_id"], 42)
+        self.assertEqual(entry["tool_call_id"], "child-tool")
+        self.assertEqual(entry["session_id"], child)
+
+    def test_child_replay_during_resume_does_not_pollute_parent(self) -> None:
+        self.holder.resume_target_id = self.holder.acp_session_id
+        self.holder.acp_session_id = None
+        self.holder.on_session_update({"sessionId": "ses-host-173:subagent:child", "update": {
+            "sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "CHILD"}}})
+        self.assertEqual(self.holder.turn["final_text"], "")
+        self.assertEqual(len(self.log_kinds("session_update")), 1)
+
     def test_a_status_outside_any_turn_is_inert(self) -> None:
         """No turn is active, so there is nothing to attach a failure to."""
         self.thread_status("systemError")
