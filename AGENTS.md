@@ -135,6 +135,10 @@ Source: explicit owner request, 2026-10-04. Scope: the current lifecycle/state-m
 
 Completion report: answer all six items against the final integrated candidate, with mechanism, actual evidence/result, and remaining limitations. Exercise this requirement's record → relay → adoption → implementation/QA → final answer path using existing records and receipts, so progress remains aligned with the agreed goals. Reuse meaningful evidence; do not add a parallel ledger, scheduler or duplicate acceptance phase.
 
+## Worker ACP upgrade rule (Owner 2026-10-31 via Jennie)
+
+Before adopting a CLI upgrade, validate the KPR ACP path against the latest relevant upstream ACP adapter and its declared CLI range. An existing working pair alone does not establish upgrade readiness. When validation of the latest adapter passes, adopt it in the same run and update the pin, measured version records and affected quirks. Evaluate out-of-range CLI candidates explicitly; never infer compatibility from version numbers alone. Preserve actual evidence and report unverified paths.
+
 ## Host capability disclosure and table (owner requirement, 2026-10-06)
 
 Source: explicit owner request relayed through the dot main session (Sentinel_27d913395e90819199545f470d8c6421 / Sentinel_15c6ec9ed9b08191a982e2d62258f92a / Sentinel_e3b97d4346908191a717f86890655ad6; support-criterion clarification Sentinel_993c0853c4c08191843176126322f9b2). Scope: the maintained Host capability/limitation table, its pre-selection disclosure and its update convention, within existing #264/#263 scope; no new scheduler, framework or installation.
