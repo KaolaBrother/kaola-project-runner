@@ -1,0 +1,2 @@
+{"n": 1, "name": "Research and verify ACP adoption", "details": "dispatched: self — RED evidence and owner rule landed in workflow/issue-432 commit b977a3a0daa46ab701a7d90d339b1e24a91f3811 and issue #432 progress comment; further candidate validation remains open", "status": "done"}
+{"n": 2, "name": "Close ACP candidate verification gaps", "details": "dispatched: self — tested protocol-1 candidate b19815055332ffb9587652a83da0a36a7e4f6a74 and issue #432 progress comment; Host acceptance pending", "status": "done"}
