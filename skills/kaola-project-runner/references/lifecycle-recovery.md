@@ -21,6 +21,19 @@ the Host ([sideagent-node.md](sideagent-node.md)). After a Host stop kept its
 seats, the new Host runs `rebind-host` for that seat only. `unknown-op`:
 `drain-restart` the seat at idle.
 
+## Never-indexed Host attestation
+
+For accepted-done tasks with every ref absent from all supplied project indices,
+Host may pass `J={"kind":"refs-host-attested","bindings":[{"ref":"REF",
+"session":"SESSION","locator":"LOCATOR"}]}`: one binding per distinct ref.
+`L` must be a schema-valid live list. Locators are optional on the verified
+route and required for every ref on the attested route. Each locator has the form `commit:path`,
+an absolute path, or HTTP(S) URL; its contents are not verified. If every
+session has a unique stopped/dead project row, the receipt records verified
+anchors. If a session is absent, it records `attested` and every locator for
+later audit, never `verified`. Active, mismatched or ambiguous rows refuse.
+Sideagent returns both routes to Host. No ledger is created.
+
 ## Size
 
 Rewriting an id replaces it; settled records leave in that write; an old
@@ -33,7 +46,9 @@ outcome retires on the stale-collect route (session absent or
 stopped under the holder); `outcome: stopped` with `mutation_status: unknown`
 retires on `stopped-collect-incomplete-turn` (Host; accepted task,
 disposition, holder, platform, repo, stopped `L` rows match).
-Neither writes index bytes.
+Neither writes index bytes. For `refs-host-attested` refusal, the Host checks
+each task ref, live row and typed locator, then retries. An absent session
+uses Host attestation; an active or ambiguous row must be resolved.
 
 ## Migration
 

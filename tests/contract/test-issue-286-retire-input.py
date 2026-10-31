@@ -54,6 +54,12 @@ def run(args: list[str]) -> tuple[int, dict]:
         raise AssertionError(f"not JSON ({exc}): {proc.stdout}\n{proc.stderr}") from exc
 
 
+def plant_done(path: Path, ident: str) -> None:
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    doc["state"]["tasks"][ident]["stage"] = "done"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+
+
 class RetireInput(unittest.TestCase):
     """One accepted task with one dispatched item and one stopped seat."""
 
@@ -68,8 +74,9 @@ class RetireInput(unittest.TestCase):
                          "--authorization", json.dumps(AUTH)])
         self.assertEqual(code, 0, out)
         code, out = self.state("update", "--kind", "tasks", "--id", "t1", "--set",
-                               json.dumps({**ACCEPTED, "dispatch": ["i1"]}))
+                               json.dumps({**ACCEPTED, "stage": "review", "dispatch": ["i1"]}))
         self.assertEqual(code, 0, out)
+        plant_done(self.file, "t1")
         self.index = self.repo / "index.json"
         self.live = self.repo / "live.json"
 
@@ -193,8 +200,9 @@ class RetireInput(unittest.TestCase):
         receiving acceptance written by retirement."""
         code, out = run(["state", "update", "--file", str(self.file), "--writer", "host",
                          "--source", "evt", "--kind", "tasks", "--id", "t2", "--set",
-                         json.dumps(ACCEPTED)])
+                         json.dumps({**ACCEPTED, "stage": "review"})])
         self.assertEqual(code, 0, out)
+        plant_done(self.file, "t2")
         foreign = self.repo / "foreign-index.json"
         foreign.write_text(json.dumps({"schema": "other/9", "repo": "/elsewhere", "items": [
             {"item_id": "x1", "task_id": "t2", "status": "returned", "acceptance": "pending"}]}),
@@ -253,8 +261,9 @@ class RetireInput(unittest.TestCase):
             ident, item = f"t2{n}", f"i2{n}"
             code, out = run(["state", "update", "--file", str(self.file), "--writer", "host",
                              "--source", "evt", "--kind", "tasks", "--id", ident, "--set",
-                             json.dumps({**ACCEPTED, "dispatch": [item]})])
+                             json.dumps({**ACCEPTED, "stage": "review", "dispatch": [item]})])
             self.assertEqual(code, 0, out)
+            plant_done(self.file, ident)
             rev = str(self.doc()["state"]["tasks"][ident]["rev"])
             self.index.write_text(json.dumps({  # the form execute and collect write
                 "schema": "kaola-dispatch-index/1", "repo": str(self.repo),
@@ -327,12 +336,15 @@ class MultiIndexRetire(unittest.TestCase):
         return self.file.read_bytes()
 
     def add_task(self, refs: list[str], dispositions: dict | None = None) -> str:
-        patch = {**ACCEPTED, "dispatch": list(refs)}
+        patch = {**ACCEPTED, "stage": "review", "dispatch": list(refs)}
         if dispositions is not None:
             patch["dispositions"] = dispositions
         code, out = self.state("update", "--kind", "tasks", "--id", "t1", "--set", json.dumps(patch))
         self.assertEqual(code, 0, out)
-        return str(self.doc()["state"]["tasks"]["t1"]["rev"])
+        doc = self.doc()
+        doc["state"]["tasks"]["t1"]["stage"] = "done"
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        return str(doc["state"]["tasks"]["t1"]["rev"])
 
     def write_index(self, name: str, items: list[dict], repo: str | None = None) -> Path:
         path = self.repo / name
@@ -495,13 +507,14 @@ class DeadHolderUnknownRetire(unittest.TestCase):
     def accept(self, item: str, **extra: object) -> str:
         self._n += 1
         ident = f"t{self._n}"
-        patch = {**ACCEPTED, "dispatch": [item]}
+        patch = {**ACCEPTED, "stage": "review", "dispatch": [item]}
         if extra:
             patch.update(extra)
         code, out = run(["state", "update", "--file", str(self.file), "--writer", "host",
                          "--source", "evt", "--kind", "tasks", "--id", ident, "--set",
                          json.dumps(patch)])
         self.assertEqual(code, 0, out)
+        plant_done(self.file, ident)
         return ident
 
     def write_index(self, item: str, **row: object) -> bytes:

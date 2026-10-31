@@ -404,6 +404,7 @@ python_suites_all=(
   "test-issue-264-compact-recovery.py"
   "test-issue-426-retire-legacy-seats.py"
   "test-issue-427-collect-binding.py"
+  "test-issue-431-retire-attested.py"
   "test-issue-425-prevent-invariants.py"
 )
 python_suites_a=(
@@ -581,6 +582,7 @@ python_suites_b=(
   "test-issue-264-compact-recovery.py"
   "test-issue-426-retire-legacy-seats.py"
   "test-issue-427-collect-binding.py"
+  "test-issue-431-retire-attested.py"
   "test-issue-425-prevent-invariants.py")
 
 # Selectable shell contract suites: they run serially before the Python lanes.
