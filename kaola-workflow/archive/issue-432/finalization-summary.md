@@ -76,3 +76,7 @@ archived_paths:
 - kaola-workflow/archive/issue-432/finalization-summary.md
 - kaola-workflow/archive/issue-432/mission-ledger.jsonl
 - kaola-workflow/archive/issue-432/workflow-state.md
+
+## Sink and closure reconciliation
+
+The offline Workflow merge sink advanced local `main` to `dfbd6ea6e3db626bf628906783b33e463f9add7e`, containing implementation candidate `b19815055332ffb9587652a83da0a36a7e4f6a74` and this archive. Post-merge `./scripts/render-skills.py --check` passed. A separate push published that sink commit to `origin/main`, independently verified with `git ls-remote`. The user-authorized [closure comment](https://github.com/KaolaBrother/kaola-project-runner/issues/432#issuecomment-6538465183) records measured scope and limitations. GitHub then reported #432 `CLOSED`, reason `COMPLETED`, at `2026-10-31T03:33:53Z`; no labels were present or changed. The #432 run worktree and branch were removed. The earlier `close-pending` and `kept` values in workflow-state are the offline finalization snapshot; the later reconciliation records actual closure and cleanup. The scoped Workflow closure audit reported `current_project_clean: true`.

@@ -25,3 +25,15 @@ claim_label_removed: skipped_offline
 worktree_removed: kept
 closure_invariants: ok
 issues_closed: 1
+
+## Closure Reconciliation
+issue_state: CLOSED
+issue_reason: COMPLETED
+issue_closed_at: 2026-10-31T03:33:53Z
+issue_url: https://github.com/KaolaBrother/kaola-project-runner/issues/432
+close_comment: https://github.com/KaolaBrother/kaola-project-runner/issues/432#issuecomment-6538465183
+sink_commit: dfbd6ea6e3db626bf628906783b33e463f9add7e
+remote_main_verified: dfbd6ea6e3db626bf628906783b33e463f9add7e
+worktree_removed: verified
+branch_removed: verified
+claim_label: absent
