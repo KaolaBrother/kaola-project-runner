@@ -1,37 +1,508 @@
-[
-  {
-    "session": "opencode-i433-2032",
-    "acp_session_id": "ses_e6ff29c04ffeapRW7CJbfWM8xO",
-    "agent_info": {
-      "name": "OpenCode",
-      "version": "2.0.32"
+{
+  "baseline_b353_receipts": [
+    {
+      "session": "opencode-i433-2032",
+      "acp_session_id": "ses_e6ff29c04ffeapRW7CJbfWM8xO",
+      "agent_info": {
+        "name": "OpenCode",
+        "version": "2.0.32"
+      },
+      "protocol_version": 1,
+      "holder_instance_id": "167581e8911a16b45da8377d1a8e976d",
+      "state": "stopped",
+      "scripts": {
+        "adapters/opencode.sh": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/adapters/opencode.sh",
+          "sha256": "c0f7ce502ca98484d78b54b337c75a8d138eb2fa8546f8b59ccd983b3dde9334"
+        },
+        "kaola-acp-holder.py": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-acp-holder.py",
+          "sha256": "d5bd12853a78ad5a831a0dc0bc3da7c8ca36121969823db6130d5721a3feabf4"
+        },
+        "kaola-acp.py": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-acp.py",
+          "sha256": "5e8d8c118b1e5dbb3d1168f5c99cbfe114fa260869cc18c2ef8964b55a934ff8"
+        },
+        "kaola-opencode-acp.py": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-acp.py",
+          "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67"
+        },
+        "kaola-opencode-steer.mjs": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-steer.mjs",
+          "sha256": "304543b7b4bf708dff1abfa303d2e5c4dfa08e1459e9c949957f080f505de0b0"
+        }
+      },
+      "start_evidence": {
+        "config_application": {
+          "effort": {
+            "advertised": true,
+            "applied": true,
+            "candidates": [
+              "effort"
+            ],
+            "config_id": "effort",
+            "value": "max"
+          },
+          "fast": {
+            "applied": false,
+            "reason": "no-advertised-config-option"
+          },
+          "model": {
+            "applied": true,
+            "config_id": "model",
+            "value": "opencode-go/deepseek-v4.1-flash"
+          }
+        },
+        "effective_selection": {
+          "effective_effort": "max",
+          "effective_model": "opencode-go/deepseek-v4.1-flash",
+          "effort_config_id": "effort"
+        },
+        "actual_runtime_model_id": null,
+        "model_verified": "unknown",
+        "resumed": false,
+        "recorded_at": 1793418159.357
+      },
+      "events": [
+        {
+          "cursor": 8,
+          "fingerprint": "sha256:7e422ae4d5eddce43503d377dfe84ce2218ac9baab732a46ab0ad3695f631b88",
+          "kind": "steer_sent",
+          "method": "_session/steering",
+          "request_id": 6,
+          "ts": 1793418170.343,
+          "turn_request_id": 5
+        },
+        {
+          "cursor": 9,
+          "kind": "steer_result",
+          "method": "_session/steering",
+          "request_id": 6,
+          "steer_consumed": null,
+          "steer_outcome": "written",
+          "ts": 1793418170.346,
+          "turn_request_id_preserved": true
+        },
+        {
+          "cursor": 12,
+          "kind": "turn_ended",
+          "outcome": "turn_completed",
+          "prompt_fingerprint": "sha256:c3a86156a066d90e21ebbe999cffc273f0bcff7e09472d5f83ee6db3d0870812",
+          "prompt_source": "delegator",
+          "stop_reason": "end_turn",
+          "ts": 1793418171.686
+        }
+      ]
     },
-    "protocol_version": 1,
-    "holder_instance_id": "167581e8911a16b45da8377d1a8e976d",
-    "state": "stopped",
-    "scripts": {
-      "adapters/opencode.sh": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/adapters/opencode.sh",
-        "sha256": "c0f7ce502ca98484d78b54b337c75a8d138eb2fa8546f8b59ccd983b3dde9334"
+    {
+      "session": "opencode-i433-225-ask",
+      "acp_session_id": "ses_e6ff3c1aaffeNAcW2RGiLmhMCn",
+      "agent_info": {
+        "name": "OpenCode",
+        "version": "2.2.5"
       },
-      "kaola-acp-holder.py": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-acp-holder.py",
-        "sha256": "d5bd12853a78ad5a831a0dc0bc3da7c8ca36121969823db6130d5721a3feabf4"
+      "protocol_version": 1,
+      "holder_instance_id": "7158f3b8463f9b89018802da8bb495cb",
+      "state": "stopped",
+      "scripts": {
+        "adapters/opencode.sh": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/adapters/opencode.sh",
+          "sha256": "c0f7ce502ca98484d78b54b337c75a8d138eb2fa8546f8b59ccd983b3dde9334"
+        },
+        "kaola-acp-holder.py": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-acp-holder.py",
+          "sha256": "d5bd12853a78ad5a831a0dc0bc3da7c8ca36121969823db6130d5721a3feabf4"
+        },
+        "kaola-acp.py": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-acp.py",
+          "sha256": "5e8d8c118b1e5dbb3d1168f5c99cbfe114fa260869cc18c2ef8964b55a934ff8"
+        },
+        "kaola-opencode-acp.py": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-acp.py",
+          "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67"
+        },
+        "kaola-opencode-steer.mjs": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-steer.mjs",
+          "sha256": "304543b7b4bf708dff1abfa303d2e5c4dfa08e1459e9c949957f080f505de0b0"
+        }
       },
-      "kaola-acp.py": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-acp.py",
-        "sha256": "5e8d8c118b1e5dbb3d1168f5c99cbfe114fa260869cc18c2ef8964b55a934ff8"
+      "start_evidence": {
+        "config_application": {
+          "effort": {
+            "advertised": true,
+            "applied": true,
+            "candidates": [
+              "effort"
+            ],
+            "config_id": "effort",
+            "value": "max"
+          },
+          "fast": {
+            "applied": false,
+            "reason": "no-advertised-config-option"
+          },
+          "model": {
+            "applied": true,
+            "config_id": "model",
+            "value": "opencode-go/deepseek-v4.1-flash"
+          }
+        },
+        "effective_selection": {
+          "effective_effort": "max",
+          "effective_model": "opencode-go/deepseek-v4.1-flash",
+          "effort_config_id": "effort"
+        },
+        "actual_runtime_model_id": null,
+        "model_verified": "unknown",
+        "resumed": false,
+        "recorded_at": 1793418084.119
       },
-      "kaola-opencode-acp.py": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-acp.py",
-        "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67"
+      "events": [
+        {
+          "cursor": 13,
+          "kind": "turn_ended",
+          "outcome": "turn_completed",
+          "prompt_fingerprint": "sha256:c5ca2db37b52daf06a9d5be0a909e05d8a32dbf485f6134e4546f846d46fcd5f",
+          "prompt_source": "delegator",
+          "stop_reason": "end_turn",
+          "ts": 1793418105.214
+        }
+      ]
+    },
+    {
+      "session": "opencode-i433-225-resume",
+      "acp_session_id": "ses_e6ff5435affeW4SH6DwLfPbvWb",
+      "agent_info": {
+        "name": "OpenCode",
+        "version": "2.2.5"
       },
-      "kaola-opencode-steer.mjs": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-steer.mjs",
-        "sha256": "304543b7b4bf708dff1abfa303d2e5c4dfa08e1459e9c949957f080f505de0b0"
+      "protocol_version": 1,
+      "holder_instance_id": "3422b8f56e5aec559cea34fb89e75d4d",
+      "state": "stopped",
+      "scripts": {
+        "adapters/opencode.sh": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/adapters/opencode.sh",
+          "sha256": "c0f7ce502ca98484d78b54b337c75a8d138eb2fa8546f8b59ccd983b3dde9334"
+        },
+        "kaola-acp-holder.py": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-acp-holder.py",
+          "sha256": "d5bd12853a78ad5a831a0dc0bc3da7c8ca36121969823db6130d5721a3feabf4"
+        },
+        "kaola-acp.py": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-acp.py",
+          "sha256": "5e8d8c118b1e5dbb3d1168f5c99cbfe114fa260869cc18c2ef8964b55a934ff8"
+        },
+        "kaola-opencode-acp.py": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-acp.py",
+          "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67"
+        },
+        "kaola-opencode-steer.mjs": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-steer.mjs",
+          "sha256": "304543b7b4bf708dff1abfa303d2e5c4dfa08e1459e9c949957f080f505de0b0"
+        }
+      },
+      "start_evidence": {
+        "config_application": {
+          "effort": {
+            "applied": false,
+            "reason": "no-resolved-value"
+          },
+          "fast": {
+            "applied": false,
+            "reason": "no-advertised-config-option"
+          },
+          "model": {
+            "applied": false,
+            "reason": "no-resolved-value"
+          }
+        },
+        "effective_selection": {
+          "effective_effort": "max",
+          "effective_model": "opencode-go/deepseek-v4.1-flash",
+          "effort_config_id": "effort"
+        },
+        "actual_runtime_model_id": null,
+        "model_verified": "unknown",
+        "resumed": true,
+        "recorded_at": 1793418018.115
+      },
+      "events": [
+        {
+          "cursor": 5,
+          "kind": "turn_ended",
+          "outcome": "turn_completed",
+          "prompt_fingerprint": "sha256:b5d6679bbfe8067b801913a3e98549b237caf8051ef28d9198b555a5e435ccb5",
+          "prompt_source": "delegator",
+          "stop_reason": "end_turn",
+          "ts": 1793418031.72
+        }
+      ]
+    },
+    {
+      "session": "opencode-i433-225-standalone",
+      "acp_session_id": "ses_e6ff5435affeW4SH6DwLfPbvWb",
+      "agent_info": {
+        "name": "OpenCode",
+        "version": "2.2.5"
+      },
+      "protocol_version": 1,
+      "holder_instance_id": "6cc1dc871ef670d37cfdf283e98d9a09",
+      "state": "stopped",
+      "scripts": {
+        "adapters/opencode.sh": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/adapters/opencode.sh",
+          "sha256": "c0f7ce502ca98484d78b54b337c75a8d138eb2fa8546f8b59ccd983b3dde9334"
+        },
+        "kaola-acp-holder.py": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-acp-holder.py",
+          "sha256": "d5bd12853a78ad5a831a0dc0bc3da7c8ca36121969823db6130d5721a3feabf4"
+        },
+        "kaola-acp.py": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-acp.py",
+          "sha256": "5e8d8c118b1e5dbb3d1168f5c99cbfe114fa260869cc18c2ef8964b55a934ff8"
+        },
+        "kaola-opencode-acp.py": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-acp.py",
+          "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67"
+        },
+        "kaola-opencode-steer.mjs": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-steer.mjs",
+          "sha256": "304543b7b4bf708dff1abfa303d2e5c4dfa08e1459e9c949957f080f505de0b0"
+        }
+      },
+      "start_evidence": {
+        "config_application": {
+          "effort": {
+            "advertised": true,
+            "applied": true,
+            "candidates": [
+              "effort"
+            ],
+            "config_id": "effort",
+            "value": "max"
+          },
+          "fast": {
+            "applied": false,
+            "reason": "no-advertised-config-option"
+          },
+          "model": {
+            "applied": true,
+            "config_id": "model",
+            "value": "opencode-go/deepseek-v4.1-flash"
+          }
+        },
+        "effective_selection": {
+          "effective_effort": "max",
+          "effective_model": "opencode-go/deepseek-v4.1-flash",
+          "effort_config_id": "effort"
+        },
+        "actual_runtime_model_id": null,
+        "model_verified": "unknown",
+        "resumed": false,
+        "recorded_at": 1793417986.675
+      },
+      "events": [
+        {
+          "cursor": 9,
+          "fingerprint": "sha256:efc4a5a7b2eb1f560a68901bc9534907c01ebb94c74fa57bee6912aa153a7660",
+          "kind": "steer_sent",
+          "method": "_session/steering",
+          "request_id": 6,
+          "ts": 1793417993.557,
+          "turn_request_id": 5
+        },
+        {
+          "cursor": 10,
+          "kind": "steer_result",
+          "method": "_session/steering",
+          "request_id": 6,
+          "steer_consumed": null,
+          "steer_outcome": "written",
+          "ts": 1793417993.56,
+          "turn_request_id_preserved": true
+        },
+        {
+          "cursor": 13,
+          "kind": "turn_ended",
+          "outcome": "turn_completed",
+          "prompt_fingerprint": "sha256:1c40af0f9fd07293cff743ca997354688df44dd8b9371b1e605c5f3ed62c629b",
+          "prompt_source": "delegator",
+          "stop_reason": "end_turn",
+          "ts": 1793417994.558
+        },
+        {
+          "cursor": 24,
+          "kind": "turn_ended",
+          "outcome": "turn_completed",
+          "prompt_fingerprint": "sha256:3d95e2feaa69b47411a3dd0e5ced0261c92cc2d668b72e54c72f5a531ff67f58",
+          "prompt_source": "delegator",
+          "stop_reason": "end_turn",
+          "ts": 1793418004.745
+        }
+      ]
+    },
+    {
+      "session": "opencode-i433-225-stripped",
+      "acp_session_id": "ses_e6ff2fbbcffeacvdfbFs3wYJcs",
+      "agent_info": {
+        "name": "OpenCode",
+        "version": "2.2.5"
+      },
+      "protocol_version": 1,
+      "holder_instance_id": "a0ac7313ca6fde757f41590fda4ad9a9",
+      "state": "stopped",
+      "scripts": {
+        "adapters/opencode.sh": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/adapters/opencode.sh",
+          "sha256": "c0f7ce502ca98484d78b54b337c75a8d138eb2fa8546f8b59ccd983b3dde9334"
+        },
+        "kaola-acp-holder.py": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-acp-holder.py",
+          "sha256": "d5bd12853a78ad5a831a0dc0bc3da7c8ca36121969823db6130d5721a3feabf4"
+        },
+        "kaola-acp.py": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-acp.py",
+          "sha256": "5e8d8c118b1e5dbb3d1168f5c99cbfe114fa260869cc18c2ef8964b55a934ff8"
+        },
+        "kaola-opencode-acp.py": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-acp.py",
+          "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67"
+        },
+        "kaola-opencode-steer.mjs": {
+          "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-steer.mjs",
+          "sha256": "304543b7b4bf708dff1abfa303d2e5c4dfa08e1459e9c949957f080f505de0b0"
+        }
+      },
+      "start_evidence": {
+        "config_application": {
+          "effort": {
+            "advertised": true,
+            "applied": true,
+            "candidates": [
+              "effort"
+            ],
+            "config_id": "effort",
+            "value": "max"
+          },
+          "fast": {
+            "applied": false,
+            "reason": "no-advertised-config-option"
+          },
+          "model": {
+            "applied": true,
+            "config_id": "model",
+            "value": "opencode-go/deepseek-v4.1-flash"
+          }
+        },
+        "effective_selection": {
+          "effective_effort": "max",
+          "effective_model": "opencode-go/deepseek-v4.1-flash",
+          "effort_config_id": "effort"
+        },
+        "actual_runtime_model_id": null,
+        "model_verified": "unknown",
+        "resumed": false,
+        "recorded_at": 1793418134.792
+      },
+      "events": [
+        {
+          "cursor": 7,
+          "kind": "turn_ended",
+          "outcome": "turn_completed",
+          "prompt_fingerprint": "sha256:788182bd012ed313127cc8f8c1cbf7a535b33ce894964d4ffa6eab5434420ac5",
+          "prompt_source": "delegator",
+          "stop_reason": "end_turn",
+          "ts": 1793418146.861
+        }
+      ]
+    }
+  ],
+  "integrated_receipts": {
+    "2032-after-cancel": {
+      "acp_session_id": "ses_e6fe9eb45ffeWaLKelWoRDmLHk",
+      "transport": {
+        "selected": "acp"
+      },
+      "outcome": "turn_completed",
+      "final_text": "AFTERCANCEL2032",
+      "pending_permissions": [],
+      "tool_calls": {
+        "count": 0,
+        "failed": 0,
+        "kinds": {}
+      },
+      "failed_tools": [],
+      "stop_reason": "end_turn",
+      "side_effects": {
+        "commands_run": 0,
+        "files_changed": 0
       }
     },
-    "start_evidence": {
+    "2032-ask-send": {
+      "acp_session_id": "ses_e6fe93dadffeklrs0aReLugYqu",
+      "transport": {
+        "selected": "acp"
+      },
+      "outcome": "in_progress",
+      "turn_request_id": 5
+    },
+    "2032-ask-start": {
+      "acp_session_id": "ses_e6fe93dadffeklrs0aReLugYqu",
+      "agent_pid": 28959,
+      "holder_instance_id": "b40bcee69bceb3a76454a46caa140f6e",
+      "bridge": {
+        "layout": "skill",
+        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-acp.py",
+        "present": true,
+        "relative": "kaola-opencode-acp.py",
+        "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67",
+        "upstream_pin": null,
+        "verified_versions": "cli=2.0.22;protocol=1"
+      },
+      "runtime_binary": {
+        "absolute": true,
+        "env": "OPENCODE_BIN",
+        "passed_as": "OPENCODE_BIN",
+        "path": "/Users/ylpromax5/.local/bin/opencode",
+        "present": true
+      },
+      "transport": {
+        "agent_info": {
+          "name": "OpenCode",
+          "version": "2.0.32"
+        },
+        "capabilities": {
+          "_meta": {
+            "opencode/child-session-updates": true
+          },
+          "loadSession": true,
+          "mcpCapabilities": {
+            "http": true,
+            "sse": false
+          },
+          "promptCapabilities": {
+            "embeddedContext": true,
+            "image": true
+          },
+          "sessionCapabilities": {
+            "additionalDirectories": {},
+            "close": {},
+            "delete": {},
+            "fork": {},
+            "list": {},
+            "resume": {}
+          }
+        },
+        "cli_version": null,
+        "protocol_version": 1,
+        "selected": "acp"
+      },
+      "state": "ready",
+      "native_permission_policy": {
+        "agent": "build",
+        "reason": "native-config-supplied",
+        "selected": false
+      },
       "config_application": {
         "effort": {
           "advertised": true,
@@ -56,76 +527,151 @@
         "effective_effort": "max",
         "effective_model": "opencode-go/deepseek-v4.1-flash",
         "effort_config_id": "effort"
-      },
-      "actual_runtime_model_id": null,
-      "model_verified": "unknown",
-      "resumed": false,
-      "recorded_at": 1793418159.357
-    },
-    "events": [
-      {
-        "cursor": 8,
-        "fingerprint": "sha256:7e422ae4d5eddce43503d377dfe84ce2218ac9baab732a46ab0ad3695f631b88",
-        "kind": "steer_sent",
-        "method": "_session/steering",
-        "request_id": 6,
-        "ts": 1793418170.343,
-        "turn_request_id": 5
-      },
-      {
-        "cursor": 9,
-        "kind": "steer_result",
-        "method": "_session/steering",
-        "request_id": 6,
-        "steer_consumed": null,
-        "steer_outcome": "written",
-        "ts": 1793418170.346,
-        "turn_request_id_preserved": true
-      },
-      {
-        "cursor": 12,
-        "kind": "turn_ended",
-        "outcome": "turn_completed",
-        "prompt_fingerprint": "sha256:c3a86156a066d90e21ebbe999cffc273f0bcff7e09472d5f83ee6db3d0870812",
-        "prompt_source": "delegator",
-        "stop_reason": "end_turn",
-        "ts": 1793418171.686
       }
-    ]
-  },
-  {
-    "session": "opencode-i433-225-ask",
-    "acp_session_id": "ses_e6ff3c1aaffeNAcW2RGiLmhMCn",
-    "agent_info": {
-      "name": "OpenCode",
-      "version": "2.2.5"
     },
-    "protocol_version": 1,
-    "holder_instance_id": "7158f3b8463f9b89018802da8bb495cb",
-    "state": "stopped",
-    "scripts": {
-      "adapters/opencode.sh": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/adapters/opencode.sh",
-        "sha256": "c0f7ce502ca98484d78b54b337c75a8d138eb2fa8546f8b59ccd983b3dde9334"
+    "2032-ask-stop": {
+      "transport": {
+        "selected": "acp"
       },
-      "kaola-acp-holder.py": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-acp-holder.py",
-        "sha256": "d5bd12853a78ad5a831a0dc0bc3da7c8ca36121969823db6130d5721a3feabf4"
+      "stopped": true,
+      "residual_pids": []
+    },
+    "2032-ask-wait": {
+      "acp_session_id": "ses_e6fe93dadffeklrs0aReLugYqu",
+      "transport": {
+        "selected": "acp"
       },
-      "kaola-acp.py": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-acp.py",
-        "sha256": "5e8d8c118b1e5dbb3d1168f5c99cbfe114fa260869cc18c2ef8964b55a934ff8"
+      "outcome": "turn_completed",
+      "final_text": "Command: `printf ASK2032`\n\nOutput:\n\n```\nASK2032\n```\n\n(No trailing newline, since `printf` doesn't add one.)",
+      "pending_permissions": [],
+      "tool_calls": {
+        "count": 1,
+        "failed": 0,
+        "kinds": {
+          "execute": 1
+        }
       },
-      "kaola-opencode-acp.py": {
+      "failed_tools": [],
+      "stop_reason": "end_turn",
+      "side_effects": {
+        "commands_run": 1,
+        "files_changed": 0
+      }
+    },
+    "2032-cancel-send": {
+      "acp_session_id": "ses_e6fe9eb45ffeWaLKelWoRDmLHk",
+      "transport": {
+        "selected": "acp"
+      },
+      "outcome": "in_progress",
+      "turn_request_id": 6
+    },
+    "2032-cancel": {
+      "acp_session_id": "ses_e6fe9eb45ffeWaLKelWoRDmLHk",
+      "transport": {
+        "selected": "acp"
+      },
+      "outcome": "turn_canceled",
+      "final_text": "",
+      "pending_permissions": [],
+      "tool_calls": {
+        "count": 1,
+        "failed": 1,
+        "kinds": {
+          "execute": 1
+        }
+      },
+      "failed_tools": [
+        {
+          "error_head": "[{'type': 'content', 'content': {'type': 'text', 'text': 'Tool execution interrupted'}}]",
+          "kind": "execute",
+          "title": "sleep 20"
+        }
+      ],
+      "stop_reason": "cancelled",
+      "side_effects": {
+        "commands_run": 1,
+        "files_changed": 0
+      },
+      "cancel_sent": true
+    },
+    "2032-delay-send": {
+      "acp_session_id": "ses_e6fe7dd10ffejoZE7e3zoP0vzs",
+      "transport": {
+        "selected": "acp"
+      },
+      "outcome": "turn_completed",
+      "final_text": "DELAY2032",
+      "pending_permissions": [],
+      "tool_calls": {
+        "count": 0,
+        "failed": 0,
+        "kinds": {}
+      },
+      "failed_tools": [],
+      "stop_reason": "end_turn",
+      "side_effects": {
+        "commands_run": 0,
+        "files_changed": 0
+      }
+    },
+    "2032-delay-start": {
+      "acp_session_id": "ses_e6fe7dd10ffejoZE7e3zoP0vzs",
+      "agent_pid": 40835,
+      "holder_instance_id": "5d0055e733b9ec762d305535250791ae",
+      "bridge": {
+        "layout": "skill",
         "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-acp.py",
-        "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67"
+        "present": true,
+        "relative": "kaola-opencode-acp.py",
+        "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67",
+        "upstream_pin": null,
+        "verified_versions": "cli=2.0.22;protocol=1"
       },
-      "kaola-opencode-steer.mjs": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-steer.mjs",
-        "sha256": "304543b7b4bf708dff1abfa303d2e5c4dfa08e1459e9c949957f080f505de0b0"
-      }
-    },
-    "start_evidence": {
+      "runtime_binary": {
+        "absolute": true,
+        "env": "OPENCODE_BIN",
+        "passed_as": "OPENCODE_BIN",
+        "path": "/Users/ylpromax5/.local/bin/opencode",
+        "present": true
+      },
+      "transport": {
+        "agent_info": {
+          "name": "OpenCode",
+          "version": "2.0.32"
+        },
+        "capabilities": {
+          "_meta": {
+            "opencode/child-session-updates": true
+          },
+          "loadSession": true,
+          "mcpCapabilities": {
+            "http": true,
+            "sse": false
+          },
+          "promptCapabilities": {
+            "embeddedContext": true,
+            "image": true
+          },
+          "sessionCapabilities": {
+            "additionalDirectories": {},
+            "close": {},
+            "delete": {},
+            "fork": {},
+            "list": {},
+            "resume": {}
+          }
+        },
+        "cli_version": null,
+        "protocol_version": 1,
+        "selected": "acp"
+      },
+      "state": "ready",
+      "native_permission_policy": {
+        "agent": "build",
+        "reason": "native-config-supplied",
+        "selected": false
+      },
       "config_application": {
         "effort": {
           "advertised": true,
@@ -150,57 +696,122 @@
         "effective_effort": "max",
         "effective_model": "opencode-go/deepseek-v4.1-flash",
         "effort_config_id": "effort"
-      },
-      "actual_runtime_model_id": null,
-      "model_verified": "unknown",
-      "resumed": false,
-      "recorded_at": 1793418084.119
-    },
-    "events": [
-      {
-        "cursor": 13,
-        "kind": "turn_ended",
-        "outcome": "turn_completed",
-        "prompt_fingerprint": "sha256:c5ca2db37b52daf06a9d5be0a909e05d8a32dbf485f6134e4546f846d46fcd5f",
-        "prompt_source": "delegator",
-        "stop_reason": "end_turn",
-        "ts": 1793418105.214
       }
-    ]
-  },
-  {
-    "session": "opencode-i433-225-resume",
-    "acp_session_id": "ses_e6ff5435affeW4SH6DwLfPbvWb",
-    "agent_info": {
-      "name": "OpenCode",
-      "version": "2.2.5"
     },
-    "protocol_version": 1,
-    "holder_instance_id": "3422b8f56e5aec559cea34fb89e75d4d",
-    "state": "stopped",
-    "scripts": {
-      "adapters/opencode.sh": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/adapters/opencode.sh",
-        "sha256": "c0f7ce502ca98484d78b54b337c75a8d138eb2fa8546f8b59ccd983b3dde9334"
+    "2032-delay-stop": {
+      "transport": {
+        "selected": "acp"
       },
-      "kaola-acp-holder.py": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-acp-holder.py",
-        "sha256": "d5bd12853a78ad5a831a0dc0bc3da7c8ca36121969823db6130d5721a3feabf4"
+      "stopped": true,
+      "residual_pids": []
+    },
+    "2032-fresh-send": {
+      "acp_session_id": "ses_e6fe9eb45ffeWaLKelWoRDmLHk",
+      "transport": {
+        "selected": "acp"
       },
-      "kaola-acp.py": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-acp.py",
-        "sha256": "5e8d8c118b1e5dbb3d1168f5c99cbfe114fa260869cc18c2ef8964b55a934ff8"
+      "outcome": "turn_completed",
+      "final_text": "Output: `FRESH2032`",
+      "pending_permissions": [],
+      "tool_calls": {
+        "count": 1,
+        "failed": 0,
+        "kinds": {
+          "execute": 1
+        }
       },
-      "kaola-opencode-acp.py": {
+      "failed_tools": [],
+      "stop_reason": "end_turn",
+      "side_effects": {
+        "commands_run": 1,
+        "files_changed": 0
+      }
+    },
+    "2032-permit": {
+      "transport": {
+        "selected": "acp"
+      },
+      "pending_permissions": [],
+      "permitted": "0",
+      "option": "once"
+    },
+    "2032-resume-send": {
+      "acp_session_id": "ses_e6fe9eb45ffeWaLKelWoRDmLHk",
+      "transport": {
+        "selected": "acp"
+      },
+      "outcome": "turn_completed",
+      "final_text": "The first shell command, `printf FRESH2032`, printed:\n\n```\nFRESH2032\n```",
+      "pending_permissions": [],
+      "tool_calls": {
+        "count": 0,
+        "failed": 0,
+        "kinds": {}
+      },
+      "failed_tools": [],
+      "stop_reason": "end_turn",
+      "side_effects": {
+        "commands_run": 0,
+        "files_changed": 0
+      }
+    },
+    "2032-resume-start": {
+      "acp_session_id": "ses_e6fe9eb45ffeWaLKelWoRDmLHk",
+      "agent_pid": 30799,
+      "holder_instance_id": "49d9f93a3bf977eec0ce381eaf0a9e8e",
+      "bridge": {
+        "layout": "skill",
         "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-acp.py",
-        "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67"
+        "present": true,
+        "relative": "kaola-opencode-acp.py",
+        "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67",
+        "upstream_pin": null,
+        "verified_versions": "cli=2.0.22;protocol=1"
       },
-      "kaola-opencode-steer.mjs": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-steer.mjs",
-        "sha256": "304543b7b4bf708dff1abfa303d2e5c4dfa08e1459e9c949957f080f505de0b0"
-      }
-    },
-    "start_evidence": {
+      "runtime_binary": {
+        "absolute": true,
+        "env": "OPENCODE_BIN",
+        "passed_as": "OPENCODE_BIN",
+        "path": "/Users/ylpromax5/.local/bin/opencode",
+        "present": true
+      },
+      "transport": {
+        "agent_info": {
+          "name": "OpenCode",
+          "version": "2.0.32"
+        },
+        "capabilities": {
+          "_meta": {
+            "opencode/child-session-updates": true
+          },
+          "loadSession": true,
+          "mcpCapabilities": {
+            "http": true,
+            "sse": false
+          },
+          "promptCapabilities": {
+            "embeddedContext": true,
+            "image": true
+          },
+          "sessionCapabilities": {
+            "additionalDirectories": {},
+            "close": {},
+            "delete": {},
+            "fork": {},
+            "list": {},
+            "resume": {}
+          }
+        },
+        "cli_version": null,
+        "protocol_version": 1,
+        "selected": "acp"
+      },
+      "state": "ready",
+      "native_permission_policy": {
+        "agent": "build",
+        "reason": "explicit-mode-resume-or-command",
+        "selected": false
+      },
       "config_application": {
         "effort": {
           "applied": false,
@@ -219,57 +830,87 @@
         "effective_effort": "max",
         "effective_model": "opencode-go/deepseek-v4.1-flash",
         "effort_config_id": "effort"
-      },
-      "actual_runtime_model_id": null,
-      "model_verified": "unknown",
-      "resumed": true,
-      "recorded_at": 1793418018.115
-    },
-    "events": [
-      {
-        "cursor": 5,
-        "kind": "turn_ended",
-        "outcome": "turn_completed",
-        "prompt_fingerprint": "sha256:b5d6679bbfe8067b801913a3e98549b237caf8051ef28d9198b555a5e435ccb5",
-        "prompt_source": "delegator",
-        "stop_reason": "end_turn",
-        "ts": 1793418031.72
       }
-    ]
-  },
-  {
-    "session": "opencode-i433-225-standalone",
-    "acp_session_id": "ses_e6ff5435affeW4SH6DwLfPbvWb",
-    "agent_info": {
-      "name": "OpenCode",
-      "version": "2.2.5"
     },
-    "protocol_version": 1,
-    "holder_instance_id": "6cc1dc871ef670d37cfdf283e98d9a09",
-    "state": "stopped",
-    "scripts": {
-      "adapters/opencode.sh": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/adapters/opencode.sh",
-        "sha256": "c0f7ce502ca98484d78b54b337c75a8d138eb2fa8546f8b59ccd983b3dde9334"
+    "2032-resume-stop": {
+      "transport": {
+        "selected": "acp"
       },
-      "kaola-acp-holder.py": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-acp-holder.py",
-        "sha256": "d5bd12853a78ad5a831a0dc0bc3da7c8ca36121969823db6130d5721a3feabf4"
-      },
-      "kaola-acp.py": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-acp.py",
-        "sha256": "5e8d8c118b1e5dbb3d1168f5c99cbfe114fa260869cc18c2ef8964b55a934ff8"
-      },
-      "kaola-opencode-acp.py": {
+      "stopped": true,
+      "residual_pids": []
+    },
+    "2032-start": {
+      "acp_session_id": "ses_e6fe9eb45ffeWaLKelWoRDmLHk",
+      "agent_pid": 20685,
+      "holder_instance_id": "f9aa1471ae22202e060064c1cf6643b6",
+      "bridge": {
+        "layout": "skill",
         "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-acp.py",
-        "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67"
+        "present": true,
+        "relative": "kaola-opencode-acp.py",
+        "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67",
+        "upstream_pin": null,
+        "verified_versions": "cli=2.0.22;protocol=1"
       },
-      "kaola-opencode-steer.mjs": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-steer.mjs",
-        "sha256": "304543b7b4bf708dff1abfa303d2e5c4dfa08e1459e9c949957f080f505de0b0"
-      }
-    },
-    "start_evidence": {
+      "runtime_binary": {
+        "absolute": true,
+        "env": "OPENCODE_BIN",
+        "passed_as": "OPENCODE_BIN",
+        "path": "/Users/ylpromax5/.local/bin/opencode",
+        "present": true
+      },
+      "transport": {
+        "agent_info": {
+          "name": "OpenCode",
+          "version": "2.0.32"
+        },
+        "capabilities": {
+          "_meta": {
+            "opencode/child-session-updates": true
+          },
+          "loadSession": true,
+          "mcpCapabilities": {
+            "http": true,
+            "sse": false
+          },
+          "promptCapabilities": {
+            "embeddedContext": true,
+            "image": true
+          },
+          "sessionCapabilities": {
+            "additionalDirectories": {},
+            "close": {},
+            "delete": {},
+            "fork": {},
+            "list": {},
+            "resume": {}
+          }
+        },
+        "cli_version": null,
+        "protocol_version": 1,
+        "selected": "acp"
+      },
+      "state": "ready",
+      "native_permission_policy": {
+        "agent": "build",
+        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/.kw/issue-433-tmp/records/opencode/opencode-i433-r2032-fresh/9b6f08aee61581e4/opencode-build-default.json",
+        "policy": {
+          "agents": {
+            "build": {
+              "permissions": [
+                {
+                  "action": "*",
+                  "effect": "allow",
+                  "resource": "*"
+                }
+              ]
+            }
+          }
+        },
+        "reason": "managed-build-default",
+        "selected": true,
+        "via": "OPENCODE_CONFIG"
+      },
       "config_application": {
         "effort": {
           "advertised": true,
@@ -294,85 +935,100 @@
         "effective_effort": "max",
         "effective_model": "opencode-go/deepseek-v4.1-flash",
         "effort_config_id": "effort"
-      },
-      "actual_runtime_model_id": null,
-      "model_verified": "unknown",
-      "resumed": false,
-      "recorded_at": 1793417986.675
-    },
-    "events": [
-      {
-        "cursor": 9,
-        "fingerprint": "sha256:efc4a5a7b2eb1f560a68901bc9534907c01ebb94c74fa57bee6912aa153a7660",
-        "kind": "steer_sent",
-        "method": "_session/steering",
-        "request_id": 6,
-        "ts": 1793417993.557,
-        "turn_request_id": 5
-      },
-      {
-        "cursor": 10,
-        "kind": "steer_result",
-        "method": "_session/steering",
-        "request_id": 6,
-        "steer_consumed": null,
-        "steer_outcome": "written",
-        "ts": 1793417993.56,
-        "turn_request_id_preserved": true
-      },
-      {
-        "cursor": 13,
-        "kind": "turn_ended",
-        "outcome": "turn_completed",
-        "prompt_fingerprint": "sha256:1c40af0f9fd07293cff743ca997354688df44dd8b9371b1e605c5f3ed62c629b",
-        "prompt_source": "delegator",
-        "stop_reason": "end_turn",
-        "ts": 1793417994.558
-      },
-      {
-        "cursor": 24,
-        "kind": "turn_ended",
-        "outcome": "turn_completed",
-        "prompt_fingerprint": "sha256:3d95e2feaa69b47411a3dd0e5ced0261c92cc2d668b72e54c72f5a531ff67f58",
-        "prompt_source": "delegator",
-        "stop_reason": "end_turn",
-        "ts": 1793418004.745
       }
-    ]
-  },
-  {
-    "session": "opencode-i433-225-stripped",
-    "acp_session_id": "ses_e6ff2fbbcffeacvdfbFs3wYJcs",
-    "agent_info": {
-      "name": "OpenCode",
-      "version": "2.2.5"
     },
-    "protocol_version": 1,
-    "holder_instance_id": "a0ac7313ca6fde757f41590fda4ad9a9",
-    "state": "stopped",
-    "scripts": {
-      "adapters/opencode.sh": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/adapters/opencode.sh",
-        "sha256": "c0f7ce502ca98484d78b54b337c75a8d138eb2fa8546f8b59ccd983b3dde9334"
+    "2032-stop": {
+      "transport": {
+        "selected": "acp"
       },
-      "kaola-acp-holder.py": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-acp-holder.py",
-        "sha256": "d5bd12853a78ad5a831a0dc0bc3da7c8ca36121969823db6130d5721a3feabf4"
+      "stopped": true,
+      "residual_pids": []
+    },
+    "225-after-cancel": {
+      "acp_session_id": "ses_e6fea9f2effeeIvpoPuHHBvldV",
+      "transport": {
+        "selected": "acp"
       },
-      "kaola-acp.py": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-acp.py",
-        "sha256": "5e8d8c118b1e5dbb3d1168f5c99cbfe114fa260869cc18c2ef8964b55a934ff8"
+      "outcome": "turn_completed",
+      "final_text": "AFTERCANCEL225",
+      "pending_permissions": [],
+      "tool_calls": {
+        "count": 0,
+        "failed": 0,
+        "kinds": {}
       },
-      "kaola-opencode-acp.py": {
+      "failed_tools": [],
+      "stop_reason": "end_turn",
+      "side_effects": {
+        "commands_run": 0,
+        "files_changed": 0
+      }
+    },
+    "225-ask-send": {
+      "acp_session_id": "ses_e6fe6f188ffefEqMlTUgbSboDT",
+      "transport": {
+        "selected": "acp"
+      },
+      "outcome": "in_progress",
+      "turn_request_id": 5
+    },
+    "225-ask-start": {
+      "acp_session_id": "ses_e6fe6f188ffefEqMlTUgbSboDT",
+      "agent_pid": 46774,
+      "holder_instance_id": "702284a21b536533f8dc63eac616ab87",
+      "bridge": {
+        "layout": "skill",
         "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-acp.py",
-        "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67"
+        "present": true,
+        "relative": "kaola-opencode-acp.py",
+        "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67",
+        "upstream_pin": null,
+        "verified_versions": "cli=2.0.22;protocol=1"
       },
-      "kaola-opencode-steer.mjs": {
-        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-steer.mjs",
-        "sha256": "304543b7b4bf708dff1abfa303d2e5c4dfa08e1459e9c949957f080f505de0b0"
-      }
-    },
-    "start_evidence": {
+      "runtime_binary": {
+        "absolute": true,
+        "env": "OPENCODE_BIN",
+        "passed_as": "OPENCODE_BIN",
+        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/.kw/issue-433-tmp/node_modules/.bin/opencode",
+        "present": true
+      },
+      "transport": {
+        "agent_info": {
+          "name": "OpenCode",
+          "version": "2.2.5"
+        },
+        "capabilities": {
+          "_meta": {
+            "opencode/child-session-updates": true
+          },
+          "loadSession": true,
+          "mcpCapabilities": {
+            "http": true,
+            "sse": false
+          },
+          "promptCapabilities": {
+            "embeddedContext": true,
+            "image": true
+          },
+          "sessionCapabilities": {
+            "additionalDirectories": {},
+            "close": {},
+            "delete": {},
+            "fork": {},
+            "list": {},
+            "resume": {}
+          }
+        },
+        "cli_version": null,
+        "protocol_version": 1,
+        "selected": "acp"
+      },
+      "state": "ready",
+      "native_permission_policy": {
+        "agent": "build",
+        "reason": "native-config-supplied",
+        "selected": false
+      },
       "config_application": {
         "effort": {
           "advertised": true,
@@ -397,22 +1053,607 @@
         "effective_effort": "max",
         "effective_model": "opencode-go/deepseek-v4.1-flash",
         "effort_config_id": "effort"
-      },
-      "actual_runtime_model_id": null,
-      "model_verified": "unknown",
-      "resumed": false,
-      "recorded_at": 1793418134.792
-    },
-    "events": [
-      {
-        "cursor": 7,
-        "kind": "turn_ended",
-        "outcome": "turn_completed",
-        "prompt_fingerprint": "sha256:788182bd012ed313127cc8f8c1cbf7a535b33ce894964d4ffa6eab5434420ac5",
-        "prompt_source": "delegator",
-        "stop_reason": "end_turn",
-        "ts": 1793418146.861
       }
-    ]
+    },
+    "225-ask-stop": {
+      "transport": {
+        "selected": "acp"
+      },
+      "stopped": true,
+      "residual_pids": []
+    },
+    "225-ask-wait": {
+      "acp_session_id": "ses_e6fe6f188ffefEqMlTUgbSboDT",
+      "transport": {
+        "selected": "acp"
+      },
+      "outcome": "turn_completed",
+      "final_text": "Output: `ASK225`",
+      "pending_permissions": [],
+      "tool_calls": {
+        "count": 1,
+        "failed": 0,
+        "kinds": {
+          "execute": 1
+        }
+      },
+      "failed_tools": [],
+      "stop_reason": "end_turn",
+      "side_effects": {
+        "commands_run": 1,
+        "files_changed": 0
+      }
+    },
+    "225-cancel-send": {
+      "acp_session_id": "ses_e6fea9f2effeeIvpoPuHHBvldV",
+      "transport": {
+        "selected": "acp"
+      },
+      "outcome": "in_progress",
+      "turn_request_id": 6
+    },
+    "225-cancel": {
+      "acp_session_id": "ses_e6fea9f2effeeIvpoPuHHBvldV",
+      "transport": {
+        "selected": "acp"
+      },
+      "outcome": "turn_canceled",
+      "final_text": "",
+      "pending_permissions": [],
+      "tool_calls": {
+        "count": 1,
+        "failed": 1,
+        "kinds": {
+          "execute": 1
+        }
+      },
+      "failed_tools": [
+        {
+          "error_head": "[{'type': 'content', 'content': {'type': 'text', 'text': 'Tool execution interrupted'}}]",
+          "kind": "execute",
+          "title": "sleep 20"
+        }
+      ],
+      "stop_reason": "cancelled",
+      "side_effects": {
+        "commands_run": 1,
+        "files_changed": 0
+      },
+      "cancel_sent": true
+    },
+    "225-delay-send": {
+      "acp_session_id": "ses_e6fe81e39ffekZBf9z6CmzB5lK",
+      "transport": {
+        "selected": "acp"
+      },
+      "outcome": "turn_completed",
+      "final_text": "DELAY225",
+      "pending_permissions": [],
+      "tool_calls": {
+        "count": 0,
+        "failed": 0,
+        "kinds": {}
+      },
+      "failed_tools": [],
+      "stop_reason": "end_turn",
+      "side_effects": {
+        "commands_run": 0,
+        "files_changed": 0
+      }
+    },
+    "225-delay-start": {
+      "acp_session_id": "ses_e6fe81e39ffekZBf9z6CmzB5lK",
+      "agent_pid": 38643,
+      "holder_instance_id": "27c24a800282fa8798cbb0d707c24382",
+      "bridge": {
+        "layout": "skill",
+        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-acp.py",
+        "present": true,
+        "relative": "kaola-opencode-acp.py",
+        "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67",
+        "upstream_pin": null,
+        "verified_versions": "cli=2.0.22;protocol=1"
+      },
+      "runtime_binary": {
+        "absolute": true,
+        "env": "OPENCODE_BIN",
+        "passed_as": "OPENCODE_BIN",
+        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/.kw/issue-433-tmp/node_modules/.bin/opencode",
+        "present": true
+      },
+      "transport": {
+        "agent_info": {
+          "name": "OpenCode",
+          "version": "2.2.5"
+        },
+        "capabilities": {
+          "_meta": {
+            "opencode/child-session-updates": true
+          },
+          "loadSession": true,
+          "mcpCapabilities": {
+            "http": true,
+            "sse": false
+          },
+          "promptCapabilities": {
+            "embeddedContext": true,
+            "image": true
+          },
+          "sessionCapabilities": {
+            "additionalDirectories": {},
+            "close": {},
+            "delete": {},
+            "fork": {},
+            "list": {},
+            "resume": {}
+          }
+        },
+        "cli_version": null,
+        "protocol_version": 1,
+        "selected": "acp"
+      },
+      "state": "ready",
+      "native_permission_policy": {
+        "agent": "build",
+        "reason": "native-config-supplied",
+        "selected": false
+      },
+      "config_application": {
+        "effort": {
+          "advertised": true,
+          "applied": true,
+          "candidates": [
+            "effort"
+          ],
+          "config_id": "effort",
+          "value": "max"
+        },
+        "fast": {
+          "applied": false,
+          "reason": "no-advertised-config-option"
+        },
+        "model": {
+          "applied": true,
+          "config_id": "model",
+          "value": "opencode-go/deepseek-v4.1-flash"
+        }
+      },
+      "effective_selection": {
+        "effective_effort": "max",
+        "effective_model": "opencode-go/deepseek-v4.1-flash",
+        "effort_config_id": "effort"
+      }
+    },
+    "225-delay-stop": {
+      "transport": {
+        "selected": "acp"
+      },
+      "stopped": true,
+      "residual_pids": []
+    },
+    "225-fresh-send": {
+      "acp_session_id": "ses_e6fea9f2effeeIvpoPuHHBvldV",
+      "transport": {
+        "selected": "acp"
+      },
+      "outcome": "turn_completed",
+      "final_text": "FRESH225",
+      "pending_permissions": [],
+      "tool_calls": {
+        "count": 1,
+        "failed": 0,
+        "kinds": {
+          "execute": 1
+        }
+      },
+      "failed_tools": [],
+      "stop_reason": "end_turn",
+      "side_effects": {
+        "commands_run": 1,
+        "files_changed": 0
+      }
+    },
+    "225-permit": {
+      "transport": {
+        "selected": "acp"
+      },
+      "pending_permissions": [],
+      "permitted": "0",
+      "option": "once"
+    },
+    "225-start": {
+      "acp_session_id": "ses_e6fea9f2effeeIvpoPuHHBvldV",
+      "agent_pid": 14372,
+      "holder_instance_id": "d07d582646109b16063eb2b518f44f12",
+      "bridge": {
+        "layout": "skill",
+        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-acp.py",
+        "present": true,
+        "relative": "kaola-opencode-acp.py",
+        "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67",
+        "upstream_pin": null,
+        "verified_versions": "cli=2.0.22;protocol=1"
+      },
+      "runtime_binary": {
+        "absolute": true,
+        "env": "OPENCODE_BIN",
+        "passed_as": "OPENCODE_BIN",
+        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/.kw/issue-433-tmp/node_modules/.bin/opencode",
+        "present": true
+      },
+      "transport": {
+        "agent_info": {
+          "name": "OpenCode",
+          "version": "2.2.5"
+        },
+        "capabilities": {
+          "_meta": {
+            "opencode/child-session-updates": true
+          },
+          "loadSession": true,
+          "mcpCapabilities": {
+            "http": true,
+            "sse": false
+          },
+          "promptCapabilities": {
+            "embeddedContext": true,
+            "image": true
+          },
+          "sessionCapabilities": {
+            "additionalDirectories": {},
+            "close": {},
+            "delete": {},
+            "fork": {},
+            "list": {},
+            "resume": {}
+          }
+        },
+        "cli_version": null,
+        "protocol_version": 1,
+        "selected": "acp"
+      },
+      "state": "ready",
+      "native_permission_policy": {
+        "agent": "build",
+        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/.kw/issue-433-tmp/records/opencode/opencode-i433-r225-fresh/9b6f08aee61581e4/opencode-build-default.json",
+        "policy": {
+          "agents": {
+            "build": {
+              "permissions": [
+                {
+                  "action": "*",
+                  "effect": "allow",
+                  "resource": "*"
+                }
+              ]
+            }
+          }
+        },
+        "reason": "managed-build-default",
+        "selected": true,
+        "via": "OPENCODE_CONFIG"
+      },
+      "config_application": {
+        "effort": {
+          "advertised": true,
+          "applied": true,
+          "candidates": [
+            "effort"
+          ],
+          "config_id": "effort",
+          "value": "max"
+        },
+        "fast": {
+          "applied": false,
+          "reason": "no-advertised-config-option"
+        },
+        "model": {
+          "applied": true,
+          "config_id": "model",
+          "value": "opencode-go/deepseek-v4.1-flash"
+        }
+      },
+      "effective_selection": {
+        "effective_effort": "max",
+        "effective_model": "opencode-go/deepseek-v4.1-flash",
+        "effort_config_id": "effort"
+      }
+    },
+    "225-steer-send": {
+      "acp_session_id": "ses_e6fe7702bffeznej5Wlctu47tW",
+      "transport": {
+        "selected": "acp"
+      },
+      "outcome": "in_progress",
+      "turn_request_id": 5
+    },
+    "225-steer-start": {
+      "acp_session_id": "ses_e6fe7702bffeznej5Wlctu47tW",
+      "agent_pid": 43617,
+      "holder_instance_id": "f80ace245b737e4123322ef039f93658",
+      "bridge": {
+        "layout": "skill",
+        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-acp.py",
+        "present": true,
+        "relative": "kaola-opencode-acp.py",
+        "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67",
+        "upstream_pin": null,
+        "verified_versions": "cli=2.0.22;protocol=1"
+      },
+      "runtime_binary": {
+        "absolute": true,
+        "env": "OPENCODE_BIN",
+        "passed_as": "OPENCODE_BIN",
+        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/.kw/issue-433-tmp/node_modules/.bin/opencode",
+        "present": true
+      },
+      "transport": {
+        "agent_info": {
+          "name": "OpenCode",
+          "version": "2.2.5"
+        },
+        "capabilities": {
+          "_meta": {
+            "opencode/child-session-updates": true
+          },
+          "loadSession": true,
+          "mcpCapabilities": {
+            "http": true,
+            "sse": false
+          },
+          "promptCapabilities": {
+            "embeddedContext": true,
+            "image": true
+          },
+          "sessionCapabilities": {
+            "additionalDirectories": {},
+            "close": {},
+            "delete": {},
+            "fork": {},
+            "list": {},
+            "resume": {}
+          }
+        },
+        "cli_version": null,
+        "protocol_version": 1,
+        "selected": "acp"
+      },
+      "state": "ready",
+      "native_permission_policy": {
+        "agent": "build",
+        "reason": "existing-config-source",
+        "selected": false,
+        "source": "/Users/ylpromax5/.config/opencode/opencode.json"
+      },
+      "config_application": {
+        "effort": {
+          "advertised": true,
+          "applied": true,
+          "candidates": [
+            "effort"
+          ],
+          "config_id": "effort",
+          "value": "max"
+        },
+        "fast": {
+          "applied": false,
+          "reason": "no-advertised-config-option"
+        },
+        "model": {
+          "applied": true,
+          "config_id": "model",
+          "value": "opencode-go/deepseek-v4.1-flash"
+        }
+      },
+      "effective_selection": {
+        "effective_effort": "max",
+        "effective_model": "opencode-go/deepseek-v4.1-flash",
+        "effort_config_id": "effort"
+      }
+    },
+    "225-steer-stop": {
+      "transport": {
+        "selected": "acp"
+      },
+      "stopped": true,
+      "residual_pids": []
+    },
+    "225-steer-wait": {
+      "acp_session_id": "ses_e6fe7702bffeznej5Wlctu47tW",
+      "transport": {
+        "selected": "acp"
+      },
+      "outcome": "turn_completed",
+      "final_text": "START225INTEGRATEDSTEER225",
+      "pending_permissions": [],
+      "tool_calls": {
+        "count": 0,
+        "failed": 0,
+        "kinds": {}
+      },
+      "failed_tools": [],
+      "stop_reason": "end_turn",
+      "side_effects": {
+        "commands_run": 0,
+        "files_changed": 0
+      }
+    },
+    "225-steer": {
+      "transport": {
+        "selected": "acp"
+      },
+      "outcome": "steer_written",
+      "steer_confirmation": "native-admitted",
+      "steer_outcome": "written",
+      "steer_method": "_session/steering",
+      "turn_request_id": 5,
+      "turn_request_id_preserved": true
+    },
+    "225-stop": {
+      "transport": {
+        "selected": "acp"
+      },
+      "stopped": true,
+      "residual_pids": []
+    },
+    "225-delayed-catalog": {
+      "initial_target_present": false,
+      "updates": [
+        {
+          "cursor": 4,
+          "target_present": true
+        }
+      ],
+      "plugin_delay_ms": 6000,
+      "plugin_trace": "hidden / reloaded"
+    },
+    "2032-delayed-catalog": {
+      "initial_target_present": false,
+      "updates": [
+        {
+          "cursor": 4,
+          "target_present": false
+        },
+        {
+          "cursor": 6,
+          "target_present": true
+        }
+      ],
+      "plugin_delay_ms": 6000,
+      "plugin_trace": "hidden / reloaded"
+    },
+    "proxy-process-check": {
+      "225": {
+        "adapter_and_native_six_absent": true,
+        "no_proxy_both_unchanged": "example.invalid"
+      },
+      "2032": {
+        "adapter_and_native_six_absent": true,
+        "no_proxy_both_unchanged": "example.invalid"
+      },
+      "input_forward_proxy": "http://127.0.0.1:9"
+    },
+    "225-native-export": {
+      "model": {
+        "id": "deepseek-v4.1-flash",
+        "providerID": "opencode-go",
+        "variant": "max"
+      },
+      "finish": "stop",
+      "source": "opencode session export --sanitize ses_e6fe81e39ffekZBf9z6CmzB5lK"
+    },
+    "225-resume-start": {
+      "acp_session_id": "ses_e6fea9f2effeeIvpoPuHHBvldV",
+      "agent_pid": 65596,
+      "holder_instance_id": "f03a89ef25f4ebdb2c985936c4d096e6",
+      "bridge": {
+        "layout": "skill",
+        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/scripts/kaola-opencode-acp.py",
+        "present": true,
+        "relative": "kaola-opencode-acp.py",
+        "sha256": "47a3b97d22b86a76457260f18030664a172ee353d97246804ee59292cde1ec67",
+        "upstream_pin": null,
+        "verified_versions": "cli=2.2.5;adapter=native-cli-2.2.5;protocol=1"
+      },
+      "runtime_binary": {
+        "absolute": true,
+        "env": "OPENCODE_BIN",
+        "passed_as": "OPENCODE_BIN",
+        "path": "/Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/.kw/issue-433-tmp/node_modules/.bin/opencode",
+        "present": true
+      },
+      "transport": {
+        "agent_info": {
+          "name": "OpenCode",
+          "version": "2.2.5"
+        },
+        "capabilities": {
+          "_meta": {
+            "opencode/child-session-updates": true
+          },
+          "loadSession": true,
+          "mcpCapabilities": {
+            "http": true,
+            "sse": false
+          },
+          "promptCapabilities": {
+            "embeddedContext": true,
+            "image": true
+          },
+          "sessionCapabilities": {
+            "additionalDirectories": {},
+            "close": {},
+            "delete": {},
+            "fork": {},
+            "list": {},
+            "resume": {}
+          }
+        },
+        "cli_version": null,
+        "protocol_version": 1,
+        "selected": "acp"
+      },
+      "state": "ready",
+      "native_permission_policy": {
+        "agent": "build",
+        "reason": "explicit-mode-resume-or-command",
+        "selected": false
+      },
+      "config_application": {
+        "effort": {
+          "applied": false,
+          "reason": "no-resolved-value"
+        },
+        "fast": {
+          "applied": false,
+          "reason": "no-advertised-config-option"
+        },
+        "model": {
+          "applied": false,
+          "reason": "no-resolved-value"
+        }
+      },
+      "effective_selection": {
+        "effective_effort": "max",
+        "effective_model": "opencode-go/deepseek-v4.1-flash",
+        "effort_config_id": "effort"
+      }
+    },
+    "225-resume-send": {
+      "acp_session_id": "ses_e6fea9f2effeeIvpoPuHHBvldV",
+      "transport": {
+        "selected": "acp"
+      },
+      "outcome": "turn_completed",
+      "final_text": "`FRESH225`",
+      "pending_permissions": [],
+      "tool_calls": {
+        "count": 0,
+        "failed": 0,
+        "kinds": {}
+      },
+      "failed_tools": [],
+      "stop_reason": "end_turn",
+      "side_effects": {
+        "commands_run": 0,
+        "files_changed": 0
+      }
+    },
+    "225-resume-stop": {
+      "transport": {
+        "selected": "acp"
+      },
+      "stopped": true,
+      "residual_pids": []
+    },
+    "2032-native-export": {
+      "model": {
+        "id": "deepseek-v4.1-flash",
+        "providerID": "opencode-go",
+        "variant": "max"
+      },
+      "finish": "stop",
+      "source": "opencode session export --sanitize ses_e6fe7dd10ffejoZE7e3zoP0vzs"
+    }
   }
-]
+}

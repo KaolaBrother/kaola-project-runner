@@ -1,4 +1,6 @@
-# Issue 433: OpenCode ACP upgrade — partial evidence, not accepted
+# Issue 433: OpenCode ACP upgrade evidence
+
+The integrated follow-up below supersedes the initial blocked verdict; the initial record is retained as historical evidence.
 
 Baseline: `b353f3d80beae67d3495018fe01d698c256fbfce`. The owner requires newest-ACP verification and the six-proxy-key stripping contract before adoption. The latter is not present in this baseline: `scripts/kaola-acp.py:agent_environment` copies `os.environ`, and `scripts/kaola-launchd-broker.py:filter_env` includes `PASS_PROXY`. OpenCode is in `LOOPBACK_NO_PROXY_PLATFORMS`. No conclusion about an integrated stripping implementation follows from this run. Do not mark 2.2.5 verified or adopt it from this evidence.
 
@@ -18,8 +20,27 @@ The run used this checkout's `scripts/kaola-opencode-acp.py` SHA-256 `47a3b97d22
 
 The default-policy attempt with an empty XDG config was not a managed-policy test: KPR detected the existing `~/.claude/agents` configuration source and did not select its default policy. A direct config-option echo is not proof that a provider actually used the selected model. The 2.2.5 session reported the requested model as applied, but delayed catalog advertisement was not forced or independently reproduced. The 2.0.29 reference machine was not touched. Test session data may exist in OpenCode's native data store; the temporary npm package and local KPR records were removed after the run.
 
-## Baseline validation and unresolved work
+## Baseline validation and unresolved work at the initial stop
 
 At unchanged baseline, `render-skills.py --check` passed. Focused suites passed: `test-issue-24-opencode-no-skip-all.py` 25, `test-issue-263-steer-adaptation.py` 30, `test-issue-254-opencode-model.py` 5. These are contract tests, not a substitute for live integration. The first invocation of `validate.sh` used macOS Bash 3.2 and refused the missing Bash >=4 prerequisite; rerunning with `/opt/homebrew/bin/bash` 5.3 passed. No full inventory was run.
 
 Acceptance remains red/incomplete, not a demonstrated OpenCode regression: validate the actual integrated six-key stripping behavior, fresh managed default policy, delayed catalog and model usage, cancellation and the complete 2.0.32 comparison; recheck candidate bytes and affected suites after any changes. Do not infer 2.2.5 compatibility or a need for staged upgrades from this partial evidence. No product patch is justified by these observations alone.
+
+## Integrated follow-up, 2026-10-31
+
+Merged origin/main `375757dc796cbba3d7df70a8c6d485e0a2f4929e` (#435, v0.9.36) into the same run. Its actual ACP environment removes all six forward-proxy keys before the OpenCode loopback helper. With each parent key set to `http://127.0.0.1:9` and both exclusion variables set to `example.invalid`, `ps` of both KPR adapter and native child showed all six absent and both exclusions unchanged, for 2.2.5 and 2.0.32. Each session successfully ran a native model/tool turn. The optional preflight loopback classification describes the caller environment, not the filtered ACP child.
+
+The 2.2.5 native adapter was taken from a temporary `@opencode/cli@2.2.5` install; the npm latest was 2.2.5. OpenCode packages its ACP in the CLI, so `acp_wrapper_pin` remains empty; the exact native adapter version is recorded with the CLI. The MacBook-installed 2.0.32 binary was used only as a comparison.
+
+- With isolated empty OpenCode config and legacy-test discovery, 2.2.5 and 2.0.32 both selected the process-only managed build policy via `OPENCODE_CONFIG`; each ran a shell tool without a permission request. The existing `~/.claude/agents` directory was empty; the test-specific discovery root prevents its mere presence from suppressing the fresh-policy case. This is an isolated fixture, not a claim that a normal launch ignores real config.
+- A separately supplied `agents.build.permissions` ask rule produced native permission request 0 for each version; `permit once` completed the harmless tool. Explicit config was not overwritten. Both versions interrupted an in-progress `sleep 20` on cancel, reported `turn_canceled` and subsequently completed another prompt.
+- A temporary native V2 plugin hid `opencode-go/deepseek-v4.1-flash`, then reloaded the model registry after six seconds. For both binaries, `session/new` lacked the target, a real `config_option_update` later included it, KPR applied model and max effort, and a real prompt completed. Sanitized native session exports for both versions identify the completed assistant message as `opencode-go/deepseek-v4.1-flash`, variant `max`. This directly exercises the delayed path; it does not imply that all discovery delays fit the existing eight-second bound.
+- 2.2.5 integrated active-turn steer returned native-admitted and the final output contained `INTEGRATEDSTEER225`; 2.0.32 produced corresponding adoption in the initial run. The 2.0.32 integrated resume restored its session and recalled its earlier tool output; 2.2.5 integrated resume also restored its original session and recalled `FRESH225`. Each owned test holder was exact-stopped with no residual PIDs.
+
+The native ACP implementation is part of the candidate CLI; there is no separately declared adapter/CLI range to pair. Comparison of 2.0.32 and 2.2.5 found no demonstrated compatibility obstacle requiring an intermediate version, so the run adopts the latest directly. This is a bounded MacBook result, not Mini verification or a global installation. The actual receipts and selected native export fields are in `issue-433-receipts.json`; temporary executables, plugins and working records are cleaned after extraction.
+
+The release pin in main deliberately remains unchanged in the run branch. Native `render-skills.py --write` and `--check` stop at its pin gate on this post-release content. Content was generated by the renderer's existing APIs with budget checks, without modifying pin metadata; `--verify-install` reports all 14 generated skill bundles aligned. The standard `validate.sh` entry stops at the same pin gate before the selected suites, so those suites were run directly with its `direct` launch backend and inherited KAOLA bindings scrubbed. An initial direct run without that backend failed two mock cases because launchd filtered their fixtures; this is not counted as a pass. An initial documentation rewrite also omitted two facts asserted by issue-24 tests; those facts were restored and the focused checks rerun.
+
+Focused direct suite results after the documentation repair: issue-24 26/26, issue-254 5/5, issue-263 30/30. `git diff --check` and the renderer content alignment check also passed. These do not constitute the pin-gated `validate.sh` run.
+
+The misconfigured launchd mock run left its own holder PID 56539 and child PID 56557 after the test removed its record directory. Their command lines identified the exact issue-254 fixture; both were terminated and subsequently absent. No unrelated session was targeted.
