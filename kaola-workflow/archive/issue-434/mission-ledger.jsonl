@@ -1,0 +1,1 @@
+{"n":1,"name":"Investigate Cursor ACP compatibility and deliver evidence","details":"dispatched: self; findings and focused validation in issue #434 comments 6541104143 and 6541111619; blocked before live probe by heartbeat-host-conflict, not_started. Host must reconcile exact routing and preserve isolated probe scope; no product changes.","status":"blocked"}
