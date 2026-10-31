@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: PATH=/opt/homebrew/bin:$PATH /opt/homebrew/bin/bash ./scripts/validate.sh --suite test-issue-255-lifecycle-state.py --suite test-issue-286-retire-input.py --suite test-issue-292-state-record-root.py --suite test-issue-309-recovery-routes.py --suite test-issue-412-maintenance-owed-retire.py --suite test-issue-421-retire-recovery.py --suite test-issue-425-prevent-invariants.py --suite test-issue-426-retire-legacy-seats.py --suite test-issue-427-collect-binding.py --suite test-issue-431-retire-attested.py
+validated_candidate_hash: e1a870bf7761d6b9251ebd106c46275271e8c9a2db1cac96b0fe971b7c201eff
