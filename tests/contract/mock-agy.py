@@ -270,7 +270,8 @@ def handle_prompt_slash(prompt: str) -> int:
 
 def main() -> int:
     global TURNS
-    log({"event": "spawn", "argv": ARGV, "scenario": SCENARIO})
+    log({"event": "spawn", "argv": ARGV, "scenario": SCENARIO,
+         "forward_proxy_keys": [k for k in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy") if k in os.environ]})
     prompt_arg = flag("-p") or flag("--prompt")
     if prompt_arg in ("/usage", "/quota") and flag("--output-format") == "json":
         return handle_prompt_slash(prompt_arg)
@@ -295,6 +296,14 @@ def main() -> int:
         if SCENARIO == "lazy-unsigned":
             refuse(ERROR_UNSIGNED, "Error: authentication required. Run 'agy' to log in, then retry.")
         init()
+        if SCENARIO in ("timeout-empty", "timeout-partial", "timeout-steer", "reason-error", "reason-interrupted"):
+            if SCENARIO == "timeout-steer":
+                time.sleep(0.5)
+            response = "partial answer" if SCENARIO in ("timeout-partial", "timeout-steer") else ""
+            reason = {"reason-error": "error", "reason-interrupted": "interrupted"}.get(SCENARIO, "print_timeout")
+            emit({"event": "result", "result": {"conversation_id": CONVERSATION, "status": "SUCCESS",
+                  "response": response, "finished_reason": reason, "num_turns": 1, "usage": {}}})
+            return 0
         if SCENARIO == "die-mid":
             sys.stderr.write("fatal: connection reset\n")
             return 1

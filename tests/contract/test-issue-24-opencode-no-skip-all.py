@@ -355,6 +355,34 @@ class Issue112LoopbackProxyBypass(unittest.TestCase):
     method (live-measured ClientError) and hangs the PTY TUI. The opencode
     child, and only the child, gets the missing loopback entries appended."""
 
+    def test_default_forward_proxy_strip_and_platform_opt_in(self) -> None:
+        module = load_acp()
+        spec = importlib.util.spec_from_file_location("broker435", PROJECT / "scripts/kaola-launchd-broker.py")
+        broker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(broker)
+        keys = ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy")
+        cases = (keys[:1] + keys[2:3], keys[1:2] + keys[3:], keys,
+                 ("HTTP_PROXY", "https_proxy"))
+        platforms = module.PLATFORMS
+        for case in cases:
+            original = {key: "http://proxy.invalid:8888" for key in case}
+            original.update({"NO_PROXY": "example.test", "no_proxy": "example.test"})
+            with mock.patch.dict(os.environ, original, clear=True), mock.patch.object(module, "runtime_binary", return_value="/fixture/bin"):
+                for platform in platforms:
+                    with self.subTest(case=case, platform=platform):
+                        manifest = parse_manifest(PROJECT / "platforms" / f"{platform}.yaml")
+                        args = argparse.Namespace(platform=platform, manifest=manifest, mode=None, resume=None,
+                                                  use_continue=False, agent_command_given=False)
+                        env = module.agent_environment(args)
+                        expected = {key: original[key] for key in case} if platform == "claude-code" else {}
+                        self.assertEqual({key: env[key] for key in keys if key in env}, expected)
+                        filtered = broker.filter_env(env)
+                        self.assertEqual({key: filtered[key] for key in keys if key in filtered}, expected)
+                        if platform != "opencode":
+                            self.assertEqual(env["NO_PROXY"], original["NO_PROXY"])
+                            self.assertEqual(env["no_proxy"], original["no_proxy"])
+                self.assertEqual(dict(os.environ), original)
+
     def test_acp_rule_matches_the_case_table(self) -> None:
         module = load_acp()
         for case, expected in LOOPBACK_CASES:
@@ -368,7 +396,7 @@ class Issue112LoopbackProxyBypass(unittest.TestCase):
 
     def test_acp_child_env_gets_it_and_the_runner_env_does_not(self) -> None:
         module = load_acp()
-        args = argparse.Namespace(platform="opencode", manifest={})
+        args = argparse.Namespace(platform="opencode", manifest={"acp_forward_proxy": "true"})
         with mock.patch.dict(os.environ, {"HTTP_PROXY": PROXY}, clear=True):
             env = module.agent_environment(args)
             self.assertEqual(env["NO_PROXY"], "127.0.0.1,localhost")

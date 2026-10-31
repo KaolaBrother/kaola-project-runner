@@ -557,6 +557,7 @@ LAUNCH_BINARY_ENV_PLATFORMS = frozenset({"dsh"})
 # these platforms only, the child environment gains the missing loopback
 # entries; the Runner's own process environment is never modified.
 LOOPBACK_NO_PROXY_PLATFORMS = frozenset({"opencode"})
+# Issue #435: forward proxies are omitted unless the platform opts in.
 FORWARD_PROXY_ENV = ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy")
 NO_PROXY_ENV = ("NO_PROXY", "no_proxy")
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost")
@@ -1001,8 +1002,9 @@ def codex_version_fact(args: argparse.Namespace, agent_pid: Any,
 
 
 def agent_environment(args: argparse.Namespace) -> dict[str, str]:
-    """Environment for the holder and its agent process: inherited whole, plus
-    the exact binary path for a vendored bridge. A non-absolute value is passed
+    """Environment for the holder and its agent process: inherited except for
+    forward proxies unless the platform opts in, plus the exact binary path for
+    a vendored bridge. A non-absolute value is passed
     as-is so the bridge refuses it (fail closed) instead of searching PATH.
     Loopback-reaching platforms also get the loopback proxy bypass; that lands
     in this copy only, never in ``os.environ``.
@@ -1011,6 +1013,9 @@ def agent_environment(args: argparse.Namespace) -> dict[str, str]:
     before spawn. An invalid explicit path is refused before this is used.
     """
     env = dict(os.environ)
+    if args.manifest.get("acp_forward_proxy") != "true":
+        for name in FORWARD_PROXY_ENV:
+            env.pop(name, None)
     bridge_env = BRIDGE_BINARY_ENV.get(args.platform)
     if bridge_env:
         env[bridge_env] = runtime_binary(args.manifest)
@@ -1100,7 +1105,7 @@ def bridge_facts(args: argparse.Namespace, with_version: bool = False) -> dict[s
             "passed_as": bridge_env,
         }
         if with_version and binary["present"]:
-            binary["version"] = binary_version(path)
+            binary["version"] = binary_version(path, agent_environment(args))
         facts["runtime_binary"] = binary
     return facts
 
@@ -4186,6 +4191,7 @@ def resolve_selection(args: argparse.Namespace, repo: str) -> dict[str, Any]:
                     "--tier", tier, "--fast-mechanism", mechanism,
                 ],
                 capture_output=True, text=True, timeout=45,
+                env=agent_environment(args),
             )
             if out.returncode == 0:
                 policy = json.loads(out.stdout)
