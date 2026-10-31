@@ -293,6 +293,7 @@ STOP_EVIDENCE_KINDS = {
     # Issue #426: dispatch refs that never entered an index. No session key —
     # the task names none, and the citation is the committed archive.
     "refs-unindexed": frozenset({"kind", "path", "commit"}),
+    "refs-host-attested": frozenset({"kind", "bindings"}),
 }
 LEDGER_KEYS = ("n", "name", "details", "status")
 

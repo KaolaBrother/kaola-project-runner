@@ -48,7 +48,7 @@ The Host gets outcomes, capacity and decisions.
   [--index I ... --live L] [--stop-evidence J] [--handoff TASK]`: needs
   verdict `accepted`/`cancelled`, items closed, seats stopped or handed off.
   `L`: `list --repo --include-dead` rows; repeat `--index`, each ref in one
-  file. Absent seats need typed `J` (Host, accepted-done).
+  file. Absent seats need typed `J` (Host, accepted-done). See [Lifecycle recovery and continuity](lifecycle-recovery.md) for never-indexed refs.
 - `$S view --role host|sideagent|delegator [--repo ROOT]` (read-only).
 - `$S checkpoint`, `update --index`: [sideagent-node.md](sideagent-node.md).
 - `$S check [--index I] [--live L] [--repo R]`: read-only. Problems:

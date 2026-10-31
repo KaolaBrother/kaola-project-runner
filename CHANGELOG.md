@@ -8,6 +8,8 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 Seats: restart required
 
+- Allow Host settlement of never-indexed refs without a Workflow ledger, recording verified live anchors or an explicitly attested missing-session route (#431). **Seats: restart required** (`scripts/kaola-dispatch.py` is in the operator diff).
+
 - Adopt OpenCode CLI 2.2.5 and its bundled native ACP adapter (protocol 1), with the existing local steer bridge. Live tests cover managed permissions, explicit permit, delayed model discovery, model use, steer, cancellation, resume, exact stop and the six-key proxy stripping contract; 2.0.32 was checked as a comparison. No intermediate pin is required by the observed behavior (#433). **Seats: restart required** (`platforms/opencode.yaml` is in the operator diff).
 
 ## 0.9.36 — 2026-10-31 (Harness launch contract and Codex ACP 2.5)

@@ -8486,13 +8486,15 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
             raise StateRefusal("invalid-input", f"--stop-evidence is not JSON: {exc}") from exc
         problem = RECORD.stop_evidence_problem(entry)
         if problem:
+            if isinstance(entry, dict) and entry.get("kind") == "refs-host-attested":
+                return [f"refs-host-attested {problem}"]
             raise StateRefusal("invalid-input", f"--stop-evidence {problem}")
         entries.append(entry)
     # Issue #426: refs-unindexed cites an archive and names no session. Every
     # other kind still has to name a seat. A task that already names seats
     # binds here. A task that names none binds from the supplied index below.
-    seat_entries = [entry for entry in entries if entry.get("kind") != "refs-unindexed"]
-    ref_entries = [entry for entry in entries if entry.get("kind") == "refs-unindexed"]
+    seat_entries = [entry for entry in entries if entry.get("kind") not in ("refs-unindexed", "refs-host-attested")]
+    ref_entries = [entry for entry in entries if entry.get("kind") in ("refs-unindexed", "refs-host-attested")]
     if seats:
         for entry in seat_entries:
             if entry["session"] not in seats:
@@ -8502,6 +8504,8 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
     args._stop_evidence_input = seat_entries
     args._refs_unindexed_input = ref_entries
     args._index_seat_presets = {}
+    if not refs and ref_entries:
+        return ["refs-host-attested requires dispatch refs on this task"]
     if not refs and not seats:
         for entry in seat_entries:
             raise StateRefusal(
@@ -8747,8 +8751,9 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
             if every_missing and len(ref_entries) > 1:
                 problems.append("refs-unindexed takes one archive citation")
             elif every_missing and len(ref_entries) == 1:
-                receipt, why = refs_unindexed_settle(
-                    ref_entries[0], task, args, missing_refs, live)
+                settler = (refs_host_attested_settle if ref_entries[0]["kind"] == "refs-host-attested"
+                           else refs_unindexed_settle)
+                receipt, why = settler(ref_entries[0], task, args, missing_refs, live)
                 if receipt is not None:
                     args._stop_evidence = getattr(args, "_stop_evidence", []) + [receipt]
                     missing_refs = []
@@ -8782,6 +8787,10 @@ def open_dispatch(task: dict[str, Any], args: argparse.Namespace) -> list[str]:
     open_for_seats = dict(seats)
     for name, holders in open_fallback.items():
         open_for_seats.setdefault(name, holders)
+    attested = [r for r in getattr(args, "_stop_evidence", []) if r.get("route") == "refs-host-attested"]
+    attested_sessions = {a["session"] for r in attested for a in r["anchors"]}
+    open_for_seats = {name: holders for name, holders in open_for_seats.items()
+                      if name not in attested_sessions}
     problems.extend(open_seats_settled(open_for_seats, live, task, args))
     # A seat the collect or a closed status already proved does not need
     # stop evidence. Evidence the caller did supply still has to verify.
@@ -9092,6 +9101,76 @@ def _workflow_state_issue_numbers(text: str) -> list[str] | None:
         if _fence_closes(line, char, length):
             fence = None
     return None if fence is not None else declared
+
+
+def refs_host_attested_settle(entry: dict[str, Any], task: dict[str, Any],
+                              args: argparse.Namespace, refs: list[str],
+                              live: list[dict[str, Any]]) -> tuple[dict[str, Any] | None, str | None]:
+    """Record Host assertions and mechanically checked anchors, not semantic proof."""
+    from urllib.parse import urlparse
+    if args.writer != "host":
+        return None, "refs-host-attested is a Host route; a Sideagent returns it to the Host"
+    verdict = task.get("verdict") if isinstance(task.get("verdict"), dict) else {}
+    if task.get("stage") != "done" or verdict.get("value") != "accepted":
+        return None, "refs-host-attested settles only an accepted-done task"
+    bindings = entry.get("bindings")
+    if not isinstance(bindings, list) or len(bindings) != len(refs) or len(set(refs)) != len(refs):
+        return None, "refs-host-attested requires one binding per distinct ref"
+    repo = repo_of_state_file(Path(args.file)).resolve()
+    seen, anchors = set(), []
+    missing_live = False
+    for binding in bindings:
+        if (not isinstance(binding, dict) or not {"ref", "session"} <= set(binding)
+                or set(binding) - {"ref", "session", "locator"}):
+            return None, "refs-host-attested requires ref and session, with optional locator"
+        ref, session, locator = binding["ref"], binding["session"], binding.get("locator")
+        if not isinstance(ref, str) or ref not in refs or ref in seen:
+            return None, "refs-host-attested has an ambiguous or foreign ref"
+        if not isinstance(session, str) or not session.strip() or session != session.strip():
+            return None, "refs-host-attested has an ambiguous session"
+        if locator is not None:
+            if not isinstance(locator, str) or not locator.strip() or locator != locator.strip():
+                return None, "refs-host-attested needs a typed evidence locator"
+            if locator.startswith(("https://", "http://")):
+                try:
+                    url = urlparse(locator)
+                    valid = bool(url.hostname and not url.username and not url.password)
+                except ValueError:
+                    valid = False
+            elif locator.startswith("/"):
+                valid = bool(Path(locator).name)
+            else:
+                match = re.fullmatch(r"([0-9a-f]{7,40}):([^:]+)", locator)
+                valid = bool(match and not match.group(2).startswith("/")
+                             and ".." not in match.group(2).split("/") and match.group(2).strip())
+            if not valid:
+                return None, "refs-host-attested evidence locator has an invalid type or form"
+        matches = [row for row in live if row.get("session") == session]
+        if len(matches) > 1:
+            return None, f"refs-host-attested session {session} has ambiguous live rows"
+        holders = task_seats(task).get(session, [])
+        if len(holders) > 1:
+            return None, f"refs-host-attested session {session} has an ambiguous holder"
+        anchor = {"ref": ref, "session": session}
+        if locator is not None:
+            anchor["locator"] = locator
+        if matches:
+            row = matches[0]
+            if (row.get("state") not in ("stopped", "dead")
+                    or not isinstance(row.get("repo"), str) or not row["repo"]
+                    or not same_repo(row["repo"], str(repo))
+                    or (holders and row.get("holder_instance_id") not in holders)):
+                return None, f"refs-host-attested session {session} has an active or mismatched live row"
+            anchor["live_row"] = row
+        else:
+            missing_live = True
+        seen.add(ref)
+        anchors.append(anchor)
+    if missing_live and any("locator" not in anchor for anchor in anchors):
+        return None, "refs-host-attested needs a typed locator for every ref when a session is absent"
+    receipt = {"kind": entry["kind"], "route": "refs-host-attested", "anchors": anchors}
+    receipt["attested" if missing_live else "verified"] = True
+    return receipt, None
 
 
 def refs_unindexed_settle(entry: dict[str, Any], task: dict[str, Any],
