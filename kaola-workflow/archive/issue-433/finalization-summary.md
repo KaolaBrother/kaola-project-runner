@@ -14,9 +14,7 @@ classification: final_validation_unverified
 green: false
 mode: final-validation
 
-no agent validation evidence at /Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-433/kaola-workflow/issue-433/.cache/final-validation.md — a consumer (non-npm) repo records its validation in .cache/final-validation.md (with a column-0 `verdict: pass`), not a chain receipt
-
-No agent validation evidence at .cache/final-validation.md. In a consumer (non-npm) repo the agent owns verification: record .cache/final-validation.md with the validation result + a column-0 `verdict: pass` before finalize.
+The finalize transaction found no machine-recorded candidate validation receipt. Host acceptance and the reported direct suite results are described above; the transaction did not independently mark validation green.
 
 ## Changed Paths
 
