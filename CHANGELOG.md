@@ -6,6 +6,8 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- Force `CLAUDE_CODE_ENTRYPOINT=custom` on Claude ACP child turns while preserving subscription credential sanitization (#436). **Seats: restart required** (bridge and platform manifest change).
+
 ## 0.9.37 — 2026-10-31 (never-indexed settlement; OpenCode 2.2.5 ACP)
 
 Seats: restart required

@@ -15814,6 +15814,7 @@ var ClaudeRunner = class {
   }
   sanitizeEnv() {
     const env = { ...process.env };
+    env.CLAUDE_CODE_ENTRYPOINT = "custom";
     delete env.ANTHROPIC_API_KEY;
     delete env.ANTHROPIC_AUTH_TOKEN;
     delete env.KAOLA_ACP_CHILD_RECORD;
