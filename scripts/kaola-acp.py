@@ -557,7 +557,8 @@ LAUNCH_BINARY_ENV_PLATFORMS = frozenset({"dsh"})
 # these platforms only, the child environment gains the missing loopback
 # entries; the Runner's own process environment is never modified.
 LOOPBACK_NO_PROXY_PLATFORMS = frozenset({"opencode"})
-FORWARD_PROXY_ENV = ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy")
+# Issue #435: forward proxies are omitted unless the platform opts in.
+FORWARD_PROXY_ENV = ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy")
 NO_PROXY_ENV = ("NO_PROXY", "no_proxy")
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost")
 ZCODE_ENTRY_ENV = "KAOLA_ZCODE_ENTRY"
@@ -782,8 +783,8 @@ def loopback_no_proxy(env: dict[str, str]) -> dict[str, str]:
     extended in place (existing bytes kept, never removed or reordered) with
     only the loopback hosts it lacks; ``*`` already excludes everything. When
     neither name is set, both are set, because clients differ on which one
-    they read. ``scripts/adapters/opencode.sh`` applies the same rule to the
-    PTY child, and one contract test runs both over the same cases.
+    they read. ``scripts/adapters/opencode.sh`` applies the HTTP(S) rule to
+    the PTY child, and one contract test runs both over those cases.
 
     #112's host set is exactly 127.0.0.1/localhost — the same list the shell
     adapter carries and test-issue-24 asserts. #299's IPv6 ``::1`` belongs to
@@ -1001,8 +1002,9 @@ def codex_version_fact(args: argparse.Namespace, agent_pid: Any,
 
 
 def agent_environment(args: argparse.Namespace) -> dict[str, str]:
-    """Environment for the holder and its agent process: inherited whole, plus
-    the exact binary path for a vendored bridge. A non-absolute value is passed
+    """Environment for the holder and its agent process: inherited except for
+    forward proxies unless the platform opts in, plus the exact binary path for
+    a vendored bridge. A non-absolute value is passed
     as-is so the bridge refuses it (fail closed) instead of searching PATH.
     Loopback-reaching platforms also get the loopback proxy bypass; that lands
     in this copy only, never in ``os.environ``.
@@ -1011,6 +1013,9 @@ def agent_environment(args: argparse.Namespace) -> dict[str, str]:
     before spawn. An invalid explicit path is refused before this is used.
     """
     env = dict(os.environ)
+    if args.manifest.get("acp_forward_proxy") != "true":
+        for name in FORWARD_PROXY_ENV:
+            env.pop(name, None)
     bridge_env = BRIDGE_BINARY_ENV.get(args.platform)
     if bridge_env:
         env[bridge_env] = runtime_binary(args.manifest)
@@ -1100,7 +1105,7 @@ def bridge_facts(args: argparse.Namespace, with_version: bool = False) -> dict[s
             "passed_as": bridge_env,
         }
         if with_version and binary["present"]:
-            binary["version"] = binary_version(path)
+            binary["version"] = binary_version(path, agent_environment(args))
         facts["runtime_binary"] = binary
     return facts
 
@@ -4186,6 +4191,7 @@ def resolve_selection(args: argparse.Namespace, repo: str) -> dict[str, Any]:
                     "--tier", tier, "--fast-mechanism", mechanism,
                 ],
                 capture_output=True, text=True, timeout=45,
+                env=agent_environment(args),
             )
             if out.returncode == 0:
                 policy = json.loads(out.stdout)

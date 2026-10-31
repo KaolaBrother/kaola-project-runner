@@ -501,6 +501,8 @@ class AntigravityAcpAgent:
     def finish_turn(self, session: Session, payload: dict[str, Any]) -> None:
         status = str(payload.get("status") or "")
         error_text = str(payload.get("error") or "").strip()
+        finished_reason = payload.get("finished_reason")
+        incomplete = finished_reason in ("print_timeout", "error")
         conversation = payload.get("conversation_id")
         with self.lock:
             rid = session.turn_rid
@@ -510,14 +512,14 @@ class AntigravityAcpAgent:
                 session.conversation_id = conversation
                 session.persisted = True
             interrupted = (
-                status in ("CANCELED", "INTERRUPTED")
+                finished_reason == "interrupted" or status in ("CANCELED", "INTERRUPTED")
                 or (status == "ERROR" and (
                     session.cancelled
                     or error_text == "interrupted"
                     or error_text.startswith("stream input cancelled")
                 ))
             )
-            if status == "SUCCESS" and not session.cancelled and session.queued_steers > 0:
+            if status == "SUCCESS" and not incomplete and not interrupted and not session.cancelled and session.queued_steers > 0:
                 session.queued_steers -= 1
                 session.step_epoch += 1
                 streamed = session.streamed
@@ -552,9 +554,18 @@ class AntigravityAcpAgent:
                                                 "num_turns": payload.get("num_turns"),
                                                 "duration_seconds": payload.get("duration_seconds"),
                                                 "usage": payload.get("usage")}}
+        if finished_reason is not None:
+            meta["antigravity"]["finished_reason"] = finished_reason
         if error_text and interrupted:
             meta["antigravity"]["agy_error"] = error_text
-        if status == "SUCCESS" and not interrupted:
+        if incomplete and not interrupted:
+            if isinstance(response, str):
+                meta["antigravity"]["partial_response"] = response
+                if not streamed and response:
+                    self.update(session, {"sessionUpdate": "agent_message_chunk",
+                                          "content": {"type": "text", "text": response}})
+            self.respond(rid, error=AgyError(-32603, f"agy turn incomplete: {finished_reason}", meta).rpc())
+        elif status == "SUCCESS" and not interrupted:
             if not streamed and isinstance(response, str) and response:
                 self.update(session, {"sessionUpdate": "agent_message_chunk",
                                       "content": {"type": "text", "text": response}})
@@ -562,7 +573,7 @@ class AntigravityAcpAgent:
         elif interrupted:
             self.respond(rid, {"stopReason": "cancelled", "_meta": meta})
         elif status == "ERROR":
-            threading.Thread(target=self.respond_error, args=(session, rid, payload, status),
+            threading.Thread(target=self.respond_error, args=(session, rid, payload, status, meta),
                              daemon=True).start()
         else:
             # INVALID, WAITING, RUNNING or an unknown status: no terminal success.
@@ -571,7 +582,8 @@ class AntigravityAcpAgent:
                         f"{redact(str(payload.get('error') or 'no terminal state reached'))[:300]}",
                 meta).rpc())
 
-    def respond_error(self, session: Session, rid: Any, payload: dict[str, Any], status: str) -> None:
+    def respond_error(self, session: Session, rid: Any, payload: dict[str, Any], status: str,
+                      meta: dict[str, Any]) -> None:
         """Answer an ERROR turn. A sign-in refusal is followed by the child's exit
         and its stderr, which classify the refusal, so wait for them (off the
         reader thread, which is the one that sets `dead`)."""
@@ -581,7 +593,9 @@ class AntigravityAcpAgent:
                                   or AUTH_AMBIGUOUS.search(error_text)):
             child.dead.wait(1.5)
         stderr = child.stderr_text() if child is not None else ""
-        self.respond(rid, error=agy_failure(error_text, stderr, None, status, "the turn").rpc())
+        failure = agy_failure(error_text, stderr, None, status, "the turn")
+        failure.data["antigravity"].update(meta["antigravity"])
+        self.respond(rid, error=failure.rpc())
 
     def on_child_exit(self, session: Session, child: Child) -> None:
         with self.lock:

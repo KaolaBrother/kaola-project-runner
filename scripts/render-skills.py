@@ -84,6 +84,8 @@ REQUIRED = {
 # ``acp_command_<w>`` for a named tier) for a preset the agent's ACP model
 # option does not offer; absent keys keep the base ``acp_command``.
 OPTIONAL = {"acp_command_default",
+            # Issue #435: absent means do not inherit HTTP(S) forward proxies.
+            "acp_forward_proxy",
             # Issue #263: supported standard prompt delivery after completion
             # when native ACP rejects or cancels concurrent input.
             "steering_delivery",
@@ -217,6 +219,8 @@ def parse_manifest(path: Path) -> dict[str, str]:
         raise ValueError(f"{path}: invalid skill name {result['skill_name']!r}")
     if result["recurring_execution"] not in {"supported", "unsupported"}:
         raise ValueError(f"{path}: invalid recurring_execution")
+    if result.get("acp_forward_proxy", "false") not in {"true", "false"}:
+        raise ValueError(f"{path}: invalid acp_forward_proxy")
     # Issue #65: the native steering fact and its transport entry travel together.
     if result["native_steering"] not in {"supported", "unsupported", "unknown"}:
         raise ValueError(f"{path}: invalid native_steering")

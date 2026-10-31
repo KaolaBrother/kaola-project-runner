@@ -411,6 +411,12 @@ See [choosing a worker](#choosing-a-worker).
 
 ### Platform notes
 
+KPR's Host/seat launch contract keeps seat configuration with the seat: Host
+environment and business parameters are not a substitute for the seat's own
+configuration or Worker start semantics. KPR strips inherited HTTP, HTTPS and ALL forward
+proxy variables at ACP spawn unless a platform manifest explicitly opts in;
+Claude Code opts in, while Antigravity uses its own configuration.
+
 Concise caveats to know before the first dispatch. Per-platform launch commands,
 environment, quirks, and verification status are in each
 [platform manifest](platforms/) and each worker Skill's `references/platform.md`

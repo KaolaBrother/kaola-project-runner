@@ -6,6 +6,14 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+## 0.9.36 — 2026-10-31 (Harness launch contract and Codex ACP 2.5)
+
+Seats: restart required
+
+The operator diff includes `platforms/claude-code.yaml`, `platforms/codex.yaml`, `scripts/kaola-acp-holder.py` and `scripts/kaola-dispatch.py`. The Grok Bot bridge is pinned by the following pin commit to this release content commit. Existing platform pins remain in their manifests; Codex ACP 2.5.0 is adopted below. AGY 1.4.12 pin adoption is intentionally deferred to a later run; this release retains the prior AGY verified-version entry.
+
+- KPR's Host/seat launch contract removes inherited HTTP, HTTPS and ALL forward proxy variables in both cases by default; Claude Code opts in via its platform manifest and Antigravity uses seat-native configuration (#435). The adapter reports native timeout/incomplete results without presenting them as successful turns and settles interrupted turns even with a queued steer. **Seats: restart required (spawn env change)**: existing holder and agent processes retain their original environment and must be respawned to apply it; the platform manifest also appears in the operator diff list.
+
 - Upgrade Codex ACP adapter to 2.5.0 with verified Codex 0.165.0 / protocol 1; expose standard child-session events without merging their replies into the parent and identify child permission requests. Bare resume may read back a different effort; inspect the continuity receipt or choose a tier explicitly (#432). **Seats: restart required** (`platforms/codex.yaml` and `scripts/kaola-acp-holder.py` changed).
 
 - Complete recovery routes for terminal-state refusals and align lifecycle contract fixtures with current and legacy state semantics; split lifecycle recovery guidance while retaining its 8192-byte reference bound (#430). **Seats: restart not required** (the #430 operator diff does not touch holder, bridge, quota, record contract, ACP paths, compact recovery, adapters or platforms).

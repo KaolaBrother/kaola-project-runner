@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: PATH="/opt/homebrew/bin:$PATH" /opt/homebrew/bin/bash ./scripts/validate.sh --suite test-issue-24-opencode-no-skip-all.py --suite test-issue-323-antigravity-acp.py --suite test-issue-255-lifecycle-state.py --suite test-issue-292-state-record-root.py --suite test-issue-309-recovery-routes.py --suite test-issue-412-maintenance-owed-retire.py --suite test-issue-421-retire-recovery.py --suite test-issue-425-prevent-invariants.py --suite test-issue-426-retire-legacy-seats.py --suite test-issue-427-collect-binding.py --suite test-issue-247-codex-child.py --suite test-issue-173-codex-system-error-turn.py --suite test-issue-22-bypass-all-approvals.py
+validated_candidate_hash: c168fbf7f1a550dbe9eb9faa2b25798e3f4391ffcca0d0e549c08156e614d0ee

@@ -229,6 +229,54 @@ class WrapperProtocol(unittest.TestCase):
         self.assertEqual(done["content"][0]["content"]["text"], "file.txt")
         self.assertEqual(w.events("user")[0]["content"], "hello")
 
+    def test_native_terminal_reasons_are_not_success(self) -> None:
+        for scenario, reason, partial in (("timeout-empty", "print_timeout", ""),
+                                          ("timeout-partial", "print_timeout", "partial answer"),
+                                          ("reason-error", "error", "")):
+            with self.subTest(scenario=scenario):
+                w = Wrapper(self, scenario=scenario)
+                sid = w.new_session()
+                reply = w.call("session/prompt", {"sessionId": sid, "prompt": "test"})
+                self.assertNotIn("result", reply)
+                data = reply["error"]["data"]["antigravity"]
+                self.assertEqual((data["finished_reason"], data["partial_response"]), (reason, partial))
+                self.assertEqual("".join(u["content"]["text"] for u in w.updates("agent_message_chunk")), partial)
+
+    def test_timeout_with_queued_steer_settles_without_second_result(self) -> None:
+        w = Wrapper(self, scenario="timeout-steer")
+        sid = w.new_session()
+        pending = w.send("session/prompt", {"sessionId": sid, "prompt": "first"})
+        deadline = time.monotonic() + 5
+        while not w.events("user") and time.monotonic() < deadline:
+            time.sleep(0.02)
+        steer = w.call("_session/steering", {"sessionId": sid, "prompt": "later",
+                      "_meta": {"steering": {"expectedTurnId": pending}}})
+        self.assertEqual(steer["result"]["outcome"], "written")
+        reply = w.wait(pending, timeout=3)
+        self.assertEqual(reply["error"]["data"]["antigravity"]["finished_reason"], "print_timeout")
+        self.assertEqual(reply["error"]["data"]["antigravity"]["partial_response"], "partial answer")
+
+    def test_native_interrupted_reason_is_cancelled(self) -> None:
+        w = Wrapper(self, scenario="reason-interrupted")
+        sid = w.new_session()
+        reply = w.call("session/prompt", {"sessionId": sid, "prompt": "test"})
+        self.assertEqual(reply["result"]["stopReason"], "cancelled")
+        self.assertEqual(reply["result"]["_meta"]["antigravity"]["finished_reason"], "interrupted")
+
+    def test_interrupted_success_with_queued_steer_is_cancelled(self) -> None:
+        w = Wrapper(self, scenario="interrupted-steer")
+        sid = w.new_session()
+        pending = w.send("session/prompt", {"sessionId": sid, "prompt": "first"})
+        deadline = time.monotonic() + 5
+        while not w.events("user") and time.monotonic() < deadline:
+            time.sleep(0.02)
+        steer = w.call("_session/steering", {"sessionId": sid, "prompt": "later",
+                      "_meta": {"steering": {"expectedTurnId": pending}}})
+        self.assertEqual(steer["result"]["outcome"], "written")
+        reply = w.wait(pending, timeout=3)
+        self.assertEqual(reply["result"]["stopReason"], "cancelled")
+        self.assertEqual(reply["result"]["_meta"]["antigravity"]["finished_reason"], "interrupted")
+
     def test_a_failed_tool_is_reported_failed(self) -> None:
         w = Wrapper(self)
         sid = w.new_session()
@@ -849,6 +897,7 @@ class RealRunnerIntegration(unittest.TestCase):
         self.log = root / "agy.jsonl"
         self.session = f"i323-{self._testMethodName.lower()}-{os.getpid()}"[:79]
         self.scenario = "ok"
+        self.proxy_env = {}
         # A refused start still leaves an error-state holder; stop every session.
         self.addCleanup(self.force_stop)
 
@@ -865,6 +914,7 @@ class RealRunnerIntegration(unittest.TestCase):
                "KAOLA_ACP_RECORD_ROOT": str(self.records), "KAOLA_LAUNCH_BACKEND": "direct",
                "AGY_BIN": str(MOCK), "MOCK_AGY_SCENARIO": scenario or self.scenario,
                "MOCK_AGY_LOG": str(self.log), "KAOLA_ANTIGRAVITY_START_WINDOW": "3"}
+        env.update(self.proxy_env)
         result = subprocess.run(
             [sys.executable, str(CLI), "antigravity", command, "--repo", str(self.repo),
              "--session", self.session, "--command", f"{sys.executable} {WRAPPER}", *args],
@@ -876,6 +926,15 @@ class RealRunnerIntegration(unittest.TestCase):
 
     def spawns(self) -> list[list[str]]:
         return [e["argv"] for e in map(json.loads, self.log.read_text().splitlines()) if e["event"] == "spawn"]
+
+    def test_inherited_forward_proxy_never_reaches_real_runner_child(self) -> None:
+        self.proxy_env = {key: "http://proxy.invalid:8888" for key in
+                          ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy")}
+        self.assertEqual(self.acp("start")["state"], "ready")
+        self.assertEqual(self.acp("send", "--text", "proxy test", "--timeout", "30")["final_text"], "echo: proxy test")
+        spawns = [e for e in map(json.loads, self.log.read_text().splitlines()) if e["event"] == "spawn"]
+        self.assertTrue(spawns)
+        self.assertTrue(all(e["forward_proxy_keys"] == [] for e in spawns), spawns)
 
     def test_unsigned_start_is_login_required_with_a_self_route(self) -> None:
         receipt = self.acp("start", scenario="unsigned")
