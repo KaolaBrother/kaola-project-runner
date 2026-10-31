@@ -10,7 +10,7 @@
 
 ## Preflight
 
-Verify the OpenCode executable and report optional Kaola carrier/configuration evidence without gating communication, plus loopback=direct|excluded|ensured: what the opencode child sees once a forward proxy is set (ensured means the Runner appends the missing loopback entries).
+Verify the OpenCode executable and report optional Kaola carrier/configuration evidence without gating communication; loopback preflight describes the caller environment, while ACP launches strip inherited forward proxies by default.
 
 Preflight is read-only: optional Kaola/Workflow surfaces and runtime health are reported as
 evidence, and their absence does not block starting the CLI. It never installs, upgrades, adopts,

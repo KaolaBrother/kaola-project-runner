@@ -1,7 +1,7 @@
 # OpenCode steering (`steer`)
 
 Scope: the ACP channel only. Noninterrupting input on this platform's ACP route:
-**supported** (entry `_session/steering`). Historical evidence: 1.18.17 candidate methods returned -32601; 2.0.11 initialize alone did not measure steer. CLI 2.0.22 uses the local V2 integration. The local V2 adapter exposes _session/steering over the existing ACP contract. It guards the original active ACP request id and calls the installed plugin session.prompt API with delivery steer and resume false. Native ACP retains its stream and original prompt. written with native-admitted confirms inbox admission only. A turn-end race can leave input pending; it cannot resume an idle turn. No cancel fallback. Old holders and custom opencode acp commands have no adapter entry; a controlled restart is needed to use this path.
+**supported** (entry `_session/steering`). OpenCode 2.2.5 uses the local V2 integration. The local adapter exposes _session/steering, guards the original active ACP request id and calls the native plugin session.prompt API with delivery steer and resume false. Native ACP retains its stream and original prompt. written with native-admitted confirms inbox admission only; actual consumption needs output evidence. A turn-end race can leave input pending; it cannot resume an idle turn. No cancel fallback. Old holders and custom opencode acp commands have no adapter entry; a controlled restart is needed to use this path.
 
 `steer` has two modes and the Agent picks one. `--steer-mode native` uses the
 native entry and exists only where the entry does. `--steer-mode interrupt` is
