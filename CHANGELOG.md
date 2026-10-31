@@ -6,7 +6,11 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+## 0.9.37 — 2026-10-31 (never-indexed settlement; OpenCode 2.2.5 ACP)
+
 Seats: restart required
+
+The operator diff includes `scripts/kaola-dispatch.py` and `platforms/opencode.yaml`. The Grok Bot bridge is pinned by the following pin commit to this release content commit.
 
 - Allow Host settlement of never-indexed refs without a Workflow ledger, recording verified live anchors or an explicitly attested missing-session route (#431). **Seats: restart required** (`scripts/kaola-dispatch.py` is in the operator diff).
 
