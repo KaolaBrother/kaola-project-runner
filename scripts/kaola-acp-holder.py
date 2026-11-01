@@ -6279,37 +6279,13 @@ class Holder:
     def _heartbeat_payload(self, events: list[dict[str, Any]],
                            overflow_full_check: bool = False
                            ) -> tuple[str, dict[str, Any]]:
-        """One literal notification prompt: fixed structured event metadata,
-        the current FULL heartbeat prompt body read at delivery time from the
-        file the ZCode Host agent maintains in the consuming project, and the
-        one-pass instruction. No worker raw output, no shell execution."""
+        """Event-scoped notification with current source metadata, not its body."""
         source = Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"
-        # Issue #66: a file that exists but carries no usable `body` is a
-        # different fact from no file at all, and silently reporting "none
-        # maintained" let a Host believe a prompt it had written under another
-        # field name was in effect. Name the defect; still deliver the event.
-        # One read returns both, so the checked body is the delivered body.
         body, defect = heartbeat_prompt_body(source)
         maintained = body is not None
-        if not maintained:
-            if defect is not None:
-                if ("stored body was not injected" in defect or "projected Host view" in defect
-                        or "record contract" in defect):
-                    body = (f"The heartbeat file at {source} uses schema kaola-heartbeat-prompt/2. "
-                            f"{defect} Do not write a body string. Repair the structured state "
-                            "with the state tool, then retry. This pass runs without the projection.")
-                else:
-                    body = (f"The heartbeat prompt file at {source} exists but carries no "
-                            f"usable prompt: {defect}. This {self.host_name} Host session maintains "
-                            'that file; write a JSON object whose "body" field is a '
-                            "non-empty string holding the full working prompt, and treat "
-                            "this pass as running without it. Recover authorization and "
-                            "field state from the consuming project records, then run one "
-                            "full pass.")
-            else:
-                body = (f"No maintained heartbeat prompt was found at {source}. Recover "
-                        "authorization and field state from the consuming project records, "
-                        "then run one full pass.")
+        if body is None:
+            body = (f"{source}: {defect}" if defect is not None
+                    else f"No maintained heartbeat prompt at {source}")
         lines = [
             self.host_entry,
             f"{HOST_NOTIFY_SCHEMA}: event-driven heartbeat carrier ({self.host_name} Host)",
@@ -6341,15 +6317,12 @@ class Holder:
         else:
             lines.append(f"heartbeat prompt source: none maintained at {source} "
                          f"(fallback trigger context, sha256:{digest})")
-        lines.append("heartbeat prompt body follows, verbatim:")
-        lines.append("<<<heartbeat-prompt")
-        lines.append(body)
-        lines.append("heartbeat-prompt>>>")
-        lines.append("Perform exactly one full Project Runner heartbeat pass - recover "
-                     "authorization and field state, handle worker questions, dispatch "
-                     "suitable authorized work, verify deliveries, and close out - per "
-                     "PROJECT_RUNNER_HEARTBEAT_V2. This worker event is the only heartbeat "
-                     f"trigger; this {self.host_name} Host registers no periodic carrier.")
+        if not maintained:
+            lines.append("Source unavailable: use original authoritative records for the "
+                         "affected action; report unknown and do not act from absent authority.")
+        lines.append("Consume these events and their original receipts; obtain the current "
+                     "facts needed for the applicable action, use the Skill's reconciliation "
+                     "triggers, and end the turn.")
         meta: dict[str, Any] = {"heartbeat_fingerprint": f"sha256:{digest}",
                                 "heartbeat_source": str(source),
                                 "heartbeat_maintained": maintained}

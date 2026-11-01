@@ -307,8 +307,9 @@ class CwdCarrierRoute(unittest.TestCase):
         self.assertEqual(lines[1],
                          f"kaola-host-notify/1: event-driven heartbeat carrier "
                          f"(dsh Host)")
-        self.assertIn("<<<heartbeat-prompt", text)
-        self.assertIn(ONE_PASS, text)
+        self.assertIn("Consume these events and their original receipts", text)
+        self.assertNotIn("<<<heartbeat-prompt", text)
+        self.assertNotIn(ONE_PASS, text)
         self.assertIn('"kind": "cwd_repaired"', text)
         self.assertNotIn("kaola-worker-notify/1", text)
 

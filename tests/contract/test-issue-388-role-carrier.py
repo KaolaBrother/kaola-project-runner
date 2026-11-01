@@ -207,8 +207,9 @@ class PayloadSelection(unittest.TestCase):
                 self.assertEqual(
                     lines[1],
                     f"kaola-host-notify/1: event-driven heartbeat carrier ({platform} Host)")
-                self.assertIn("<<<heartbeat-prompt", text)
-                self.assertIn("Perform exactly one full Project Runner heartbeat pass", text)
+                self.assertIn("Consume these events and their original receipts", text)
+                self.assertNotIn("<<<heartbeat-prompt", text)
+                self.assertNotIn("Perform exactly one full Project Runner heartbeat pass", text)
                 self.assertNotIn("kaola-worker-notify/1", text)
                 self.assertIn('"kind": "cwd_repaired"', text)
                 self.assertIn('"kind": "idle"', text)
