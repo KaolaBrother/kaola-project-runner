@@ -169,10 +169,26 @@ class ActivationBoundaries(unittest.TestCase):
             self.assertTrue(references, skill_id)
             for reference in references:
                 self.assertLessEqual(reference.stat().st_size, BUDGETS["reference_bytes"], f"{skill_id}/{reference.name}")
-                self.assertIn(f"](references/{reference.name})", skill, f"{skill_id} must link {reference.name} by relative path")
                 heading = reference.read_text(encoding="utf-8").splitlines()[0]
                 self.assertTrue(heading.startswith("# "), f"{skill_id}/{reference.name}")
                 self.assertNotIn(heading + "\n", skill, f"{skill_id} inlines {reference.name}")
+                needle = f"](references/{reference.name})"
+                if needle in skill:
+                    continue
+                # One hop is only for the main Skill. #430 linked lifecycle-recovery.md
+                # from lifecycle-state.md because a direct body link (34 bytes) does not
+                # fit the 17408-byte cap (10 bytes free). Workers and orphans still need
+                # the body link. A second hop still fails.
+                parents = []
+                if skill_id == ORCHESTRATOR_ID:
+                    for parent in references:
+                        if parent == reference:
+                            continue
+                        if f"](references/{parent.name})" not in skill:
+                            continue
+                        if f"]({reference.name})" in parent.read_text(encoding="utf-8"):
+                            parents.append(parent.name)
+                self.assertTrue(parents, f"{skill_id} must link {reference.name} by relative path")
             self.assertNotIn("## Bundled reference", skill)
 
     def test_skill_text_never_instructs_reading_script_source(self) -> None:
