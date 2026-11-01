@@ -1,0 +1,1 @@
+{"agent_exit_code": 0, "agent_exit_signal": null, "git": {"branch": "main", "dirty": true}, "mutation_status": "not_started", "platform": "dsh", "repo": "/Users/ylpromax5/Workspace/kaola-project-runner-dev", "residual_pids": [], "schema_version": 3, "session": "dsh-KPR-i447-bootstrap2", "stopped": true, "swept_child_pgids": [], "transport": {"selected": "acp"}}
