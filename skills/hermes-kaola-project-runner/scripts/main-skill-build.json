@@ -1,12 +1,12 @@
 {
-  "build": "e221c902b100",
+  "build": "2c6969c10b40",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "16c500471d627178b76c94117fbf6f20471101b2519f8a205c66f7cf17b5ca8d",
     "agents/openai.yaml": "97bb48822fa366d7f5c1ae92a3ad970507085f6499bc5982000f0a7a3374a36e",
     "references/dispatch-collect.md": "b77b7a1c5c95378e64135733612df7a023847cabcfa43bb6961c34d7c0812454",
     "references/doc-maintenance.md": "11bbe20631ea279b528377c31579d4eed42270c09c4ed0b27ace435ab1b7888e",
-    "references/duty-reconcile.md": "f794a37061541af443c9ea8947ad3498531a2451b4fadba04a52b888b74bf9c0",
+    "references/duty-reconcile.md": "54ea01cab35154b3e926c9f199d8c6cec48528c3b2be5d55db64d6b215ae678d",
     "references/heartbeat-skeleton.md": "4dd4a5014878147fc13fa49ad0092f47372fe01c3be74032744d9d37e08940ad",
     "references/host-entry-matrix.md": "22a5d0a58a31b2e2934c6e47ed342fc6f2bd6f72ca4c7b6d512511385ae3a4f5",
     "references/host-startup.md": "b98a13757837d1110984f16fc366bff8d3a6ec37f06ee11be5edcca6de10f7e7",
@@ -26,7 +26,7 @@
     "scripts/kaola-acp-paths.py": "124bd8fb908857bb2c7df8bc33797f69df6ef513e859f365c9270724d4eb5402",
     "scripts/kaola-compact-recovery.py": "f34a58affc095f7b9d8e29958bf237639ffe2c66728db2377d0f74dda11675d1",
     "scripts/kaola-cwd-guard.py": "975be54b05f4aa8e08f18f1eb47da2c9999774639a7df092fe67365312e8c8af",
-    "scripts/kaola-dispatch.py": "4d9f070c59fa3d2931f721caa2117244e9931e477052210e12513f4ceb33d4d2",
+    "scripts/kaola-dispatch.py": "96fdf53b9210f68d83486bd0e6324af80a6db51be5ab1ae9c4e52f06a2695a97",
     "scripts/kaola-record-contract.py": "91ea5af292523297a83e6755cb5560488621676597a85a40b37f8376e3eddc88",
     "scripts/kaola-recovery-routes.py": "18bd23741124c5440fc5b45d0abc75592191e78a13bd495c76747092c7bd78b6",
     "scripts/kaola-session-names.py": "772f2d729e61763851b78ab9d440c664df225bc4f08dc71f8ba0102ead411316"

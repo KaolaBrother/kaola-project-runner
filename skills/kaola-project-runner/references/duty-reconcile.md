@@ -1,22 +1,20 @@
 # Bounded duty reconciliation
 
-At recovery and before quiescence or closeout, the Host reads applicable owner
-goal/stop records and relevant newer corrections, comparing authorized duties
-with actual evidence. Load this reference when a record-visible source/evidence
-mismatch, an unreconciled latest owner change, genuinely unaccounted coverage
-after a handoff, or an explicit owner/Delegator request calls for one bounded,
-read-only Sideagent check. Remembered confidence alone is insufficient. Reuse
-sufficient unchanged evidence for the same scope and candidate, or a check
-already in flight. A heartbeat, issue completion, Host replacement or multi-issue closeout alone
-needs no audit. A verified completed HOST compaction owes the bounded
-recovery check below; a worker compaction owes no node.
+At recovery and before quiescence or closeout, the Host compares applicable
+owner goal/stop records, newer corrections and authorized duties with evidence.
+Load this reference for a record-visible mismatch, unreconciled owner change,
+unaccounted handoff coverage or explicit owner/Delegator request requiring a
+bounded read-only Sideagent check. Recall alone is insufficient. Reuse sufficient
+unchanged evidence for the same scope and candidate, or an in-flight check. A
+heartbeat, issue completion, Host replacement or multi-issue closeout alone
+needs no audit. A verified completed HOST compaction owes the bounded recovery
+check below; worker compaction owes no node.
 
 ## Brief and sources
 
-Give the Sideagent the canonical root, affected scope and question, candidate or
-baseline when relevant, and independent source pointers, not a prefiltered duty
-list or a conversation/repository dump. It reads applicable requirements before
-the Host snapshot, using only relevant slices of:
+Give the Sideagent the canonical root, scope, question, relevant candidate or
+baseline, and independent source pointers, not a prefiltered list or dump. It
+reads applicable requirements before the Host snapshot, using relevant slices of:
 
 - Latest owner requirements, goal/stop and issue corrections; for a mandate
   check include the mandate record (Delegator goal/stop or project plan).
@@ -25,10 +23,9 @@ the Host snapshot, using only relevant slices of:
   within this mandate.
 - Current Host goal/stop, active/pending and their evidence.
 
-The Delegator retains new owner requirements and source pointers through its
-existing snapshot/issue handoff. Trusted Delegator records of an owner change
-remain usable without a raw transcript; disclose uncertainty only where it
-affects a finding. Missing sources remain explicit uncertainty, never authority
+The Delegator retains owner requirements and source pointers in its existing
+snapshot/issue handoff. Trusted records need no raw transcript; disclose
+uncertainty where it affects a finding. Missing sources remain explicit uncertainty, never authority
 to invent work or claim full coverage. A Host-originated duty lost from every
 available record cannot be reconstructed; recall is not perfect.
 

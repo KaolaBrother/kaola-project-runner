@@ -1323,6 +1323,14 @@ def summary_from_acp(error: dict[str, Any]) -> dict[str, Any]:
     status = provider_http_status(raw_message, None)
     if status is not None:
         summary["status"] = status
+    # kimi-cli 2.4.1 prompt failures put session.stale / session.occupied on
+    # data.code while the JSON-RPC code stays -32600. Keep both. This summary
+    # does not retry, evict, or disable the session lock.
+    data = error.get("data")
+    if isinstance(data, dict):
+        engine_code = data.get("code")
+        if isinstance(engine_code, str) and engine_code.strip():
+            summary["engine_code"] = engine_code.strip()
     return summary
 
 

@@ -1,0 +1,1 @@
+{"agent_exit_code": 0, "agent_exit_signal": null, "git": {"branch": "main", "dirty": true}, "mutation_status": "completed", "platform": "kimi-cli", "repo": "/private/tmp/kimi-241-repo", "residual_pids": [], "schema_version": 3, "session": "kpr440c", "stopped": true, "swept_child_pgids": [], "transport": {"selected": "acp"}}

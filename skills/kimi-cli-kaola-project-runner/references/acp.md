@@ -1,6 +1,6 @@
 # Kimi CLI ACP transport
 
-Command: `kimi acp`. Login: see SKILL.md §Transport. Platform quirks: none recorded.
+Command: `kimi acp`. Login: see SKILL.md §Transport. Platform quirks: Native kimi acp has no public adapter and no declared CLI range; acp_wrapper_pin stays empty. Measured CLI 2.4.1, protocol 1, agentInfo Kimi Code CLI 2.4.1, capabilities terminal:false,fs:false. Prompt failures session.stale and session.occupied are JSON-RPC -32600 with data.code. The stale text says to close and reopen; KPR does not replay the prompt. Durable turn_error keeps the numeric code and copies data.code to engine_code. A second client's resume or load while a live client holds the session is resume-failed: JSON-RPC -32603 Internal error, data.details says the session is in use by another Kimi Code CLI instance, and the engine code session.occupied is not on that wire. KPR does not evict, take over the lock, or set KIMI_CODE_SESSION_LOCK=0. After the holder exits, resume of the same native id succeeds. Prompt-path session.occupied, cancellation, permission, and compact were not exercised..
 
 ## Command surface
 

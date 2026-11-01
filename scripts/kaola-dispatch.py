@@ -21,6 +21,7 @@ It holds current responsibilities and references only, never history.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import fcntl
 import functools
 import hashlib
@@ -10603,6 +10604,71 @@ def command_state_recovery_input(args: argparse.Namespace) -> int:
         return fail("invalid-input", str(exc))
 
 
+def checkpoint_processes() -> dict[int, tuple[int, float]]:
+    """Live process ancestry and start times, including macOS sandbox fallback."""
+    try:
+        result = subprocess.run(["ps", "-axo", "pid=,ppid=,state=,lstart="],
+                                capture_output=True, text=True, env={**os.environ, "LC_ALL": "C"})
+        rows = {}
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                fields = line.split(None, 3)
+                if len(fields) != 4 or not fields[0].isdigit() or not fields[1].isdigit() or fields[2].startswith("Z"):
+                    continue
+                try:
+                    rows[int(fields[0])] = (int(fields[1]), time.mktime(time.strptime(fields[3].strip(), "%a %b %d %H:%M:%S %Y")))
+                except ValueError:
+                    continue
+            return rows
+    except OSError:
+        pass
+    if sys.platform != "darwin":
+        return {}
+    class BsdInfo(ctypes.Structure):
+        _fields_ = [("flags", ctypes.c_uint32), ("status", ctypes.c_uint32),
+                    ("xstatus", ctypes.c_uint32), ("pid", ctypes.c_uint32),
+                    ("ppid", ctypes.c_uint32), ("ids", ctypes.c_uint32 * 7),
+                    ("comm", ctypes.c_char * 16), ("name", ctypes.c_char * 32),
+                    ("nfiles", ctypes.c_uint32), ("pgid", ctypes.c_uint32),
+                    ("pjobc", ctypes.c_uint32), ("e_tdev", ctypes.c_uint32),
+                    ("e_tpgid", ctypes.c_uint32), ("nice", ctypes.c_int32),
+                    ("start_tvsec", ctypes.c_uint64), ("start_tvusec", ctypes.c_uint64)]
+    try:
+        lib = ctypes.CDLL("/usr/lib/libproc.dylib")
+        count = lib.proc_listallpids(None, 0)
+        pids = (ctypes.c_int * (max(count, 0) + 256))()
+        count = lib.proc_listallpids(pids, ctypes.sizeof(pids))
+        rows = {}
+        for pid in pids[:max(count, 0)]:
+            info = BsdInfo()
+            if lib.proc_pidinfo(pid, 3, ctypes.c_uint64(0), ctypes.byref(info), ctypes.sizeof(info)) == ctypes.sizeof(info) and info.status != 5:
+                rows[pid] = (info.ppid, float(info.start_tvsec))
+        return rows
+    except (OSError, AttributeError):
+        return {}
+
+
+def verify_checkpoint_origin(node: dict[str, Any]) -> None:
+    table = checkpoint_processes()
+    holder, agent, started = node.get("holder_pid"), node.get("agent_pid"), node.get("agent_started")
+    if node.get("state") == "stopped" or not isinstance(holder, int) or isinstance(holder, bool) or holder not in table:
+        raise StateRefusal("node-not-live", "the recorded node holder is not live or cannot be verified")
+    if (not isinstance(agent, int) or isinstance(agent, bool) or agent not in table
+            or not isinstance(started, (int, float)) or isinstance(started, bool)
+            or abs(table[agent][1] - started) > 1 or node.get("agent_alive") is not True):
+        raise StateRefusal("node-not-live", "the recorded node agent is not live or cannot be verified")
+    def descends(pid: int, ancestor: int) -> bool:
+        seen = set()
+        while pid in table and pid not in seen:
+            if pid == ancestor:
+                return True
+            seen.add(pid)
+            pid = table[pid][0]
+        return False
+    if table[agent][0] != holder or not descends(os.getppid(), agent):
+        raise StateRefusal("caller-origin-unverified", "checkpoint caller is not inside the recorded live node agent process tree")
+
+
 def maintenance_receipt(caller: dict[str, str], batch: str, through: int) -> dict[str, Any]:
     _, node = caller_record(caller)
     if (node.get("platform") != caller["platform"] or node.get("session") != caller["session"]
@@ -10727,6 +10793,14 @@ def apply_checkpoint(args: argparse.Namespace, doc: dict[str, Any],
     if through < handled or through > current:
         raise StateRefusal("invalid-input", f"--through-host-revision must be within {handled}..{current}")
     receipt = maintenance_receipt(caller, args.batch, through)
+    last = maintenance.get("last_checkpoint") or {}
+    _, node = caller_record(caller)
+    carrier_dir, _ = caller_record(node["dispatcher"])
+    if (last.get("batch") == args.batch or any(
+            event.get("kind") == "sideagent_node_settled" and event.get("batch") == args.batch
+            and event.get("holder") == holder for event in original_events(carrier_dir))):
+        raise StateRefusal("batch-consumed", "the admitted batch already has a checkpoint or settlement")
+    verify_checkpoint_origin(node)
     if events:
         raise StateRefusal("batch-unverified", "worker events are not selected node maintenance inputs")
     recovery = receipt.get("recovery_input")

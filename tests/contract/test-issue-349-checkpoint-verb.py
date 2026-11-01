@@ -321,7 +321,7 @@ class CheckpointVerb(issue255.MaintenanceCheckpoint):
         holder = issue255.holder_module.Holder.__new__(issue255.holder_module.Holder)
         holder.args = argparse.Namespace(repo=str(self.repo))
         holder.node = {"batch": batch, "holder": holder_id, "fingerprint": "fp",
-                       "sent_through": through, "phase": "running",
+                       "sent_through": through, "phase": "running", "session": self.SESSION,
                        "attention_sent": attention_sent}
         holder.host_attention_seen = None
         holder.session_role = "host"
@@ -346,9 +346,9 @@ class CheckpointVerb(issue255.MaintenanceCheckpoint):
         self.bind()
         rev = self.decision("d-next", self.NEXT)
         ident = f"host:decisions/d-next@{rev}"
-        self.assert_retained(self.node("node-1"), "b-wake", rev, ident,
-                             {"input": ident, "applied": ["decisions/d-next"]})
-        end, log, failures = self.drive("b-wake", "node-1", rev)
+        checkpoint = self.assert_retained(self.node("node-1"), "b-wake", rev, ident,
+                                          {"input": ident, "applied": ["decisions/d-next"]})
+        end, log, failures = self.drive(checkpoint["batch"], "node-1", rev)
         self.assertTrue(end.get("node_quiet"))
         self.assertNotIn("host_owned", end)
         settled = [row for row in log if row.get("kind") == "sideagent_node_settled"]
@@ -363,7 +363,7 @@ class CheckpointVerb(issue255.MaintenanceCheckpoint):
         ident = f"host:decisions/d-next@{rev}"
         doc = self.doc()
         doc["state"]["maintenance"] = {"handled_host_revision": 0, "last_checkpoint": {
-            "batch": "b-plant", "node": {"holder_instance_id": "node-1"}, "verified": False,
+            "batch": "b-plant", "node": {"holder_instance_id": "node-1", "session": self.SESSION}, "verified": False,
             "host_revision": {"from": 0, "through": rev, "current": rev},
             "returned_to_host": {ident: "decisions/d-next is not a current record this node wrote"},
             "settled": []}}
@@ -383,7 +383,7 @@ class CheckpointVerb(issue255.MaintenanceCheckpoint):
         other = "host:tasks/t-missing@1"
         doc = self.doc()
         doc["state"]["maintenance"] = {"handled_host_revision": 0, "last_checkpoint": {
-            "batch": "b-mix", "node": {"holder_instance_id": "node-1"}, "verified": False,
+            "batch": "b-mix", "node": {"holder_instance_id": "node-1", "session": self.SESSION}, "verified": False,
             "host_revision": {"from": 0, "through": rev, "current": rev},
             "returned_to_host": {
                 ident: "decisions/d-next is not a current record this node wrote",
@@ -408,7 +408,7 @@ class CheckpointVerb(issue255.MaintenanceCheckpoint):
             "level": "warn", "owner": "host", "writer": "sideagent", "writer_holder": "node-1",
             "summary": "planted", "inputs": {ident: {"why": "other", "host_revision_through": rev}}}
         doc["state"]["maintenance"] = {"handled_host_revision": rev, "last_checkpoint": {
-            "batch": "b-attn", "node": {"holder_instance_id": "node-1"}, "verified": True,
+            "batch": "b-attn", "node": {"holder_instance_id": "node-1", "session": self.SESSION}, "verified": True,
             "host_revision": {"from": 0, "through": rev, "current": rev},
             "returned_to_host": {}, "settled": [ident]}}
         doc["body"] = json.dumps({"view": "host", "attention": [

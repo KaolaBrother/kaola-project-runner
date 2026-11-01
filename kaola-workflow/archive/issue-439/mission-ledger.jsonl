@@ -1,0 +1,2 @@
+{"n": 1, "name": "Validate Droid latest ACP convergence", "details": "dispatched: self; NOT GREEN evidence in .kw/worktrees/issue-439/kaola-workflow/issue-439/droid-validation.md; Host acceptance pending", "status": "done"}
+{"n": 2, "name": "Correct Droid binary selection and revalidate candidate", "details": "dispatched: self; result commit 434d9348, NOT GREEN evidence in issue-439/droid-validation.md; Host acceptance pending", "status": "done"}

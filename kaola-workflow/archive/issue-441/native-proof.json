@@ -1,0 +1,199 @@
+{
+  "base_head": "c537c74e057a5d7bc72b92dc95d356e2c8bdd204",
+  "candidate_dispatch_sha256": "96fdf53b9210f68d83486bd0e6324af80a6db51be5ab1ae9c4e52f06a2695a97",
+  "baseline_main": "7a0d848ef6997969d7fa1b65cc2de77e89f77673",
+  "host_events": [
+    {
+      "cursor": 16,
+      "holder": "303f9c8dd8e16ee087866da3ae177666",
+      "kind": "sideagent_node_started",
+      "session": "devin-I441-sideagent-node",
+      "ts": 1793503151.616
+    },
+    {
+      "batch": "b-bf9b270a4cdc",
+      "cursor": 17,
+      "host_holder": "9b9f0bd93bef2d4fd287e975b55535b5",
+      "host_revision_through": 3,
+      "kind": "sideagent_node_batch",
+      "prompt_fingerprint": "sha256:23b5ad192f813ef7d84bc62ba4d838456dc953888319dbcf5b21260fb802ef71",
+      "recovery_alerts": {},
+      "recovery_input": null,
+      "target_holder": "303f9c8dd8e16ee087866da3ae177666",
+      "ts": 1793503152.133
+    },
+    {
+      "batch": "b-bf9b270a4cdc",
+      "checkpoint": "verified",
+      "checkpoint_through": 3,
+      "cursor": 26,
+      "holder": "303f9c8dd8e16ee087866da3ae177666",
+      "host_revision_through": 3,
+      "host_woken": false,
+      "kind": "sideagent_node_settled",
+      "ts": 1793503182.544
+    },
+    {
+      "cursor": 31,
+      "holder": "303f9c8dd8e16ee087866da3ae177666",
+      "kind": "sideagent_node_stopped",
+      "receipt": {
+        "stopped": true
+      },
+      "ts": 1793503183.948
+    }
+  ],
+  "last_checkpoint": {
+    "at": "2026-11-01T03:19:38.266281+00:00",
+    "batch": "b-bf9b270a4cdc",
+    "host_revision": {
+      "current": 3,
+      "from": 0,
+      "through": 3
+    },
+    "node": {
+      "holder_instance_id": "303f9c8dd8e16ee087866da3ae177666",
+      "session": "devin-I441-sideagent-node"
+    },
+    "returned_to_host": {},
+    "settled": [
+      "host:section/authorization@1",
+      "host:section/project@1",
+      "host:section/sideagent@3"
+    ],
+    "source": "b-bf9b270a4cdc",
+    "verified": true
+  },
+  "stopped_replay": {
+    "exit": 2,
+    "reply": {
+      "detail": "the admitted batch already has a checkpoint or settlement",
+      "reason": "batch-consumed",
+      "result": "refused",
+      "self_route": "batch-consumed: Self-route: read detail and status before any stop or start. Do not repeat the refused command unchanged and do not start a second session on a guess."
+    },
+    "sha256_before": "df6178da48e6636c4e832e5c03ffc8600fbe576a3656642924afcd44b62f1dd8",
+    "sha256_after": "df6178da48e6636c4e832e5c03ffc8600fbe576a3656642924afcd44b62f1dd8",
+    "unchanged": true
+  },
+  "native_checkpoint_events": [
+    {
+      "cursor": 183,
+      "kind": "session_update",
+      "sessionId": "muddy-vole",
+      "ts": 1793503178.109,
+      "update": {
+        "_meta": {
+          "cognition.ai/commandNames": [
+            "python3"
+          ],
+          "cognition.ai/inferenceToolName": "exec"
+        },
+        "content": [
+          {
+            "content": {
+              "_meta": {
+                "cognition.ai/preview_is_shell_command": true
+              },
+              "resource": {
+                "mimeType": "text/x-shellscript",
+                "text": "python3 /Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-441/scripts/kaola-dispatch.py state checkpoint --file /Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-441/.kaola/i441-native-proof/.kaola/heartbeat-prompt.json --writer sideagent --source b-bf9b270a4cdc --batch b-bf9b270a4cdc --through-host-revision 3 --entries '[{\"input\":\"host:section/authorization@1\",\"retained\":\"section/authorization\"},{\"input\":\"host:section/project@1\",\"retained\":\"section/project\"},{\"input\":\"host:section/sideagent@3\",\"retained\":\"section/sideagent\"}]'",
+                "uri": "tool://preview"
+              },
+              "type": "resource"
+            },
+            "type": "content"
+          }
+        ],
+        "kind": "execute",
+        "rawInput": {
+          "command": "python3 /Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-441/scripts/kaola-dispatch.py state checkpoint --file /Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-441/.kaola/i441-native-proof/.kaola/heartbeat-prompt.json --writer sideagent --source b-bf9b270a4cdc --batch b-bf9b270a4cdc --through-host-revision 3 --entries '[{\"input\":\"host:section/authorization@1\",\"retained\":\"section/authorization\"},{\"input\":\"host:section/project@1\",\"retained\":\"section/project\"},{\"input\":\"host:section/sideagent@3\",\"retained\":\"section/sideagent\"}]'"
+        },
+        "sessionUpdate": "tool_call",
+        "title": "Ran python3",
+        "toolCallId": "exec:0#e2082a795a5846008ee78f64590dbd2a"
+      }
+    },
+    {
+      "cursor": 186,
+      "kind": "session_update",
+      "sessionId": "muddy-vole",
+      "ts": 1793503178.273,
+      "update": {
+        "_meta": {
+          "cognition.ai/inferenceToolName": "exec",
+          "cognition.ai/terminalPreview": true
+        },
+        "content": [
+          {
+            "content": {
+              "text": "{\n  \"body_bytes\": 800,\n  \"file_bytes\": 3444,\n  \"file_limit\": 65536,\n  \"host_revision\": 3,\n  \"previous_revision\": 3,\n  \"result\": \"written\",\n  \"revision\": 4,\n  \"value\": {\n    \"at\": \"2026-11-01T03:19:38.266281+00:00\",\n    \"batch\": \"b-bf9b270a4cdc\",\n    \"host_revision\": {\n      \"current\": 3,\n      \"from\": 0,\n      \"through\": 3\n    },\n    \"node\": {\n      \"holder_instance_id\": \"303f9c8dd8e16ee087866da3ae177666\",\n      \"session\": \"devin-I441-sideagent-node\"\n    },\n    \"returned_to_host\": {},\n    \"settled\": [\n      \"host:section/authorization@1\",\n      \"host:section/project@1\",\n      \"host:section/sideagent@3\"\n    ],\n    \"source\": \"b-bf9b270a4cdc\",\n    \"verified\": true\n  }\n}",
+              "type": "text"
+            },
+            "type": "content"
+          }
+        ],
+        "sessionUpdate": "tool_call_update",
+        "status": "in_progress",
+        "toolCallId": "exec:0#e2082a795a5846008ee78f64590dbd2a"
+      }
+    }
+  ],
+  "owned_node_final": {
+    "state": "stopped",
+    "residual_pids": [],
+    "runner_build": "f37bd5571406"
+  },
+  "test_host_final": {
+    "state": "stopped",
+    "residual_pids": []
+  },
+  "timing": {
+    "main": {
+      "calls": 14,
+      "median_ms": 135.36,
+      "min_ms": 132.792,
+      "max_ms": 154.055,
+      "samples_ms": [
+        148.651,
+        152.776,
+        148.63,
+        154.055,
+        132.792,
+        138.353,
+        133.793,
+        135.377,
+        133.947,
+        136.716,
+        135.331,
+        132.905,
+        134.659,
+        135.333
+      ]
+    },
+    "candidate": {
+      "calls": 16,
+      "median_ms": 128.57,
+      "min_ms": 116.617,
+      "max_ms": 136.97,
+      "samples_ms": [
+        136.97,
+        133.997,
+        126.541,
+        130.216,
+        128.226,
+        131.671,
+        132.216,
+        129.556,
+        124.966,
+        124.548,
+        118.994,
+        118.422,
+        130.383,
+        128.92,
+        117.075,
+        116.617
+      ]
+    }
+  }
+}

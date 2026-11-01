@@ -376,5 +376,52 @@ class KimiProviderErrorTest(unittest.TestCase):
         self.assertIsNone(self.holder_record().get("fatal_error"))
 
 
+class SummaryEngineCodeTest(unittest.TestCase):
+    """Issue #440: a string data.code survives beside the JSON-RPC code."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "holder_issue_440", REPO / "scripts" / "kaola-acp-holder.py")
+        assert spec is not None and spec.loader is not None
+        cls.holder = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.holder)
+
+    def test_stale_keeps_numeric_code_and_engine_code(self) -> None:
+        summary = self.holder.summary_from_acp({
+            "code": -32600,
+            "data": {"code": "session.stale"},
+            "message": (
+                "Invalid request: Session was updated by another client. "
+                "Close and reopen the session, then retry."
+            ),
+        })
+        self.assertEqual(summary["code"], -32600)
+        self.assertEqual(summary["engine_code"], "session.stale")
+        self.assertEqual(summary["source"], "acp")
+        self.assertIn("Close and reopen", summary["message"])
+
+    def test_occupied_engine_code_is_copied_not_substituted(self) -> None:
+        summary = self.holder.summary_from_acp({
+            "code": -32600,
+            "data": {"code": "  session.occupied  "},
+            "message": "Invalid request: occupied",
+        })
+        self.assertEqual(summary["code"], -32600)
+        self.assertEqual(summary["engine_code"], "session.occupied")
+
+    def test_absent_or_non_string_data_code_adds_no_engine_code(self) -> None:
+        plain = self.holder.summary_from_acp(
+            {"code": -32000, "message": USABLE_ACP})
+        self.assertNotIn("engine_code", plain)
+        blank = self.holder.summary_from_acp(
+            {"code": -32600, "data": {"code": "  "}, "message": "Invalid request"})
+        self.assertNotIn("engine_code", blank)
+        numeric = self.holder.summary_from_acp(
+            {"code": -32600, "data": {"code": 1}, "message": "Invalid request"})
+        self.assertNotIn("engine_code", numeric)
+        self.assertEqual(plain["code"], -32000)
+
+
 if __name__ == "__main__":
     unittest.main()

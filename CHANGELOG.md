@@ -17,6 +17,24 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
   verified-version record changes; no runtime-read field changes
   behavior) (#445).
 
+- Adopt Kimi Code CLI 2.4.1 native ACP (protocol 1). There is no public adapter package and no declared CLI range; `acp_wrapper_pin` stays empty. Isolated receipts cover start, observe, send, capture, and exact-stop, model/thinking/mode apply, a refused resume while another live client holds the session (`resume-failed`, JSON-RPC -32603, in-use details, no eviction and no `KIMI_CODE_SESSION_LOCK=0`), and a stale prompt on the original client (JSON-RPC -32600, `data.code` `session.stale`, no replay) followed by a successful prompt on the loader and a successful reopen of the same native id. Prompt-path `session.occupied`, cancellation, permission, and compact were not exercised. Durable `turn_error` keeps a string `data.code` as `engine_code` beside the numeric JSON-RPC code (#440). **Seats: restart required** (`scripts/kaola-acp-holder.py` and `platforms/kimi-cli.yaml` are in the operator diff).
+
+- Reject Sideagent checkpoint replays and require the live bound node agent process tree for an admitted batch (#441). **Seats: restart required** (`scripts/kaola-dispatch.py` is in the operator diff).
+
+- Record Claude Code 2.1.316 as the verified CLI (`cli=2.1.316;bridge=6c20f28;protocol=1`,
+  MacBook, Darwin ARM) from a live Runner run on the installed binary (#444). The vendored
+  bridge stays at upstream HEAD `6c20f28` (no upstream commits since the pin; upstream
+  declares no Claude CLI range, so compatibility rests on the live run). Receipts: start,
+  observe, send with `--resume`, a native steer joined the running turn, cancel, exact stop,
+  and a native `--resume` after stop. Every child row carries `entrypoint: custom` (#436).
+  No bridge, adapter or holder bytes change; the hybrid path stays research-only.
+  **Seats: restart not required** (`platforms/claude-code.yaml` is in the operator diff,
+  but only verified-record and quirk text changes).
+
+- Honor `DROID_BIN` for the native ACP launch, so the selected binary matches
+  preflight instead of silently starting the PATH binary (#439). **Seats: restart
+  not required** for existing sessions; use a new start to apply the selection.
+
 - Record AGY 1.4.12 as the Antigravity verified version (MacBook, Darwin ARM;
   protocol 1) by reusing the #435 final Expert evidence on candidate
   `4414c26f`: one/two turns, model/mode replacement, close/resume, mid-turn
