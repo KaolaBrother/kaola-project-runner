@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: python3 ./scripts/render-skills.py --check --require-pinned && python3 ./scripts/kaola-grok-bot-verify.py hosts/grok-bot --repo . --require-pinned && /opt/homebrew/bin/bash ./scripts/validate.sh --suite test-issue-335-kimi-provider-error.py && /opt/homebrew/bin/bash ./scripts/validate.sh --suite test-issue-255-lifecycle-state.py && /opt/homebrew/bin/bash ./scripts/validate.sh --suite test-droid-acp-contract.py && /opt/homebrew/bin/bash ./scripts/validate.sh --suite test-issue-168-drift-enumeration.py
+validated_candidate_hash: cd4ec9e8ab36a8305ec00ce2d623bc81517bb327dedd5cd1f1cc690ce860fcfe
