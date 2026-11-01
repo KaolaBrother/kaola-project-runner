@@ -6,6 +6,12 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+## 0.9.38 — 2026-11-01 (verified pins; checkpoint provenance; Droid binary)
+
+Seats: restart required
+
+The operator diff includes `platforms/antigravity.yaml`, `platforms/claude-code.yaml`, `platforms/dsh.yaml`, `platforms/grok.yaml`, `platforms/kimi-cli.yaml`, `scripts/kaola-acp-holder.py` and `scripts/kaola-dispatch.py`. Worker wrapper pins already set stay in their manifests (Codex `2.5.0`, Claude bridge `6c20f28`, ZCode `80aa4e2c`). Empty `acp_wrapper_pin` stays intentional for antigravity, cursor-cli, devin, droid, dsh, grok, hermes, kimi-cli and opencode (native ACP or no public adapter). The Grok Bot bridge is pinned by the following pin commit to this release content commit.
+
 - Verify DSH 0.2.1-rc.5 over ACP protocol 1 using the operator-configured OpenCode Go route. A sandboxed start, observe, credentialed turn, capture, and exact stop succeeded (#447). **Seats: restart not required** (only the verified-version record changes).
 
 - Record Grok CLI 1.0.70 as the verified ACP version (protocol 1) from a
