@@ -6,6 +6,16 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- Record Claude Code 2.1.316 as the verified CLI (`cli=2.1.316;bridge=6c20f28;protocol=1`,
+  MacBook, Darwin ARM) from a live Runner run on the installed binary (#444). The vendored
+  bridge stays at upstream HEAD `6c20f28` (no upstream commits since the pin; upstream
+  declares no Claude CLI range, so compatibility rests on the live run). Receipts: start,
+  observe, send with `--resume`, a native steer joined the running turn, cancel, exact stop,
+  and a native `--resume` after stop. Every child row carries `entrypoint: custom` (#436).
+  No bridge, adapter or holder bytes change; the hybrid path stays research-only.
+  **Seats: restart not required** (`platforms/claude-code.yaml` is in the operator diff,
+  but only verified-record and quirk text changes).
+
 - Honor `DROID_BIN` for the native ACP launch, so the selected binary matches
   preflight instead of silently starting the PATH binary (#439). **Seats: restart
   not required** for existing sessions; use a new start to apply the selection.
