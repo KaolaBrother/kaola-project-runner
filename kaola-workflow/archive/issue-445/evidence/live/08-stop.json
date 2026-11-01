@@ -1,0 +1,1 @@
+{"agent_exit_code": 0, "agent_exit_signal": null, "git": {"branch": "main", "dirty": false}, "mutation_status": "completed", "platform": "grok", "repo": "/private/tmp/kpr-445-smoke", "residual_pids": [], "schema_version": 3, "session": "grok-kaola-i445-acp70", "stopped": true, "swept_child_pgids": [], "transport": {"selected": "acp"}}
