@@ -6,7 +6,11 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+## 0.9.39 — 2026-11-01 (Devin sideagent session-origin isolation)
+
 Seats: restart required
+
+The operator diff includes `scripts/kaola-acp-holder.py`. `scripts/kaola-acp.py` also changed (#450); it is outside the operator path list. Worker wrapper pins already set stay in their manifests (Codex `2.5.0`, Claude bridge `6c20f28`, ZCode `80aa4e2c`). Empty `acp_wrapper_pin` stays intentional for antigravity, cursor-cli, devin, droid, dsh, grok, hermes, kimi-cli and opencode (native ACP or no public adapter). The Grok Bot bridge is pinned by the following pin commit to this release content commit.
 
 - Devin Sideagent starts refuse resume and continue, bind to the ID returned by
   their own `session/new`, isolate their native session DB per seat, and stop on a
