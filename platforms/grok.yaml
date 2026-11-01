@@ -33,7 +33,7 @@ fast_summary: "no native Fast mechanism; explicit --fast on is reported unsuppor
 acp_command: "grok agent --always-approve stdio"
 acp_client_capabilities: "terminal:false,fs:false"
 acp_quirks: ""
-acp_verified_versions: "cli=1.0.40;protocol=1"
+acp_verified_versions: "cli=1.0.70;protocol=1"
 acp_env_allowlist: "GROK_API_KEY,GROK_BASE_URL"
 acp_login_requires_pty: "false"
 login_summary: "Login is a human act outside the Runner and needs no terminal."

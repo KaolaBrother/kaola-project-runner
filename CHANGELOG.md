@@ -6,6 +6,17 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- Record Grok CLI 1.0.70 as the verified ACP version (protocol 1) from a
+  checkout start, observe, send, capture, and exact stop on the installed
+  binary. The native command stays `grok agent --always-approve stdio`.
+  Model `grok-4.7` and `reasoning_effort` `high` applied; the probe turn
+  ended `end_turn` with no tool call and no residual process. No separate
+  adapter package and no quirk change. The steering summary still cites
+  the CLI 1.0.46 measurement. **Seats: restart not required**
+  (`platforms/grok.yaml` is in the operator diff, but only the
+  verified-version record changes; no runtime-read field changes
+  behavior) (#445).
+
 - Record AGY 1.4.12 as the Antigravity verified version (MacBook, Darwin ARM;
   protocol 1) by reusing the #435 final Expert evidence on candidate
   `4414c26f`: one/two turns, model/mode replacement, close/resume, mid-turn
