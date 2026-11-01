@@ -753,7 +753,11 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   under `superseded`, not returned, since the rewrite is the next batch's input; `acked_host_revision` never passes an unsettled change or one still
   open in the `maintenance-returned` alert, which receives each unsettled input once. A
   caller that is not the session's current node holder is `binding-superseded`; no caller
-  identity is `node-identity-required`.
+  identity is `node-identity-required`. The admitted batch can write one checkpoint, even
+  when partial; a consumed or settled batch is `batch-consumed` and recovery needs a fresh
+  node batch. The recorded holder and agent must be live (`node-not-live`), and the caller
+  must descend from that holder's recorded agent (`caller-origin-unverified`). Copied
+  environment identity alone is insufficient.
 - `update --kind alerts --id ID --expect-rev N --evidence checkpoint:B --set
   '{"inputs":{"<input>":null}}'` removes one handled returned input (Issue #287). The tool
   accepts it only when the recorded checkpoint `B` settled that exact input, or is verified,

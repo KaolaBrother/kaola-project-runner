@@ -140,6 +140,18 @@ def _fixture_processes(tmp_str: str, repo_realpath: str) -> tuple:
 
 
 def run(args: list[str], env: dict[str, str] | None = None) -> tuple[int, dict]:
+    # The carrier fixture is in this process; model its node agent as this
+    # process and its holder as our parent for real CLI ancestry checks.
+    if args[:2] == ["state", "checkpoint"] and env and env.get("FAKE_NODE_RECORD"):
+        path = Path(env["FAKE_NODE_RECORD"])
+        if path.exists():
+            node = json.loads(path.read_text())
+            caller = json.loads(env.get("KAOLA_ACP_DISPATCHER") or "null")
+            if isinstance(caller, dict) and node.get("holder_instance_id") == caller.get("holder_instance_id"):
+                node.update(holder_pid=os.getppid(), agent_pid=os.getpid(), agent_alive=True,
+                    agent_started=next(holder_module.start_epoch(started) for pid, _, _, started
+                                       in holder_module.process_table() if pid == os.getpid()))
+                path.write_text(json.dumps(node))
     proc = subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True,
                           env=env or {k: v for k, v in os.environ.items() if k not in CALLER_ENV})
     try:
@@ -2872,7 +2884,10 @@ class MaintenanceCheckpoint(StateProject):
         directory = self.records / "zcode" / self.SESSION / digest
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "record.json").write_text(json.dumps({"holder_instance_id": holder, "platform": "zcode", "session": self.SESSION,
-                                                           "repo": str(self.repo), "session_role": "sideagent"}), encoding="utf-8")
+                                                           "repo": str(self.repo), "session_role": "sideagent",
+                                                           "holder_pid": os.getppid(), "agent_pid": os.getpid(),
+                                                           "agent_started": next(holder_module.start_epoch(started) for pid, _, _, started in holder_module.process_table() if pid == os.getpid()),
+                                                           "agent_alive": True}), encoding="utf-8")
         return self.caller_env(self.SESSION, holder)
 
     def bind(self) -> None:
@@ -2894,6 +2909,70 @@ class MaintenanceCheckpoint(StateProject):
         code, out = self.state("view", "--file", str(self.file), "--role", "sideagent")
         self.assertEqual(code, 0, out)
         return out
+
+    def test_checkpoint_provenance_and_replay_matrix(self) -> None:
+        self.init(); self.bind()
+        through = self.doc()["host_revision"]
+        env = self.node("node-current")
+        batch = self.fixture_ordinary_batch(env, through)
+        digest = hashlib.sha256(str(self.repo).encode()).hexdigest()[:16]
+        path = self.records / "zcode" / self.SESSION / digest / "record.json"
+        node = json.loads(path.read_text())
+        args = ["checkpoint", "--file", str(self.file), "--writer", "sideagent", "--source", batch,
+                "--batch", batch, "--through-host-revision", str(through), "--entries", "[]"]
+        before = self.file.read_bytes()
+        host = self.caller_env("zcode-KT-orchestrator-main", "fixture-host")
+        for label, vector, expected in (("host", host, "writer-refused"),
+                                        ("anonymous", None, "node-identity-required"),
+                                        ("superseded", self.caller_env(self.SESSION, "node-old"), "binding-superseded")):
+            code, out = self.state(*args, env=vector)
+            self.assertEqual((code, out.get("reason")), (2, expected), (label, out))
+            self.assertEqual(self.file.read_bytes(), before)
+        fake = args.copy(); fake[fake.index("--batch") + 1] = "b-fake"
+        code, out = self.state(*fake, env=env)
+        self.assertEqual((code, out.get("reason")), (2, "batch-unverified"), out)
+        self.assertEqual(self.file.read_bytes(), before)
+        path.write_text(json.dumps({**node, "holder_pid": 99999999}))
+        code, out = self.state(*args, env=env)
+        self.assertEqual((code, out.get("reason")), (2, "node-not-live"), out)
+        self.assertEqual(self.file.read_bytes(), before)
+        with subprocess.Popen(["sleep", "30"]) as sibling:
+            try:
+                started = next(holder_module.start_epoch(t) for pid, _, _, t in holder_module.process_table() if pid == sibling.pid)
+                path.write_text(json.dumps({**node, "holder_pid": os.getpid(), "agent_pid": sibling.pid, "agent_started": started}))
+                code, out = self.state(*args, env=env)
+                self.assertEqual((code, out.get("reason")), (2, "caller-origin-unverified"), out)
+                self.assertEqual(self.file.read_bytes(), before)
+            finally:
+                sibling.terminate()
+        path.write_text(json.dumps(node))
+        entries = [{"input": f"host:section/{name}@{revision}", "retained": f"section/{name}"}
+                   for name, revision in (("authorization", 1), ("project", 1), ("sideagent", through))]
+        args[args.index("--entries") + 1] = json.dumps(entries)
+        code, out = self.state(*args, env=env)
+        self.assertEqual(code, 0, out)
+        self.assertTrue(out["value"]["verified"], out)
+        written = self.file.read_bytes()
+        args[args.index("--entries") + 1] = '[{"input":"host:section/project@1","returned":"fabricated"}]'
+        code, out = self.state(*args, env=env)
+        self.assertEqual((code, out.get("reason")), (2, "batch-consumed"), out)
+        self.assertEqual(self.file.read_bytes(), written)
+        path.write_text(json.dumps({**node, "holder_pid": 99999999}))
+        code, out = self.state(*args, env=env)
+        self.assertEqual((code, out.get("reason")), (2, "batch-consumed"), out)
+        self.assertEqual(self.file.read_bytes(), written)
+        # Settlement remains authoritative if a newer checkpoint replaced the
+        # current summary; the original carrier event is the evidence.
+        doc = self.doc()
+        doc["state"]["maintenance"]["last_checkpoint"]["batch"] = "b-newer"
+        self.file.write_text(json.dumps(doc))
+        carrier = self.records / "zcode" / "zcode-KT-orchestrator-main" / digest / "events.jsonl"
+        with carrier.open("a") as stream:
+            stream.write(json.dumps({"kind": "sideagent_node_settled", "batch": batch, "holder": "node-current"}) + "\n")
+        before = self.file.read_bytes()
+        code, out = self.state(*args, env=env)
+        self.assertEqual((code, out.get("reason")), (2, "batch-consumed"), out)
+        self.assertEqual(self.file.read_bytes(), before)
 
     def test_two_consecutive_nodes_account_for_their_fixed_inputs(self) -> None:
         self.init()
@@ -3246,10 +3325,11 @@ class MaintenanceCheckpoint(StateProject):
         self.assertEqual(self.doc()["state"]["maintenance"]["recovery_input"], item)
         alert = self.doc()["state"]["alerts"]["maintenance-returned"]
         self.assertIn(f"recovery#{item['seq']}", alert["inputs"])
-        # The later alert did not exist in the original selection receipt.
+        # A fresh node gets a fresh batch; the later alert was not selected.
+        env = self.recovery_receipt(item, batch="b-recovery-next", holder="node-next")
         doc = self.doc(); doc["state"]["alerts"]["maintenance-returned"]["inputs"]["recovery#91"] = {"why": "newer"}
         self.file.write_text(json.dumps(doc))
-        code, out = self.recovery_checkpoint(env, item, [self.scoped_entry(item["seq"])])
+        code, out = self.recovery_checkpoint(env, item, [self.scoped_entry(item["seq"])], batch="b-recovery-next")
         self.assertEqual(code, 0, out)
         self.assertNotIn("recovery_input", self.doc()["state"]["maintenance"])
         inputs = self.doc()["state"]["alerts"]["maintenance-returned"]["inputs"]
@@ -4442,8 +4522,9 @@ class HolderNodeMode(HolderFixture):
         self.finish_host_turn()
         with self.holder.worker_events_lock:
             self.holder._relay_pass()
-            self.assertEqual(self.holder.node.get("phase"), "starting",
-                             "an aligned disk admits the same start at the next boundary")
+        # The asynchronous start can pass through "starting" before this
+        # thread reacquires the lock. Its start receipt proves admission even
+        # if a later pass has already begun reclaiming the node.
         self.wait_for(lambda: self.node_count() == 3, "the admitted start runs")
         self.wait_for(lambda: "sideagent_node_started" in self.log_kinds(), "the aligned start admits")
         with self.holder.worker_events_lock:
@@ -4764,7 +4845,10 @@ class SideagentTaskRetire(StateProject):
         directory = self.records / "zcode" / self.SESSION / digest
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "record.json").write_text(json.dumps({"holder_instance_id": holder, "platform": "zcode", "session": self.SESSION,
-                                                           "repo": str(self.repo), "session_role": "sideagent"}), encoding="utf-8")
+                                                           "repo": str(self.repo), "session_role": "sideagent",
+                                                           "holder_pid": os.getppid(), "agent_pid": os.getpid(),
+                                                           "agent_started": next(holder_module.start_epoch(started) for pid, _, _, started in holder_module.process_table() if pid == os.getpid()),
+                                                           "agent_alive": True}), encoding="utf-8")
         return self.caller_env(self.SESSION, holder)
 
     def bind(self) -> None:
@@ -5265,11 +5349,13 @@ class SideagentTaskRetire(StateProject):
                                         {"input": ident, "returned": "why", "applied": ["tasks/t1"]}])
         self.assertEqual(code, 0, out)
         self.assertEqual(out["value"]["returned_to_host"][ident], "entry-needs-one-verb")
+        node = self.node("node-2")
         code, out = self.checkpoint(node, "b-2", hr,
                                     self.section_entries() + [
                                         {"input": ident, "returned": ""}])
         self.assertEqual(code, 0, out)
         self.assertEqual(out["value"]["returned_to_host"][ident], "returned-unreadable")
+        node = self.node("node-3")
         code, out = self.checkpoint(node, "b-3", hr,
                                     self.section_entries() + [
                                         {"input": ident, "returned": "host must judge this"}])

@@ -6,6 +6,8 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- Reject Sideagent checkpoint replays and require the live bound node agent process tree for an admitted batch (#441). **Seats: restart required** (`scripts/kaola-dispatch.py` is in the operator diff).
+
 - **Sideagent outages no longer stay silent (#437).** A carrier failure of the
   same class refreshes the blocking `maintenance-returned` alert
   (`state recovery-input --rearm`, carrier caller) instead of returning
