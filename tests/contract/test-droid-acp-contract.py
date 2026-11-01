@@ -132,6 +132,24 @@ class DroidAcpSessionFixture(unittest.TestCase):
             events.append((str(event.get("configId")), str(event.get("value"))))
         return events
 
+    def test_droid_bin_drives_manifest_acp_launch(self) -> None:
+        # An executable with spaces proves the override remains one argv item.
+        shim = self.root / "selected droid"
+        shim.write_text(
+            '#!/bin/sh\n'
+            'if [ "$1" = "--version" ]; then echo "droid fixture"; exit 0; fi\n'
+            f'exec "{sys.executable}" "{FAKE}"\n', encoding="utf-8")
+        shim.chmod(0o755)
+        env = self.env()
+        env["DROID_BIN"] = str(shim)
+        result = subprocess.run(
+            [sys.executable, str(CLI), "droid", "start", "--repo", str(self.repo),
+             "--session", self.session, "--launch-backend", "direct"],
+            capture_output=True, text=True, env=env, timeout=30)
+        self._started = True
+        self.assertEqual(result.returncode, 0, (result.stdout, result.stderr))
+        self.assertEqual(json.loads(result.stdout).get("state"), "ready")
+
     def echoed_model_values(self) -> list[str]:
         """Every model ``currentValue`` the agent itself echoed.
 

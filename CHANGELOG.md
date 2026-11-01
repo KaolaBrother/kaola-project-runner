@@ -6,6 +6,10 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- Honor `DROID_BIN` for the native ACP launch, so the selected binary matches
+  preflight instead of silently starting the PATH binary (#439). **Seats: restart
+  not required** for existing sessions; use a new start to apply the selection.
+
 - **Sideagent outages no longer stay silent (#437).** A carrier failure of the
   same class refreshes the blocking `maintenance-returned` alert
   (`state recovery-input --rearm`, carrier caller) instead of returning
