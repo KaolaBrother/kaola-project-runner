@@ -548,8 +548,8 @@ BRIDGE_BINARY_ENV = {
 CLI_VERSION_PLATFORMS = frozenset({"grok"})
 # Issue #227: platforms whose manifest ACP command starts with ``binary_name``
 # and must launch the same ``binary_env`` binary that preflight reports;
-# otherwise a PATH ``dsh`` ran while preflight named ``$DSH_BIN``'s version.
-LAUNCH_BINARY_ENV_PLATFORMS = frozenset({"dsh"})
+# otherwise a PATH binary can run while preflight names the override's version.
+LAUNCH_BINARY_ENV_PLATFORMS = frozenset({"dsh", "droid"})
 # Issue #112: OpenCode V2 reaches its own server over loopback HTTP, so a
 # forward proxy that does not exclude loopback swallows that hop and every ACP
 # session method answers ClientError while `initialize` still succeeds.

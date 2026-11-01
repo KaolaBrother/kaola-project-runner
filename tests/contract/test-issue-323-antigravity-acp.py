@@ -855,8 +855,11 @@ class ManifestAndRegistrations(unittest.TestCase):
         self.assertEqual((self.values["native_steering"], self.values["acp_steer_method"]),
                          ("supported", "_session/steering"))
         self.assertNotIn("steering_delivery", self.values)
-        for token in ("_session/steering", "user", "write-only", "promptRequired", "--steer-mode interrupt"):
+        for token in ("_session/steering", "user", "write-only", "promptRequired", "SIGINT",
+                      "finished_reason=interrupted"):
             self.assertIn(token, self.values["steering_summary"], token)
+        steering = PROJECT / "skills" / "antigravity-kaola-project-runner" / "references" / "steering.md"
+        self.assertIn("--steer-mode interrupt", steering.read_text(encoding="utf-8"))
 
     def test_permission_default_is_the_one_skip_flag(self) -> None:
         self.assertEqual(self.acp.ACP_SKIP_MODE["antigravity"], "bypassPermissions")
@@ -868,7 +871,9 @@ class ManifestAndRegistrations(unittest.TestCase):
         self.assertEqual(self.acp.SURVEY_RUNTIMES["antigravity"], ("Antigravity", "agy", "AGY_BIN"))
 
     def test_verified_versions_claim_only_the_measured_live_scope(self) -> None:
-        self.assertIn("live-one-turn-two-turn-resume-steer-cancel-usage", self.values["acp_verified_versions"])
+        self.assertIn("cli=1.4.12;protocol=1;condition=live-one-turn-two-turn-model-mode-resume-steer-cancel-"
+                      "interrupt-resume-usage-direct-launchd-proxy-isolation-finished-reason",
+                      self.values["acp_verified_versions"])
         self.assertNotIn("steer-and-cancel-unverified", self.values["acp_verified_versions"])
         self.assertIn("provisional", self.values["acp_quirks"])
         self.assertIn("/usage", self.values["acp_quirks"])
