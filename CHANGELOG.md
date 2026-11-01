@@ -6,6 +6,21 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- Record AGY 1.4.12 as the Antigravity verified version (MacBook, Darwin ARM;
+  protocol 1) by reusing the #435 final Expert evidence on candidate
+  `4414c26f`: one/two turns, model/mode replacement, close/resume, mid-turn
+  steer, cancel/interrupt+resume, quota, direct/launchd six-key proxy isolation
+  with exact stop, and `finished_reason` handling. `acp_quirks` and
+  `steering_summary` are updated to describe cumulative usage, native
+  persistence, route-specific unsupported operations, steering admission vs
+  consumption, and terminal reasons. Mini/Studio, other CLI versions and
+  unmeasured model/Host capabilities are not covered; this is an evidence
+  record, not an installation, restart or transport gate. No adapter or
+  translator bytes change; `acp_wrapper_pin` stays empty (#443).
+  **Seats: restart not required** (`platforms/antigravity.yaml` is in the
+  operator diff, but only verified-record and description text changes; no
+  runtime-read field changes behavior).
+
 - **Sideagent outages no longer stay silent (#437).** A carrier failure of the
   same class refreshes the blocking `maintenance-returned` alert
   (`state recovery-input --rearm`, carrier caller) instead of returning
