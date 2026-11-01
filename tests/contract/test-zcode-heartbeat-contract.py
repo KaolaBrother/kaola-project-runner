@@ -14,8 +14,8 @@ ZCode Host session's own holder is the event carrier:
   raw send) as soon as its turn is idle, flushing at the next completed turn
   boundary when busy;
 * the delivered prompt carries fixed structured event metadata plus the
-  current FULL heartbeat prompt body, read at delivery time from the file the
-  ZCode Host agent maintains at ``<repo>/.kaola/heartbeat-prompt.json``;
+  source locator and event-scoped instruction; the Host state file remains at
+  ``<repo>/.kaola/heartbeat-prompt.json``;
 * unconfirmed events are redelivered after ``start --resume``; the carrier is
   ZCode-Host-only (a non-ZCode holder rejects the op, the CLI refuses a
   non-ZCode or self target) and registers no periodic scheduler anywhere.
@@ -457,17 +457,18 @@ def assert_overflow_full_check(content: str) -> None:
 def assert_delivered_notification(sandbox: Sandbox, host: str, content: str,
                                   event_ids: list[str], body: str) -> None:
     """The delivered prompt is one literal text: the native Skill entry line,
-    fixed metadata, the event lines, the current full heartbeat body verbatim,
-    and the one-pass instruction per PROJECT_RUNNER_HEARTBEAT_V2."""
+    fixed metadata, event lines, the source locator and event-scoped instruction."""
     first_line = content.split("\n", 1)[0]
     check(first_line == "/kaola-project-runner",
           f"notification payload opens with the native Skill entry line (got {first_line!r})")
     check("kaola-host-notify/1" in content, "notification payload carries its schema marker")
-    check("<<<heartbeat-prompt" in content and "heartbeat-prompt>>>" in content,
-          "notification payload delimits the heartbeat body verbatim")
-    check(body in content, "notification payload carries the FULL current heartbeat body verbatim")
-    check("PROJECT_RUNNER_HEARTBEAT_V2" in content,
-          "notification payload demands one pass per the canonical heartbeat skeleton")
+    check("<<<heartbeat-prompt" not in content and body not in content,
+          "notification does not inject the state body")
+    check(str(sandbox.repo / ".kaola" / "heartbeat-prompt.json") in content,
+          "notification identifies the state source")
+    check("Consume these events and their original receipts" in content
+          and "full Project Runner heartbeat pass" not in content,
+          "notification scopes the action to the events")
     for event_id in event_ids:
         check(event_id in content, f"notification payload carries structured event {event_id}")
 

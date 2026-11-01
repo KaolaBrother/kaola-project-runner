@@ -9,6 +9,7 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 Seats: restart required
 
 - Retain unavailable maintenance inputs without waking the Host; recovery action respects current holds and grants (#453).
+- Host carrier notifications identify events and the current state source without injecting the full state or ordering an unconditional full pass (#452). The operator diff from v0.9.39 includes `scripts/kaola-acp-holder.py`.
 
 ## 0.9.39 — 2026-11-01 (Devin sideagent session-origin isolation)
 

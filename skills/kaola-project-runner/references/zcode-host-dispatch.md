@@ -111,8 +111,7 @@ then `kaola-host-notify/1`, one JSON object per event —
  "reason":"outcome=turn_completed stop_reason=end_turn"}
 ```
 
-— then your heartbeat body verbatim between `<<<heartbeat-prompt` and
-`heartbeat-prompt>>>`.
+— then the heartbeat source locator and an event-scoped instruction. Read current facts as needed.
 
 **The notification is not the worker's reply and is not a success verdict.** Read
 what happened with the event's own `platform`/`session`/`repo` using the

@@ -7,7 +7,7 @@ detects the vanished path, stages a holder-owned ``cwd_repaired`` event, and
 delivers it as one self prompt. On v0.9.23 that self prompt must be the compact
 ``kaola-worker-notify/1`` line for a worker/Expert/Sideagent holder, and only a
 ``host`` holder may receive the full ``kaola-host-notify/1`` carrier with the
-heartbeat body and the one-pass Project Runner instruction.
+heartbeat source locator and event-scoped instruction.
 
 The suite pins the whole route, not only the payload selector:
 
@@ -307,8 +307,9 @@ class CwdCarrierRoute(unittest.TestCase):
         self.assertEqual(lines[1],
                          f"kaola-host-notify/1: event-driven heartbeat carrier "
                          f"(dsh Host)")
-        self.assertIn("<<<heartbeat-prompt", text)
-        self.assertIn(ONE_PASS, text)
+        self.assertIn("Consume these events and their original receipts", text)
+        self.assertNotIn("<<<heartbeat-prompt", text)
+        self.assertNotIn(ONE_PASS, text)
         self.assertIn('"kind": "cwd_repaired"', text)
         self.assertNotIn("kaola-worker-notify/1", text)
 

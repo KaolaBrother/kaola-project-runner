@@ -4258,7 +4258,10 @@ class HolderNodeMode(HolderFixture):
         prompts = self.agent.prompts()
         self.assertEqual(len(prompts), 1, "changed attention wakes the Host exactly once")
         self.assertIn("verified; Host attention changed", prompts[0])
-        self.assertIn("w1-gap", prompts[0], "the Host reads the changed view")
+        self.assertIn(str(self.repo / ".kaola" / "heartbeat-prompt.json"), prompts[0],
+                      "the event identifies the current state source")
+        self.assertIn("w1-gap", (self.repo / ".kaola" / "heartbeat-prompt.json").read_text(),
+                      "the changed attention remains in the source")
         self.finish_host_turn()
         self.boundary()
         self.wait_still(0.2)

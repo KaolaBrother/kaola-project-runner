@@ -12,7 +12,7 @@ This suite pins both guards:
   when a legacy start armed it with a Host entry, receives the compact
   ``kaola-worker-notify/1`` notice for a staged ``cwd_repaired`` and an
   ordinary worker event; a host-role holder still receives
-  ``kaola-host-notify/1`` with the heartbeat body;
+  ``kaola-host-notify/1`` with the source locator;
 * the start seam - a real dsh/devin worker or Expert start omits
   ``--host-entry`` from the holder argv and records an empty
   ``host_skill_entry``, while a Host start keeps both.
@@ -207,11 +207,54 @@ class PayloadSelection(unittest.TestCase):
                 self.assertEqual(
                     lines[1],
                     f"kaola-host-notify/1: event-driven heartbeat carrier ({platform} Host)")
-                self.assertIn("<<<heartbeat-prompt", text)
-                self.assertIn("Perform exactly one full Project Runner heartbeat pass", text)
+                self.assertIn("Consume these events and their original receipts", text)
+                self.assertNotIn("<<<heartbeat-prompt", text)
+                self.assertNotIn("Perform exactly one full Project Runner heartbeat pass", text)
                 self.assertNotIn("kaola-worker-notify/1", text)
                 self.assertIn('"kind": "cwd_repaired"', text)
                 self.assertIn('"kind": "idle"', text)
+
+    def test_host_admission_refusal_retains_events(self) -> None:
+        holder = self.holder("dsh", "host", HOST_ENTRY)
+        event = self.stage(holder, "permission_required", 8, request_id="request-8")
+        original = holder.op_prompt
+        holder.op_prompt = lambda _params: {"error": {"code": "prompt-in-progress"}}
+        result = holder._deliver_worker_events()
+        self.assertFalse(result["delivered"])
+        self.assertNotIn("prompt_fingerprint", event)
+        holder.op_prompt = original
+        receipt, text = self.deliver(holder)
+        self.assertIn(event["event_id"], text)
+        self.assertEqual(event["prompt_fingerprint"], receipt["prompt_fingerprint"])
+
+    def test_host_event_payload_source_and_overflow(self) -> None:
+        holder = self.holder("dsh", "host", HOST_ENTRY)
+        event = self.stage(holder, "permission", 7, request_id="request-7")
+        path = self.repo / ".kaola" / "heartbeat-prompt.json"
+        for source in ("missing", "unusable", "valid"):
+            with self.subTest(source=source):
+                if source != "missing":
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(json.dumps({"body": "PRIVATE-STATE-452"} if source == "valid"
+                                               else {"prompt": "wrong field"}))
+                text, meta = holder._heartbeat_payload([event])
+                self.assertEqual(text.splitlines()[0], HOST_ENTRY)
+                self.assertIn(str(path), text)
+                self.assertIn(event["event_id"], text)
+                self.assertIn('"request_id": "request-7"', text)
+                self.assertNotIn("PRIVATE-STATE-452", text)
+                self.assertNotIn("full Project Runner heartbeat pass", text)
+                self.assertNotIn(holder_module.OVERFLOW_FULL_CHECK_MARK, text)
+                self.assertEqual(meta["heartbeat_maintained"], source == "valid")
+                if source != "valid":
+                    self.assertIn("report unknown and do not act from absent authority", text)
+                    self.assertIn("none maintained" if source == "missing" else "UNUSABLE", text)
+                else:
+                    self.assertIn("sha256:", meta["heartbeat_fingerprint"])
+        text, meta = holder._heartbeat_payload([event], overflow_full_check=True)
+        self.assertIn(holder_module.OVERFLOW_FULL_CHECK_MARK, text)
+        self.assertIn("inspect every authorized worker's real status", text)
+        self.assertTrue(meta["overflow_full_check"])
 
     def test_sideagent_holder_gets_the_compact_notice_and_its_node_batch_is_separate(self) -> None:
         # A node-mode Sideagent has its own Host-authored batch prompt. Its own
