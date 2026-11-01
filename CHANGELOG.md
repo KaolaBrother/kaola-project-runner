@@ -6,6 +6,8 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- Verify DSH 0.2.1-rc.5 over ACP protocol 1 using the operator-configured OpenCode Go route. A sandboxed start, observe, credentialed turn, capture, and exact stop succeeded (#447). **Seats: restart not required** (only the verified-version record changes).
+
 - Record Grok CLI 1.0.70 as the verified ACP version (protocol 1) from a
   checkout start, observe, send, capture, and exact stop on the installed
   binary. The native command stays `grok agent --always-approve stdio`.
