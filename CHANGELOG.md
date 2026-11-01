@@ -6,10 +6,14 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+## 0.9.40 — 2026-11-01 (event-scoped carrier notification; unavailable-binding retention)
+
 Seats: restart required
 
-- Retain unavailable maintenance inputs without waking the Host; recovery action respects current holds and grants (#453).
-- Host carrier notifications identify events and the current state source without injecting the full state or ordering an unconditional full pass (#452). The operator diff from v0.9.39 includes `scripts/kaola-acp-holder.py`.
+The operator diff includes `scripts/kaola-acp-holder.py` and `scripts/kaola-dispatch.py`. Worker wrapper pins already set stay in their manifests (Codex `2.5.0`, Claude bridge `6c20f28`, ZCode `80aa4e2c`). Empty `acp_wrapper_pin` stays intentional for antigravity, cursor-cli, devin, droid, dsh, grok, hermes, kimi-cli and opencode (native ACP or no public adapter). The Grok Bot bridge is pinned by the following pin commit to this release content commit.
+
+- Host carrier notifications identify events and the current state source without injecting the full state or ordering an unconditional full pass (#452). **Seats: restart required** (`scripts/kaola-acp-holder.py` is in the operator diff).
+- Retain unavailable maintenance inputs without waking the Host; recovery action respects current holds and grants (#453). **Seats: restart required** (`scripts/kaola-acp-holder.py` and `scripts/kaola-dispatch.py` are in the operator diff).
 
 ## 0.9.39 — 2026-11-01 (Devin sideagent session-origin isolation)
 
