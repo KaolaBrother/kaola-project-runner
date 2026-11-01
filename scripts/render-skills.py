@@ -1205,7 +1205,7 @@ def write_one(target: Path, expected: dict[str, bytes]) -> None:
 # At the pinned stage --check/--write prove (pin_findings) that R exists here,
 # is an ancestor of HEAD, is not a self-pin, carries every path the bridge
 # tells the Agent to load or run, and that a named release tag points at R.
-# --require-pinned is the final gate for P.
+# --require-pinned also checks the P-to-R delta at the release boundary.
 # ---------------------------------------------------------------------------
 GROK_BOT_ADAPTER_INPUTS = (
     "templates/grok-bot",          # adapter-only prose: bridge, guide, accepted revision
@@ -1312,7 +1312,8 @@ def required_pin_paths(manifests: list[dict[str, str]]) -> list[str]:
     return paths
 
 
-def pin_findings(revision: dict[str, str | None], manifests: list[dict[str, str]]) -> list[str]:
+def pin_findings(revision: dict[str, str | None], manifests: list[dict[str, str]],
+                 *, check_delta: bool = True) -> list[str]:
     """The pinned stage must name a real, reachable, complete, non-self content commit."""
     if revision["stage"] != "pinned":
         return []
@@ -1348,7 +1349,8 @@ def pin_findings(revision: dict[str, str | None], manifests: list[dict[str, str]
         tag_commit = git_out("rev-parse", f"{revision['release']}^{{commit}}")
         if tag_commit != commit:
             findings.append(f"pin: release {revision['release']} is not a tag at {short}")
-    findings.extend(pin_delta_findings(commit, revision))
+    if check_delta:
+        findings.extend(pin_delta_findings(commit, revision))
     return findings
 
 
@@ -1619,7 +1621,7 @@ def main() -> int:
     findings.extend(budget_findings(ORCHESTRATOR_NAME, orch_expected, "main_skill_bytes", limits))
     findings.extend(budget_findings(EXTERNAL_NAME, external_expected, "external_skill_bytes", limits))
     findings.extend(host_budget_findings(host_expected, limits))
-    findings.extend(pin_findings(revision, manifests))
+    findings.extend(pin_findings(revision, manifests, check_delta=args.require_pinned))
     if args.require_pinned and revision["stage"] != "pinned":
         findings.append("pin: stage is content; --require-pinned demands a pinned, verified bridge")
     if findings:
@@ -1663,7 +1665,7 @@ def main() -> int:
             print(finding, file=sys.stderr)
         return 1
     stage = (
-        f"pinned at {str(revision['commit'])[:12]}, pin verified" if revision["stage"] == "pinned"
+        f"pinned at {str(revision['commit'])[:12]}, " + ("pin verified" if args.require_pinned else "release pin gate not run") if revision["stage"] == "pinned"
         else "content stage, unpinned (not saveable)"
     )
     print(

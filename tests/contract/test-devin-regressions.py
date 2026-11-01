@@ -375,5 +375,116 @@ class DevinSessionIdTests(unittest.TestCase):
                          "adapter_extract_session_id should return empty")
 
 
+
+class DevinSideagentOriginTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("holder450", PROJECT / "scripts/kaola-acp-holder.py")
+        cls.mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.mod)
+
+    def holder(self, new_id="fresh", listed=(), streamed="fresh"):
+        import threading
+        from types import SimpleNamespace
+        h = self.mod.Holder.__new__(self.mod.Holder)
+        h.args = SimpleNamespace(platform="devin", command="devin acp", repo="/repo", session_new_timeout=1)
+        h.session_role = "sideagent"
+        h.devin_origin_lock = threading.RLock()
+        h.devin_origin_id = None
+        h.devin_origin_failed = False
+        h.devin_prior_ids = set()
+        h.devin_pending_updates = []
+        h.init_meta = {}
+        h.state = "starting"
+        h.lock = threading.Lock()
+        h.write_record = lambda **kw: None
+        h.delivered = []
+        h.on_agent_notification = lambda message: h.delivered.append(message)
+        class Agent:
+            stdin_write_failed = False
+            def spawn(self, *a): pass
+            def send_request(self, method, params):
+                self.method = method
+                if method == "session/new" and streamed:
+                    h.on_agent_message({"method": "session/update", "params": {"sessionId": streamed, "update": {}}})
+                return method
+            def wait_response(self, request, timeout):
+                if request == "initialize": return {"result": {"protocolVersion": 1, "agentCapabilities": {"sessionCapabilities": {"list": {}}}}}
+                if request == "session/list": return {"result": {"sessions": [{"sessionId": x} for x in listed]}}
+                return {"result": {"sessionId": new_id}}
+        h.agent = Agent()
+        return h
+
+    def test_spawn_uses_seat_private_devin_session_directory(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            holder = SimpleNamespace(args=SimpleNamespace(platform="devin"), session_role="sideagent",
+                                     record_dir=Path(directory), tool_cwd_trace_env=lambda env: {},
+                                     dispatcher_identity=lambda: {})
+            connection = self.mod.AgentConnection(holder)
+            seen = {}
+            def capture(*args, **kwargs):
+                seen.update(kwargs["env"])
+                raise RuntimeError("captured")
+            with patch.object(self.mod, "compact_spawn_record"), patch.object(self.mod.subprocess, "Popen", capture):
+                with self.assertRaisesRegex(RuntimeError, "captured"):
+                    connection.spawn("devin acp", directory, {"DEVIN_SESSIONS_DIR": "/foreign"})
+            self.assertEqual(seen["DEVIN_SESSIONS_DIR"], str(Path(directory) / "devin-sessions"))
+
+    def test_fresh_new_binds_and_replays_matching_updates(self):
+        h = self.holder()
+        result = h.initialize_agent()
+        self.assertEqual(result["acp_session_id"], "fresh")
+        self.assertEqual(h.devin_origin_id, "fresh")
+        self.assertEqual(len(h.delivered), 1)
+
+    def test_preexisting_or_foreign_start_is_refused_without_replay(self):
+        for h in (self.holder(new_id="old", listed=("old",), streamed="old"),
+                  self.holder(new_id="fresh", streamed="old"),
+                  self.holder(new_id="", streamed=None)):
+            with self.subTest(h=h):
+                self.assertEqual(h.initialize_agent()["error"]["code"], "sideagent-foreign-session")
+                self.assertEqual(h.delivered, [])
+
+    def test_invalid_inventory_refuses_before_new(self):
+        h = self.holder(listed=(42,), streamed=None)
+        self.assertEqual(h.initialize_agent()["error"]["code"], "sideagent-origin-unverifiable")
+        self.assertEqual(h.delivered, [])
+
+    def test_other_seat_record_id_is_refused(self):
+        h = self.holder(new_id="other-seat", streamed="other-seat")
+        h.devin_prior_ids.add("other-seat")
+        self.assertEqual(h.initialize_agent()["error"]["code"], "sideagent-foreign-session")
+        self.assertEqual(h.delivered, [])
+
+    def test_recording_sideagent_role_cannot_adopt_loaded_session(self):
+        h = self.holder()
+        h.acp_session_id = "foreign"
+        h.start_selection = None
+        result = h.op_record_start_evidence({"evidence": {}, "session_role": "sideagent"})
+        self.assertEqual(result["error"]["code"], "sideagent-fresh-session-required")
+
+    def test_resume_and_continue_never_spawn(self):
+        for kwargs in ({"resume": "old"}, {"use_continue": True}):
+            h = self.holder()
+            self.assertEqual(h.initialize_agent(**kwargs)["error"]["code"], "sideagent-fresh-session-required")
+            self.assertEqual(h._request_resume("old")["error"]["code"], "sideagent-fresh-session-required")
+
+    def test_foreign_update_after_start_is_not_delivered(self):
+        from types import SimpleNamespace
+        h = self.holder()
+        h.initialize_agent()
+        h.events = SimpleNamespace(append=lambda *a, **k: None)
+        h._terminate_group = lambda force: None
+        h.on_agent_message({"method": "session/update", "params": {"sessionId": "old", "update": {"text": "foreign"}}})
+        self.assertTrue(h.devin_origin_failed)
+        self.assertEqual(h.state, "error")
+        self.assertEqual(len(h.delivered), 1)
+        self.assertEqual(h._no_acp_session()["error"]["code"], "sideagent-foreign-session")
+
+
 if __name__ == "__main__":
     unittest.main()

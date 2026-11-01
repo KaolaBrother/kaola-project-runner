@@ -6,6 +6,16 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+Seats: restart required
+
+- Devin Sideagent starts refuse resume and continue, bind to the ID returned by
+  their own `session/new`, isolate their native session DB per seat, and stop on a
+  foreign session stream. Pre-existing
+  Devin inventory and Runner seat IDs are rejected. Existing holders must
+  restart to load the changed holder code (#450).
+- Ordinary rendering permits a post-release pin delta; `--require-pinned`
+  continues to enforce the saveable bridge's release boundary (#450).
+
 ## 0.9.38 — 2026-11-01 (verified pins; checkpoint provenance; Droid binary)
 
 Seats: restart required

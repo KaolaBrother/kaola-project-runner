@@ -7082,6 +7082,15 @@ def pre_spawn_refusal(args: argparse.Namespace,
     and the heartbeat resolution for ``command_start`` to reuse.
     ``drain-restart`` runs this first; a refusal leaves the live seat up.
     """
+    prior = read_record(record_dir(args, repo)) if args.platform == "devin" and (args.resume or args.use_continue) else None
+    if (args.platform == "devin" and (args.resume or args.use_continue)
+            and (getattr(args, "role", None) == "sideagent"
+                 or (prior or {}).get("session_role") == "sideagent")):
+        receipt = base_receipt(args, repo)
+        receipt.update({"result": "refused", "reason": "sideagent-fresh-session-required",
+                        "detail": "Devin sideagent starts cannot resume or continue a session.",
+                        "mutation_status": "not_started", "mutation_performed": False})
+        return receipt, {}
     if not host_capable(args.platform) and host_session(args.platform, args.session):
         return heartbeat_host_refusal(args, repo, {
             "source": "none", "dispatcher": None,

@@ -321,7 +321,8 @@ def generated_state_findings(bundle: Path, repo: Path, require_pinned: bool) -> 
         revision = module.accepted_revision()
         # The renderer's pin gate, run from outside the renderer: exists, ancestor, no self-pin,
         # every entry path present, release tag (if any) at the pinned commit.
-        findings.extend(f"{bundle}: {finding}" for finding in module.pin_findings(revision, manifests))
+        findings.extend(f"{bundle}: {finding}" for finding in
+                        module.pin_findings(revision, manifests, check_delta=require_pinned))
         if require_pinned and revision["stage"] != "pinned":
             findings.append(f"{bundle}: stage is content; --require-pinned demands a pinned, verified bridge")
     except (OSError, ValueError) as exc:
@@ -402,7 +403,7 @@ def main() -> int:
         return 1
     size = (args.bundle / BRIDGE_FILE).stat().st_size
     stage = bundle_stage(args.bundle)
-    proof = "generated state" + (", pin verified" if stage == "pinned" else "") if args.repo else "shape only; pass --repo to prove generated state"
+    proof = "generated state" + (", pin verified" if stage == "pinned" and args.require_pinned else "") if args.repo else "shape only; pass --repo to prove generated state"
     print(f"kaola-grok-bot-verify: PASS {args.bundle} (1 bridge skill, {size} B, stage {stage}, manifest, guide; no canonical content; {proof})")
     return 0
 

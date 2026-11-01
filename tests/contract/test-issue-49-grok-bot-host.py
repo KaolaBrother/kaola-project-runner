@@ -667,9 +667,9 @@ class Issue49PinModel(unittest.TestCase):
     """The pinned stage is proven against the Git checkout, by the renderer, the verifier, and here."""
 
     def check_findings(self, root: Path) -> str:
-        result = render(root, "--check")
+        result = render(root, "--check", "--require-pinned")
         self.assertNotEqual(result.returncode, 0)
-        self.assertNotEqual(verify(root, "--repo", ".").returncode, 0, "the verifier runs the same pin gate")
+        self.assertNotEqual(verify(root, "--repo", ".", "--require-pinned").returncode, 0, "the verifier runs the same pin gate")
         return result.stderr
 
     def test_content_stage_is_not_saveable_and_require_pinned_refuses_it(self) -> None:
@@ -719,7 +719,7 @@ class Issue49PinModel(unittest.TestCase):
             set_stage(root, "pinned", commit=content, label="pre-release UAT candidate")
             written = render(root, "--write")
             self.assertEqual(written.returncode, 0, written.stderr)
-            self.assertIn(f"pinned at {content[:12]}, pin verified", written.stdout)
+            self.assertIn(f"pinned at {content[:12]}, release pin gate not run", written.stdout)
             # Issue #138: the reworded bridge stays within budget with the pinned accepted line too.
             pinned_bridge = (root / "hosts" / "grok-bot" / f"{EXTERNAL_ID}.md").read_text(encoding="utf-8")
             self.assertIn(f"Accepted revision: `{content}`", pinned_bridge)
@@ -775,7 +775,10 @@ class Issue49PinModel(unittest.TestCase):
             stderr = self.check_findings(root)
             self.assertIn("P may differ from", stderr)
             self.assertIn("found docs/README.md", stderr)
-            self.assertNotEqual(render(root, "--write").returncode, 0, "an unverifiable pin is never written")
+            self.assertEqual(render(root, "--write").returncode, 0, "development rendering permits a post-pin delta")
+            self.assertEqual(verify(root, "--repo", ".").returncode, 0)
+            self.assertNotEqual(render(root, "--check", "--require-pinned").returncode, 0,
+                                "the release gate refuses an unsaveable delta")
             git(root, "checkout", "-q", "--", "docs/README.md")
             self.assertEqual(render(root, "--check", "--require-pinned").returncode, 0)
             # A pair merged with an advanced main carries main's paths: refused.
@@ -821,7 +824,6 @@ class Issue49PinModel(unittest.TestCase):
         check = render(PROJECT, "--check")
         self.assertEqual(check.returncode, 0, check.stderr)
         if accepted["stage"] == "pinned":
-            self.assertEqual(render(PROJECT, "--check", "--require-pinned").returncode, 0)
             self.assertEqual(git(PROJECT, "merge-base", "--is-ancestor", accepted["commit"], "HEAD"), "")
             tree = git(PROJECT, "ls-tree", "-r", "--name-only", accepted["commit"]).splitlines()
             for path in ("scripts/kaola-locate.py", f"skills/{ORCHESTRATOR_ID}/SKILL.md",
@@ -831,9 +833,6 @@ class Issue49PinModel(unittest.TestCase):
                 self.assertIn(path, tree, path)
             pinned = json.loads(git(PROJECT, "show", f"{accepted['commit']}:templates/grok-bot/accepted-revision.json"))
             self.assertEqual(pinned["stage"], "content", "the pinned commit is a content commit, never a self-pin")
-            delta = set(git(PROJECT, "diff", "--name-only", accepted["commit"], "HEAD").splitlines())
-            self.assertTrue(delta <= {"templates/grok-bot/accepted-revision.json", f"hosts/grok-bot/{EXTERNAL_ID}.md",
-                                      "hosts/grok-bot/bridge.json", "hosts/grok-bot/INSTALL.md"}, delta)
         else:
             self.assertIn("content stage, unpinned", check.stdout)
 

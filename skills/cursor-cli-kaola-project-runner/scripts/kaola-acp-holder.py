@@ -1680,6 +1680,11 @@ class AgentConnection:
     def spawn(self, command: str, cwd: str, env: dict[str, str] | None = None) -> None:
         argv = shlex.split(command)
         env = dict(os.environ if env is None else env)
+        if (getattr(self.holder.args, "platform", None) == "devin"
+                and getattr(self.holder, "session_role", None) == "sideagent"):
+            # Devin's DB is normally global to the user. Keep the Sideagent
+            # inventory in this seat's already-private Runner record directory.
+            env["DEVIN_SESSIONS_DIR"] = str(self.holder.record_dir / "devin-sessions")
         # Issue #373: the holder exports tier A's entry environment to its own
         # agent. A guard inherited from some outer shell would silence every
         # nested tool shell, so it is always dropped here, and the user's own
@@ -2936,6 +2941,21 @@ class Holder:
         acp_paths.prepare_record_directory(self.record_dir, root)
         self.events = EventLog(self.record_dir / "events.jsonl")
         self.record_path = self.record_dir / "record.json"
+        # Snapshot prior records before this holder replaces its own record.
+        self.devin_prior_ids: set[str] = set()
+        self.devin_origin_lock = threading.RLock()
+        self.devin_origin_id: str | None = None
+        self.devin_origin_failed = False
+        self.devin_origin_inventory_error: str | None = None
+        self.devin_pending_updates: list[dict[str, Any]] = []
+        if args.platform == "devin" and getattr(args, "session_role", None) == "sideagent":
+            try:
+                for path in acp_paths.record_paths("devin/*/*/record.json", root, all_roots=True):
+                    prior = acp_paths.read_record(path.parent) or {}
+                    if isinstance(prior.get("acp_session_id"), str):
+                        self.devin_prior_ids.add(prior["acp_session_id"])
+            except acp_paths.RecordRootMismatch as exc:
+                self.devin_origin_inventory_error = str(exc)
         self.socket_path = Path(args.socket) if args.socket else self.record_dir / "holder.sock"
         self.agent = AgentConnection(self)
         self.listener: socket.socket | None = None
@@ -3315,6 +3335,14 @@ class Holder:
 
     def initialize_agent(self, resume: str | None = None, use_continue: bool = False,
                          list_supported: bool = False) -> dict[str, Any]:
+        if (self.args.platform == "devin" and self.session_role == "sideagent"
+                and (resume is not None or use_continue)):
+            return {"error": {"code": "sideagent-fresh-session-required",
+                              "message": "Devin sideagent cannot resume or continue a session"}}
+        if (self.args.platform == "devin" and self.session_role == "sideagent"
+                and getattr(self, "devin_origin_inventory_error", None)):
+            return {"error": {"code": "sideagent-origin-unverifiable",
+                              "message": self.devin_origin_inventory_error}}
         command = self.args.command
         try:
             self.agent.spawn(command, self.args.repo)
@@ -3364,6 +3392,16 @@ class Holder:
                 }
             }
         session_caps = self.capabilities.get("sessionCapabilities") or {}
+        fresh_devin = self.args.platform == "devin" and self.session_role == "sideagent"
+        if fresh_devin:
+            if not capability_supported(session_caps, "list"):
+                return {"error": {"code": "sideagent-origin-unverifiable", "message": "Devin cannot list existing sessions"}}
+            sessions, error = self._list_repo_sessions(all_sessions=True)
+            if error:
+                return {"error": {"code": "sideagent-origin-unverifiable", "message": error}}
+            if any(not isinstance(row.get("sessionId"), str) for row in sessions):
+                return {"error": {"code": "sideagent-origin-unverifiable", "message": "invalid session inventory identity"}}
+            self.devin_prior_ids.update(row["sessionId"] for row in sessions)
         if resume is not None:
             return self._request_resume(resume)
         elif use_continue:
@@ -3408,19 +3446,40 @@ class Holder:
                 return {"error": {"code": "acp-session-failed", "message": error}}
             self.session_meta = response.get("result") or {}
             self.initial_config_options = self.session_meta.get("configOptions")
-            self.acp_session_id = self.session_meta.get("sessionId")
-        self.state = "ready"
+            sid = self.session_meta.get("sessionId")
+            if fresh_devin:
+                with self.devin_origin_lock:
+                    foreign = any(m.get("params", {}).get("sessionId") != sid
+                                  for m in self.devin_pending_updates)
+                    if not isinstance(sid, str) or not sid or sid in self.devin_prior_ids or foreign:
+                        self.devin_origin_failed = True
+                        self.devin_pending_updates.clear()
+                        self.acp_session_id = None
+                        return {"error": {"code": "sideagent-foreign-session", "message": "session/new identity is missing, pre-existing, or differs from the session stream"}}
+                    self.devin_origin_id = sid
+                    self.acp_session_id = sid
+                    pending, self.devin_pending_updates = self.devin_pending_updates, []
+                    for message in pending:
+                        self.on_agent_notification(message)
+                    if self.devin_origin_failed:
+                        return {"error": {"code": "sideagent-foreign-session", "message": "foreign session on stream"}}
+            else:
+                self.acp_session_id = sid
+        with self.devin_origin_lock:
+            if fresh_devin and self.devin_origin_failed:
+                return {"error": {"code": "sideagent-foreign-session", "message": "foreign session on stream"}}
+            self.state = "ready"
         self.write_record()
         return {"acp_session_id": self.acp_session_id, "agent_info": self.agent_info,
                 "protocol_version": self.protocol_version, "capabilities": self.capabilities}
 
-    def _list_repo_sessions(self) -> tuple[list[dict], dict | None]:
+    def _list_repo_sessions(self, all_sessions: bool = False) -> tuple[list[dict], dict | None]:
         """Collect all cwd-filtered sessions by following ``nextCursor`` pages."""
         collected: list[dict] = []
         seen_cursors: set[str] = set()
         cursor: str | None = None
         while True:
-            params: dict[str, Any] = {"cwd": self.args.repo}
+            params: dict[str, Any] = {} if all_sessions else {"cwd": self.args.repo}
             if cursor:
                 params["cursor"] = cursor
             request_id = self.agent.send_request("session/list", params)
@@ -3428,6 +3487,12 @@ class Holder:
             if response is None or "error" in response:
                 return [], {"code": "continue-list-failed", "message": json.dumps(response)}
             result = (response or {}).get("result") or {}
+            if all_sessions and (not isinstance(result, dict)
+                    or not isinstance(result.get("sessions"), list)
+                    or any(not isinstance(entry, dict)
+                           or not isinstance(entry.get("sessionId"), str)
+                           or not entry["sessionId"] for entry in result["sessions"])):
+                return [], {"code": "continue-list-failed", "message": "invalid session inventory"}
             collected.extend(
                 entry for entry in (result.get("sessions") or [])
                 if isinstance(entry, dict) and entry.get("sessionId")
@@ -3478,6 +3543,8 @@ class Holder:
         timeout keeps the JSON-RPC slot and records ``resume_pending`` so a
         later success can clear the failure instead of landing as an orphan.
         """
+        if self.args.platform == "devin" and self.session_role == "sideagent":
+            return {"error": {"code": "sideagent-fresh-session-required", "message": "Devin sideagent cannot load a session"}}
         session_caps = self.capabilities.get("sessionCapabilities") or {}
         if not capability_supported(session_caps, "resume") \
                 and not capability_supported(self.capabilities, "loadSession"):
@@ -3565,6 +3632,26 @@ class Holder:
 
     def on_agent_message(self, message: dict[str, Any]) -> None:
         self.last_activity = time.monotonic()
+        if self.args.platform == "devin" and self.session_role == "sideagent" and "method" in message:
+            params = message.get("params") or {}
+            sid = params.get("sessionId") if isinstance(params, dict) else None
+            if sid is not None:
+                with self.devin_origin_lock:
+                    if self.devin_origin_failed:
+                        return
+                    if self.devin_origin_id is None and not self.devin_origin_failed and "id" not in message:
+                        self.devin_pending_updates.append(message)
+                        return
+                    if self.devin_origin_id is None or sid != self.devin_origin_id:
+                        self.devin_origin_failed = True
+                        self.fatal_error = {"code": "sideagent-foreign-session", "message": "foreign session on Devin sideagent stream"}
+                        with self.lock:
+                            self.state = "error"
+                            self.stop_requested = True
+                        self.events.append({"kind": "sideagent_foreign_session", "sessionId": sid})
+                        self.write_record()
+                        threading.Thread(target=self._terminate_group, args=(True,), daemon=True).start()
+                        return
         if "method" in message:
             if "id" in message:
                 self.on_agent_request(message)
@@ -5060,6 +5147,10 @@ class Holder:
         Worse, the composite steer would then report `steer_consumed: true` for
         text no session ever received. Refuse before writing anything.
         """
+        if getattr(self, "devin_origin_failed", False):
+            return {"outcome": "no_session", "mutation_status": "not_started",
+                    "mutation_performed": False,
+                    "error": {"code": "sideagent-foreign-session", "message": "foreign session refused"}}
         if self.acp_session_id:
             return None
         return {"outcome": "no_session", "mutation_status": "not_started",
@@ -10478,6 +10569,11 @@ class Holder:
                 updated_role = normalize_session_role(params.get("session_role"))
             except ValueError:
                 return {"error": {"code": "invalid-session-role"}}
+            if (self.args.platform == "devin" and updated_role == "sideagent"
+                    and (not self.devin_origin_id or self.devin_origin_id != self.acp_session_id
+                         or self.devin_origin_failed)):
+                return {"error": {"code": "sideagent-fresh-session-required",
+                                  "message": "this holder did not establish a verified fresh sideagent session"}}
         self.start_evidence = evidence
         if "session_role" in params:
             self.session_role = updated_role
@@ -10878,7 +10974,7 @@ class Holder:
                     self.write_record()
             if not already_ready:
                 self._delegator_wake("error", "boot_failure", "boot_failure")
-                if result["error"].get("code") == "acp-protocol-version-unsupported":
+                if result["error"].get("code") in ("acp-protocol-version-unsupported", "sideagent-foreign-session", "sideagent-origin-unverifiable", "sideagent-fresh-session-required"):
                     self._terminate_group(force=True)
                 elif self.agent.proc and not self.agent.exited.is_set():
                     pass
