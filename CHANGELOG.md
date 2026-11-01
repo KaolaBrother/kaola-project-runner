@@ -6,6 +6,8 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- Adopt Kimi Code CLI 2.4.1 native ACP (protocol 1). There is no public adapter package and no declared CLI range; `acp_wrapper_pin` stays empty. Isolated receipts cover start, observe, send, capture, and exact-stop, model/thinking/mode apply, a refused resume while another live client holds the session (`resume-failed`, JSON-RPC -32603, in-use details, no eviction and no `KIMI_CODE_SESSION_LOCK=0`), and a stale prompt on the original client (JSON-RPC -32600, `data.code` `session.stale`, no replay) followed by a successful prompt on the loader and a successful reopen of the same native id. Prompt-path `session.occupied`, cancellation, permission, and compact were not exercised. Durable `turn_error` keeps a string `data.code` as `engine_code` beside the numeric JSON-RPC code (#440). **Seats: restart required** (`scripts/kaola-acp-holder.py` and `platforms/kimi-cli.yaml` are in the operator diff).
+
 - Reject Sideagent checkpoint replays and require the live bound node agent process tree for an admitted batch (#441). **Seats: restart required** (`scripts/kaola-dispatch.py` is in the operator diff).
 
 - Record Claude Code 2.1.316 as the verified CLI (`cli=2.1.316;bridge=6c20f28;protocol=1`,
