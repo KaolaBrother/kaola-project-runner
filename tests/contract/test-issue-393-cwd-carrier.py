@@ -7,7 +7,7 @@ detects the vanished path, stages a holder-owned ``cwd_repaired`` event, and
 delivers it as one self prompt. On v0.9.23 that self prompt must be the compact
 ``kaola-worker-notify/1`` line for a worker/Expert/Sideagent holder, and only a
 ``host`` holder may receive the full ``kaola-host-notify/1`` carrier with the
-heartbeat body and the one-pass Project Runner instruction.
+heartbeat source locator and event-scoped instruction.
 
 The suite pins the whole route, not only the payload selector:
 

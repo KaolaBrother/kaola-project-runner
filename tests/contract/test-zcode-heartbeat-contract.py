@@ -14,8 +14,8 @@ ZCode Host session's own holder is the event carrier:
   raw send) as soon as its turn is idle, flushing at the next completed turn
   boundary when busy;
 * the delivered prompt carries fixed structured event metadata plus the
-  current FULL heartbeat prompt body, read at delivery time from the file the
-  ZCode Host agent maintains at ``<repo>/.kaola/heartbeat-prompt.json``;
+  source locator and event-scoped instruction; the Host state file remains at
+  ``<repo>/.kaola/heartbeat-prompt.json``;
 * unconfirmed events are redelivered after ``start --resume``; the carrier is
   ZCode-Host-only (a non-ZCode holder rejects the op, the CLI refuses a
   non-ZCode or self target) and registers no periodic scheduler anywhere.
