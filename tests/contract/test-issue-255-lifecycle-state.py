@@ -4465,22 +4465,18 @@ class HolderNodeMode(HolderFixture):
         os.environ["FAKE_NODE_RECORD"] = str(Path(self.tmp.name) / "missing" / "record.json")
         self.host_change(4)
         self.boundary()
-        # Issue #388: a Host role now reports the unusable recipe before the
-        # failed start. Settle that pass, then read the start failure's own
-        # notification at the next boundary.
-        self.wait_for(lambda: len(self.agent.prompts()) == 1, "the recipe failure notice")
-        self.finish_host_turn()
+        # The unusable recipe is record-only; a real failed start still wakes.
         self.wait_for(lambda: "sideagent_node_start_failed" in self.log_kinds(), "the failed start")
         self.boundary()
-        self.wait_for(lambda: len(self.agent.prompts()) == 2, "the Host told of the failure")
-        self.assertIn("sideagent node start failed", self.agent.prompts()[1])
-        self.assertIn("host revision 1..4 not handled", self.agent.prompts()[1])
+        self.wait_for(lambda: len(self.agent.prompts()) == 1, "the Host told of the failure")
+        self.assertIn("sideagent node start failed", self.agent.prompts()[0])
+        self.assertIn("host revision 1..4 not handled", self.agent.prompts()[0])
         self.finish_host_turn()
         self.host_change(5)
         self.boundary()
         self.wait_still(0.3)
         self.assertEqual(self.node_count(), 1, "one recorded failure, no retry storm")
-        self.assertEqual(len(self.agent.prompts()), 2)
+        self.assertEqual(len(self.agent.prompts()), 1)
 
     def test_a_build_skew_refusal_is_not_a_permanent_latch(self) -> None:
         # Issue #437: a main-skill-build-skew start refusal is a condition of

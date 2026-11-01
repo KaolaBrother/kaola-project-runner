@@ -21,6 +21,7 @@ import importlib.util
 import json
 import os
 import time
+import threading
 import unittest
 from pathlib import Path
 
@@ -289,7 +290,7 @@ class CarrierFailure(issue255.HolderNodeMode):
         doc["state"]["sideagent"]["recipe"]["runner"] = str(self.runner)
         (self.repo / ".kaola" / "heartbeat-prompt.json").write_text(json.dumps(doc))
         def sent() -> bool:
-            self.holder.turn["active"] = False  # the Host turn the failure started has ended
+            self.holder.turn["active"] = False  # an idle Host boundary
             self.boundary()
             return len(self.fake.prompts) == 1
         self.wait_for(sent, "the repaired binding's batch")
@@ -297,22 +298,43 @@ class CarrierFailure(issue255.HolderNodeMode):
         self.assertEqual(self.node_count(), 1)
         self.holder._reclaim_node()
 
-    def test_owed_recovery_without_a_binding_stays_one_visible_failure(self) -> None:
-        # A verified compaction input is a real duty without a binding: it
-        # keeps its one visible failure per sequence (unchanged).
+    def test_owed_recoveries_without_binding_are_recorded_without_a_wake(self) -> None:
         self.prepare_recovery_host()
-        self.bump(0, None, keep=False)
+        self.bump(0, {"mode": "node", "state": "unbound"}, keep=False)
+        path = self.repo / ".kaola" / "heartbeat-prompt.json"
         doc = self.doc()
-        doc["state"]["maintenance"].update(recovery_seq=1, recovery_input={
-            "seq": 1, "kind": "host-compaction", "occurrence_id": "o-1", "source": "completed-host-signal",
-            "holder": self.holder.holder_instance_id, "at": "2026-10-14", "evidence": "events.jsonl#1"})
-        (self.repo / ".kaola" / "heartbeat-prompt.json").write_text(json.dumps(doc))
-        for _ in range(3):
+        doc["state"]["holds"] = {"maintenance": {"owner": "host", "summary": "enable, sweep and node held"}}
+        doc["state"]["alerts"] = {"maintenance-returned": {"inputs": {
+            "batch:old": {"why": "stop-unconfirmed", "evidence": "old-stop"}}}}
+        path.write_text(json.dumps(doc))
+        kick = self.holder._kick_worker_events
+        kicked = threading.Event()
+        def observed_kick():
+            kick()
+            kicked.set()
+        self.holder._kick_worker_events = observed_kick
+        for seq in (1, 2):
+            doc = self.doc()
+            doc["state"]["maintenance"].update(recovery_seq=seq, recovery_input={
+                "seq": seq, "kind": "host-compaction", "occurrence_id": f"o-{seq}",
+                "source": "completed-host-signal", "holder": self.holder.holder_instance_id,
+                "at": "2026-10-14", "evidence": f"events.jsonl#{seq}"})
+            path.write_text(json.dumps(doc))
+            kicked.clear()
             self.boundary()
-        self.wait_for(lambda: self.failures() == ["recovery#1"], "the recovery failure")
-        time.sleep(0.3)
-        self.assertEqual(self.failures(), ["recovery#1"])
-        self.assertEqual(self.staged_nodes(), [])
+            self.assertTrue(kicked.wait(10), "record completion callback ran")
+            self.assertEqual(self.failures(), [f"recovery#{n}" for n in range(1, seq + 1)])
+            self.assertEqual(self.staged_nodes(), [])
+            self.assertEqual(self.holder._deliver_worker_events()["reason"], "queue-empty")
+        rows = self.returned()
+        self.assertEqual(rows["batch:old"]["evidence"], "old-stop")
+        self.assertEqual(rows["recovery#2"]["count"], 2)
+        self.assertEqual(rows["recovery#2"]["coalesced_from"], "recovery#1")
+        self.assertIn("events.jsonl#", rows["recovery#2"]["evidence"])
+        self.assertIn("current holds and grants", rows["recovery#2"]["next"])
+        self.assertIn("only when permitted", rows["recovery#2"]["next"])
+        self.assertIn("maintenance", self.doc()["state"]["holds"])
+        self.assertEqual(self.node_count(), 0)
 
 
 # Only this module's own cases run; the #255 harness's tests stay in their suite.
