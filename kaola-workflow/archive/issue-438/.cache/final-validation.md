@@ -1,0 +1,3 @@
+verdict: pass
+validation_command: python3 -c 'import json,pathlib; p=pathlib.Path("kaola-workflow/issue-438/evidence"); j=lambda n: json.loads((p/n).read_text()); assert j("start-auth.json")["transport"]["protocol_version"]==1 and j("send.json")["final_text"]=="KPR438_OK" and j("cancel.json")["stop_reason"]=="cancelled" and j("watch-wait.json")["final_text"]=="STEER_438" and j("resume-send.json")["final_text"]=="AFTER_CANCEL_438"; assert all(j(n)["stopped"] and not j(n)["residual_pids"] for n in ("stop.json","resume-stop.json","background-stop.json")); assert (p/"picker-before.sha256").read_text()==(p/"picker-after.sha256").read_text(); print("PASS")'
+validated_candidate_hash: d4fb493fd0612f420c8c7d3d1a02796710a14cdfce850ec681f761f45948191e
