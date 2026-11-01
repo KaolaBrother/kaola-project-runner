@@ -715,8 +715,8 @@ class EvidenceKeys(unittest.TestCase):
 record_module = load("kaola_record_contract_421",
                      REPO / "scripts" / "kaola-record-contract.py")
 
-RETURN_NEXT = ("Host: reconcile the original node and stop receipts; "
-               "repair the binding; request a bounded check")
+RETURN_NEXT = ("Host: read original receipts and current holds and grants; retain the blocker and its owner; "
+               "repair or request a bounded check only when permitted and conditions have changed")
 
 
 class ReturnedAlertCompaction(Fixture):

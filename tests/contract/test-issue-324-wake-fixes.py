@@ -265,11 +265,12 @@ class CarrierFailure(issue255.HolderNodeMode):
         self.bump(3, broken)
         self.boundary()
         self.wait_for(lambda: self.failures() == ["batch:3"], "the one visible failure")
-        self.assertEqual(len(self.staged_nodes()), 1, "the Host is woken once")
-        # The evidence pointer names the failure's own event, not the stream
-        # row before it (the KPR log had #41565 for the row at #41566).
+        self.assertEqual(self.staged_nodes(), [], "unavailable binding does not wake the Host")
+        # The returned row retains the original event stream evidence.
         cursor = int(self.returned()["batch:3"]["evidence"].rsplit("#", 1)[1])
-        self.assertEqual(cursor, self.staged_nodes()[0]["event_cursor"])
+        self.assertGreater(cursor, 0)
+        self.assertIn("current holds and grants", self.returned()["batch:3"]["next"])
+        self.assertIn("only when permitted", self.returned()["batch:3"]["next"])
         for revision in (4, 5, 6):
             self.bump(revision)
             self.boundary()
@@ -279,7 +280,7 @@ class CarrierFailure(issue255.HolderNodeMode):
         self.boundary()
         time.sleep(0.3)
         self.assertEqual(self.failures(), ["batch:3"])
-        self.assertEqual(len(self.staged_nodes()), 1)
+        self.assertEqual(self.staged_nodes(), [])
         self.assertEqual(list(self.returned()), ["batch:3"])
         self.assertEqual(self.node_count(), 0)
         # The Host repairs the binding: the next boundary sends the later
@@ -311,7 +312,7 @@ class CarrierFailure(issue255.HolderNodeMode):
         self.wait_for(lambda: self.failures() == ["recovery#1"], "the recovery failure")
         time.sleep(0.3)
         self.assertEqual(self.failures(), ["recovery#1"])
-        self.assertEqual(len(self.staged_nodes()), 1)
+        self.assertEqual(self.staged_nodes(), [])
 
 
 # Only this module's own cases run; the #255 harness's tests stay in their suite.

@@ -6,6 +6,10 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+Seats: restart required
+
+- Retain unavailable maintenance inputs without waking the Host; recovery action respects current holds and grants (#453).
+
 ## 0.9.39 — 2026-11-01 (Devin sideagent session-origin isolation)
 
 Seats: restart required

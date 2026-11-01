@@ -10517,7 +10517,10 @@ def command_state_recovery_input(args: argparse.Namespace) -> int:
                     if derived:
                         missing = derived
                 row = {"why": args.fail, "evidence": evidence,
-                       "next": "Host: reconcile the original node and stop receipts; repair the binding; request a bounded check",
+                       "next": ("Host: read original receipts and current holds and grants; retain the blocker and its owner; "
+                                "repair or request a bounded check only when permitted and conditions have changed"
+                                if args.fail == "binding-or-recipe-unavailable" else
+                                "Host: reconcile the original node and stop receipts; repair the binding; request a bounded check"),
                        **({"host_revision_through": args.through_host_revision}
                           if args.through_host_revision is not None else {}),
                        **({"missing_sources": missing} if missing else {})}

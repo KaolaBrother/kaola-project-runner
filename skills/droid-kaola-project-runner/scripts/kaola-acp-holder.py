@@ -6629,7 +6629,7 @@ class Holder:
             if recovery is None and through is not None and not self._node_business_owed(doc):
                 through = None
             if recovery or through is not None:
-                self._maintenance_failure("binding-or-recipe-unavailable", through, recovery)
+                self._maintenance_failure("binding-or-recipe-unavailable", through, recovery, wake=False)
         if not self.pending_worker_events:
             return {}
         target = self._sideagent_relay_target()
