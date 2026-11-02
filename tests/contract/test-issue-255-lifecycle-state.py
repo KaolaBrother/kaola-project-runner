@@ -5435,6 +5435,9 @@ class DefaultSideagentBind(StateProject):
         self.assertEqual(doc["host_revision"], 1)
         self.assertNotIn("sideagent", doc["state"]["section_sources"])
         self.assertEqual(binding["recipe"]["argv"][:2], ["zcode", "start"])
+        self.assertEqual(binding["recipe"]["argv"][1:], dispatch_module.launch_argv(
+            {"session": binding["session"], "_tier": "default", "role": "sideagent"},
+            str(self.repo.resolve()), "start"))
         for flag in ("--session", "--repo", "--role", "--tier"):
             self.assertIn(flag, binding["recipe"]["argv"])
         self.assertNotIn("--continue", binding["recipe"]["argv"])

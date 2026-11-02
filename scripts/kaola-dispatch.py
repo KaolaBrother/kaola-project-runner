@@ -10061,7 +10061,8 @@ def choose_default_binding(doc: dict[str, Any], repo: Path, repo_text: str,
         "authorization_source": "configured" if configured == row["id"] else "granted",
         "recipe": {
             "runner": runner_path,
-            "argv": [*head, "--repo", repo_text, "--session", session, "--role", "sideagent", "--tier", row["tier"]],
+            "argv": [*head[:-1], *launch_argv({"session": session, "_tier": row["tier"],
+                                               "role": "sideagent"}, repo_text, "start")],
             "state_tool": str(Path(__file__).resolve()),
         },
     }
