@@ -1,1 +1,5 @@
-{"stage":"content"}
+{
+  "stage": "pinned",
+  "commit": "b1253f21cefc3d45170b3f5d8bdeb7b127738eb3",
+  "release": "v0.9.41"
+}
