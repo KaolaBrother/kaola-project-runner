@@ -6,6 +6,10 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+Seats: restart required
+
+- Record bounded Devin Sideagent origin rejection diagnostics without changing isolation (#455). The operator diff from v0.9.40 includes `scripts/kaola-acp-holder.py`.
+
 ## 0.9.40 — 2026-11-01 (event-scoped carrier notification; unavailable-binding retention)
 
 Seats: restart required

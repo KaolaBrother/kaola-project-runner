@@ -394,6 +394,9 @@ class DevinSideagentOriginTests(unittest.TestCase):
         h.devin_origin_id = None
         h.devin_origin_failed = False
         h.devin_prior_ids = set()
+        h.devin_record_ids = set()
+        h.events = SimpleNamespace(append=lambda event: h.event_rows.append(event))
+        h.event_rows = []
         h.devin_pending_updates = []
         h.init_meta = {}
         h.state = "starting"
@@ -407,7 +410,8 @@ class DevinSideagentOriginTests(unittest.TestCase):
             def send_request(self, method, params):
                 self.method = method
                 if method == "session/new" and streamed:
-                    h.on_agent_message({"method": "session/update", "params": {"sessionId": streamed, "update": {}}})
+                    for stream_id in (streamed if isinstance(streamed, tuple) else (streamed,)):
+                        h.on_agent_message({"method": "session/update", "params": {"sessionId": stream_id, "update": {}}})
                 return method
             def wait_response(self, request, timeout):
                 if request == "initialize": return {"result": {"protocolVersion": 1, "agentCapabilities": {"sessionCapabilities": {"list": {}}}}}
@@ -449,7 +453,23 @@ class DevinSideagentOriginTests(unittest.TestCase):
                 self.assertEqual(h.initialize_agent()["error"]["code"], "sideagent-foreign-session")
                 self.assertEqual(h.delivered, [])
 
-    def test_invalid_inventory_refuses_before_new(self):
+    def test_diagnostic_matrix_and_bounded_association(self):
+        cases = [("inventory_match", self.holder(new_id="old", listed=("old",), streamed="old")),
+                 ("startup_stream_mismatch", self.holder(streamed=("fresh", "foreign"))),
+                 ("missing_new_id", self.holder(new_id="", streamed=None))]
+        for branch, h in cases:
+            with self.subTest(branch=branch):
+                result = h.initialize_agent()
+                self.assertEqual(result["error"]["code"], "sideagent-foreign-session")
+                self.assertIn(branch, result["error"]["diagnostic"]["branches"])
+                self.assertEqual(h.event_rows[-1]["kind"], "sideagent_origin_rejected")
+                self.assertNotIn("foreign", str(h.event_rows[-1]))
+                self.assertEqual(h.delivered, [])
+        h = self.holder(streamed=("fresh", "fresh"))
+        self.assertEqual(h.initialize_agent()["acp_session_id"], "fresh")
+        self.assertEqual(len(h.delivered), 2)
+
+
         h = self.holder(listed=(42,), streamed=None)
         self.assertEqual(h.initialize_agent()["error"]["code"], "sideagent-origin-unverifiable")
         self.assertEqual(h.delivered, [])
@@ -457,7 +477,10 @@ class DevinSideagentOriginTests(unittest.TestCase):
     def test_other_seat_record_id_is_refused(self):
         h = self.holder(new_id="other-seat", streamed="other-seat")
         h.devin_prior_ids.add("other-seat")
-        self.assertEqual(h.initialize_agent()["error"]["code"], "sideagent-foreign-session")
+        h.devin_record_ids.add("other-seat")
+        result = h.initialize_agent()
+        self.assertEqual(result["error"]["code"], "sideagent-foreign-session")
+        self.assertIn("record_match", result["error"]["diagnostic"]["branches"])
         self.assertEqual(h.delivered, [])
 
     def test_recording_sideagent_role_cannot_adopt_loaded_session(self):
@@ -477,10 +500,11 @@ class DevinSideagentOriginTests(unittest.TestCase):
         from types import SimpleNamespace
         h = self.holder()
         h.initialize_agent()
-        h.events = SimpleNamespace(append=lambda *a, **k: None)
         h._terminate_group = lambda force: None
         h.on_agent_message({"method": "session/update", "params": {"sessionId": "old", "update": {"text": "foreign"}}})
         self.assertTrue(h.devin_origin_failed)
+        self.assertEqual(h.event_rows[-1]["branch"], "post_start_stream_mismatch")
+        self.assertNotIn("old", str(h.event_rows[-1]))
         self.assertEqual(h.state, "error")
         self.assertEqual(len(h.delivered), 1)
         self.assertEqual(h._no_acp_session()["error"]["code"], "sideagent-foreign-session")

@@ -2943,6 +2943,7 @@ class Holder:
         self.record_path = self.record_dir / "record.json"
         # Snapshot prior records before this holder replaces its own record.
         self.devin_prior_ids: set[str] = set()
+        self.devin_record_ids: set[str] = set()
         self.devin_origin_lock = threading.RLock()
         self.devin_origin_id: str | None = None
         self.devin_origin_failed = False
@@ -2954,6 +2955,7 @@ class Holder:
                     prior = acp_paths.read_record(path.parent) or {}
                     if isinstance(prior.get("acp_session_id"), str):
                         self.devin_prior_ids.add(prior["acp_session_id"])
+                        self.devin_record_ids.add(prior["acp_session_id"])
             except acp_paths.RecordRootMismatch as exc:
                 self.devin_origin_inventory_error = str(exc)
         self.socket_path = Path(args.socket) if args.socket else self.record_dir / "holder.sock"
@@ -3401,7 +3403,8 @@ class Holder:
                 return {"error": {"code": "sideagent-origin-unverifiable", "message": error}}
             if any(not isinstance(row.get("sessionId"), str) for row in sessions):
                 return {"error": {"code": "sideagent-origin-unverifiable", "message": "invalid session inventory identity"}}
-            self.devin_prior_ids.update(row["sessionId"] for row in sessions)
+            self.devin_inventory_ids = {row["sessionId"] for row in sessions}
+            self.devin_prior_ids.update(self.devin_inventory_ids)
         if resume is not None:
             return self._request_resume(resume)
         elif use_continue:
@@ -3452,10 +3455,25 @@ class Holder:
                     foreign = any(m.get("params", {}).get("sessionId") != sid
                                   for m in self.devin_pending_updates)
                     if not isinstance(sid, str) or not sid or sid in self.devin_prior_ids or foreign:
+                        branches = []
+                        if not isinstance(sid, str) or not sid:
+                            branches.append("missing_new_id")
+                        if isinstance(sid, str) and sid in getattr(self, "devin_inventory_ids", set()):
+                            branches.append("inventory_match")
+                        if isinstance(sid, str) and sid in getattr(self, "devin_record_ids", set()):
+                            branches.append("record_match")
+                        if foreign:
+                            branches.append("startup_stream_mismatch")
+                        diagnostic = {"branches": branches, "pending_count": min(len(self.devin_pending_updates), 100),
+                                      "pending_count_capped": len(self.devin_pending_updates) > 100,
+                                      "identity": {"new_matches_inventory": "inventory_match" in branches,
+                                                   "new_matches_record": "record_match" in branches,
+                                                   "all_pending_match_new": not foreign}}
+                        self.events.append({"kind": "sideagent_origin_rejected", **diagnostic})
                         self.devin_origin_failed = True
                         self.devin_pending_updates.clear()
                         self.acp_session_id = None
-                        return {"error": {"code": "sideagent-foreign-session", "message": "session/new identity is missing, pre-existing, or differs from the session stream"}}
+                        return {"error": {"code": "sideagent-foreign-session", "message": "session/new identity is missing, pre-existing, or differs from the session stream", "diagnostic": diagnostic}}
                     self.devin_origin_id = sid
                     self.acp_session_id = sid
                     pending, self.devin_pending_updates = self.devin_pending_updates, []
@@ -3648,7 +3666,7 @@ class Holder:
                         with self.lock:
                             self.state = "error"
                             self.stop_requested = True
-                        self.events.append({"kind": "sideagent_foreign_session", "sessionId": sid})
+                        self.events.append({"kind": "sideagent_foreign_session", "branch": "post_start_stream_mismatch" if self.devin_origin_id is not None else "startup_stream_mismatch", "identity": {"matches_bound": False}})
                         self.write_record()
                         threading.Thread(target=self._terminate_group, args=(True,), daemon=True).start()
                         return
