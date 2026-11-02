@@ -2077,12 +2077,7 @@ def repo_of(receipt: dict[str, Any] | None) -> Any:
 
 
 def session_absent(receipt: dict[str, Any] | None) -> bool:
-    if not isinstance(receipt, dict):
-        return False
-    error = receipt.get("error")
-    if isinstance(error, dict) and error.get("code") == "no-session":
-        return True
-    return receipt.get("reason") == "no-session"
+    return RECORD.acp_paths.status_available(receipt)
 
 
 def runner_root_sources(skills_root: Path) -> list[tuple[Path, str]]:
@@ -2157,18 +2152,7 @@ def parse_stdout(text: str) -> dict[str, Any] | None:
 
 
 def run_runner(script: Path, argv: list[str]) -> tuple[int | None, dict[str, Any] | None, str]:
-    try:
-        proc = subprocess.run(
-            [str(script), *argv],
-            capture_output=True,
-            text=True,
-            timeout=RUNNER_TIMEOUT,
-        )
-    except subprocess.TimeoutExpired:
-        return None, None, "timeout"
-    except OSError as exc:
-        return None, None, str(exc)
-    return proc.returncode, parse_stdout(proc.stdout), (proc.stderr or "")[:240]
+    return RECORD.acp_paths.run_runner(script, argv, RUNNER_TIMEOUT)
 
 
 def evidence(receipt: dict[str, Any] | None, code: int | None, note: str = "") -> dict[str, Any]:
@@ -9971,6 +9955,24 @@ def configured_sideagent_preset(repo: Path) -> str | None:
     return preset if isinstance(preset, str) and preset else None
 
 
+def sideagent_disable_source(repo: Path) -> str | None:
+    """The Delegator's current typed disable instruction, when present."""
+    try:
+        doc = json.loads((repo / ".kaola" / "delegator-heartbeat.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(doc, dict) or doc.get("schema") != RECORD.DELEGATOR_SCHEMA:
+        return None
+    auth = doc.get("authorization")
+    if not isinstance(auth, dict) or RECORD.delegator_authorization_blockers(auth):
+        return None
+    side = auth.get("sideagent") if isinstance(auth, dict) else None
+    if not isinstance(side, dict) or side.get("state") != "disabled":
+        return None
+    source = side.get("source")
+    return source if isinstance(source, str) and source.strip() else None
+
+
 def sideagent_runner(platform: str) -> tuple[str, list[str]] | None:
     """Checkout `kaola-tmux.sh` takes the platform first. An installed Skill
     entry is `runtime-tmux.sh` and already names the platform."""
@@ -10004,7 +10006,8 @@ def sideagent_session_name(platform: str, code: Any, host_session: str) -> str:
     return name
 
 
-def default_worker_rows(doc: dict[str, Any], repo: Path) -> tuple[list[dict[str, Any]], str | None]:
+def default_worker_rows(doc: dict[str, Any], repo: Path,
+                        exact_preset: str | None = None) -> tuple[list[dict[str, Any]], str | None]:
     """Eligible Worker presets. A configured preset wins when it is one of them."""
     state = doc.get("state") if isinstance(doc.get("state"), dict) else {}
     auth = state.get("authorization") if isinstance(state.get("authorization"), dict) else {}
@@ -10028,7 +10031,7 @@ def default_worker_rows(doc: dict[str, Any], repo: Path) -> tuple[list[dict[str,
             and not computer_use_only_row(row) and isinstance(row.get("id"), str)
             and isinstance(row.get("platform"), str) and isinstance(row.get("tier"), str)]
     rows.sort(key=lambda row: row["id"])
-    configured = configured_sideagent_preset(repo)
+    configured = exact_preset or configured_sideagent_preset(repo)
     if configured:
         chosen = [row for row in rows if row["id"] == configured]
         if not chosen:
@@ -10091,29 +10094,6 @@ def ensure_sideagent_recover_command(path: Path, repo: Path) -> str:
                        "--evidence", "ORIGINAL_OWNER_EVIDENCE"])
 
 
-# Issue #421: a hold row, or any decision row settled or not, whose strings
-# name the old binding session or the sideagent holds the recovery; the tool
-# never interprets an Owner answer on its own.
-_SIDEAGENT_HELD_RE = re.compile(r"(?i)(?<![a-z0-9])sideagent")
-
-
-def sideagent_held_rows(state: dict[str, Any], old_session: Any) -> list[str]:
-    held: list[str] = []
-    for kind in ("holds", "decisions"):
-        rows = state.get(kind) if isinstance(state.get(kind), dict) else {}
-        for name, row in sorted(rows.items()):
-            if not isinstance(row, dict):
-                continue
-            for text in record_strings(row):
-                if isinstance(old_session, str) and old_session and old_session in text:
-                    held.append(f"{kind}/{name}")
-                    break
-                if _SIDEAGENT_HELD_RE.search(text):
-                    held.append(f"{kind}/{name}")
-                    break
-    return held
-
-
 def failed_sideagent_problem(doc: dict[str, Any], path: Path, repo: Path) -> dict[str, Any] | None:
     """A failed binding is visible with its recovery command; check writes nothing."""
     state = doc.get("state") if isinstance(doc.get("state"), dict) else {}
@@ -10121,17 +10101,16 @@ def failed_sideagent_problem(doc: dict[str, Any], path: Path, repo: Path) -> dic
     if not (isinstance(binding, dict) and binding.get("state") == "failed"):
         return None
     command = ensure_sideagent_recover_command(path, repo)
-    held = sideagent_held_rows(state, binding.get("session"))
     detail = (f"the bound Sideagent {binding.get('session')} is failed; the Host runs "
               f"{command} once the old node is gone")
-    if held:
-        detail += "; held by " + ", ".join(held)
     return {"code": "sideagent-failed", "level": "warn", "kind": "sideagent",
-            "command": command, "held_by": held, "detail": detail}
+            "command": command, "held_by": [], "detail": detail}
 
 
 def default_bind_problem(doc: dict[str, Any], path: Path, rows: list[dict[str, Any]] | None,
                          repo: Path) -> dict[str, Any] | None:
+    if sideagent_disable_source(repo):
+        return None
     """Visible while a declaring carrier has no binding. Check does not write."""
     state = doc.get("state") if isinstance(doc.get("state"), dict) else {}
     if sideagent_kept(state):
@@ -10150,7 +10129,7 @@ def default_bind_problem(doc: dict[str, Any], path: Path, rows: list[dict[str, A
 def apply_default_sideagent(doc: dict[str, Any], repo: Path, repo_text: str) -> None:
     """Set the binding in place. Does not move host_revision or section_sources."""
     state = doc.get("state")
-    if not isinstance(state, dict) or sideagent_kept(state):
+    if not isinstance(state, dict) or sideagent_kept(state) or sideagent_disable_source(repo):
         return
     caller = caller_dispatcher()
     if not node_capability_declared(doc, None, repo, caller):
@@ -10162,9 +10141,11 @@ def apply_default_sideagent(doc: dict[str, Any], repo: Path, repo_text: str) -> 
 
 def recover_failed_sideagent(args: argparse.Namespace, path: Path, repo: Path,
                              repo_text: str, caller: dict[str, str] | None) -> int:
-    """Issue #421: rebind a failed binding once the old node is shown gone and
-    no hold or decision holds it. No sweep runs and host_revision is untouched."""
+    """Reconcile the recorded node, then recover its preset or clear its binding."""
     try:
+        if not caller or caller_role(caller) != "host" or not same_repo(caller["repo"], str(repo)):
+            raise StateRefusal("host-identity-required", "use the exact verified Host holder in this project")
+        caller_record(caller)
         with StateLock(path):
             doc, _raw = read_state_file(path)
             if doc is None:
@@ -10172,10 +10153,9 @@ def recover_failed_sideagent(args: argparse.Namespace, path: Path, repo: Path,
             doc = require_current(doc, path)
             state = doc["state"]
             old = state.get("sideagent")
-            if not (isinstance(old, dict) and old.get("state") == "failed"):
+            if not (isinstance(old, dict) and old.get("mode") == "node" and old.get("session")):
                 return emit({"result": "refused", "reason": "sideagent-not-failed",
-                             "detail": "--recover-failed applies only to a binding whose "
-                                      "state is failed"}, 2)
+                             "detail": "there is no recorded node binding to reconcile"}, 2)
             evidence = getattr(args, "evidence", None)
             if not isinstance(evidence, str) or not evidence.strip():
                 return emit({"result": "refused", "reason": "evidence-required",
@@ -10185,36 +10165,82 @@ def recover_failed_sideagent(args: argparse.Namespace, path: Path, repo: Path,
                 return emit({"result": "refused", "reason": "invalid-input",
                              "detail": "pass the actual original evidence, not the "
                                       "ORIGINAL_* placeholder the named command carries"}, 2)
-            live_arg = getattr(args, "live", None)
-            if not isinstance(live_arg, str) or not live_arg:
-                return emit({"result": "refused", "reason": "invalid-input",
-                             "detail": "--recover-failed needs --live rows to show the "
-                                      "old node gone"}, 2)
-            rows = live_rows_of(live_arg)
+            rows = live_rows_of(getattr(args, "live", None)) or []
             old_session = old.get("session")
-            if any(row.get("session") == old_session and row.get("state") != "stopped"
+            if any(row.get("session") == old_session and row.get("platform") == old.get("platform")
+                   and same_repo(row.get("repo"), str(repo)) and row.get("state") != "stopped"
                    for row in rows):
                 return emit({"result": "refused", "reason": "old-node-live",
                              "detail": f"{old_session} still has a live row; recovery "
                                       "does not rebind over a live old node"}, 2)
-            held = sideagent_held_rows(state, old_session)
-            if held:
-                return emit({"result": "refused", "reason": "sideagent-held",
-                             "held_by": held,
-                             "detail": ", ".join(held) + " still name the old binding or "
-                                      "the sideagent; the Host retires those rows with "
-                                      "the Owner's original evidence first; the tool "
-                                      "does not interpret an Owner answer"}, 2)
-            if not node_capability_declared(doc, rows, repo, caller):
-                return emit({"result": "not-applicable",
-                             "detail": "platform and carrier do not both declare "
-                                      "sideagent node mode"})
-            binding, why = choose_default_binding(doc, repo, repo_text, caller)
-            if binding is None:
-                problem = default_bind_problem(doc, path, rows, repo) or {"detail": why}
-                return emit({"result": "unbound", "problem": problem})
-            binding["source"] = "recover-failed"
+            preset = old.get("preset")
+            if not isinstance(preset, str) or not preset:
+                return emit({"result": "refused", "reason": "preset-missing",
+                             "detail": "recover the original preset from its binding evidence"}, 2)
+            recipe = old.get("recipe")
+            if not isinstance(recipe, dict) or not isinstance(recipe.get("runner"), str) or not isinstance(recipe.get("argv"), list):
+                return emit({"result": "refused", "reason": "binding-incomplete",
+                             "detail": "reconcile the recorded platform and Runner recipe for the same preset"}, 2)
+            argv = recipe["argv"]
+            if "start" not in argv:
+                return emit({"result": "refused", "reason": "binding-incomplete",
+                             "detail": "recorded Runner recipe has no start command"}, 2)
+            status_argv = [*argv[:argv.index("start")], *launch_argv({"session": old_session}, repo_text, "status")]
+            code, status, note = run_runner(Path(recipe["runner"]), status_argv)
+            if receipt_unreadable(code, status, note):
+                return emit({"result": "refused", "reason": "holder-unreachable", "detail": note,
+                             "next": "reconcile the exact Runner status and original attempt"}, 2)
+            absent = session_absent(status)
+            stopped = (isinstance(status, dict) and status.get("stopped") is True
+                       and status.get("residual_pids") == [])
+            status_holder = holder_of(status)
+            if (not (absent or stopped) or (old.get("holder_instance_id")
+                    and status_holder != old.get("holder_instance_id"))):
+                return emit({"result": "refused", "reason": "holder-unconfirmed", "status": status,
+                             "next": "observe or exact-stop the recorded holder before recovery or clear"}, 2)
+            if getattr(args, "clear_failed", False):
+                disable_source = sideagent_disable_source(repo)
+                if not disable_source:
+                    return emit({"result": "refused", "reason": "disable-instruction-required",
+                                 "next": "Host requests an owner decision; retain pending maintenance"}, 2)
+                state["sideagent"] = None
+                before = doc.get("revision")
+                sizes = write_state(path, doc)
+                return emit({"result": "cleared", "previous_revision": before, "revision": doc["revision"],
+                             "session": old_session, "preset": preset, "disable_source": disable_source,
+                             "evidence": evidence, "pending_maintenance": "retained", **sizes})
+            if sideagent_disable_source(repo):
+                return emit({"result": "refused", "reason": "sideagent-disabled",
+                             "detail": "the current disable instruction prevents recovery"}, 2)
+            eligible, why = default_worker_rows(doc, repo, exact_preset=preset)
+            if why or not eligible:
+                return emit({"result": "refused", "reason": "preset-unavailable",
+                             "detail": why or f"recorded preset {preset} is unavailable"}, 2)
+            if eligible[0].get("platform") != old.get("platform"):
+                return emit({"result": "refused", "reason": "binding-incomplete",
+                             "detail": "recorded preset and platform do not match"}, 2)
+            binding = {**old, "state": "active", "source": "recover-failed"}
             state["sideagent"] = binding
+            maintenance = state.setdefault("maintenance", {})
+            prior = maintenance.get("recovery_input") or {}
+            last = maintenance.get("last_checkpoint") or {}
+            prior_id = f"recovery#{prior.get('seq')}"
+            if prior.get("seq") and prior_id not in (last.get("settled") or []):
+                alerts = state.setdefault("alerts", {})
+                alert = alerts.get("maintenance-returned") or {}
+                inputs = dict(alert.get("inputs") or {})
+                if prior_id not in inputs:
+                    inputs[prior_id] = {"why": "recovery-pending", "evidence": prior.get("evidence"),
+                                        "next": "carry the original pending input into the recovery batch"}
+                alerts["maintenance-returned"] = {**alert, "level": "warn", "owner": "host", "inputs": inputs,
+                    "summary": "maintenance needs Host recovery from original receipts",
+                    "next": "reconcile pending inputs through the native carrier batch", "source": evidence,
+                    "writer": "tool:carrier", "writer_holder": caller["holder_instance_id"],
+                    "rev": int(alert.get("rev") or 0) + 1, "updated_at": observed_at()}
+            seq = int(maintenance.get("recovery_seq") or 0) + 1
+            maintenance.update(recovery_seq=seq, recovery_input={"seq": seq, "kind": "request",
+                "occurrence_id": None, "source": "recover-failed", "holder": caller["holder_instance_id"],
+                "at": observed_at(), "evidence": evidence})
             before = doc.get("revision")
             sizes = write_state(path, doc)
     except StateRefusal as refusal:
@@ -10229,7 +10255,7 @@ def recover_failed_sideagent(args: argparse.Namespace, path: Path, repo: Path,
                                "mode": binding["mode"], "since": binding["since"],
                                "platform": binding["platform"]},
                  "evidence": evidence,
-                 "sweep": "not run; recovery schedules no sweep", **sizes})
+                 "recovery_seq": seq, "sweep": "not run", **sizes})
 
 
 def command_state_ensure_sideagent(args: argparse.Namespace) -> int:
@@ -10241,7 +10267,7 @@ def command_state_ensure_sideagent(args: argparse.Namespace) -> int:
     if caller and role not in (None, "host"):
         return emit({"result": "refused", "reason": "host-only",
                      "detail": "only the Host carrier binds the default Sideagent"}, 2)
-    if getattr(args, "recover_failed", False):
+    if getattr(args, "recover_failed", False) or getattr(args, "clear_failed", False):
         return recover_failed_sideagent(args, path, repo, repo_text, caller)
     binding: dict[str, Any] | None = None
     try:
@@ -10261,6 +10287,8 @@ def command_state_ensure_sideagent(args: argparse.Namespace) -> int:
                     payload["state"] = "failed"
                     payload["recovery"] = ensure_sideagent_recover_command(path, repo)
                 return emit(payload)
+            if sideagent_disable_source(repo):
+                return emit({"result": "disabled", "source": sideagent_disable_source(repo)})
             if not node_capability_declared(doc, None, repo, caller):
                 return emit({"result": "not-applicable",
                              "detail": "platform and carrier do not both declare sideagent node mode"})
@@ -10702,7 +10730,9 @@ def maintenance_receipt(caller: dict[str, str], batch: str, through: int) -> dic
                   and row.get("host_revision_through") == through), None)
     prompt = node.get("last_prompt") or {}
     fingerprint = event.get("prompt_fingerprint") if event else None
+    native_id = event.get("target_acp_session_id") if event else None
     if (event is None or event.get("sweep") is not None
+            or not isinstance(native_id, str) or not native_id or native_id != node.get("acp_session_id")
             or not isinstance(fingerprint, str) or not fingerprint
             or not isinstance(prompt, dict) or prompt.get("fingerprint") != fingerprint):
         raise StateRefusal("batch-unverified", "no matching admitted maintenance batch and current node prompt")
@@ -12830,6 +12860,11 @@ def command_sweep(args: argparse.Namespace) -> int:
                     raise StateRefusal("node-identity-required",
                                        "a sweep batch applies only from the bound node holder")
                 _, node_record = caller_record(caller)
+                binding = doc["state"].get("sideagent")
+                if (not node_binding(binding) or caller["session"] != binding.get("session")
+                        or caller["platform"] != binding.get("platform")):
+                    raise StateRefusal("binding-superseded", "sweep requires the current bound node")
+                verify_checkpoint_origin(node_record)
                 carrier = node_record.get("dispatcher")
                 if (not isinstance(carrier, dict) or caller_role(carrier) != "host"
                         or not same_repo(carrier.get("repo"), str(repo))):
@@ -12840,8 +12875,15 @@ def command_sweep(args: argparse.Namespace) -> int:
                               if row.get("kind") == "sideagent_node_batch"
                               and row.get("batch") == batch
                               and row.get("target_holder") == caller["holder_instance_id"]
+                              and row.get("host_holder") == carrier["holder_instance_id"]
                               and isinstance(row.get("sweep"), dict)), None)
-                if event is None:
+                prompt = node_record.get("last_prompt") or {}
+                native_id = event.get("target_acp_session_id") if event else None
+                if (event is None or not isinstance(native_id, str) or not native_id
+                        or native_id != node_record.get("acp_session_id")
+                        or not isinstance(event.get("prompt_fingerprint"), str)
+                        or not isinstance(prompt, dict)
+                        or prompt.get("fingerprint") != event.get("prompt_fingerprint")):
                     raise StateRefusal("batch-unverified",
                                        "no original sent sweep plan for this batch and node holder")
                 accepted_revision = carrier_record.get("accepted_revision")
@@ -13102,8 +13144,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="bind node mode when this carrier declares it and no binding exists")
     ensure.add_argument("--file", required=True)
     ensure.add_argument("--repo")
-    ensure.add_argument("--recover-failed", action="store_true",
-                        help="rebind a failed Sideagent binding after the old node is shown gone")
+    disposition = ensure.add_mutually_exclusive_group()
+    disposition.add_argument("--recover-failed", action="store_true",
+                             help="reconcile the recorded node and recover its same preset")
+    disposition.add_argument("--clear-failed", action="store_true",
+                             help="clear the recorded node after an authorized current disable instruction")
     ensure.add_argument("--evidence",
                         help="the Owner's original rebind evidence for --recover-failed")
     ensure.add_argument("--live", help="JSON file path: kaola-acp-list/1 rows proving "

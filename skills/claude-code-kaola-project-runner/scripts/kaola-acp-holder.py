@@ -2942,7 +2942,6 @@ class Holder:
         self.events = EventLog(self.record_dir / "events.jsonl")
         self.record_path = self.record_dir / "record.json"
         # Snapshot prior records before this holder replaces its own record.
-        self.devin_prior_ids: set[str] = set()
         self.devin_record_ids: set[str] = set()
         self.devin_origin_lock = threading.RLock()
         self.devin_origin_id: str | None = None
@@ -2954,7 +2953,6 @@ class Holder:
                 for path in acp_paths.record_paths("devin/*/*/record.json", root, all_roots=True):
                     prior = acp_paths.read_record(path.parent) or {}
                     if isinstance(prior.get("acp_session_id"), str):
-                        self.devin_prior_ids.add(prior["acp_session_id"])
                         self.devin_record_ids.add(prior["acp_session_id"])
             except acp_paths.RecordRootMismatch as exc:
                 self.devin_origin_inventory_error = str(exc)
@@ -3404,7 +3402,6 @@ class Holder:
             if any(not isinstance(row.get("sessionId"), str) for row in sessions):
                 return {"error": {"code": "sideagent-origin-unverifiable", "message": "invalid session inventory identity"}}
             self.devin_inventory_ids = {row["sessionId"] for row in sessions}
-            self.devin_prior_ids.update(self.devin_inventory_ids)
         if resume is not None:
             return self._request_resume(resume)
         elif use_continue:
@@ -3454,7 +3451,8 @@ class Holder:
                 with self.devin_origin_lock:
                     foreign = any(m.get("params", {}).get("sessionId") != sid
                                   for m in self.devin_pending_updates)
-                    if not isinstance(sid, str) or not sid or sid in self.devin_prior_ids or foreign:
+                    if (not isinstance(sid, str) or not sid or sid in self.devin_inventory_ids
+                            or sid in self.devin_record_ids or foreign):
                         branches = []
                         if not isinstance(sid, str) or not sid:
                             branches.append("missing_new_id")
@@ -3469,7 +3467,6 @@ class Holder:
                                       "identity": {"new_matches_inventory": "inventory_match" in branches,
                                                    "new_matches_record": "record_match" in branches,
                                                    "all_pending_match_new": not foreign}}
-                        self.events.append({"kind": "sideagent_origin_rejected", **diagnostic})
                         self.devin_origin_failed = True
                         self.devin_pending_updates.clear()
                         self.acp_session_id = None
@@ -5044,6 +5041,7 @@ class Holder:
             activity = "idle"
         return {
             "state": self.state,
+            **({"sideagent_lifecycle": self._node_lifecycle()} if self.session_role == "host" else {}),
             "holder_pid": os.getpid(),
             "holder_instance_id": self.holder_instance_id,
             "runner_build": self.runner_identity["runner_build"],
@@ -6396,8 +6394,6 @@ class Holder:
         binding = state.get("sideagent") if isinstance(state, dict) else None
         if not isinstance(binding, dict) or binding.get("state") != "active":
             return None
-        if binding.get("mode") == "node":
-            binding = self._node_override(binding)
         platform, session = binding.get("platform"), binding.get("session")
         if (not isinstance(platform, str) or not platform or not isinstance(session, str)
                 or not session or session == self.args.session):
@@ -6424,6 +6420,7 @@ class Holder:
         if not sock.exists():
             return None
         return {"platform": platform, "session": session, "holder_instance_id": holder,
+                "acp_session_id": record.get("acp_session_id"),
                 "socket": str(sock), "attention": attention_fingerprint(body),
                 # Issue #408: the relay prompt is a mutating op on a bound
                 # seat; present the Sideagent's own minted token.
@@ -6575,7 +6572,7 @@ class Holder:
         except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
             receipt = {"result": "unbound", "problem": {"detail": str(exc)}}
         result = receipt.get("result") if isinstance(receipt, dict) else None
-        if result in ("kept", "not-applicable"):
+        if result in ("kept", "not-applicable", "disabled"):
             return
         if result == "bound":
             side = receipt.get("sideagent") if isinstance(receipt.get("sideagent"), dict) else {}
@@ -6689,26 +6686,20 @@ class Holder:
 
     def _node_binding(self) -> dict[str, Any] | None:
         """The active node-mode binding with a usable recipe, or None. The
-        recipe is the existing Runner argv for a fresh Sideagent start of the
-        bound session in this project; a resume or continue is not fresh."""
+        recipe is the existing Runner argv for the bound session."""
         doc = self._lifecycle_state()
         state = doc.get("state") if doc else None
         binding = state.get("sideagent") if isinstance(state, dict) else None
         if not isinstance(binding, dict) or binding.get("mode") != "node" or binding.get("state") != "active":
             return None
-        effective = self._node_override(binding)
-        if effective is not binding:
-            return effective
         recipe = binding.get("recipe") if isinstance(binding.get("recipe"), dict) else {}
         runner, argv = recipe.get("runner"), recipe.get("argv")
         session = binding.get("session")
         problem = None
-        runtime_missing = False
         if not isinstance(binding.get("platform"), str) or not binding["platform"]:
             problem = "binding must name the node platform"
         elif not isinstance(runner, str) or not os.path.isabs(runner) or not os.path.isfile(runner):
             problem = "recipe runner must be an existing absolute path"
-            runtime_missing = isinstance(runner, str) and os.path.isabs(runner)
         elif (not isinstance(argv, list) or not all(isinstance(part, str) for part in argv)
               or not argv or (argv[0] != "start" and argv[:2] != [binding["platform"], "start"])):
             # A platform Runner takes `start ...`; the checkout entrypoint
@@ -6721,138 +6712,50 @@ class Holder:
             problem = "recipe must start the bound session in this project with --role sideagent"
         elif not all(flag in argv for flag in ("--session", "--repo", "--role")):
             problem = "recipe must name --session, --repo and --role sideagent"
-        elif "--continue" in argv or "--resume" in argv:
-            problem = "a node starts with a fresh native context; --continue/--resume are refused"
         if problem:
             key = json.dumps(recipe, sort_keys=True)
             if self.node.get("recipe_refused") != key:
                 self.node["recipe_refused"] = key
                 self.events.append({"kind": "sideagent_node_recipe_refused", "detail": problem})
-                if runtime_missing and self._recipe_policy_ok(binding):
-                    # Issue #324: the bound runtime is not installed here.
-                    # That is an unavailable runtime, not a refused policy.
-                    return self._node_fallback(binding, binding["platform"], "runner-missing")
+                self.node["recipe_problem"] = {"reason": "recipe-unavailable",
+                    "evidence": f"{self.events.path}#{self.events.cursor}", "next": problem}
             return None
+        self.node.pop("recipe_problem", None)
         return binding
 
-    # -- Issue #324: node runtime fallback --------------------------------------
-
-    def _recipe_policy_ok(self, binding: dict[str, Any]) -> bool:
-        """The recipe argv itself is acceptable; only its runner is missing."""
-        argv = (binding.get("recipe") or {}).get("argv")
-        session = binding.get("session")
-        return (isinstance(argv, list) and all(isinstance(part, str) for part in argv) and bool(argv)
-                and (argv[0] == "start" or argv[:2] == [binding["platform"], "start"])
-                and isinstance(session, str) and session != self.args.session
-                and all(flag in argv for flag in ("--session", "--repo", "--role"))
-                and not any(argv[i] == flag and (i + 1 >= len(argv) or argv[i + 1] != want)
-                            for i in range(len(argv)) for flag, want in
-                            (("--session", session), ("--repo", self.args.repo), ("--role", "sideagent")))
-                and "--continue" not in argv and "--resume" not in argv)
-
-    @staticmethod
-    def _binding_key(binding: dict[str, Any]) -> str:
-        """The stored binding a runtime choice belongs to. A Host edit to the
-        binding is a new key, so its own runtime is tried first again."""
-        return binding.get("fallback_of") or json.dumps(
-            {key: binding.get(key) for key in ("platform", "session", "recipe", "since")}, sort_keys=True)
-
-    def _node_override(self, binding: dict[str, Any]) -> dict[str, Any]:
-        """The stored node binding, or the fallback runtime chosen for it."""
-        runtime = self.node.get("runtime")
-        if (isinstance(runtime, dict) and runtime.get("binding") == self._binding_key(binding)
-                and isinstance(runtime.get("recipe"), dict)):
-            return {**binding, "platform": runtime["platform"], "preset": runtime["preset"],
-                    "recipe": runtime["recipe"], "fallback_of": runtime["binding"]}
-        return binding
-
-    def _fallback_recipe(self, binding: dict[str, Any], platform: str, tier: str) -> dict[str, Any] | None:
-        """The same Runner start for another platform: the sibling installed
-        Skill's Runner (or the checkout entrypoint with that platform first),
-        the bound session, this project, ``--role sideagent`` and the preset's
-        tier. None when that Runner is not on this machine."""
-        recipe = binding.get("recipe") or {}
-        runner, argv, bound = Path(str(recipe.get("runner"))), list(recipe.get("argv") or []), binding["platform"]
-        if argv[:2] == [bound, "start"]:
-            target, head, tail = runner, [platform], argv[1:]
-        elif runner.parent.name == "scripts" and runner.parent.parent.name == f"{bound}-kaola-project-runner":
-            target = runner.parent.parent.parent / f"{platform}-kaola-project-runner" / "scripts" / runner.name
-            head, tail = [], argv
-        else:
-            return None
-        if not target.is_file():
-            return None
-        kept: list[str] = []
-        skip = False
-        for part in tail:
-            if skip:
-                skip = False
-                continue
-            if part in ("--tier", "--model", "--effort"):
-                skip = True
-                continue
-            kept.append(part)
-        return {**{key: value for key, value in recipe.items() if key == "state_tool"},
-                "runner": str(target), "argv": [*head, *kept, "--tier", tier]}
-
-    def _node_chain(self, binding: dict[str, Any], tried: list[str]) -> list[dict[str, Any]]:
-        """Fallback runtimes for the bound node: granted Worker presets, by id.
-
-        The list is the current dispatch eligibility (explicit Worker grants,
-        exclusions, holds, Delegator ceiling, availability). A preset whose
-        roles include computer-use-only is omitted. An ungranted preset is
-        not a candidate. No remaining preset means an empty chain; the caller
-        fails once and does not try another preset."""
-        tool = self._state_tool()
-        state_file = Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"
-        if tool is None or not state_file.is_file():
-            return []
-        argv = [sys.executable, tool, "project", "--authorization", str(state_file), "--repo", self.args.repo]
-        availability = state_file.parent / "dispatch-availability.json"
-        if availability.is_file():
-            argv += ["--availability", str(availability)]
-        try:
-            run = subprocess.run(argv, cwd=self.args.repo, stdin=subprocess.DEVNULL, capture_output=True,
-                                 text=True, timeout=NODE_START_TIMEOUT)
-            candidates = json.loads(run.stdout).get("candidates") if run.returncode == 0 else None
-        except (OSError, ValueError, subprocess.SubprocessError, AttributeError):
-            candidates = None
-        rows = [row for row in (candidates or []) if isinstance(row, dict)
-                and row.get("class") == "Worker" and row.get("availability") != "absent"
-                and not automatic_worker_barred(row)
-                and isinstance(row.get("platform"), str) and row["platform"] not in tried
-                and isinstance(row.get("tier"), str) and isinstance(row.get("id"), str)]
-        rows.sort(key=lambda row: row["id"])
-        chain = []
-        for row in rows:
-            recipe = self._fallback_recipe(binding, row["platform"], row["tier"])
-            if recipe is not None:
-                chain.append({"preset": row["id"], "platform": row["platform"], "recipe": recipe})
-        return chain
-
-    def _node_fallback(self, binding: dict[str, Any], failed: str, why: str) -> dict[str, Any] | None:
-        """Move the bound node to the next eligible runtime, never the same
-        one again. Returns the effective binding, or None when the chain is
-        exhausted: the caller then fails once as before. Caller holds
-        ``worker_events_lock``."""
-        key = self._binding_key(binding)
-        runtime = self.node.get("runtime")
-        if not isinstance(runtime, dict) or runtime.get("binding") != key:
-            runtime = {"binding": key, "tried": []}
-        tried = list(dict.fromkeys([*runtime.get("tried", []), failed]))
-        chain = self._node_chain(binding, tried)
-        event: dict[str, Any] = {"kind": "sideagent_node_fallback", "from": failed, "reason": why,
-                                 "tried": tried, "chain": [item["preset"] for item in chain]}
-        if not chain:
-            # Exhausted: keep the last runtime so its recorded failure stands
-            # and nothing restarts the chain until the binding changes.
-            self.node["runtime"] = {**runtime, "tried": tried, "exhausted": True}
-            self.events.append({**event, "exhausted": True})
-            return None
-        self.node["runtime"] = {"binding": key, "tried": tried, **chain[0]}
-        self.node.pop("failed", None)
-        self.events.append({**event, "to": chain[0]["preset"]})
-        return self._node_override({**binding, "fallback_of": key})
+    def _node_lifecycle(self) -> dict[str, Any]:
+        """Current carrier transition and its original evidence, for status."""
+        doc = self._lifecycle_state() or {}
+        binding = (doc.get("state") or {}).get("sideagent")
+        if not isinstance(binding, dict) or not binding.get("session"):
+            return {"state": "UNBOUND"}
+        node = self.node
+        locator = str(self.events.path)
+        stop = node.get("stop_unconfirmed")
+        if isinstance(stop, dict):
+            return {"state": "NEEDS_ACTION", "reason": "stop-unconfirmed", "evidence": locator,
+                    "next": "reconcile or exact-stop the recorded holder", "holder": stop.get("holder")}
+        failed = node.get("failed")
+        problem = node.get("recipe_problem")
+        if isinstance(failed, dict):
+            return {"state": "NEEDS_ACTION", "reason": str(failed.get("code")),
+                    "evidence": failed.get("evidence") or locator,
+                    "next": "reconcile the original attempt and recover the recorded preset or clear"}
+        if isinstance(problem, dict):
+            return {"state": "NEEDS_ACTION", **problem}
+        if binding.get("state") == "failed":
+            return {"state": "NEEDS_ACTION", "reason": "binding-failed",
+                    "evidence": str(Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"),
+                    "next": "reconcile the original attempt and recover the recorded preset or clear"}
+        if node.get("phase") in ("starting", "running", "stopping"):
+            return {"state": "EXECUTING", "holder": node.get("holder")}
+        record = (self._node_record(binding) if binding.get("mode") == "node"
+                  and isinstance(binding.get("platform"), str) else None)
+        if record and record.get("holder_instance_id") and self._node_holder_alive(binding, record["holder_instance_id"]):
+            return {"state": "NEEDS_ACTION", "reason": "holder-unreconciled", "evidence": locator,
+                    "next": "reconcile the exact recorded holder before another start",
+                    "holder": record["holder_instance_id"]}
+        return {"state": "BOUND"}
 
     def _node_host_pending(self, doc: dict[str, Any] | None, requested: bool = False) -> int | None:
         """The Host revision a new batch would select, when Host business
@@ -6917,6 +6820,12 @@ class Holder:
         if ident in returned or item["seq"] <= (self.node.get("recovery_sent") or 0):
             return None
         return item
+
+    def _node_failure(self, fingerprint: str, code: Any) -> dict[str, Any]:
+        state = (self._lifecycle_state() or {}).get("state") or {}
+        sequence = (state.get("maintenance") or {}).get("recovery_seq") or 0
+        return {"binding": fingerprint, "code": code, "recovery_seq": sequence,
+                "evidence": f"{self.events.path}#{self.events.cursor}"}
 
     def _maintenance_tool(self, argv: list[str]) -> dict[str, Any]:
         tool = self._state_tool()
@@ -7024,6 +6933,48 @@ class Holder:
         return {ident: value for ident, value in inputs.items()
                 if isinstance(ident, str) and ident.startswith("recovery#") and ident not in gone}
 
+    def _node_start_transition(self, binding: dict[str, Any], fingerprint: str,
+                               through: Any = None, recovery: dict[str, Any] | None = None) -> str:
+        """One occupied slot and one start path for all node batch kinds."""
+        node = self.node
+        if node.get("phase") in ("starting", "stopping"):
+            return "node-busy"
+        old = self._node_record(binding) or {}
+        holder = old.get("holder_instance_id")
+        if holder and self._node_holder_alive(binding, holder):
+            node["stop_unconfirmed"] = {"holder": holder, "platform": binding["platform"],
+                                        "session": binding["session"]}
+            self._maintenance_failure("old-node-live", through, recovery)
+            return "old-node-live"
+        node.update(phase="starting", binding=fingerprint)
+        self.node_start = threading.Thread(target=self._start_node, args=(binding, fingerprint), daemon=True)
+        self.node_start.start()
+        return "node-starting"
+
+    def _node_admit_transition(self, binding: dict[str, Any], target: dict[str, Any],
+                               batch: str, prompt: str, fingerprint: str,
+                               through: Any = None, recovery: dict[str, Any] | None = None,
+                               sweep: bool = False) -> dict[str, Any]:
+        """Admit one native batch, or preserve one failure and exact-stop it."""
+        receipt = self._relay_send(target, prompt)
+        error = receipt.get("error") if isinstance(receipt.get("error"), dict) else None
+        if (error is None and receipt.get("outcome") == "in_progress"
+                and isinstance(receipt.get("prompt_fingerprint"), str)):
+            return receipt
+        reason = (error or {}).get("code") or "relay-unadmitted"
+        self.events.append({"kind": "worker_event_relay_failed", "target_session": binding["session"],
+                            "batch": batch, "receipt": receipt})
+        self.node.update(failed=self._node_failure(fingerprint, reason))
+        if not sweep:
+            self._maintenance_failure(reason, through, recovery, wake=False)
+        self._node_to_host(binding, f"sideagent node {target['holder_instance_id']} did not admit "
+                                    f"{'sweep ' if sweep else ''}batch {batch} ({reason}); "
+                                    f"{self._unhandled(through)}", record=not sweep)
+        self.node.update(phase="stopping", batch=None, fingerprint=None)
+        threading.Thread(target=self._stop_node, args=(target["holder_instance_id"], None, binding),
+                         daemon=True).start()
+        return {"error": {"code": reason}, "receipt": receipt}
+
     def _node_relay_pass(self, binding: dict[str, Any]) -> dict[str, Any]:
         """Node mode of the relay. Caller holds ``worker_events_lock``.
 
@@ -7048,7 +6999,7 @@ class Holder:
             # ran on, which a move may since have replaced in ``binding``.
             probe = {**binding, "platform": old.get("platform") or binding["platform"],
                      "session": old.get("session") or session}
-            if not self._node_holder_alive(probe, old.get("holder")):
+            if self._node_stop_confirmed(probe, old.get("holder")):
                 self.events.append({"kind": "sideagent_node_stop_confirmed_late", "holder": old.get("holder")})
                 node.pop("stop_unconfirmed", None)
         own = [item for item in self.pending_worker_events if item.get("session") == session]
@@ -7068,6 +7019,8 @@ class Holder:
             self.events.append({"kind": "sideagent_node_lost", "holder": node.get("holder"),
                                 "batch": node["batch"],
                                 **({"sweep": True} if node.get("sweep_batch") else {})})
+            node["stop_unconfirmed"] = {"holder": node.get("holder"),
+                                        "platform": binding["platform"], "session": session}
             if node.get("sweep_batch"):
                 # A lost sweep node writes no maintenance-returned row; the
                 # attempt cools down for the interval and the Host sees it.
@@ -7083,8 +7036,12 @@ class Holder:
         failed = node.get("failed")
         fingerprint = json.dumps({key: binding.get(key) for key in ("session", "recipe", "since")},
                                  sort_keys=True)
-        if failed and failed.get("binding") != fingerprint:
+        sequence = (((self._lifecycle_state() or {}).get("state") or {}).get("maintenance") or {}).get("recovery_seq") or 0
+        if failed and (failed.get("binding") != fingerprint
+                       or sequence > (failed.get("recovery_seq") or 0)):
             node.pop("failed", None)
+            node.pop("sent_through", None)
+            node.pop("recovery_sent", None)
             failed = None
         result: dict[str, Any] = {"session": session}
         if failed or node.get("stop_unconfirmed"):
@@ -7134,18 +7091,8 @@ class Holder:
             self._sweep_pass(binding, doc, target, result)
             return result
         if target is None:
-            old = self._node_record(binding) or {}
-            old_holder = old.get("holder_instance_id")
-            if old_holder and self._node_holder_alive(binding, old_holder):
-                node["stop_unconfirmed"] = {"holder": old_holder, "platform": binding["platform"],
-                                            "session": session}
-                self._maintenance_failure("old-node-live", through, recovery)
-                return result
-            node.update(phase="starting", binding=fingerprint)
-            self.node_start = threading.Thread(target=self._start_node, args=(binding, fingerprint),
-                                               daemon=True)
-            self.node_start.start()
-            result["receipt"] = {"relayed": 0, "reason": "node-starting"}
+            reason = self._node_start_transition(binding, fingerprint, through, recovery)
+            result["receipt"] = {"relayed": 0, "reason": reason}
             return result
         maintenance = ((doc or {}).get("state") or {}).get("maintenance") or {}
         handled = maintenance.get("handled_host_revision") or 0
@@ -7153,7 +7100,8 @@ class Holder:
             through = self._node_host_pending(doc, requested=True) or int(handled)
         batch = "b-" + hashlib.sha256(json.dumps([target["holder_instance_id"], through, recovery])
                                       .encode("utf-8")).hexdigest()[:12]
-        receipt = self._relay_send(target, self._node_prompt(batch, handled, through, recovery))
+        receipt = self._node_admit_transition(binding, target, batch,
+            self._node_prompt(batch, handled, through, recovery), fingerprint, through, recovery)
         error = receipt.get("error") if isinstance(receipt.get("error"), dict) else None
         if (error is None and receipt.get("outcome") == "in_progress"
                 and isinstance(receipt.get("prompt_fingerprint"), str)):
@@ -7165,6 +7113,7 @@ class Holder:
                         recovery_sent=(recovery or {}).get("seq", node.get("recovery_sent", 0)))
             self.events.append({"kind": "sideagent_node_batch", "batch": batch,
                                 "target_holder": target["holder_instance_id"],
+                                "target_acp_session_id": target.get("acp_session_id"),
                                 "host_revision_through": through, "host_holder": self.holder_instance_id,
                                 "recovery_input": recovery,
                                 "recovery_alerts": self._recovery_alerts(doc),
@@ -7172,18 +7121,6 @@ class Holder:
             result["receipt"] = {"batch": batch, "target_session": session}
         else:
             reason = (error or {}).get("code") or "relay-unadmitted"
-            self.events.append({"kind": "worker_event_relay_failed", "target_session": session,
-                                "receipt": receipt})
-            if self._node_fallback(binding, binding["platform"], f"batch-unadmitted:{reason}") is None:
-                # Recorded once and not resent: the node is stopped and no other
-                # starts until the binding changes.
-                node.update(failed={"binding": fingerprint, "code": reason})
-                self._maintenance_failure(reason, through, recovery, wake=False)
-                self._node_to_host(binding, f"sideagent node {target['holder_instance_id']} did not admit "
-                                            f"batch {batch} ({reason}); {self._unhandled(through)}")
-            holder = target["holder_instance_id"]
-            node.update(phase="stopping", batch=None, fingerprint=None)
-            threading.Thread(target=self._stop_node, args=(holder, None, binding), daemon=True).start()
             result["receipt"] = {"relayed": 0, "reason": reason}
         return result
 
@@ -7191,8 +7128,8 @@ class Holder:
     #
     # At a relay boundary with no reconcile input, no node batch in flight and
     # no active Host turn, a due sweep runs `sweep --dry-run` in a daemon
-    # thread, then either records the empty result itself or queues exactly
-    # one node batch keyed by the candidate set. A sweep never starts during
+    # thread, then queues exactly one node batch keyed by the candidate set,
+    # including an empty result. A sweep never starts during
     # a Host turn; a reconcile input always goes first, and one arriving
     # during a sweep batch runs right after it.
 
@@ -7289,25 +7226,12 @@ class Holder:
             return {"error": str(exc)}
 
     def _sweep_scan(self, reason: str) -> None:
-        """The due scan: outside the lock like ``_register_compact_maintenance``.
-        ``record-empty`` runs in this same thread; its ``candidates`` answer is
-        queued like a scan's."""
+        """Select sweep inputs outside the lock; the node settles the receipt."""
         receipt = self._sweep_tool(["--dry-run"])
         planned = isinstance(receipt, dict) and "error" not in receipt \
             and receipt.get("result") == "planned" and not receipt.get("timed_out")
         candidates = [item["id"] for item in (receipt.get("candidates") or [])
                       if isinstance(item, dict) and isinstance(item.get("id"), str)] if planned else []
-        recorded: dict[str, Any] | None = None
-        if planned and not candidates:
-            recorded = self._sweep_tool(["--record-empty"])
-            if recorded.get("result") == "candidates":
-                receipt = recorded
-                candidates = [item["id"] for item in (recorded.get("candidates") or [])
-                              if isinstance(item, dict) and isinstance(item.get("id"), str)]
-            elif recorded.get("result") != "recorded-empty":
-                # Any other answer is a failed scan, not an empty one.
-                planned = False
-                receipt = recorded
         with self.worker_events_lock:
             sweep = self.node.get("sweep")
             if not isinstance(sweep, dict) or sweep.get("phase") != "scanning":
@@ -7319,12 +7243,6 @@ class Holder:
                                       "until": time.monotonic() + SWEEP_INTERVAL_SECONDS}
                 self.events.append({"kind": "sideagent_sweep_scan_failed",
                                     "reason": reason, "receipt": receipt})
-                return
-            if not candidates and recorded is not None:
-                self.node.pop("sweep", None)
-                self.events.append({"kind": "sideagent_sweep_empty", "key": "",
-                                    "kept": len(recorded.get("kept") or []),
-                                    "receipt_result": recorded.get("result")})
                 return
             self.node["sweep"] = {"phase": "queued", "key": receipt.get("key") or "",
                                   "candidates": candidates, "reason": reason,
@@ -7365,29 +7283,17 @@ class Holder:
             return
         key = sweep.get("key") or ""
         if target is None:
-            if node.get("phase") in ("starting", "stopping"):
-                return
-            old = self._node_record(binding) or {}
-            old_holder = old.get("holder_instance_id")
-            if old_holder and self._node_holder_alive(binding, old_holder):
-                # A foreign or old node holds the session. A sweep never makes
-                # a maintenance-returned row; it stays queued for the next
-                # boundary once the holder is gone.
-                node["stop_unconfirmed"] = {"holder": old_holder,
-                                            "platform": binding["platform"],
-                                            "session": binding["session"]}
-                return
             fingerprint = json.dumps({k: binding.get(k) for k in ("session", "recipe", "since")},
                                      sort_keys=True)
-            node.update(phase="starting", binding=fingerprint)
-            self.node_start = threading.Thread(target=self._start_node, args=(binding, fingerprint),
-                                               daemon=True)
-            self.node_start.start()
-            result["receipt"] = {"relayed": 0, "reason": "node-starting"}
+            reason = self._node_start_transition(binding, fingerprint)
+            result["receipt"] = {"relayed": 0, "reason": reason}
             return
         batch = "s-" + hashlib.sha256(json.dumps([target["holder_instance_id"], key])
                                       .encode("utf-8")).hexdigest()[:12]
-        receipt = self._relay_send(target, self._sweep_prompt(batch))
+        fingerprint = json.dumps({k: binding.get(k) for k in ("session", "recipe", "since")},
+                                 sort_keys=True)
+        receipt = self._node_admit_transition(binding, target, batch, self._sweep_prompt(batch),
+                                              fingerprint, sweep=True)
         error = receipt.get("error") if isinstance(receipt.get("error"), dict) else None
         if (error is None and receipt.get("outcome") == "in_progress"
                 and isinstance(receipt.get("prompt_fingerprint"), str)):
@@ -7399,6 +7305,7 @@ class Holder:
             sweep["batch"] = batch
             self.events.append({"kind": "sideagent_node_batch", "batch": batch,
                                 "target_holder": target["holder_instance_id"],
+                                "target_acp_session_id": target.get("acp_session_id"),
                                 "host_holder": self.holder_instance_id,
                                 "host_revision_through": int(handled)
                                 if isinstance(handled, int) else 0,
@@ -7409,21 +7316,7 @@ class Holder:
             result["receipt"] = {"batch": batch, "target_session": binding["session"]}
             return
         reason = (error or {}).get("code") or "relay-unadmitted"
-        self.events.append({"kind": "worker_event_relay_failed", "target_session": binding["session"],
-                            "receipt": receipt})
-        if self._node_fallback(binding, binding["platform"], f"batch-unadmitted:{reason}") is not None:
-            # The next runtime's boundary retries the same queued sweep.
-            return
-        fingerprint = json.dumps({k: binding.get(k) for k in ("session", "recipe", "since")},
-                                 sort_keys=True)
-        node.update(failed={"binding": fingerprint, "code": reason})
-        self.events.append({"kind": "sideagent_sweep_dropped", "key": key, "reason": reason})
-        node.pop("sweep", None)
-        self._node_to_host(binding, f"sideagent node {target['holder_instance_id']} did not admit "
-                                    f"sweep batch {batch} ({reason})", record=False)
-        holder = target["holder_instance_id"]
-        node.update(phase="stopping", batch=None, fingerprint=None)
-        threading.Thread(target=self._stop_node, args=(holder, None, binding), daemon=True).start()
+        self.events.append({"kind": "sideagent_sweep_returned", "key": key, "reason": reason})
         result["receipt"] = {"relayed": 0, "reason": reason}
 
     def _unhandled(self, through: Any) -> str:
@@ -7562,12 +7455,8 @@ class Holder:
         Host has not seen. A verified batch that changed no attention stays
         quiet.
 
-        Issue #336: a node whose admitted turn its runtime refused, with no
-        checkpoint at all, is an unavailable runtime as a failed start is
-        (#324): the carrier moves to the next eligible runtime, which takes
-        the same range at the next boundary, and the Host is not woken for
-        the move. An exhausted chain fails once; no node starts until the
-        binding or recipe changes."""
+        A refused turn retains the recorded preset and returns the unresolved
+        batch to the Host for reconciliation."""
         node = self.node
         if not node.get("batch"):
             return
@@ -7589,27 +7478,19 @@ class Holder:
                 verified = bool(ours and end.get("turn_outcome") == "turn_completed")
                 refusal = None if ours else self._node_turn_refusal(end)
                 binding = self._node_binding() if refusal else None
-                moved = (self._node_fallback(binding, binding["platform"], f"turn-refused:{refusal}")
-                         if refusal and binding is not None else None)
                 attention = attention_fingerprint(body) if doc else None
                 changed = (verified and attention is not None and attention != node.get("attention_sent")
                            and attention != self.host_attention_seen
                            and self._node_wrote_attention(doc, body, node["holder"]))
                 if verified and not changed:
                     end["node_quiet"] = True
-                elif moved is not None:
-                    # The same sweep stays queued for the next runtime's node.
-                    end["node_quiet"] = True
-                    if isinstance(node.get("sweep"), dict):
-                        node["sweep"]["phase"] = "queued"
                 else:
                     end["host_owned"] = True
                     detail = "verified; Host attention changed" if changed else "checkpoint missing"
                     end["reason"] = (f"{end.get('reason')} maintenance sweep batch "
                                      f"{node['batch']} {detail}")
-                if verified or moved is not None:
-                    if verified:
-                        node.pop("sweep", None)
+                if verified:
+                    node.pop("sweep", None)
                 else:
                     node["sweep"] = {"phase": "cooldown",
                                      "until": time.monotonic() + SWEEP_INTERVAL_SECONDS}
@@ -7619,8 +7500,7 @@ class Holder:
                                     "removed": (last_sweep.get("removed") or []) if ours else [],
                                     "host_woken": bool(end.get("host_owned")),
                                     **({"attention_changed": True} if changed else {}),
-                                    **({"turn_refused": refusal} if refusal else {}),
-                                    **({"runtime_moved": moved["preset"]} if moved is not None else {})})
+                                    **({"turn_refused": refusal} if refusal else {})})
                 holder = node["holder"]
                 node.update(phase="stopping", batch=None, fingerprint=None, sweep_batch=False)
                 threading.Thread(target=self._stop_node,
@@ -7643,11 +7523,7 @@ class Holder:
             verified = bool(ours and last.get("verified") and not short_range and recovery_covered
                             and end.get("turn_outcome") == "turn_completed")
             refusal = None if ours else self._node_turn_refusal(end)
-            # The runtime this node ran on: the move is decided from it, and
-            # the node is stopped under it, not under the runtime chosen next.
             binding = self._node_binding() if refusal else None
-            moved = (self._node_fallback(binding, binding["platform"], f"turn-refused:{refusal}")
-                     if refusal and binding is not None else None)
             attention = attention_fingerprint(body) if doc else None
             changed = (verified and attention is not None and attention != node.get("attention_sent")
                        and attention != self.host_attention_seen
@@ -7675,16 +7551,6 @@ class Holder:
                               if isinstance(ident, str) and isinstance(why, str))
             if (verified and not changed) or standing_return:
                 end["node_quiet"] = True
-            elif moved is not None:
-                # The batch is the next runtime's at the next boundary: its
-                # selection is restored and no failure is returned.
-                end["node_quiet"] = True
-                prior = node.get("sent_prior") or {}
-                for key in ("sent_through", "recovery_sent"):
-                    if prior.get(key) is None:
-                        node.pop(key, None)
-                    else:
-                        node[key] = prior[key]
             else:
                 end["host_owned"] = True
                 if changed:
@@ -7697,10 +7563,8 @@ class Holder:
                 elif ours:
                     detail = f"checkpoint partial: {named}" if named else "checkpoint partial"
                 elif refusal and binding is not None:
-                    tried = ", ".join((node.get("runtime") or {}).get("tried") or [])
-                    detail = (f"checkpoint missing; node turn refused ({refusal}); no eligible fallback "
-                              f"runtime (tried {tried}); {self._unhandled(sent)}; "
-                              "no node starts until the binding or recipe changes")
+                    detail = (f"checkpoint missing; node turn refused ({refusal}); "
+                              f"{self._unhandled(sent)}; reconcile the recorded preset")
                 else:
                     detail = "checkpoint missing"
                 end["reason"] = f"{end.get('reason')} maintenance batch {node['batch']} {detail}"
@@ -7712,18 +7576,17 @@ class Holder:
                                 "host_woken": bool(end.get("host_owned")),
                                 **({"attention_changed": True} if changed else {}),
                                 **({"missing_sources": missing} if missing else {}),
-                                **({"turn_refused": refusal} if refusal else {}),
-                                **({"runtime_moved": moved["preset"]} if moved is not None else {})})
-            if not verified and moved is None and not standing_return:
+                                **({"turn_refused": refusal} if refusal else {})})
+            if not verified and not standing_return:
                 self._maintenance_failure("checkpoint-partial" if ours else "checkpoint-missing", sent,
                                           recovery, wake=False,
                                           missing_sources=missing or None)
-            if refusal and moved is None and binding is not None:
+            if refusal and binding is not None:
                 # One failure is recorded, not retried (#324): a later start
                 # needs a changed binding or recipe from an authorized controller.
-                node["failed"] = {"binding": json.dumps({key: binding.get(key) for key in
-                                                         ("session", "recipe", "since")}, sort_keys=True),
-                                  "code": f"turn-refused:{refusal}"}
+                node["failed"] = self._node_failure(
+                    json.dumps({key: binding.get(key) for key in ("session", "recipe", "since")}, sort_keys=True),
+                    f"turn-refused:{refusal}")
             holder = node["holder"]
             node.update(phase="stopping", batch=None, fingerprint=None)
             threading.Thread(target=self._stop_node, args=(holder, None, binding, (sent, recovery)),
@@ -7825,14 +7688,33 @@ class Holder:
         return record if isinstance(record, dict) else None
 
     def _node_holder_alive(self, binding: dict[str, Any], holder: Any) -> bool:
-        # The process, not the record state: a holder that wrote "stopped"
-        # but still runs owns the session, and a fresh start is refused.
+        # Treat an absent, unreadable or replaced record as unknown, not proof
+        # that this exact holder is gone. Only its matching dead PID releases
+        # the slot; a stopped record whose process lives still owns it.
         record = self._node_record(binding)
-        return bool(record and record.get("holder_instance_id") == holder
-                    and isinstance(record.get("holder_pid"), int) and process_alive(record["holder_pid"]))
+        if (not record or record.get("holder_instance_id") != holder
+                or not isinstance(record.get("holder_pid"), int)
+                or isinstance(record.get("holder_pid"), bool) or record["holder_pid"] <= 0):
+            return True
+        return process_alive(record["holder_pid"])
 
-    def _start_node(self, binding: dict[str, Any], fingerprint: str) -> None:
-        recipe = binding["recipe"]
+    def _node_stop_confirmed(self, binding: dict[str, Any], holder: Any) -> bool:
+        recipe = binding.get("recipe") or {}
+        argv = recipe.get("argv") or []
+        if not isinstance(recipe.get("runner"), str) or "start" not in argv or not isinstance(holder, str):
+            return False
+        status = [*argv[:argv.index("start")], "status", "--repo", self.args.repo,
+                  "--session", binding["session"]]
+        code, receipt, _note = acp_paths.run_runner(recipe["runner"], status, NODE_STOP_CONFIRM_SECONDS,
+                                                   cwd=self.args.repo, env=self._node_runner_env(),
+                                                   stdin=subprocess.DEVNULL)
+        if code is None or not isinstance(receipt, dict):
+            return False
+        record = receipt.get("record") if isinstance(receipt.get("record"), dict) else {}
+        seen = receipt.get("holder_instance_id") or record.get("holder_instance_id")
+        return receipt.get("stopped") is True and receipt.get("residual_pids") == [] and seen == holder
+
+    def _node_runner_env(self) -> dict[str, str]:
         env = dict(os.environ)
         for key in (HEARTBEAT_HOST_ENV, HEARTBEAT_HOST_SOCKET_ENV, "KAOLA_ACP_CHILD_RECORD"):
             env.pop(key, None)
@@ -7842,28 +7724,19 @@ class Holder:
         # directly; the all-roots enumeration (`ps`, 3 s) refused a fresh
         # dsh node with record-root-mismatch whenever `ps` failed or timed out.
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_dir.parent.parent.parent)
+        return env
+
+    def _start_node(self, binding: dict[str, Any], fingerprint: str) -> None:
+        recipe = binding["recipe"]
+        env = self._node_runner_env()
         def run_runner(argv):
-            try:
-                run = subprocess.run([recipe["runner"], *argv], cwd=self.args.repo, env=env,
-                                     stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                                     timeout=NODE_START_TIMEOUT)
-                for line in reversed(run.stdout.splitlines()):
-                    try:
-                        value = json.loads(line)
-                        if isinstance(value, dict):
-                            return run.returncode, value, ""
-                    except ValueError:
-                        continue
-                return run.returncode, None, "unreadable"
-            except (OSError, subprocess.SubprocessError) as exc:
-                return None, None, str(exc)
+            return acp_paths.run_runner(recipe["runner"], argv, NODE_START_TIMEOUT,
+                                        cwd=self.args.repo, env=env, stdin=subprocess.DEVNULL)
 
         def reconcile_status(code, receipt, note):
             if code is None or not isinstance(receipt, dict):
                 return {"reason": "status-unreadable", "detail": note}
-            error = receipt.get("error")
-            if ((isinstance(error, dict) and error.get("code") == "no-session")
-                    or receipt.get("reason") == "no-session"):
+            if acp_paths.status_available(receipt):
                 return None
             return {"reason": "status-existing", "receipt": receipt}
 
@@ -7885,10 +7758,9 @@ class Holder:
                     self.events.append({"kind": "sideagent_node_adopted", "holder": holder,
                                         "session": binding["session"]})
                 else:
-                    self.node.update(phase="stopped", failed={"binding": fingerprint,
-                                                               "code": result["reason"]})
                     self.events.append({"kind": "sideagent_node_start_failed", "session": binding["session"],
                                         "receipt": result})
+                    self.node.update(phase="stopped", failed=self._node_failure(fingerprint, result["reason"]))
                     self._node_to_host(binding, f"sideagent status requires reconciliation: {result['reason']}")
             self._kick_worker_events()
             return
@@ -7905,7 +7777,7 @@ class Holder:
             # adopted only once its record is ready. A still-starting one is
             # waited for, bounded and outside the lock; one that never gets
             # there, or sits in an error state alive, is exact-stopped under
-            # its own runtime before the chain moves on, never twinned.
+            # its own runtime before another attempt, never twinned.
             own = self._own_live_node(binding)
             deadline = time.monotonic() + NODE_ADOPT_READY_SECONDS
             while (own.get("state") == "starting" and time.monotonic() < deadline
@@ -7947,8 +7819,7 @@ class Holder:
                             and error.get("identity") == "verified" and pid == error.get("holder_pid"))
                 # Issue #336: a Runner that fails after its holder came up (a
                 # timed-out or non-zero start) leaves this carrier's own live
-                # node; it is adopted like a verified session-exists refusal,
-                # never twinned by a start on the next runtime.
+                # node; it is adopted like a verified session-exists refusal.
                 if ((verified or ours)
                         and process_alive(pid)
                         and record.get("repo") == self.args.repo
@@ -7999,18 +7870,13 @@ class Holder:
                                                     "(the running Host loaded a different main Skill build); "
                                                     "reload kaola-project-runner in this Host, then the next "
                                                     "boundary retries the same start")
-                    elif self._node_fallback(binding, binding["platform"], f"start-failed:{code}") is not None:
-                        # Issue #324: the next eligible runtime starts at the
-                        # next boundary; this runtime is not tried again.
-                        self.node.update(phase="stopped")
                     else:
                         # One failure is recorded, not retried: a later start needs a
                         # changed binding or recipe from an authorized controller.
-                        self.node.update(phase="stopped", failed={"binding": fingerprint, "code": code})
+                        self.node.update(phase="stopped", failed=self._node_failure(fingerprint, code))
                         self._node_to_host(binding, f"sideagent node start failed (exit {code}); "
                                                     f"{self._unhandled(self._node_host_pending(self._lifecycle_state()))}; "
-                                                    "no eligible fallback runtime; "
-                                                    "no node starts until the binding or recipe changes")
+                                                    "reconcile the recorded preset and original receipt")
         self._kick_worker_events()
 
     def _own_live_node(self, binding: dict[str, Any], holder: str | None = None) -> dict[str, Any]:
@@ -8071,7 +7937,8 @@ class Holder:
         while alive and time.monotonic() < deadline:
             time.sleep(0.5)
             alive = self._node_holder_alive(binding, holder)
-        return alive, receipt
+        confirmed = receipt.get("stopped") is True and receipt.get("residual_pids") == []
+        return alive or not confirmed, receipt
 
     def _stop_node(self, holder: str, wait: float | None = None,
                    binding: dict[str, Any] | None = None,
@@ -8083,8 +7950,6 @@ class Holder:
         ``sweep`` marks a #348 sweep node: it never writes a
         maintenance-returned row, even when its stop is unconfirmed."""
         wait = NODE_STOP_CONFIRM_SECONDS if wait is None else wait
-        # Issue #324: a caller that just moved to a fallback runtime names the
-        # runtime this holder runs on.
         binding = binding or self._node_binding() or {}
         alive, receipt = self._exact_stop_holder(holder, binding, wait)
         confirmed = False

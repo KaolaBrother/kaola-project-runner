@@ -249,7 +249,8 @@ class StateProject(unittest.TestCase):
         carrier._lifecycle_state = lambda: self.doc()
         carrier._node_host_pending = lambda doc, **kwargs: through
         carrier._node_recovery_pending = lambda doc: None
-        carrier._sideagent_relay_target = lambda: {"holder_instance_id": caller["holder_instance_id"], "attention": None}
+        carrier._sideagent_relay_target = lambda: {"holder_instance_id": caller["holder_instance_id"],
+                                                     "acp_session_id": record["acp_session_id"], "attention": None}
         carrier._sweep_overdue = lambda doc: False
         carrier._node_prompt = lambda *args: "fixture prompt"
         carrier._relay_send = lambda target, prompt: {"outcome": "in_progress", "prompt_fingerprint": fingerprint}
@@ -1470,6 +1471,7 @@ class StubAgent:
         self.exit_signal = None
         self.stderr_pump = None
         self.malformed_lines = 0
+        self.unknown_updates = []
         self.handler_errors = 0
         self.pending_out: dict = {}
         self.sent: list[dict] = []
@@ -2885,6 +2887,7 @@ class MaintenanceCheckpoint(StateProject):
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "record.json").write_text(json.dumps({"holder_instance_id": holder, "platform": "zcode", "session": self.SESSION,
                                                            "repo": str(self.repo), "session_role": "sideagent",
+                                                           "acp_session_id": "native-" + holder,
                                                            "holder_pid": os.getppid(), "agent_pid": os.getpid(),
                                                            "agent_started": next(holder_module.start_epoch(started) for pid, _, _, started in holder_module.process_table() if pid == os.getpid()),
                                                            "agent_alive": True}), encoding="utf-8")
@@ -3123,6 +3126,7 @@ class MaintenanceCheckpoint(StateProject):
         alerts = ((self.doc()["state"].get("alerts") or {}).get("maintenance-returned") or {}).get("inputs") or {}
         (directory / "events.jsonl").write_text(json.dumps({"kind": "sideagent_node_batch", "batch": batch,
             "target_holder": holder, "host_holder": "host-recovery",
+            "target_acp_session_id": "native-" + holder,
             "host_revision_through": self.doc()["host_revision"] if through is None else through,
             "recovery_input": item, "recovery_alerts": alerts, "prompt_fingerprint": "native-fingerprint"}) + "\n")
         return env
@@ -3157,6 +3161,7 @@ class MaintenanceCheckpoint(StateProject):
         event = json.loads(event_path.read_text())
         before = self.file.read_bytes()
         for patch in ({"target_holder": "other"}, {"host_holder": "other"},
+                      {"target_acp_session_id": "copied-native-id"},
                       {"host_revision_through": through + 1}, {"prompt_fingerprint": "other"},
                       {"sweep": {"key": "fixture"}}):
             event_path.write_text(json.dumps({**event, **patch}) + "\n")
@@ -3626,6 +3631,14 @@ FAKE_NODE_RUNNER = textwrap.dedent("""\
         record = json.loads(path.read_text()) if path.exists() else {}
         if record.get("state") == "ready":
             print(json.dumps(record))
+        elif record.get("state") == "stopped":
+            try:
+                os.kill(record["holder_pid"], 0)
+                alive = True
+            except (OSError, KeyError):
+                alive = False
+            print(json.dumps({"error": {"code": "holder-unreachable"}} if alive else
+                             {"stopped": True, "residual_pids": [], "record": record}))
         else:
             print(json.dumps({"error": {"code": "no-session"}}))
         sys.exit(0)
@@ -3642,6 +3655,7 @@ FAKE_NODE_RUNNER = textwrap.dedent("""\
     holder = f"node-{n}"
     Path(os.environ["FAKE_NODE_RECORD"]).write_text(json.dumps({
         "session_role": "sideagent", "platform": "zcode", "session": "zcode-KT-sideagent", "repo": os.environ["FAKE_NODE_REPO"], "state": "ready",
+        "acp_session_id": f"native-node-{n}",
         "holder_instance_id": holder, "holder_pid": int(os.environ["FAKE_NODE_PID"]),
         "dispatcher": json.loads(os.environ.get("KAOLA_ACP_DISPATCHER") or "null"),
         "holder_features": ["heartbeat-state/2", "sideagent-relay/1", "sideagent-node/1"]}))
@@ -3697,7 +3711,8 @@ class FakeNode(FakeSideagent):
                         if not self.linger:
                             record["holder_pid"] = self.dead_pid
                         self.record.write_text(json.dumps(record))
-                    connection.sendall(json.dumps({"stopped": not self.ignore_stop}).encode() + b"\n")
+                    connection.sendall(json.dumps({"stopped": not self.ignore_stop,
+                                                   "residual_pids": []}).encode() + b"\n")
                     continue
                 fingerprint = f"sha256:{len(self.prompts) + 1}"
                 reply = ({"error": {"code": "prompt-refused"}} if self.refuse else
@@ -3943,6 +3958,9 @@ class HolderNodeMode(HolderFixture):
         self.prepare_recovery_host(); self.holder.turn["active"] = True
         self.holder._observe_compact_signal(self.compact_signal("first")); first = self.wait_registration()
         self.holder.turn["active"] = False; self.boundary()
+        self.wait_for(lambda: "compact_reload_delivered" in self.log_kinds(), "native Skill reload")
+        self.finish_host_turn()
+        self.boundary()
         self.wait_for(lambda: len(self.fake.prompts) == 1, "first sent batch")
         self.holder.turn["active"] = True
         self.holder._observe_compact_signal(self.compact_signal("second"))
@@ -3962,6 +3980,10 @@ class HolderNodeMode(HolderFixture):
         self.assertEqual(self.fake.stops[0]["params"]["expected_holder_instance_id"], "node-1")
         self.assertEqual(self.node_count(), 1)
         self.holder.turn["active"] = False; self.boundary()
+        self.wait_for(lambda: self.log_kinds().count("compact_reload_delivered") == 2,
+                      "second native Skill reload")
+        self.finish_host_turn()
+        self.boundary()
         self.wait_for(lambda: len(self.fake.prompts) == 2, "next recovery batch")
         self.assertEqual(self.holder.node["recovery_input"]["seq"], 2)
         self.assertEqual(self.holder._lifecycle_state()["host_revision"], 0)
@@ -3971,6 +3993,9 @@ class HolderNodeMode(HolderFixture):
         self.prepare_recovery_host(); self.holder.turn["active"] = True
         self.holder._observe_compact_signal(self.compact_signal()); item = self.wait_registration()
         self.holder.turn["active"] = False; self.boundary()
+        self.wait_for(lambda: "compact_reload_delivered" in self.log_kinds(), "native Skill reload")
+        self.finish_host_turn()
+        self.boundary()
         self.wait_for(lambda: len(self.fake.prompts) == 1, "sent batch")
         path = self.repo / ".kaola/heartbeat-prompt.json"
         doc = self.holder._lifecycle_state()
@@ -4236,14 +4261,28 @@ class HolderNodeMode(HolderFixture):
         self.assertEqual(self.node_count(), 1)
 
     def test_unreadable_status_does_not_start_a_node(self) -> None:
+        self.holder.session_role = "host"
         os.environ["FAKE_NODE_STATUS"] = "not-json"
         self.write_node_state()
         self.host_change(4)
         self.boundary()
-        self.wait_for(lambda: "sideagent_node_start_failed" in self.log_kinds(), "status failure")
+        self.wait_for(lambda: self.holder.node.get("failed") is not None, "status failure")
         self.assertEqual(self.node_count(), 0)
         self.assertEqual(self.fake.prompts, [])
         self.assertEqual(self.holder.node["failed"]["code"], "status-unreadable")
+        lifecycle = self.holder.op_state()["sideagent_lifecycle"]
+        self.assertEqual(lifecycle["state"], "NEEDS_ACTION")
+        self.assertEqual(lifecycle["reason"], "status-unreadable")
+        self.assertIn("events.jsonl#", lifecycle["evidence"])
+        self.assertIn("recover", lifecycle["next"])
+
+    def test_node_lifecycle_exposes_unbound_bound_and_executing(self) -> None:
+        self.holder.session_role = "host"
+        self.assertEqual(self.holder.op_state()["sideagent_lifecycle"]["state"], "UNBOUND")
+        self.write_node_state()
+        self.assertEqual(self.holder.op_state()["sideagent_lifecycle"]["state"], "BOUND")
+        self.first_node()
+        self.assertEqual(self.holder.op_state()["sideagent_lifecycle"]["state"], "EXECUTING")
 
     def test_node_and_ordinary_dispatch_use_the_same_status_start_sequence(self) -> None:
         calls = []
@@ -4414,6 +4453,62 @@ class HolderNodeMode(HolderFixture):
         self.assertEqual((len(self.fake.prompts), self.node_count()), (1, 1), "no resend, no restart")
         self.assertEqual(self.holder.pending_worker_events, [])
 
+    def test_recovery_request_rearms_failed_attempt_without_editing_binding(self) -> None:
+        self.prepare_recovery_host()
+        self.fake.refuse = True
+        self.host_change(4)
+        self.boundary()
+        self.wait_for(lambda: self.holder.node.get("failed") is not None, "failed admission")
+        self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "failed node stopped")
+        self.wait_for(lambda: len(self.agent.prompts()) == 1, "Host failure notice")
+        before = self.holder._lifecycle_state()["state"]["sideagent"]
+        self.fake.refuse = False
+        self.finish_host_turn()
+        receipt = self.holder._maintenance_tool(["--kind", "request", "--source", "host-recovery",
+                                                  "--evidence", "events#failed-admission"])
+        self.assertNotIn("error", receipt)
+        self.holder.turn["active"] = False
+        self.boundary()
+        self.wait_for(lambda: len(self.fake.prompts) == 2, "same binding recovery batch")
+        self.assertEqual(self.holder._lifecycle_state()["state"]["sideagent"], before)
+        self.assertEqual(self.node_count(), 2)
+
+    def test_one_recover_operation_rearms_the_recorded_binding(self) -> None:
+        self.holder.session_role = "host"
+        self.holder.write_record()
+        env = dict(os.environ)
+        env["KAOLA_ACP_RECORD_ROOT"] = str(self.records)
+        env["KAOLA_ACP_DISPATCHER"] = json.dumps(self.holder.dispatcher_identity())
+        path = self.repo / ".kaola" / "heartbeat-prompt.json"
+        code, out = run(["state", "init", "--file", str(path), "--writer", "host", "--source", "fixture",
+                         "--project", json.dumps({"code": "KT", "goal": "test"}),
+                         "--authorization", json.dumps({"grants": [WORKER_GRANT]})], env)
+        self.assertEqual(code, 0, out)
+        doc = json.loads(path.read_text())
+        binding = {"platform": "zcode", "session": "zcode-KT-sideagent", "preset": "zcode/default",
+                   "state": "active", "mode": "node", "source": "fixture", "since": "2026-10-22T00:00:00Z",
+                   "recipe": {"runner": str(self.runner), "argv": ["start", "--repo", str(self.repo),
+                               "--session", "zcode-KT-sideagent", "--role", "sideagent", "--tier", "default"]}}
+        doc["state"]["sideagent"] = binding
+        path.write_text(json.dumps(doc))
+        self.fake.refuse = True
+        self.boundary()
+        self.wait_for(lambda: self.holder.node.get("failed") is not None, "failed admission")
+        self.wait_for(lambda: "sideagent_node_stopped" in self.log_kinds(), "old node stopped")
+        self.wait_for(lambda: "sideagent_maintenance_failure_recorded" in self.log_kinds(), "failure recorded")
+        self.wait_for(lambda: len(self.agent.prompts()) == 1, "Host informed")
+        self.finish_host_turn()
+        self.fake.refuse = False
+        code, out = run(["state", "ensure-sideagent", "--file", str(path), "--repo", str(self.repo),
+                         "--recover-failed", "--evidence", "events#failed-admission"], env)
+        self.assertEqual((code, out.get("result")), (0, "recovered"), out)
+        self.assertEqual(out["sideagent"]["preset"], "zcode/default")
+        self.assertEqual(json.loads(path.read_text())["state"]["sideagent"]["recipe"], binding["recipe"])
+        self.holder.turn["active"] = False
+        self.boundary()
+        self.wait_for(lambda: len(self.fake.prompts) == 2, "recovery batch without a second operation")
+        self.assertEqual(self.node_count(), 2)
+
     def test_an_unconfirmed_stop_blocks_a_competing_node(self) -> None:
         self.write_node_state()
         self.fake.ignore_stop = True
@@ -4425,6 +4520,19 @@ class HolderNodeMode(HolderFixture):
         self.boundary()
         self.wait_still(0.3)
         self.assertEqual(self.node_count(), 1, "no second node starts")
+
+    def test_missing_record_for_unreachable_holder_does_not_release_slot(self) -> None:
+        self.write_node_state()
+        self.first_node()
+        (self.side_dir / "record.json").unlink()
+        self.boundary()
+        self.wait_still(0.3)
+        self.assertEqual(self.node_count(), 1)
+        self.assertEqual(self.holder.node["stop_unconfirmed"]["holder"], "node-1")
+        self.host_change(5)
+        self.boundary()
+        self.wait_still(0.3)
+        self.assertEqual(self.node_count(), 1, "unreachable is not confirmed death")
 
     def test_a_stopped_record_is_not_a_stopped_node_until_its_holder_is_gone(self) -> None:
         self.write_node_state()
@@ -4511,16 +4619,21 @@ class HolderNodeMode(HolderFixture):
                          ["node-1"], "the record naming this carrier as dispatcher finds the node")
         self.holder.node_start.join(5)
 
-    def test_a_resume_recipe_or_failed_start_is_not_retried(self) -> None:
+    def test_resume_recipe_uses_the_ordinary_start_path(self) -> None:
+        self.host_change(4)
         self.write_node_state(argv=["start", "--repo", str(self.repo), "--session", "zcode-KT-sideagent",
-                                    "--role", "sideagent", "--continue"], host_revision=2)
+                                    "--role", "sideagent", "--continue"], host_revision=4)
         self.boundary()
-        self.assertIn("sideagent_node_recipe_refused", self.log_kinds())
-        self.assertEqual(self.node_count(), 0)
+        self.wait_for(lambda: len(self.fake.prompts) == 1, "the ordinary start admits the batch")
+        argv = json.loads((Path(self.tmp.name) / "argv").read_text())
+        self.assertIn("--continue", argv)
+        self.assertNotIn("sideagent_node_recipe_refused", self.log_kinds())
+
+    def test_failed_start_is_not_blindly_retried(self) -> None:
+        self.write_node_state(host_revision=2)
         os.environ["FAKE_NODE_RECORD"] = str(Path(self.tmp.name) / "missing" / "record.json")
         self.host_change(4)
         self.boundary()
-        # The unusable recipe is record-only; a real failed start still wakes.
         self.wait_for(lambda: "sideagent_node_start_failed" in self.log_kinds(), "the failed start")
         self.boundary()
         self.wait_for(lambda: len(self.agent.prompts()) == 1, "the Host told of the failure")

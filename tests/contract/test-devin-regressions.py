@@ -393,7 +393,6 @@ class DevinSideagentOriginTests(unittest.TestCase):
         h.devin_origin_lock = threading.RLock()
         h.devin_origin_id = None
         h.devin_origin_failed = False
-        h.devin_prior_ids = set()
         h.devin_record_ids = set()
         h.events = SimpleNamespace(append=lambda event: h.event_rows.append(event))
         h.event_rows = []
@@ -467,13 +466,13 @@ class DevinSideagentOriginTests(unittest.TestCase):
                 result = h.initialize_agent()
                 self.assertEqual(result["error"]["code"], "sideagent-foreign-session")
                 self.assertIn(branch, result["error"]["diagnostic"]["branches"])
-                self.assertEqual(h.event_rows[-1], {"kind": "sideagent_origin_rejected", **result["error"]["diagnostic"]})
+                self.assertNotIn("sideagent_origin_rejected", [row.get("kind") for row in h.event_rows])
                 self.assertEqual(result["error"]["diagnostic"]["identity"], {
                     "new_matches_inventory": branch == "inventory_match",
                     "new_matches_record": False,
                     "all_pending_match_new": branch != "startup_stream_mismatch",
                 })
-                self.assertNotIn("foreign", str(h.event_rows[-1]))
+                self.assertNotIn("foreign", str(result["error"]["diagnostic"]))
                 self.assertEqual(h.delivered, [])
         h = self.holder(streamed=("fresh", "fresh"))
         self.assertEqual(h.initialize_agent()["acp_session_id"], "fresh")
@@ -505,7 +504,6 @@ class DevinSideagentOriginTests(unittest.TestCase):
 
     def test_other_seat_record_id_is_refused(self):
         h = self.holder(new_id="other-seat", streamed="other-seat")
-        h.devin_prior_ids.add("other-seat")
         h.devin_record_ids.add("other-seat")
         result = h.initialize_agent()
         self.assertEqual(result["error"]["code"], "sideagent-foreign-session")

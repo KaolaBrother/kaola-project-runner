@@ -147,10 +147,15 @@ class Fixture(unittest.TestCase):
 
     def failed_binding(self, session: str = "zcode-KT-sideagent-old") -> None:
         doc = self.doc()
+        runner = self.repo / "runner"
+        runner.write_text('#!/bin/sh\nprintf \'%s\\n\' \'{"error":{"code":"no-session"}}\'\n', encoding="utf-8")
+        runner.chmod(0o755)
         doc["state"]["sideagent"] = {"platform": "zcode", "session": session,
                                      "preset": "zcode/default", "state": "failed",
                                      "mode": "node", "source": "default-bind",
-                                     "since": "2026-10-22T00:00:00+00:00"}
+                                     "since": "2026-10-22T00:00:00+00:00",
+                                     "recipe": {"runner": str(runner), "argv": ["start", "--repo", str(self.repo),
+                                                "--session", session, "--role", "sideagent", "--tier", "default"]}}
         self.file.write_text(json.dumps(doc), encoding="utf-8")
 
     def stop_live(self, session: str = SEAT, holder: str = "h-1") -> None:
@@ -594,7 +599,7 @@ class RecoverFailedSideagent(Fixture):
         self.assertEqual(out["result"], "recovered")
         self.assertEqual(out["previous"]["session"], self.OLD)
         self.assertEqual(out["previous"]["state"], "failed")
-        self.assertEqual(out["sideagent"]["session"], "zcode-KT-sideagent")
+        self.assertEqual(out["sideagent"]["session"], self.OLD)
         self.assertEqual(out["sideagent"]["mode"], "node")
         self.assertIn("sweep", out)
         after = self.doc()
@@ -603,6 +608,8 @@ class RecoverFailedSideagent(Fixture):
                          before["state"]["maintenance"]["last_sweep"])
         self.assertEqual(after["state"]["sideagent"]["source"], "recover-failed")
         self.assertEqual(after["state"]["sideagent"]["state"], "active")
+        self.assertEqual(after["state"]["sideagent"]["recipe"], before["state"]["sideagent"]["recipe"])
+        self.assertEqual(after["state"]["maintenance"]["recovery_input"]["seq"], out["recovery_seq"])
 
     def test_a_hold_naming_sideagent_refuses(self) -> None:
         self.build()
@@ -612,11 +619,10 @@ class RecoverFailedSideagent(Fixture):
         self.file.write_text(json.dumps(doc), encoding="utf-8")
         code, out = self.ensure("--recover-failed", "--live", str(self.live),
                                 "--evidence", "owner confirmed", env=self.host_env())
-        self.assertEqual((code, out["reason"]), (2, "sideagent-held"), out)
-        self.assertEqual(out["held_by"], ["holds/h1"])
+        self.assertEqual((code, out["reason"]), (2, "preset-unavailable"), out)
         self.assertEqual(self.doc()["state"]["sideagent"]["state"], "failed")
 
-    def test_a_settled_decision_naming_the_old_session_refuses(self) -> None:
+    def test_a_settled_decision_naming_the_old_session_does_not_block(self) -> None:
         self.build()
         doc = self.doc()
         doc["state"]["decisions"]["d1"] = {"status": "settled", "owner": "host",
@@ -627,8 +633,7 @@ class RecoverFailedSideagent(Fixture):
         self.file.write_text(json.dumps(doc), encoding="utf-8")
         code, out = self.ensure("--recover-failed", "--live", str(self.live),
                                 "--evidence", "owner confirmed", env=self.host_env())
-        self.assertEqual((code, out["reason"]), (2, "sideagent-held"), out)
-        self.assertEqual(out["held_by"], ["decisions/d1"])
+        self.assertEqual((code, out["result"]), (0, "recovered"), out)
 
     def test_a_live_old_node_refuses(self) -> None:
         self.build()
@@ -638,20 +643,103 @@ class RecoverFailedSideagent(Fixture):
                                 "--evidence", "owner confirmed", env=self.host_env())
         self.assertEqual((code, out["reason"]), (2, "old-node-live"), out)
 
-    def test_recover_requires_a_failed_binding(self) -> None:
+    def test_recovery_uses_recorded_preset_even_with_a_higher_ranked_alternative(self) -> None:
+        self.build()
+        doc = self.doc()
+        doc["state"]["authorization"]["grants"].append({"id": "devin/default", "state": "granted", "count": 1})
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        code, out = self.ensure("--recover-failed", "--evidence", "events#failure", env=self.host_env())
+        self.assertEqual((code, out["result"]), (0, "recovered"), out)
+        self.assertEqual((out["sideagent"]["session"], out["sideagent"]["preset"]),
+                         (self.OLD, "zcode/default"))
+
+    def test_recovery_does_not_query_originating_issue_status(self) -> None:
+        self.build()
+        bin_dir = self.repo / "bin"
+        bin_dir.mkdir()
+        marker = self.repo / "forge-was-called"
+        gh = bin_dir / "gh"
+        gh.write_text(f"#!/bin/sh\ntouch '{marker}'\nexit 1\n", encoding="utf-8")
+        gh.chmod(0o755)
+        env = self.host_env()
+        env["PATH"] = f"{bin_dir}:{env['PATH']}"
+        code, out = self.ensure("--recover-failed", "--evidence", "closed-issue-421#original", env=env)
+        self.assertEqual((code, out["result"]), (0, "recovered"), out)
+        self.assertFalse(marker.exists(), "recovery does not depend on forge issue status")
+
+    def test_unavailable_recorded_preset_does_not_use_an_alternative(self) -> None:
+        self.build()
+        doc = self.doc()
+        doc["state"]["authorization"]["grants"] = [{"id": "devin/default", "state": "granted", "count": 1}]
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        before = self.file.read_bytes()
+        code, out = self.ensure("--recover-failed", "--evidence", "events#failure", env=self.host_env())
+        self.assertEqual((code, out["reason"]), (2, "preset-unavailable"), out)
+        self.assertEqual(self.file.read_bytes(), before)
+
+    def test_unreachable_or_missing_known_holder_never_counts_as_gone(self) -> None:
+        self.build()
+        runner = self.repo / "runner"
+        runner.write_text('#!/bin/sh\nprintf \'%s\\n\' \'{"error":{"code":"holder-unreachable"}}\'\n', encoding="utf-8")
+        before = self.file.read_bytes()
+        code, out = self.ensure("--recover-failed", "--evidence", "events#failure", env=self.host_env())
+        self.assertEqual((code, out["reason"]), (2, "holder-unconfirmed"), out)
+        self.assertEqual(self.file.read_bytes(), before)
+        runner.write_text('#!/bin/sh\nprintf \'%s\\n\' \'{"error":{"code":"no-session"}}\'\n', encoding="utf-8")
+        doc = self.doc()
+        doc["state"]["sideagent"]["holder_instance_id"] = "known-old-holder"
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        before = self.file.read_bytes()
+        code, out = self.ensure("--recover-failed", "--evidence", "events#failure", env=self.host_env())
+        self.assertEqual((code, out["reason"]), (2, "holder-unconfirmed"), out)
+        self.assertEqual(self.file.read_bytes(), before)
+
+    def test_clear_requires_current_disable_and_keeps_pending_work_across_rebind_check(self) -> None:
+        self.build()
+        doc = self.doc()
+        doc["state"]["maintenance"].update(recovery_seq=1, recovery_input={
+            "seq": 1, "kind": "request", "occurrence_id": None, "source": "turn-1",
+            "holder": "host-1", "at": "2026-10-22T00:00:00Z", "evidence": "events#pending"})
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        env = self.host_env()
+        code, out = self.ensure("--clear-failed", "--evidence", "events#failure", env=env)
+        self.assertEqual((code, out["reason"]), (2, "disable-instruction-required"), out)
+        (self.repo / ".kaola" / "delegator-heartbeat.json").write_text(json.dumps({
+            "schema": dispatch_module.RECORD.DELEGATOR_SCHEMA,
+            "authorization": {"sideagent": {"state": "disabled", "source": "owner#disable"}}}), encoding="utf-8")
+        code, out = self.ensure("--clear-failed", "--evidence", "events#failure", env=env)
+        self.assertEqual((code, out["result"]), (0, "cleared"), out)
+        self.assertEqual(self.doc()["state"]["maintenance"]["recovery_input"]["evidence"], "events#pending")
+        code, out = self.ensure(env=env)
+        self.assertEqual((code, out["result"]), (0, "disabled"), out)
+        self.assertIsNone(self.doc()["state"]["sideagent"])
+
+    def test_recovery_preserves_a_prior_unsettled_input(self) -> None:
+        self.build()
+        doc = self.doc()
+        doc["state"]["maintenance"].update(recovery_seq=1, recovery_input={
+            "seq": 1, "kind": "request", "occurrence_id": None, "source": "turn-1",
+            "holder": "host-1", "at": "2026-10-22T00:00:00Z", "evidence": "events#pending"})
+        self.file.write_text(json.dumps(doc), encoding="utf-8")
+        code, out = self.ensure("--recover-failed", "--evidence", "events#failure", env=self.host_env())
+        self.assertEqual((code, out["result"]), (0, "recovered"), out)
+        state = self.doc()["state"]
+        self.assertEqual(state["maintenance"]["recovery_input"]["seq"], 2)
+        self.assertEqual(state["alerts"]["maintenance-returned"]["inputs"]["recovery#1"]["evidence"], "events#pending")
+
+    def test_recover_requires_a_recorded_node_binding(self) -> None:
         self.init()
         self.write_live([])
         code, out = self.ensure("--recover-failed", "--live", str(self.live),
                                 "--evidence", "owner confirmed", env=self.host_env())
         self.assertEqual((code, out["reason"]), (2, "sideagent-not-failed"), out)
+        self.failed_binding()
         doc = self.doc()
-        doc["state"]["sideagent"] = {"platform": "zcode", "session": "zcode-KT-sideagent",
-                                     "preset": "zcode/default", "state": "active",
-                                     "mode": "node", "since": "2026-10-22T00:00:00+00:00"}
+        doc["state"]["sideagent"]["state"] = "active"
         self.file.write_text(json.dumps(doc), encoding="utf-8")
         code, out = self.ensure("--recover-failed", "--live", str(self.live),
                                 "--evidence", "owner confirmed", env=self.host_env())
-        self.assertEqual((code, out["reason"]), (2, "sideagent-not-failed"), out)
+        self.assertEqual((code, out["result"]), (0, "recovered"), out)
 
     def test_recover_requires_original_evidence_not_a_placeholder(self) -> None:
         self.build()

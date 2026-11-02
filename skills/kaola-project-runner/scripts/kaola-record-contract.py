@@ -208,7 +208,7 @@ DELEGATOR_TIMER_KEYS = frozenset({
     "platform", "native_timer_id", "state", "wake_mode", "webhook_routine_id",
 })
 DELEGATOR_WAKE_MODES = frozenset({"heartbeat", "webhook+heartbeat"})
-DELEGATOR_SIDEAGENT_KEYS = frozenset({"preset", "scope", "source"})
+DELEGATOR_SIDEAGENT_KEYS = frozenset({"preset", "scope", "source", "state"})
 GRANT_STATES = frozenset({"granted", "paused", "revoked", "excluded"})
 TASK_STAGES = frozenset({"todo", "doing", "review", "closeout", "done"})
 DELEGATOR_AUTH_KEYS = frozenset({
@@ -1635,6 +1635,8 @@ def delegator_authorization_blockers(auth: Any) -> list[dict[str, str]]:
     sideagent = auth.get("sideagent")
     if sideagent is not None:
         found.extend(_closed_strings("authorization.sideagent", sideagent, DELEGATOR_SIDEAGENT_KEYS))
+        if isinstance(sideagent, dict) and sideagent.get("state") not in (None, "enabled", "disabled"):
+            bad("authorization.sideagent.state", "enabled or disabled")
     for key in ("elite_grants", "expert_task_grants"):
         grants = auth.get(key)
         found.extend(duplicate_preset_blockers(grants, f"authorization.{key}", "preset_id"))

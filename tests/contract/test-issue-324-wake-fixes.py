@@ -343,7 +343,10 @@ for _name in dir(issue255.HolderNodeMode):
         setattr(CarrierFailure, _name, None)
 
 
-FAILING_RUNNER = "#!/bin/sh\nexit 1\n"
+FAILING_RUNNER = '''#!/bin/sh
+if [ "$1" = status ]; then echo '{"error":{"code":"no-session"}}'; exit 0; fi
+exit 1
+'''
 
 
 class NodeRuntimeFallback(issue255.HolderNodeMode):
@@ -402,68 +405,35 @@ class NodeRuntimeFallback(issue255.HolderNodeMode):
             return until()
         self.wait_for(step, what, timeout=20)
 
-    def test_failed_runtime_falls_back_through_the_eligible_worker_chain(self) -> None:
+    def test_failed_bound_runtime_never_selects_an_available_alternative(self) -> None:
         self.prepare_recovery_host()
         self.install("claude-code", FAILING_RUNNER)
-        self.install("dsh", FAILING_RUNNER)
         self.install("zcode", issue255.FAKE_NODE_RUNNER)
-        self.install("opencode", issue255.FAKE_NODE_RUNNER)  # installed but excluded
         self.serve("zcode")
         self.bind("claude-code", ["codex/luna", "devin/default", "dsh/commandcode", "opencode/default"])
-        self.drive(lambda: len(self.fake.prompts) == 1, "a batch on the first runtime that starts")
-        moves = self.events_of("sideagent_node_fallback")
-        self.assertEqual([(m["from"], m.get("to"), m["chain"]) for m in moves],
-                         [("claude-code", "dsh/default", ["dsh/default", "zcode/default"]),
-                          ("dsh", "zcode/default", ["zcode/default"])],
-                         "granted Worker presets by id; a failed runtime is not retried")
-        self.assertEqual([row["session"] for row in self.events_of("sideagent_node_start_failed")],
-                         [self.SESSION, self.SESSION])
-        argv = json.loads((Path(self.tmp.name) / "argv").read_text())
-        self.assertEqual(argv, ["start", "--repo", str(self.repo), "--session", self.SESSION,
-                                "--role", "sideagent", "--tier", "default"])
-        self.assertEqual(self.node_count(), 1, "the excluded opencode Runner never ran")
-        self.assertEqual([row for row in self.holder.pending_worker_events if row.get("kind") == "node"], [],
-                         "a move to the next runtime starts no Host turn")
-        self.assertEqual(self.events_of("sideagent_maintenance_failure_recorded"), [])
-        self.assertIn("host revision 1..4", self.fake.prompts[0]["params"]["text"])
-        self.holder._reclaim_node()
-
-    def test_exhausted_chain_fails_once_and_is_not_requeued(self) -> None:
-        self.prepare_recovery_host()
-        self.install("zcode", FAILING_RUNNER)
-        self.install("claude-code", FAILING_RUNNER)
-        self.install("dsh", issue255.FAKE_NODE_RUNNER)  # installed but excluded
-        excluded = ["codex/luna", "devin/default", "dsh/default", "dsh/commandcode", "opencode/default"]
-        self.bind("zcode", excluded)
-        self.drive(lambda: self.holder.node.get("failed") is not None, "the exhausted chain")
-        self.wait_for(lambda: len(self.agent.prompts()) == 1, "the Host told once")
-        self.assertIn("no eligible fallback runtime", self.agent.prompts()[0])
-        moves = self.events_of("sideagent_node_fallback")
-        self.assertEqual([(m["from"], m.get("to"), m.get("exhausted")) for m in moves],
-                         [("zcode", "claude-code/haiku", None), ("claude-code", None, True)])
+        self.drive(lambda: self.holder.node.get("failed") is not None, "bound start failure")
+        self.wait_for(lambda: len(self.agent.prompts()) == 1, "Host informed")
+        self.assertEqual(len(self.events_of("sideagent_node_start_failed")), 1)
+        self.assertEqual(self.events_of("sideagent_node_fallback"), [])
+        self.assertEqual(self.node_count(), 0, "the available alternate Runner did not start")
+        self.assertEqual(self.fake.prompts, [])
+        self.assertEqual(self.holder._lifecycle_state()["state"]["sideagent"]["platform"], "claude-code")
         self.finish_host_turn()
-        for revision in (5, 6, 7):
-            self.bind("zcode", excluded, revision)
-            # The binding is the same; only Host business changed.
-            self.holder.turn["active"] = False
-            self.boundary()
-        time.sleep(0.5)
-        self.assertEqual(len(self.events_of("sideagent_node_start_failed")), 2, "no runtime is retried")
-        self.assertEqual(len(self.events_of("sideagent_node_fallback")), 2)
-        self.assertEqual(len(self.agent.prompts()), 1, "no Host turn per later write")
-        self.assertEqual(self.node_count(), 0, "the excluded dsh Runner never ran")
+        self.holder.turn["active"] = False
+        self.boundary()
+        self.wait_still(0.3)
+        self.assertEqual(len(self.events_of("sideagent_node_start_failed")), 1)
 
-    def test_missing_bound_runner_moves_to_the_next_runtime(self) -> None:
+    def test_missing_bound_runner_never_selects_an_available_alternative(self) -> None:
         self.prepare_recovery_host()
         self.install("claude-code", issue255.FAKE_NODE_RUNNER)
         self.serve("claude-code")
         self.bind("zcode", ["codex/luna", "devin/default", "dsh/default", "dsh/commandcode", "opencode/default"])
-        self.drive(lambda: len(self.fake.prompts) == 1, "a batch on the installed runtime")
-        self.assertIn("sideagent_node_recipe_refused", self.log_kinds())
-        self.assertEqual([(m["from"], m.get("to")) for m in self.events_of("sideagent_node_fallback")],
-                         [("zcode", "claude-code/haiku")])
-        self.assertEqual(json.loads((Path(self.tmp.name) / "argv").read_text())[-2:], ["--tier", "haiku"])
-        self.holder._reclaim_node()
+        self.drive(lambda: "sideagent_node_recipe_refused" in self.log_kinds(), "missing bound Runner")
+        self.assertEqual(self.events_of("sideagent_node_fallback"), [])
+        self.assertEqual(self.node_count(), 0)
+        self.assertEqual(self.fake.prompts, [])
+        self.assertEqual(self.holder._lifecycle_state()["state"]["sideagent"]["platform"], "zcode")
 
 
 for _name in dir(issue255.HolderNodeMode):

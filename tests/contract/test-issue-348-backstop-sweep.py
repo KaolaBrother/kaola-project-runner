@@ -201,8 +201,15 @@ class SweepTool(unittest.TestCase):
         directory.mkdir(parents=True, exist_ok=True)
         return directory
 
-    @staticmethod
-    def _write_record(directory: Path, record: dict) -> None:
+    def _write_record(self, directory: Path, record: dict) -> None:
+        if record.get("session_role") == "sideagent":
+            record = {**record, "platform": directory.parent.parent.name, "session": directory.parent.name,
+                      "acp_session_id": "native-node-1", "last_prompt": {"fingerprint": "fp-sweep"}}
+            if self.file.exists():
+                doc = json.loads(self.file.read_text())
+                doc["state"]["sideagent"] = {"platform": record["platform"], "session": record["session"],
+                                               "state": "active", "mode": "node"}
+                self.file.write_text(json.dumps(doc))
         (directory / "record.json").write_text(json.dumps(record), encoding="utf-8")
 
     def set_rows(self, rows: list[dict], status: dict | None = None) -> None:
@@ -228,9 +235,19 @@ class SweepTool(unittest.TestCase):
         return env
 
     def sweep(self, *argv: str, env: dict | None = None) -> tuple[int, dict]:
+        chosen_env = env or self.env()
+        caller = json.loads(chosen_env.get("KAOLA_ACP_DISPATCHER") or "null")
+        if isinstance(caller, dict) and caller.get("session") == "zcode-KT-sideagent":
+            path = self._record_dir("zcode", caller["session"]) / "record.json"
+            if path.exists():
+                node = json.loads(path.read_text())
+                node.update(holder_pid=os.getppid(), agent_pid=os.getpid(), agent_alive=True,
+                            agent_started=next(holder_module.start_epoch(started) for pid, _, _, started
+                                               in holder_module.process_table() if pid == os.getpid()))
+                path.write_text(json.dumps(node))
         proc = subprocess.run([sys.executable, str(SCRIPT), "sweep", "--repo", str(self.repo),
                                "--skills-root", str(self.skills), *argv],
-                              capture_output=True, text=True, env=env or self.env())
+                              capture_output=True, text=True, env=chosen_env)
         try:
             return proc.returncode, json.loads(proc.stdout)
         except ValueError as exc:
@@ -475,6 +492,7 @@ class SweepTool(unittest.TestCase):
         log = self.host_dir / "events.jsonl"
         log.write_text(json.dumps({"kind": "sideagent_node_batch", "batch": batch,
                                    "target_holder": "node-1", "host_holder": "host-1",
+                                   "target_acp_session_id": "native-node-1", "prompt_fingerprint": "fp-sweep",
                                    "host_revision_through": 0,
                                    "sweep": {"key": plan["key"], "candidates": ids,
                                              "reason": "interval"}}) + "\n",
@@ -604,6 +622,7 @@ class SweepTool(unittest.TestCase):
         (self.host_dir / "events.jsonl").write_text(
             json.dumps({"kind": "sideagent_node_batch", "batch": batch,
                         "target_holder": "node-1", "host_holder": "host-1",
+                                   "target_acp_session_id": "native-node-1", "prompt_fingerprint": "fp-sweep",
                         "host_revision_through": 0,
                         "sweep": {"key": "k353", "candidates": ids, "reason": "interval",
                                   "kept": [kept]}}) + "\n",
@@ -835,6 +854,7 @@ class SweepTool(unittest.TestCase):
         (self.host_dir / "events.jsonl").write_text(
             json.dumps({"kind": "sideagent_node_batch", "batch": batch,
                         "target_holder": "node-1", "host_holder": "host-1",
+                                   "target_acp_session_id": "native-node-1", "prompt_fingerprint": "fp-sweep",
                         "host_revision_through": 0,
                         "sweep": {"key": plan["key"], "candidates": ids,
                                   "reason": "interval"}}) + "\n",
@@ -1142,10 +1162,10 @@ class SweepCarrier(issue255.HolderFixture):
 
     def checkpoint(self, batch: str, holder: str, through: int) -> None:
         self.write_node_state({"last_checkpoint": {
-            "batch": batch, "node": {"holder_instance_id": holder},
+            "batch": batch, "node": {"holder_instance_id": holder, "session": "zcode-KT-sideagent"},
             "host_revision": {"from": getattr(self, "handled", 0), "through": through,
                               "current": through}, "verified": True},
-            "handled_host_revision": through})
+            "handled_host_revision": through}, host_revision=through)
         self.handled = through
 
     def node_env(self, holder: str = "node-1") -> dict[str, str]:
@@ -1158,6 +1178,12 @@ class SweepCarrier(issue255.HolderFixture):
         return env
 
     def apply_as_node(self, batch: str) -> dict:
+        path = self.side_dir / "record.json"
+        node = json.loads(path.read_text())
+        node.update(holder_pid=os.getppid(), agent_pid=os.getpid(), agent_alive=True,
+                    agent_started=next(holder_module.start_epoch(started) for pid, _, _, started
+                                       in holder_module.process_table() if pid == os.getpid()))
+        path.write_text(json.dumps(node))
         proc = subprocess.run([sys.executable, str(SCRIPT), "sweep", "--apply", "--batch", batch,
                                "--repo", str(self.repo),
                                "--file", str(self.repo / ".kaola" / "heartbeat-prompt.json")],
@@ -1190,6 +1216,16 @@ class SweepCarrier(issue255.HolderFixture):
             time.sleep(0.1)
         self.fail(f"timed out waiting for {what}")
 
+    def settle_empty_sweep(self) -> None:
+        self.drive(lambda: bool(self.sweep_events("sideagent_node_batch")), "empty sweep batch")
+        event = self.sweep_events("sideagent_node_batch")[-1]
+        self.assertEqual(event["sweep"]["candidates"], [])
+        receipt = self.apply_as_node(event["batch"])
+        self.assertIn(receipt["result"], ("nothing", "swept"), receipt)
+        self.end_node_turn()
+        self.drive(lambda: bool(self.sweep_events("sideagent_sweep_settled")), "empty sweep settlement")
+        self.wait_for(lambda: self.holder.node.get("phase") == "stopped", "node exact-stopped")
+
     def test_not_due_spends_nothing(self) -> None:
         self.write_sweep_state({"last_sweep": self.last_sweep(),
                                 "handled_host_revision": 0})
@@ -1201,22 +1237,22 @@ class SweepCarrier(issue255.HolderFixture):
         self.assertEqual(self.holder.pending_worker_events, [])
         self.assertNotIn("sweep", self.holder.node)
 
-    def test_due_empty_records_without_a_node(self) -> None:
+    def test_due_empty_uses_a_node_and_typed_sweep_receipt(self) -> None:
         self.write_sweep_state({"handled_host_revision": 0})
-        self.drive(lambda: bool(self.sweep_events("sideagent_sweep_empty")), "empty sweep receipt")
+        self.settle_empty_sweep()
         doc = self.holder._lifecycle_state()
         last = doc["state"]["maintenance"]["last_sweep"]
         self.assertTrue(last["at"])
-        self.assertIsNone(last["batch"])
+        self.assertTrue(last["batch"].startswith("s-"))
         self.assertEqual(last["accepted_revision"],
                          self.holder.runner_identity["accepted_revision"])
         self.assertEqual(last["head"], self.head())
-        self.assertEqual(self.node_count(), 0)
+        self.assertEqual(self.node_count(), 1)
         self.assertEqual(self.holder.pending_worker_events, [])
         self.assertEqual(doc.get("host_revision"), 0)
         # The fresh due mark makes the next pass quiet.
         self.boundary()
-        self.assertEqual(len(self.sweep_events("sideagent_sweep_empty")), 1)
+        self.assertEqual(len(self.sweep_events("sideagent_sweep_settled")), 1)
 
     def test_due_candidates_send_exactly_one_sweep_batch(self) -> None:
         self.write_sweep_state({"handled_host_revision": 0})
@@ -1275,14 +1311,14 @@ class SweepCarrier(issue255.HolderFixture):
     def test_head_move_is_due_once(self) -> None:
         last = self.last_sweep(head="0" * 40)
         self.write_sweep_state({"last_sweep": last, "handled_host_revision": 0})
-        self.drive(lambda: bool(self.sweep_events("sideagent_sweep_empty")), "merge-due sweep")
+        self.settle_empty_sweep()
         doc = self.holder._lifecycle_state()
         self.assertEqual(doc["state"]["maintenance"]["last_sweep"]["head"], self.head())
         for _ in range(2):
             self.boundary()
-        self.assertEqual(len(self.sweep_events("sideagent_sweep_empty")), 1,
+        self.assertEqual(len(self.sweep_events("sideagent_sweep_settled")), 1,
                          "the recorded head is handled; not due again")
-        self.assertEqual(self.node_count(), 0)
+        self.assertEqual(self.node_count(), 1)
 
     def test_recorded_empty_moves_the_due_mark_once(self) -> None:
         """An unchanged kept set still moves last_sweep.at: the next pass is
@@ -1302,31 +1338,25 @@ class SweepCarrier(issue255.HolderFixture):
                                  "next": "Host: reconcile the session's original holder record"}}}
         path = self.repo / ".kaola" / "heartbeat-prompt.json"
         path.write_text(json.dumps(doc))
-        self.drive(lambda: bool(self.sweep_events("sideagent_sweep_empty")), "empty sweep")
+        self.settle_empty_sweep()
         last = self.holder._lifecycle_state()["state"]["maintenance"]["last_sweep"]
         self.assertNotEqual(last["at"], old_at, "the due mark moved")
         for _ in range(4):
             self.boundary()
-        self.assertEqual(len(self.sweep_events("sideagent_sweep_empty")), 1,
+        self.assertEqual(len(self.sweep_events("sideagent_sweep_settled")), 1,
                          "one scan across many ticks, not one per tick")
-        self.assertEqual(self.node_count(), 0)
+        self.assertEqual(self.node_count(), 1)
         self.assertEqual(self.holder.pending_worker_events, [])
 
-    def test_a_failed_record_empty_is_a_failed_scan_not_an_empty_one(self) -> None:
+    def test_sweep_admission_failure_preserves_accounting_and_pending_work(self) -> None:
         self.write_sweep_state({"handled_host_revision": 0})
-        # The binding stays usable; only the tool's state write can fail.
-        os.chmod(self.repo / ".kaola", 0o555)
-        try:
-            self.drive(lambda: bool(self.sweep_events("sideagent_sweep_scan_failed")),
-                       "the failed scan")
-        finally:
-            os.chmod(self.repo / ".kaola", 0o755)
-        self.assertEqual(self.sweep_events("sideagent_sweep_empty"), [])
-        for _ in range(3):
-            self.boundary()
-        self.assertEqual(len(self.sweep_events("sideagent_sweep_scan_failed")), 1,
-                         "the failed attempt cools down; no rescan")
-        self.assertEqual(self.node_count(), 0)
+        self.fake.refuse = True
+        self.drive(lambda: bool(self.sweep_events("sideagent_sweep_returned")), "unadmitted sweep")
+        maintenance = self.holder._lifecycle_state()["state"]["maintenance"]
+        self.assertNotIn("last_sweep", maintenance)
+        self.assertEqual(maintenance["handled_host_revision"], 0)
+        self.assertNotIn("acked_host_revision", maintenance)
+        self.assertEqual(self.holder.node["sweep"]["phase"], "queued")
 
     def test_a_fully_vanished_plan_still_settles_verified(self) -> None:
         self.write_sweep_state({"handled_host_revision": 0})

@@ -432,42 +432,11 @@ class WorkerGrants(unittest.TestCase):
         self.assertEqual(rows["i4"]["status"], "not-run")
         self.assertEqual(rows["i4"]["reason"], "count")
 
-    def test_sideagent_chain_uses_only_granted_workers_and_fails_once(self) -> None:
+    def test_sideagent_holder_has_no_preset_reselection_chain(self) -> None:
         holder = load_holder()
-        self.write_host()
-        self.write_delegator({"dispatch_enabled": True})
-        carrier = holder.Holder.__new__(holder.Holder)
-        carrier.args = argparse.Namespace(repo=str(self.repo))
-        carrier.node = {}
-        carrier.events = []
-        binding = {
-            "platform": "zcode",
-            "session": "side-346",
-            "recipe": {
-                "runner": "/bin/echo",
-                "argv": ["zcode", "start", "--repo", str(self.repo), "--session", "side-346",
-                         "--role", "sideagent"],
-            },
-        }
-        self.assertIsNone(carrier._node_fallback(binding, "zcode", "start-failed"))
-        self.assertEqual(len(carrier.events), 1)
-        self.assertTrue(carrier.events[0]["exhausted"])
-        self.assertEqual(carrier.events[0]["chain"], [])
-        self.assertNotIn("to", carrier.events[0])
-
-        self.write_delegator({"worker_grants": [{
-            "preset_ids": ["opencode/default"], "count": 1, "state": "granted",
-        }]})
-        carrier.events.clear()
-        carrier.node = {}
-        chain = carrier._node_chain(binding, ["zcode"])
-        self.assertEqual([item["preset"] for item in chain], ["opencode/default"])
-        moved = carrier._node_fallback(binding, "zcode", "start-failed")
-        self.assertIsNotNone(moved)
-        self.assertEqual(moved["platform"], "opencode")
-        self.assertEqual(carrier.events[-1]["to"], "opencode/default")
-        self.assertEqual(carrier.events[-1]["chain"], ["opencode/default"])
-        self.assertNotIn("zcode/default", carrier.events[-1]["chain"])
+        self.assertFalse(hasattr(holder.Holder, "_node_chain"))
+        self.assertFalse(hasattr(holder.Holder, "_node_fallback"))
+        self.assertFalse(hasattr(holder.Holder, "_node_override"))
 
 
 if __name__ == "__main__":

@@ -38,6 +38,43 @@ def status_then_start(read_status, decide, start):
     return True, start()
 
 
+def status_available(receipt):
+    """The Runner proved no session, or a stopped session with no residuals."""
+    if not isinstance(receipt, dict):
+        return False
+    error = receipt.get("error")
+    return ((isinstance(error, dict) and error.get("code") == "no-session")
+            or receipt.get("reason") == "no-session"
+            or (receipt.get("stopped") is True and receipt.get("residual_pids") == []))
+
+
+def run_runner(script, argv, timeout, *, cwd=None, env=None, stdin=None):
+    """Run a Runner argv and return its JSON receipt without a shell."""
+    try:
+        proc = subprocess.run([str(script), *argv], cwd=cwd, env=env, stdin=stdin,
+                              capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return None, None, "timeout"
+    except OSError as exc:
+        return None, None, str(exc)
+    receipt = None
+    for line in reversed(proc.stdout.splitlines()):
+        try:
+            value = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(value, dict):
+            receipt = value
+            break
+    if receipt is None:
+        try:
+            value = json.loads(proc.stdout)
+            receipt = value if isinstance(value, dict) else None
+        except ValueError:
+            pass
+    return proc.returncode, receipt, (proc.stderr or "")[:240]
+
+
 def check_record_root(root: Path) -> None:
     """Read-only check; legacy discovery never calls this write-target guard."""
     try:
