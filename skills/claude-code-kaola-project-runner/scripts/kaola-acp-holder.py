@@ -403,22 +403,9 @@ CLIENT_MESSAGE_ID_LEDGER_MAX = 64
 # batch from the binding's exact Runner argv (never a shell string), and
 # exact-stops it after its turn end. Bounds on that one start and stop only.
 NODE_START_TIMEOUT = 180.0
-# Issue #346: the maintenance chain is granted Worker presets in id order.
-# zcode/default is not a privileged first choice and is not a default grant.
-NODE_DEFAULT_PRESET = "zcode/default"
-
-
-def automatic_worker_barred(row: dict[str, Any]) -> bool:
-    """Issue #350: a computer-use-only role is not an automatic Worker choice.
-
-    The mark is a catalog role, not a preset name and not an authorization
-    decision. A missing or empty roles list keeps the preset selectable.
-    """
-    roles = row.get("roles") if isinstance(row, dict) else None
-    return isinstance(roles, list) and "computer-use-only" in roles
 NODE_STOP_CONFIRM_SECONDS = 30.0
 # Issue #336: how long a carrier waits for its own still-starting node holder
-# (the Runner gave up first) before it exact-stops it and moves on.
+# (the Runner gave up first) before it exact-stops it.
 NODE_ADOPT_READY_SECONDS = 60.0
 # Issue #437: after a main-skill-build-skew start refusal the carrier waits at
 # least this long before retrying the same start, so a live Host that reloads
@@ -1253,6 +1240,45 @@ def bound_provider_message(text: object) -> str:
     return cleaned[:PROVIDER_ERROR_MESSAGE_MAX]
 
 
+def bounded_admission_receipt(receipt: Any) -> dict[str, Any]:
+    """Keep actionable admission facts, including diagnostics from older holders."""
+    if not isinstance(receipt, dict):
+        return {"reason": "receipt-unreadable"}
+    result: dict[str, Any] = {}
+    for key in ("result", "reason", "mutation_status", "outcome", "state", "holder_instance_id"):
+        value = receipt.get(key)
+        if isinstance(value, str):
+            result[key] = value[:128]
+    error = receipt.get("error")
+    if isinstance(error, dict):
+        code = error.get("code")
+        info: dict[str, Any] = {"code": str(code)[:128]} if code is not None else {}
+        message = error.get("message")
+        if isinstance(message, str):
+            info["message"] = bound_provider_message(message)
+        diagnostic = error.get("diagnostic")
+        if not isinstance(diagnostic, dict) and isinstance(message, dict):
+            diagnostic = message.get("diagnostic")
+        if isinstance(diagnostic, dict):
+            allowed = {"missing_new_id", "inventory_match", "record_match",
+                       "startup_stream_mismatch", "post_start_stream_mismatch"}
+            branches = diagnostic.get("branches")
+            clean: dict[str, Any] = {"branches": [x for x in branches if isinstance(x, str) and x in allowed][:5]
+                                     if isinstance(branches, list) else []}
+            count = diagnostic.get("pending_count")
+            if isinstance(count, int) and not isinstance(count, bool) and count >= 0:
+                clean["pending_count"] = min(count, 100)
+                clean["pending_count_capped"] = bool(diagnostic.get("pending_count_capped")) or count > 100
+            identity = diagnostic.get("identity")
+            if isinstance(identity, dict):
+                clean["identity"] = {key: identity[key] for key in
+                    ("new_matches_inventory", "new_matches_record", "all_pending_match_new")
+                    if isinstance(identity.get(key), bool)}
+            info["diagnostic"] = clean
+        result["error"] = info
+    return result
+
+
 def provider_http_status(message: str, details: object) -> int | None:
     if isinstance(details, dict):
         raw = details.get("statusCode")
@@ -1680,11 +1706,6 @@ class AgentConnection:
     def spawn(self, command: str, cwd: str, env: dict[str, str] | None = None) -> None:
         argv = shlex.split(command)
         env = dict(os.environ if env is None else env)
-        if (getattr(self.holder.args, "platform", None) == "devin"
-                and getattr(self.holder, "session_role", None) == "sideagent"):
-            # Devin's DB is normally global to the user. Keep the Sideagent
-            # inventory in this seat's already-private Runner record directory.
-            env["DEVIN_SESSIONS_DIR"] = str(self.holder.record_dir / "devin-sessions")
         # Issue #373: the holder exports tier A's entry environment to its own
         # agent. A guard inherited from some outer shell would silence every
         # nested tool shell, so it is always dropped here, and the user's own
@@ -2941,21 +2962,11 @@ class Holder:
         acp_paths.prepare_record_directory(self.record_dir, root)
         self.events = EventLog(self.record_dir / "events.jsonl")
         self.record_path = self.record_dir / "record.json"
-        # Snapshot prior records before this holder replaces its own record.
-        self.devin_record_ids: set[str] = set()
-        self.devin_origin_lock = threading.RLock()
-        self.devin_origin_id: str | None = None
-        self.devin_origin_failed = False
-        self.devin_origin_inventory_error: str | None = None
-        self.devin_pending_updates: list[dict[str, Any]] = []
-        if args.platform == "devin" and getattr(args, "session_role", None) == "sideagent":
-            try:
-                for path in acp_paths.record_paths("devin/*/*/record.json", root, all_roots=True):
-                    prior = acp_paths.read_record(path.parent) or {}
-                    if isinstance(prior.get("acp_session_id"), str):
-                        self.devin_record_ids.add(prior["acp_session_id"])
-            except acp_paths.RecordRootMismatch as exc:
-                self.devin_origin_inventory_error = str(exc)
+        # Observation only: the transport remains identical for every role.
+        # A maintenance checkpoint later joins the actual stream identity.
+        self.stream_identity_lock = threading.Lock()
+        self.stream_session_ids: set[str] = set()
+        self.stream_identity_overflow = False
         self.socket_path = Path(args.socket) if args.socket else self.record_dir / "holder.sock"
         self.agent = AgentConnection(self)
         self.listener: socket.socket | None = None
@@ -3277,6 +3288,7 @@ class Holder:
                                    for pgid, members in sorted(self.agent_child_groups.items())},
             "agent_alive": bool(self.agent.proc and not self.agent.exited.is_set()),
             "acp_session_id": self.acp_session_id,
+            "stream_identity": self._stream_identity(),
             "session_meta": self.session_meta,
             "initial_config_options": self.initial_config_options,
             "protocol_version": self.protocol_version,
@@ -3335,14 +3347,6 @@ class Holder:
 
     def initialize_agent(self, resume: str | None = None, use_continue: bool = False,
                          list_supported: bool = False) -> dict[str, Any]:
-        if (self.args.platform == "devin" and self.session_role == "sideagent"
-                and (resume is not None or use_continue)):
-            return {"error": {"code": "sideagent-fresh-session-required",
-                              "message": "Devin sideagent cannot resume or continue a session"}}
-        if (self.args.platform == "devin" and self.session_role == "sideagent"
-                and getattr(self, "devin_origin_inventory_error", None)):
-            return {"error": {"code": "sideagent-origin-unverifiable",
-                              "message": self.devin_origin_inventory_error}}
         command = self.args.command
         try:
             self.agent.spawn(command, self.args.repo)
@@ -3392,16 +3396,6 @@ class Holder:
                 }
             }
         session_caps = self.capabilities.get("sessionCapabilities") or {}
-        fresh_devin = self.args.platform == "devin" and self.session_role == "sideagent"
-        if fresh_devin:
-            if not capability_supported(session_caps, "list"):
-                return {"error": {"code": "sideagent-origin-unverifiable", "message": "Devin cannot list existing sessions"}}
-            sessions, error = self._list_repo_sessions(all_sessions=True)
-            if error:
-                return {"error": {"code": "sideagent-origin-unverifiable", "message": error}}
-            if any(not isinstance(row.get("sessionId"), str) for row in sessions):
-                return {"error": {"code": "sideagent-origin-unverifiable", "message": "invalid session inventory identity"}}
-            self.devin_inventory_ids = {row["sessionId"] for row in sessions}
         if resume is not None:
             return self._request_resume(resume)
         elif use_continue:
@@ -3447,54 +3441,19 @@ class Holder:
             self.session_meta = response.get("result") or {}
             self.initial_config_options = self.session_meta.get("configOptions")
             sid = self.session_meta.get("sessionId")
-            if fresh_devin:
-                with self.devin_origin_lock:
-                    foreign = any(m.get("params", {}).get("sessionId") != sid
-                                  for m in self.devin_pending_updates)
-                    if (not isinstance(sid, str) or not sid or sid in self.devin_inventory_ids
-                            or sid in self.devin_record_ids or foreign):
-                        branches = []
-                        if not isinstance(sid, str) or not sid:
-                            branches.append("missing_new_id")
-                        if isinstance(sid, str) and sid in getattr(self, "devin_inventory_ids", set()):
-                            branches.append("inventory_match")
-                        if isinstance(sid, str) and sid in getattr(self, "devin_record_ids", set()):
-                            branches.append("record_match")
-                        if foreign:
-                            branches.append("startup_stream_mismatch")
-                        diagnostic = {"branches": branches, "pending_count": min(len(self.devin_pending_updates), 100),
-                                      "pending_count_capped": len(self.devin_pending_updates) > 100,
-                                      "identity": {"new_matches_inventory": "inventory_match" in branches,
-                                                   "new_matches_record": "record_match" in branches,
-                                                   "all_pending_match_new": not foreign}}
-                        self.devin_origin_failed = True
-                        self.devin_pending_updates.clear()
-                        self.acp_session_id = None
-                        return {"error": {"code": "sideagent-foreign-session", "message": "session/new identity is missing, pre-existing, or differs from the session stream", "diagnostic": diagnostic}}
-                    self.devin_origin_id = sid
-                    self.acp_session_id = sid
-                    pending, self.devin_pending_updates = self.devin_pending_updates, []
-                    for message in pending:
-                        self.on_agent_notification(message)
-                    if self.devin_origin_failed:
-                        return {"error": {"code": "sideagent-foreign-session", "message": "foreign session on stream"}}
-            else:
-                self.acp_session_id = sid
-        with self.devin_origin_lock:
-            if fresh_devin and self.devin_origin_failed:
-                return {"error": {"code": "sideagent-foreign-session", "message": "foreign session on stream"}}
-            self.state = "ready"
+            self.acp_session_id = sid
+        self.state = "ready"
         self.write_record()
         return {"acp_session_id": self.acp_session_id, "agent_info": self.agent_info,
                 "protocol_version": self.protocol_version, "capabilities": self.capabilities}
 
-    def _list_repo_sessions(self, all_sessions: bool = False) -> tuple[list[dict], dict | None]:
+    def _list_repo_sessions(self) -> tuple[list[dict], dict | None]:
         """Collect all cwd-filtered sessions by following ``nextCursor`` pages."""
         collected: list[dict] = []
         seen_cursors: set[str] = set()
         cursor: str | None = None
         while True:
-            params: dict[str, Any] = {} if all_sessions else {"cwd": self.args.repo}
+            params: dict[str, Any] = {"cwd": self.args.repo}
             if cursor:
                 params["cursor"] = cursor
             request_id = self.agent.send_request("session/list", params)
@@ -3502,12 +3461,6 @@ class Holder:
             if response is None or "error" in response:
                 return [], {"code": "continue-list-failed", "message": json.dumps(response)}
             result = (response or {}).get("result") or {}
-            if all_sessions and (not isinstance(result, dict)
-                    or not isinstance(result.get("sessions"), list)
-                    or any(not isinstance(entry, dict)
-                           or not isinstance(entry.get("sessionId"), str)
-                           or not entry["sessionId"] for entry in result["sessions"])):
-                return [], {"code": "continue-list-failed", "message": "invalid session inventory"}
             collected.extend(
                 entry for entry in (result.get("sessions") or [])
                 if isinstance(entry, dict) and entry.get("sessionId")
@@ -3558,8 +3511,6 @@ class Holder:
         timeout keeps the JSON-RPC slot and records ``resume_pending`` so a
         later success can clear the failure instead of landing as an orphan.
         """
-        if self.args.platform == "devin" and self.session_role == "sideagent":
-            return {"error": {"code": "sideagent-fresh-session-required", "message": "Devin sideagent cannot load a session"}}
         session_caps = self.capabilities.get("sessionCapabilities") or {}
         if not capability_supported(session_caps, "resume") \
                 and not capability_supported(self.capabilities, "loadSession"):
@@ -3645,28 +3596,34 @@ class Holder:
 
     # -- inbound agent messages --------------------------------------------------
 
+    def _stream_identity(self) -> dict[str, Any]:
+        native_id = getattr(self, "acp_session_id", None)
+        lock = getattr(self, "stream_identity_lock", None)
+        if lock is None:
+            return {"mismatch": None}
+        with lock:
+            ids = set(self.stream_session_ids)
+            overflow = self.stream_identity_overflow
+        return {"mismatch": (None if not isinstance(native_id, str) or not native_id else
+                             overflow or any(value != native_id for value in ids))}
+
     def on_agent_message(self, message: dict[str, Any]) -> None:
         self.last_activity = time.monotonic()
-        if self.args.platform == "devin" and self.session_role == "sideagent" and "method" in message:
-            params = message.get("params") or {}
-            sid = params.get("sessionId") if isinstance(params, dict) else None
-            if sid is not None:
-                with self.devin_origin_lock:
-                    if self.devin_origin_failed:
-                        return
-                    if self.devin_origin_id is None and not self.devin_origin_failed and "id" not in message:
-                        self.devin_pending_updates.append(message)
-                        return
-                    if self.devin_origin_id is None or sid != self.devin_origin_id:
-                        self.devin_origin_failed = True
-                        self.fatal_error = {"code": "sideagent-foreign-session", "message": "foreign session on Devin sideagent stream"}
-                        with self.lock:
-                            self.state = "error"
-                            self.stop_requested = True
-                        self.events.append({"kind": "sideagent_foreign_session", "branch": "post_start_stream_mismatch" if self.devin_origin_id is not None else "startup_stream_mismatch", "identity": {"matches_bound": False}})
-                        self.write_record()
-                        threading.Thread(target=self._terminate_group, args=(True,), daemon=True).start()
-                        return
+        params = message.get("params") if "method" in message else None
+        stream_id = params.get("sessionId") if isinstance(params, dict) else None
+        lock = getattr(self, "stream_identity_lock", None)
+        changed = False
+        if lock is not None and isinstance(stream_id, str) and stream_id:
+            with lock:
+                ids = self.stream_session_ids
+                if stream_id not in ids:
+                    if len(ids) < 16:
+                        ids.add(stream_id)
+                    else:
+                        self.stream_identity_overflow = True
+                    changed = True
+        if changed and getattr(self, "acp_session_id", None):
+            self.write_record()
         if "method" in message:
             if "id" in message:
                 self.on_agent_request(message)
@@ -5163,10 +5120,6 @@ class Holder:
         Worse, the composite steer would then report `steer_consumed: true` for
         text no session ever received. Refuse before writing anything.
         """
-        if getattr(self, "devin_origin_failed", False):
-            return {"outcome": "no_session", "mutation_status": "not_started",
-                    "mutation_performed": False,
-                    "error": {"code": "sideagent-foreign-session", "message": "foreign session refused"}}
         if self.acp_session_id:
             return None
         return {"outcome": "no_session", "mutation_status": "not_started",
@@ -6743,6 +6696,13 @@ class Holder:
                     "next": "reconcile the original attempt and recover the recorded preset or clear"}
         if isinstance(problem, dict):
             return {"state": "NEEDS_ACTION", **problem}
+        returned = (((doc.get("state") or {}).get("alerts") or {}).get("maintenance-returned") or {}).get("inputs") or {}
+        current = next((row for _, row in sorted(returned.items()) if isinstance(row, dict)
+                        and row.get("why") != "sweep-retry-pending"), None)
+        if current is not None and node.get("phase") not in ("starting", "running", "stopping"):
+            return {"state": "NEEDS_ACTION", "reason": current.get("why") or "maintenance-unresolved",
+                    "evidence": current.get("evidence") or locator,
+                    "next": current.get("next") or "reconcile the original attempt"}
         if binding.get("state") == "failed":
             return {"state": "NEEDS_ACTION", "reason": "binding-failed",
                     "evidence": str(Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"),
@@ -6881,14 +6841,15 @@ class Holder:
 
     def _maintenance_failure(self, why: str, through: Any = None,
                              recovery: dict[str, Any] | None = None, wake: bool = True,
-                             missing_sources: dict[str, Any] | None = None) -> None:
+                             missing_sources: dict[str, Any] | None = None,
+                             input_id: str | None = None) -> None:
         if self.session_role != "host":
             return
         doc = self._lifecycle_state()
         recovery = recovery or (self.node.get("recovery_input") if self.node.get("batch") else None)
         recovery = recovery or self._node_recovery_pending(doc)
-        ident = f"recovery#{recovery['seq']}" if recovery else f"batch:{self.node.get('batch') or through}"
-        if recovery is None and through is None and not self.node.get("batch"):
+        ident = input_id or (f"recovery#{recovery['seq']}" if recovery else f"batch:{self.node.get('batch') or through}")
+        if input_id is None and recovery is None and through is None and not self.node.get("batch"):
             return
         key = (ident, why)
         if self.node.get("failure_reported") == key:
@@ -6941,15 +6902,54 @@ class Holder:
             return "node-busy"
         old = self._node_record(binding) or {}
         holder = old.get("holder_instance_id")
-        if holder and self._node_holder_alive(binding, holder):
+        if holder and self._node_holder_alive(binding, holder) and not self._own_live_node(binding, holder):
             node["stop_unconfirmed"] = {"holder": holder, "platform": binding["platform"],
                                         "session": binding["session"]}
-            self._maintenance_failure("old-node-live", through, recovery)
+            sweep = node.get("sweep") or {}
+            sweep_id = (f"sweep:{sweep.get('key') or 'empty'}" if sweep.get("phase") == "queued"
+                        and through is None and recovery is None else None)
+            self._maintenance_failure("old-node-live", through, recovery, input_id=sweep_id)
             return "old-node-live"
+        problem = self._node_preset_problem(binding)
+        if problem:
+            self.events.append({"kind": "sideagent_node_start_failed", "session": binding["session"],
+                                "reason": problem["reason"], "receipt": problem})
+            node["failed"] = self._node_failure(fingerprint, problem["reason"])
+            self._node_to_host(binding, f"sideagent start requires reconciliation: {problem['reason']}")
+            return problem["reason"]
         node.update(phase="starting", binding=fingerprint)
         self.node_start = threading.Thread(target=self._start_node, args=(binding, fingerprint), daemon=True)
         self.node_start.start()
         return "node-starting"
+
+    def _node_preset_problem(self, binding: dict[str, Any]) -> dict[str, Any] | None:
+        """Use the ordinary dispatch projection for the recorded preset."""
+        preset = binding.get("preset")
+        if not isinstance(preset, str) or not preset:
+            return {"reason": "preset-missing", "next": "recover the recorded preset from original evidence"}
+        tool = self._state_tool()
+        state_file = Path(self.args.repo) / ".kaola" / "heartbeat-prompt.json"
+        if tool is None:
+            return {"reason": "authorization-unavailable", "next": "recover the matching Project Runner state tool"}
+        argv = [sys.executable, tool, "project", "--authorization", str(state_file), "--repo", self.args.repo]
+        availability = state_file.parent / "dispatch-availability.json"
+        if availability.is_file():
+            argv.extend(["--availability", str(availability)])
+        try:
+            run = subprocess.run(argv, cwd=self.args.repo, stdin=subprocess.DEVNULL,
+                                 capture_output=True, text=True, timeout=NODE_STOP_CONFIRM_SECONDS)
+            projection = json.loads(run.stdout) if run.returncode == 0 else None
+        except (OSError, ValueError, subprocess.SubprocessError):
+            projection = None
+        if not isinstance(projection, dict) or not isinstance(projection.get("candidates"), list):
+            return {"reason": "authorization-unavailable", "next": "read the original dispatch projection"}
+        row = next((item for item in projection["candidates"] if isinstance(item, dict)
+                    and item.get("id") == preset), None)
+        if (row is None or row.get("class") != "Worker" or row.get("availability") == "absent"
+                or row.get("platform") != binding.get("platform")):
+            return {"reason": "preset-unavailable", "preset": preset,
+                    "next": "reconcile current grants, holds and availability for the recorded preset"}
+        return None
 
     def _node_admit_transition(self, binding: dict[str, Any], target: dict[str, Any],
                                batch: str, prompt: str, fingerprint: str,
@@ -6963,15 +6963,18 @@ class Holder:
             return receipt
         reason = (error or {}).get("code") or "relay-unadmitted"
         self.events.append({"kind": "worker_event_relay_failed", "target_session": binding["session"],
-                            "batch": batch, "receipt": receipt})
+                            "batch": batch, "receipt": bounded_admission_receipt(receipt)})
         self.node.update(failed=self._node_failure(fingerprint, reason))
-        if not sweep:
-            self._maintenance_failure(reason, through, recovery, wake=False)
+        sweep_state = self.node.get("sweep") or {}
+        sweep_key = str(sweep_state.get("key") or "empty") if sweep else None
+        self._maintenance_failure(reason, through, recovery, wake=False,
+                                  input_id=f"sweep:{sweep_key}" if sweep else None)
         self._node_to_host(binding, f"sideagent node {target['holder_instance_id']} did not admit "
                                     f"{'sweep ' if sweep else ''}batch {batch} ({reason}); "
                                     f"{self._unhandled(through)}", record=not sweep)
         self.node.update(phase="stopping", batch=None, fingerprint=None)
         threading.Thread(target=self._stop_node, args=(target["holder_instance_id"], None, binding),
+                         kwargs={"sweep": sweep, "sweep_key": sweep_key},
                          daemon=True).start()
         return {"error": {"code": reason}, "receipt": receipt}
 
@@ -7001,7 +7004,11 @@ class Holder:
                      "session": old.get("session") or session}
             if self._node_stop_confirmed(probe, old.get("holder")):
                 self.events.append({"kind": "sideagent_node_stop_confirmed_late", "holder": old.get("holder")})
+                self.events.append({"kind": "sideagent_node_stopped", "holder": old.get("holder"),
+                                    "receipt": {"stopped": True, "residual_pids": []}, "late": True})
                 node.pop("stop_unconfirmed", None)
+                if old.get("sweep_batch") and old.get("sweep_key"):
+                    self._queue_sweep_settlement(old["sweep_batch"], old["sweep_key"], old["holder"])
         own = [item for item in self.pending_worker_events if item.get("session") == session]
         quiet = [item for item in own if item.get("node_quiet")
                  or (item.get("kind") == "terminated" and not item.get("host_owned")
@@ -7037,8 +7044,7 @@ class Holder:
         fingerprint = json.dumps({key: binding.get(key) for key in ("session", "recipe", "since")},
                                  sort_keys=True)
         sequence = (((self._lifecycle_state() or {}).get("state") or {}).get("maintenance") or {}).get("recovery_seq") or 0
-        if failed and (failed.get("binding") != fingerprint
-                       or sequence > (failed.get("recovery_seq") or 0)):
+        if failed and sequence > (failed.get("recovery_seq") or 0):
             node.pop("failed", None)
             node.pop("sent_through", None)
             node.pop("recovery_sent", None)
@@ -7064,6 +7070,8 @@ class Holder:
         doc = self._lifecycle_state()
         through = self._node_host_pending(doc)
         recovery = self._node_recovery_pending(doc)
+        if recovery is None and not self._node_business_owed(doc):
+            return result
         target = self._sideagent_relay_target()
         if through is None and recovery is None:
             queued_sweep = (isinstance(node.get("sweep"), dict)
@@ -7271,6 +7279,11 @@ class Holder:
         ``worker_events_lock``. Reconcile batches always win; a sweep never
         starts during a Host turn (the caller already returned then)."""
         node = self.node
+        returned = (((((doc or {}).get("state") or {}).get("alerts") or {})
+                     .get("maintenance-returned") or {}).get("inputs") or {})
+        if any(isinstance(ident, str) and ident.startswith("sweep:") and isinstance(row, dict)
+               and row.get("why") != "sweep-retry-pending" for ident, row in returned.items()):
+            return
         sweep = node.get("sweep")
         if not isinstance(sweep, dict) or sweep.get("phase") not in ("scanning", "queued"):
             reason = self._sweep_due(doc)
@@ -7335,6 +7348,9 @@ class Holder:
                        or self._node_recovery_pending(self._lifecycle_state())):
             self._maintenance_failure(reason, self.node.get("sent_through") or
                                       self._node_host_pending(self._lifecycle_state()), wake=False)
+        elif record and isinstance(self.node.get("sweep"), dict) and self.node["sweep"].get("phase") == "queued":
+            self._maintenance_failure("sweep-start-failed", wake=False,
+                input_id=f"sweep:{self.node['sweep'].get('key') or 'empty'}")
         cursor = self.events.append({"kind": "sideagent_node_returned", "reason": reason})
         self.pending_worker_events.append({
             "schema": WORKER_EVENT_SCHEMA, "event_id": f"{binding['platform']}/{binding['session']}/node/{cursor}",
@@ -7492,8 +7508,12 @@ class Holder:
                 if verified:
                     node.pop("sweep", None)
                 else:
-                    node["sweep"] = {"phase": "cooldown",
-                                     "until": time.monotonic() + SWEEP_INTERVAL_SECONDS}
+                    node["sweep"] = {**sweep_state, "phase": "queued"}
+                    fingerprint = json.dumps({k: (binding or self._node_binding() or {}).get(k)
+                                              for k in ("session", "recipe", "since")}, sort_keys=True)
+                    node["failed"] = self._node_failure(fingerprint, "sweep-checkpoint-missing")
+                    self._maintenance_failure("sweep-checkpoint-missing", wake=False,
+                        input_id=f"sweep:{sweep_state.get('key') or 'empty'}")
                 self.events.append({"kind": "sideagent_sweep_settled", "batch": node["batch"],
                                     "holder": node["holder"], "key": sweep_state.get("key"),
                                     "checkpoint": "verified" if verified else "missing",
@@ -7501,10 +7521,12 @@ class Holder:
                                     "host_woken": bool(end.get("host_owned")),
                                     **({"attention_changed": True} if changed else {}),
                                     **({"turn_refused": refusal} if refusal else {})})
-                holder = node["holder"]
+                holder, sweep_batch = node["holder"], node["batch"]
                 node.update(phase="stopping", batch=None, fingerprint=None, sweep_batch=False)
                 threading.Thread(target=self._stop_node,
-                                 args=(holder, None, binding), kwargs={"sweep": True},
+                                 args=(holder, None, binding),
+                                 kwargs={"sweep": True, "sweep_key": str(sweep_state.get("key") or "empty"),
+                                         "sweep_batch": sweep_batch if verified else None},
                                  daemon=True).start()
                 continue
             last = (((doc or {}).get("state") or {}).get("maintenance") or {}).get("last_checkpoint")
@@ -7737,6 +7759,10 @@ class Holder:
             if code is None or not isinstance(receipt, dict):
                 return {"reason": "status-unreadable", "detail": note}
             if acp_paths.status_available(receipt):
+                record = self._node_record(binding) or {}
+                prior_holder = record.get("holder_instance_id")
+                if prior_holder and self._node_holder_alive(binding, prior_holder):
+                    return {"reason": "holder-unconfirmed", "receipt": receipt}
                 return None
             return {"reason": "status-existing", "receipt": receipt}
 
@@ -7750,16 +7776,26 @@ class Holder:
             with self.worker_events_lock:
                 record = self._own_live_node(binding)
                 seen = result.get("receipt") or {}
+                nested_record = seen.get("record") if isinstance(seen.get("record"), dict) else {}
+                seen_holder = seen.get("holder_instance_id") or nested_record.get("holder_instance_id")
                 if (result["reason"] == "status-existing" and record.get("state") == "ready"
-                        and seen.get("holder_instance_id") == record.get("holder_instance_id")):
+                        and not isinstance(seen.get("error"), dict) and seen.get("result") != "refused"
+                        and seen_holder == record.get("holder_instance_id")):
                     holder = record["holder_instance_id"]
                     self.node.update(phase="running", holder=holder, batch=None, fingerprint=None)
                     self.node.setdefault("holders", []).append(holder)
                     self.events.append({"kind": "sideagent_node_adopted", "holder": holder,
                                         "session": binding["session"]})
                 else:
+                    prior = self._node_record(binding) or {}
+                    prior_holder = prior.get("holder_instance_id")
+                    if (isinstance(prior_holder, str) and prior_holder
+                            and self._node_holder_alive(binding, prior_holder)):
+                        self.node["stop_unconfirmed"] = {"holder": prior_holder,
+                            "platform": binding["platform"], "session": binding["session"]}
                     self.events.append({"kind": "sideagent_node_start_failed", "session": binding["session"],
-                                        "receipt": result})
+                                        "reason": result["reason"],
+                                        "receipt": bounded_admission_receipt(result.get("receipt") or result)})
                     self.node.update(phase="stopped", failed=self._node_failure(fingerprint, result["reason"]))
                     self._node_to_host(binding, f"sideagent status requires reconciliation: {result['reason']}")
             self._kick_worker_events()
@@ -7770,6 +7806,10 @@ class Holder:
         holder = receipt.get("holder_instance_id") if isinstance(receipt, dict) else None
         ok = (code == 0 and isinstance(holder, str) and holder
               and (receipt.get("result") not in ("refused", "failed")))
+        if ok and not self._own_live_node(binding, holder):
+            ok = False
+            receipt = {"error": {"code": "identity-unverified",
+                                 "message": "start receipt does not match the recorded node identity and preset"}}
         stopped_holder: str | None = None
         stopped_alive, stop_receipt = False, {}
         if not ok:
@@ -7800,7 +7840,7 @@ class Holder:
                                               self._node_recovery_pending(doc))
                 else:
                     self.events.append({"kind": "sideagent_node_stopped", "holder": stopped_holder,
-                                        "receipt": {key: stop_receipt.get(key) for key in ("stopped", "error")
+                                        "receipt": {key: stop_receipt.get(key) for key in ("stopped", "residual_pids", "error")
                                                     if key in stop_receipt}})
             if ok:
                 self.node.update(phase="running", holder=holder, batch=None, fingerprint=None)
@@ -7814,13 +7854,13 @@ class Holder:
                 live_holder: Any = None
                 record = self._node_record(binding) or {}
                 pid = record.get("holder_pid")
-                ours = (record.get("dispatcher") or {}).get("holder_instance_id") == self.holder_instance_id
+                ours = bool(self._own_live_node(binding))
                 verified = (isinstance(error, dict) and error.get("code") == "session-exists"
                             and error.get("identity") == "verified" and pid == error.get("holder_pid"))
                 # Issue #336: a Runner that fails after its holder came up (a
                 # timed-out or non-zero start) leaves this carrier's own live
                 # node; it is adopted like a verified session-exists refusal.
-                if ((verified or ours)
+                if ((verified or ours) and isinstance(pid, int) and not isinstance(pid, bool)
                         and process_alive(pid)
                         and record.get("repo") == self.args.repo
                         and record.get("session_role") in SIDEAGENT_ROLES
@@ -7852,7 +7892,7 @@ class Holder:
                 else:
                     self.events.append({"kind": "sideagent_node_start_failed",
                                         "session": binding["session"], "code": code,
-                                        "receipt": receipt if isinstance(receipt, dict) else None})
+                                        "receipt": bounded_admission_receipt(receipt)})
                     if isinstance(receipt, dict) and receipt.get("reason") == "main-skill-build-skew":
                         # Issue #437: the refusal is the Host process being
                         # older than the installed bytes, not a broken binding.
@@ -7885,11 +7925,19 @@ class Holder:
         match; ``holder`` pins the instance), else an empty dict."""
         record = self._node_record(binding) or {}
         ident = record.get("holder_instance_id")
+        selection = record.get("start_selection") if isinstance(record.get("start_selection"), dict) else {}
+        preset = binding.get("preset")
+        tier = selection.get("tier") or ("default" if not selection.get("model") else None)
+        preset_matches = (isinstance(preset, str) and isinstance(tier, str)
+                          and preset == f"{binding.get('platform')}/{tier}")
+        pid = record.get("holder_pid")
         if ((record.get("dispatcher") or {}).get("holder_instance_id") == self.holder_instance_id
                 and isinstance(ident, str) and ident and (holder is None or ident == holder)
+                and record.get("platform") == binding.get("platform")
+                and record.get("session") == binding.get("session") and preset_matches
                 and record.get("repo") == self.args.repo
                 and record.get("session_role") in SIDEAGENT_ROLES
-                and process_alive(record.get("holder_pid"))):
+                and isinstance(pid, int) and not isinstance(pid, bool) and process_alive(pid)):
             return record
         return {}
 
@@ -7943,7 +7991,8 @@ class Holder:
     def _stop_node(self, holder: str, wait: float | None = None,
                    binding: dict[str, Any] | None = None,
                    failure: tuple[Any, Any] | None = None,
-                   sweep: bool = False) -> None:
+                   sweep: bool = False, sweep_key: str | None = None,
+                   sweep_batch: str | None = None) -> None:
         """``failure`` is the (host revision through, recovery input) the batch
         this holder carried, for an unconfirmed stop's maintenance failure;
         the caller may already have restored the node's own fields (#336).
@@ -7957,26 +8006,43 @@ class Holder:
             if alive:
                 # The node is still alive. This is not the idle moment.
                 self.node.update(phase="stopped", stop_unconfirmed={
-                    "holder": holder, "platform": binding.get("platform"), "session": binding.get("session")})
+                    "holder": holder, "platform": binding.get("platform"), "session": binding.get("session"),
+                    **({"sweep_key": sweep_key, "sweep_batch": sweep_batch} if sweep and sweep_batch else {})})
                 self.events.append({"kind": "sideagent_node_stop_unconfirmed", "holder": holder,
                                     "receipt": receipt})
                 through, recovery = (failure if failure is not None
                                      else (self.node.get("sent_through"), self.node.get("recovery_input")))
-                if not sweep:
+                if sweep:
+                    self._maintenance_failure("stop-unconfirmed", wake=False,
+                                              input_id=f"sweep:{sweep_key or 'empty'}")
+                else:
                     self._maintenance_failure("stop-unconfirmed", through, recovery)
             else:
                 confirmed = True
                 self.node.update(phase="stopped")
                 self.events.append({"kind": "sideagent_node_stopped", "holder": holder,
-                                    "receipt": {key: receipt.get(key) for key in ("stopped", "error")
+                                    "receipt": {key: receipt.get(key) for key in ("stopped", "residual_pids", "error")
                                                 if key in receipt}})
         self._kick_worker_events()
+        returned = (((((self._lifecycle_state() or {}).get("state") or {}).get("alerts") or {})
+                     .get("maintenance-returned") or {}).get("inputs") or {}) if confirmed and sweep and sweep_batch else {}
+        if confirmed and sweep and sweep_batch and f"sweep:{sweep_key or 'empty'}" in returned:
+            self._queue_sweep_settlement(sweep_batch, sweep_key or "empty", holder)
         # Issue #305: the node can stop after the Host's last turn end, and a
         # quieted node ``terminated`` does not start a turn that would check.
         # Kick first, so a turn the kick admitted is visible here and suppresses
         # this wake. Exact stop sets ``stop_requested`` before it gets here.
         if confirmed:
             self._maybe_delegator_all_idle()
+
+    def _queue_sweep_settlement(self, batch: str, key: str, holder: str) -> None:
+        def settle():
+            receipt = self._maintenance_tool(["--source", "carrier-sweep-settlement",
+                "--settle-sweep", batch, "--sweep-key", key, "--holder", holder])
+            self.events.append({"kind": "sideagent_sweep_return_resolved", "batch": batch,
+                                "receipt": receipt})
+            self._kick_worker_events()
+        threading.Thread(target=settle, daemon=True).start()
 
     def _reclaim_node(self) -> None:
         """A node is this carrier's own per-batch session, not a dispatched
@@ -10463,11 +10529,6 @@ class Holder:
                 updated_role = normalize_session_role(params.get("session_role"))
             except ValueError:
                 return {"error": {"code": "invalid-session-role"}}
-            if (self.args.platform == "devin" and updated_role == "sideagent"
-                    and (not self.devin_origin_id or self.devin_origin_id != self.acp_session_id
-                         or self.devin_origin_failed)):
-                return {"error": {"code": "sideagent-fresh-session-required",
-                                  "message": "this holder did not establish a verified fresh sideagent session"}}
         self.start_evidence = evidence
         if "session_role" in params:
             self.session_role = updated_role
@@ -10868,7 +10929,7 @@ class Holder:
                     self.write_record()
             if not already_ready:
                 self._delegator_wake("error", "boot_failure", "boot_failure")
-                if result["error"].get("code") in ("acp-protocol-version-unsupported", "sideagent-foreign-session", "sideagent-origin-unverifiable", "sideagent-fresh-session-required"):
+                if result["error"].get("code") == "acp-protocol-version-unsupported":
                     self._terminate_group(force=True)
                 elif self.agent.proc and not self.agent.exited.is_set():
                     pass

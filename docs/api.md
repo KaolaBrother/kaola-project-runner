@@ -815,17 +815,18 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   still names its sources from those reasons.
 - At `state init` and at holder startup, a carrier whose holder record advertises
   `sideagent-node/1` binds node mode from an eligible Worker: the Delegator file's
-  `authorization.sideagent.preset` when that id is eligible, otherwise the first granted
-  Worker by id. A `computer-use-only` role and exclusions are skipped. An existing binding
+  `authorization.sideagent.preset` when configured, otherwise the first eligible granted
+  Worker by id. An unavailable configured preset does not fall through. Automatic selection
+  skips `computer-use-only` and exclusions. An existing binding
   is not replaced, and resume keeps it. The bind does not raise `host_revision` and is not
   itself a node input. When no eligible preset exists or the runner cannot be built,
   `sideagent` stays unset and `state check` reports `sideagent-default-unbound` with the
   `state ensure-sideagent` command. The next Host boundary retries.
-  A binding whose `state` is `failed` rebinds with `state ensure-sideagent
-  --recover-failed --live L --evidence E` (Host caller only): the `--live` rows
-  must show the old node gone, no `holds/*` or `decisions/*` row may name the
-  old session or the sideagent, and recovery runs no sweep and does not raise
-  `host_revision`. `state check` reports `sideagent-failed` with that command.
+  The Host reconciles a failed binding with `state ensure-sideagent --recover-failed
+  --live L --evidence E`: the old holder must be confirmed gone, and the recorded
+  preset must remain eligible. Applicable current holds still apply; unrelated
+  decisions and text do not block recovery. Recovery keeps the binding and does
+  not raise `host_revision`. `state check` reports `sideagent-failed` with that command.
   `state retire --index` also accepts this project's `kpm.dispatch-index/1.x`
   (KPM items addressed `<task_id>/<id>`; the mirror never writes it), and
   `state retire --stop-evidence` settles a task-named seat absent from `--live`
@@ -878,7 +879,7 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   else, a missing checkpoint, or a checkpoint `through` below the sent range reaches the Host
   once naming the unhandled range, and that range is not sent again. A batch the node does not
   admit, a failed start and a lost node are staged for the Host once as a `node` item naming
-  the unhandled range; the first two start no further node until the binding changes. The
+  the unhandled range; the first two start no further node until recovery is requested. The
   carrier then exact-stops the node. Host business changes are node inputs only under a node
   binding (`mode` `node`, `state` `active`); with no binding, or one in another mode or state,
   a Host write owes no batch and records no failure (Issue #324). A node binding whose recipe
@@ -922,24 +923,17 @@ projected Host view. Old readers keep receiving a string `body`. Subcommands:
   `sideagent_maintenance` to `no node is running; the owed range was already
   returned to the Host and is not resent automatically; request one bounded
   batch with state recovery-input --kind request`.
-  The bound runtime is not a pin (Issue #324). When its Runner file is missing, its start
-  fails, or its node does not admit a batch, the carrier moves the node to the next runtime
-  instead of failing: only Worker presets that `kaola-dispatch.py project` finds
-  eligible now (an explicit Worker grant, exclusions, holds, Delegator ceiling, availability not `absent`),
-  sorted by preset id, skipping every runtime already tried for this
-  binding, and skipping every candidate whose `roles` include `computer-use-only` (Issue #350).
-  That skip is not an authorization change: grants, exclusions, holds, and availability stay as they are,
-  and `project` still lists the preset for an explicit dispatch. No remaining Worker preset means the chain fails once and returns; it does not try an ungranted preset and it does not add a wake reason. The fallback start is the same Runner start from the sibling installed Skill
-  (`<root>/<platform>-kaola-project-runner/scripts/<runner>`, or the checkout entrypoint with
-  that platform first), the bound `--session`, this `--repo`, `--role sideagent` and the
-  preset's `--tier`; the bound `--model`/`--effort` are dropped. A preset whose Runner is not
-  on this machine is skipped. Each move is one `sideagent_node_fallback` event (`from`,
-  `to`, `chain`, `tried`) and starts no Host turn. The chosen runtime serves later batches
-  until the Host changes the binding or the holder restarts. Only an exhausted chain
-  (`exhausted: true`) records the failure above, once, and starts nothing further. A stop is confirmed when the node's holder process is
-  gone, not by its `stopped` record; while it still runs (`sideagent_node_stop_unconfirmed`)
-  no node starts, and once it is gone (`sideagent_node_stop_confirmed_late`) the next Host
-  change starts a fresh node. A holder whose stop reply cannot be delivered still exits.
+  The bound preset remains fixed across startup, admission and recovery failures.
+  The carrier checks the exact Runner status before starting and adopts an existing
+  node only when its holder, dispatcher, project, session and preset match. An
+  unreachable or foreign holder remains a reconciliation duty; no replacement is
+  started while its stop is unconfirmed. A failure retains its evidence and pending
+  inputs. The Host can use `state ensure-sideagent --recover-failed` to reconcile
+  the old attempt and rearm the same preset, or `--clear-failed` after an authorized
+  current disable instruction and confirmed stop. Clear preserves pending duties.
+  Maintenance and heartbeat cleanup share the node lifecycle, but a sweep receipt
+  cannot acknowledge maintenance. A stop is confirmed through the exact holder,
+  not merely a stopped-looking record.
   The holder and state tool use the same current-input selector. A retirement with no
   selectable input starts or sends no node and advances no checkpoint revision. If an
   owned node finishes startup after its input disappears, the carrier waits for the Host

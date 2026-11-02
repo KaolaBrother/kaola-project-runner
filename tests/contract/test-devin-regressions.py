@@ -376,27 +376,24 @@ class DevinSessionIdTests(unittest.TestCase):
 
 
 
-class DevinSideagentOriginTests(unittest.TestCase):
+class DevinSharedPathTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         import importlib.util
-        spec = importlib.util.spec_from_file_location("holder450", PROJECT / "scripts/kaola-acp-holder.py")
+        spec = importlib.util.spec_from_file_location("holder458", PROJECT / "scripts/kaola-acp-holder.py")
         cls.mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.mod)
 
-    def holder(self, new_id="fresh", listed=(), streamed="fresh"):
+    def holder(self, role, streamed="fresh"):
         import threading
         from types import SimpleNamespace
         h = self.mod.Holder.__new__(self.mod.Holder)
         h.args = SimpleNamespace(platform="devin", command="devin acp", repo="/repo", session_new_timeout=1)
-        h.session_role = "sideagent"
-        h.devin_origin_lock = threading.RLock()
-        h.devin_origin_id = None
-        h.devin_origin_failed = False
-        h.devin_record_ids = set()
-        h.events = SimpleNamespace(append=lambda event: h.event_rows.append(event))
-        h.event_rows = []
-        h.devin_pending_updates = []
+        h.session_role = role
+        h.stream_identity_lock = threading.Lock()
+        h.stream_session_ids = set()
+        h.stream_identity_overflow = False
+        h.acp_session_id = None
         h.init_meta = {}
         h.state = "starting"
         h.lock = threading.Lock()
@@ -405,137 +402,89 @@ class DevinSideagentOriginTests(unittest.TestCase):
         h.on_agent_notification = lambda message: h.delivered.append(message)
         class Agent:
             stdin_write_failed = False
-            def spawn(self, *a): pass
+            def __init__(self): self.calls = []
+            def spawn(self, *a): self.calls.append("spawn")
             def send_request(self, method, params):
-                self.method = method
+                self.calls.append(method)
                 if method == "session/new" and streamed:
                     for stream_id in (streamed if isinstance(streamed, tuple) else (streamed,)):
                         h.on_agent_message({"method": "session/update", "params": {"sessionId": stream_id, "update": {}}})
                 return method
             def wait_response(self, request, timeout):
-                if request == "initialize": return {"result": {"protocolVersion": 1, "agentCapabilities": {"sessionCapabilities": {"list": {}}}}}
-                if request == "session/list": return {"result": {"sessions": [{"sessionId": x} for x in listed]}}
-                return {"result": {"sessionId": new_id}}
+                if request == "initialize":
+                    return {"result": {"protocolVersion": 1, "agentCapabilities": {"sessionCapabilities": {"list": {}}}}}
+                return {"result": {"sessionId": "fresh"}}
         h.agent = Agent()
         return h
 
-    def test_spawn_uses_seat_private_devin_session_directory(self):
+    def test_sideagent_and_worker_share_new_session_path(self):
+        for role in ("sideagent", "worker"):
+            with self.subTest(role=role):
+                h = self.holder(role)
+                self.assertEqual(h.initialize_agent()["acp_session_id"], "fresh")
+                self.assertEqual(h.agent.calls, ["spawn", "initialize", "session/new"])
+                self.assertEqual(h._stream_identity(), {"mismatch": False})
+                self.assertEqual(len(h.delivered), 1)
+
+    def test_sideagent_and_worker_share_resume_path(self):
+        for role in ("sideagent", "worker"):
+            with self.subTest(role=role):
+                h = self.holder(role, streamed=None)
+                h._request_resume = lambda session: {"resumed": session}
+                self.assertEqual(h.initialize_agent(resume="old"), {"resumed": "old"})
+                self.assertEqual(h.agent.calls, ["spawn", "initialize"])
+
+    def test_stream_mismatch_is_observed_without_blocking_transport(self):
+        for role in ("sideagent", "worker"):
+            with self.subTest(role=role):
+                h = self.holder(role, streamed=("fresh", "foreign"))
+                self.assertEqual(h.initialize_agent()["acp_session_id"], "fresh")
+                self.assertEqual(h._stream_identity(), {"mismatch": True})
+                self.assertEqual(len(h.delivered), 2)
+                self.assertEqual(h.state, "ready")
+
+    def test_recording_role_uses_the_shared_path(self):
+        h = self.holder("worker", streamed=None)
+        h.acp_session_id = "existing"
+        h.start_selection = None
+        self.assertEqual(h.op_record_start_evidence({"evidence": {}, "session_role": "sideagent"}),
+                         {"recorded": True})
+        self.assertEqual(h.session_role, "sideagent")
+
+    def test_spawn_uses_the_same_devin_environment_for_both_roles(self):
         from types import SimpleNamespace
         from unittest.mock import patch
         import tempfile
-        with tempfile.TemporaryDirectory() as directory:
-            holder = SimpleNamespace(args=SimpleNamespace(platform="devin"), session_role="sideagent",
-                                     record_dir=Path(directory), tool_cwd_trace_env=lambda env: {},
-                                     dispatcher_identity=lambda: {})
-            connection = self.mod.AgentConnection(holder)
-            seen = {}
-            def capture(*args, **kwargs):
-                seen.update(kwargs["env"])
-                raise RuntimeError("captured")
-            with patch.object(self.mod, "compact_spawn_record"), patch.object(self.mod.subprocess, "Popen", capture):
-                with self.assertRaisesRegex(RuntimeError, "captured"):
-                    connection.spawn("devin acp", directory, {"DEVIN_SESSIONS_DIR": "/foreign"})
-            self.assertEqual(seen["DEVIN_SESSIONS_DIR"], str(Path(directory) / "devin-sessions"))
+        for role in ("sideagent", "worker"):
+            with self.subTest(role=role), tempfile.TemporaryDirectory() as directory:
+                holder = SimpleNamespace(args=SimpleNamespace(platform="devin"), session_role=role,
+                                         record_dir=Path(directory), tool_cwd_trace_env=lambda env: {},
+                                         dispatcher_identity=lambda: {})
+                connection = self.mod.AgentConnection(holder)
+                seen = {}
+                def capture(*args, **kwargs):
+                    seen.update(kwargs["env"])
+                    raise RuntimeError("captured")
+                with patch.object(self.mod, "compact_spawn_record"), patch.object(self.mod.subprocess, "Popen", capture):
+                    with self.assertRaisesRegex(RuntimeError, "captured"):
+                        connection.spawn("devin acp", directory, {"DEVIN_SESSIONS_DIR": "/chosen"})
+                self.assertEqual(seen["DEVIN_SESSIONS_DIR"], "/chosen")
 
-    def test_unique_new_id_without_updates(self):
-        h = self.holder(streamed=None)
-        self.assertEqual(h.initialize_agent()["acp_session_id"], "fresh")
-        self.assertEqual(h.delivered, [])
-
-    def test_fresh_new_binds_and_replays_matching_updates(self):
-        h = self.holder()
-        result = h.initialize_agent()
-        self.assertEqual(result["acp_session_id"], "fresh")
-        self.assertEqual(h.devin_origin_id, "fresh")
-        self.assertEqual(len(h.delivered), 1)
-
-    def test_preexisting_or_foreign_start_is_refused_without_replay(self):
-        for h in (self.holder(new_id="old", listed=("old",), streamed="old"),
-                  self.holder(new_id="fresh", streamed="old"),
-                  self.holder(new_id="", streamed=None)):
-            with self.subTest(h=h):
-                self.assertEqual(h.initialize_agent()["error"]["code"], "sideagent-foreign-session")
-                self.assertEqual(h.delivered, [])
-
-    def test_diagnostic_matrix_and_bounded_association(self):
-        cases = [("inventory_match", self.holder(new_id="old", listed=("old",), streamed="old")),
-                 ("startup_stream_mismatch", self.holder(streamed=("fresh", "foreign"))),
-                 ("missing_new_id", self.holder(new_id="", streamed=None))]
-        for branch, h in cases:
+    def test_legacy_origin_branches_are_bounded_in_common_admission_receipt(self):
+        for branch in ("missing_new_id", "inventory_match", "record_match", "startup_stream_mismatch"):
             with self.subTest(branch=branch):
-                result = h.initialize_agent()
-                self.assertEqual(result["error"]["code"], "sideagent-foreign-session")
-                self.assertIn(branch, result["error"]["diagnostic"]["branches"])
-                self.assertNotIn("sideagent_origin_rejected", [row.get("kind") for row in h.event_rows])
-                self.assertEqual(result["error"]["diagnostic"]["identity"], {
-                    "new_matches_inventory": branch == "inventory_match",
-                    "new_matches_record": False,
-                    "all_pending_match_new": branch != "startup_stream_mismatch",
-                })
-                self.assertNotIn("foreign", str(result["error"]["diagnostic"]))
-                self.assertEqual(h.delivered, [])
-        h = self.holder(streamed=("fresh", "fresh"))
-        self.assertEqual(h.initialize_agent()["acp_session_id"], "fresh")
-        self.assertEqual(len(h.delivered), 2)
-
-
-    def test_invalid_inventory_refuses_before_new(self):
-        h = self.holder(listed=(42,), streamed=None)
-        self.assertEqual(h.initialize_agent()["error"]["code"], "sideagent-origin-unverifiable")
-        self.assertEqual(h.delivered, [])
-
-    def test_incomplete_paginated_inventory_refuses_before_new(self):
-        h = self.holder(streamed=None)
-        original = h.agent.wait_response
-        calls = []
-        def response(request, timeout):
-            if request == "session/list":
-                calls.append(request)
-                if len(calls) == 1:
-                    return {"result": {"sessions": [{"sessionId": "old"}], "nextCursor": "next"}}
-                return None
-            return original(request, timeout)
-        h.agent.wait_response = response
-        result = h.initialize_agent()
-        self.assertEqual(result["error"]["code"], "sideagent-origin-unverifiable")
-        self.assertEqual(len(calls), 2)
-        self.assertEqual(h.agent.method, "session/list")
-        self.assertEqual(h.delivered, [])
-
-    def test_other_seat_record_id_is_refused(self):
-        h = self.holder(new_id="other-seat", streamed="other-seat")
-        h.devin_record_ids.add("other-seat")
-        result = h.initialize_agent()
-        self.assertEqual(result["error"]["code"], "sideagent-foreign-session")
-        self.assertIn("record_match", result["error"]["diagnostic"]["branches"])
-        self.assertTrue(result["error"]["diagnostic"]["identity"]["new_matches_record"])
-        self.assertEqual(h.delivered, [])
-
-    def test_recording_sideagent_role_cannot_adopt_loaded_session(self):
-        h = self.holder()
-        h.acp_session_id = "foreign"
-        h.start_selection = None
-        result = h.op_record_start_evidence({"evidence": {}, "session_role": "sideagent"})
-        self.assertEqual(result["error"]["code"], "sideagent-fresh-session-required")
-
-    def test_resume_and_continue_never_spawn(self):
-        for kwargs in ({"resume": "old"}, {"use_continue": True}):
-            h = self.holder()
-            self.assertEqual(h.initialize_agent(**kwargs)["error"]["code"], "sideagent-fresh-session-required")
-            self.assertEqual(h._request_resume("old")["error"]["code"], "sideagent-fresh-session-required")
-
-    def test_foreign_update_after_start_is_not_delivered(self):
-        from types import SimpleNamespace
-        h = self.holder()
-        h.initialize_agent()
-        h._terminate_group = lambda force: None
-        h.on_agent_message({"method": "session/update", "params": {"sessionId": "old", "update": {"text": "foreign"}}})
-        self.assertTrue(h.devin_origin_failed)
-        self.assertEqual(h.event_rows[-1]["branch"], "post_start_stream_mismatch")
-        self.assertNotIn("old", str(h.event_rows[-1]))
-        self.assertEqual(h.state, "error")
-        self.assertEqual(len(h.delivered), 1)
-        self.assertEqual(h._no_acp_session()["error"]["code"], "sideagent-foreign-session")
+                raw = {"error": {"code": "sideagent-foreign-session", "message": "token=secret",
+                       "diagnostic": {"branches": [branch, "private-id"], "pending_count": 10000,
+                                      "identity": {"new_matches_inventory": branch == "inventory_match",
+                                                   "new_matches_record": branch == "record_match",
+                                                   "all_pending_match_new": branch != "startup_stream_mismatch"}}}}
+                got = self.mod.bounded_admission_receipt(raw)
+                diagnostic = got["error"]["diagnostic"]
+                self.assertEqual(diagnostic["branches"], [branch])
+                self.assertEqual(diagnostic["pending_count"], 100)
+                self.assertTrue(diagnostic["pending_count_capped"])
+                self.assertNotIn("secret", str(got))
+                self.assertNotIn("private-id", str(got))
 
 
 if __name__ == "__main__":

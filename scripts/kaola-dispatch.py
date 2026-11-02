@@ -2077,7 +2077,11 @@ def repo_of(receipt: dict[str, Any] | None) -> Any:
 
 
 def session_absent(receipt: dict[str, Any] | None) -> bool:
-    return RECORD.acp_paths.status_available(receipt)
+    if not isinstance(receipt, dict):
+        return False
+    error = receipt.get("error")
+    return ((isinstance(error, dict) and error.get("code") == "no-session")
+            or receipt.get("reason") == "no-session")
 
 
 def runner_root_sources(skills_root: Path) -> list[tuple[Path, str]]:
@@ -10027,11 +10031,11 @@ def default_worker_rows(doc: dict[str, Any], repo: Path,
         candidates, _withheld = current_candidates(catalog, auth, grants, available, doc, str(repo))
     except ValueError as exc:
         return [], str(exc)
+    configured = exact_preset or configured_sideagent_preset(repo)
     rows = [row for row in candidates if row.get("class") == "Worker" and row.get("availability") != "absent"
-            and not computer_use_only_row(row) and isinstance(row.get("id"), str)
+            and (row.get("id") == configured or not computer_use_only_row(row)) and isinstance(row.get("id"), str)
             and isinstance(row.get("platform"), str) and isinstance(row.get("tier"), str)]
     rows.sort(key=lambda row: row["id"])
-    configured = exact_preset or configured_sideagent_preset(repo)
     if configured:
         chosen = [row for row in rows if row["id"] == configured]
         if not chosen:
@@ -10222,6 +10226,16 @@ def recover_failed_sideagent(args: argparse.Namespace, path: Path, repo: Path,
             binding = {**old, "state": "active", "source": "recover-failed"}
             state["sideagent"] = binding
             maintenance = state.setdefault("maintenance", {})
+            returned = (state.get("alerts") or {}).get("maintenance-returned") or {}
+            inputs = returned.get("inputs") or {}
+            sweep_rearmed = False
+            for ident, row in inputs.items():
+                if isinstance(ident, str) and ident.startswith("sweep:") and isinstance(row, dict):
+                    row.update(why="sweep-retry-pending",
+                               next="retry the native sweep after reconciling the original attempt")
+                    sweep_rearmed = True
+            if sweep_rearmed:
+                returned.update(rev=int(returned.get("rev") or 0) + 1, updated_at=observed_at())
             prior = maintenance.get("recovery_input") or {}
             last = maintenance.get("last_checkpoint") or {}
             prior_id = f"recovery#{prior.get('seq')}"
@@ -10524,6 +10538,48 @@ def command_state_recovery_input(args: argparse.Namespace) -> int:
             maintenance = doc["state"].setdefault("maintenance", {})
             prior = maintenance.get("recovery_input") or {}
             folded: list[str] = []
+            if getattr(args, "settle_sweep", None):
+                batch = args.settle_sweep
+                key, holder = getattr(args, "sweep_key", None), getattr(args, "holder", None)
+                last = maintenance.get("last_sweep") or {}
+                if (not isinstance(key, str) or not key or not isinstance(holder, str) or not holder
+                        or last.get("batch") != batch or (last.get("key") or "empty") != key
+                        or last.get("holder") != holder):
+                    raise StateRefusal("batch-unverified", "read the matching typed sweep receipt")
+                events = list(original_events(directory))
+                settled = [row for row in events if row.get("kind") == "sideagent_sweep_settled"
+                           and row.get("batch") == batch and row.get("holder") == holder
+                           and row.get("checkpoint") == "verified"]
+                stopped = [row for row in events if row.get("kind") == "sideagent_node_stopped"
+                           and row.get("holder") == holder and (row.get("receipt") or {}).get("stopped") is True
+                           and (row.get("receipt") or {}).get("residual_pids") == []]
+                if not any(isinstance(s.get("cursor"), int) and isinstance(t.get("cursor"), int)
+                           and t["cursor"] > s["cursor"] for s in settled for t in stopped):
+                    raise StateRefusal("batch-unverified", "read the completed sweep and exact-stop receipts")
+                alerts = doc["state"].setdefault("alerts", {})
+                alert = alerts.get("maintenance-returned") or {}
+                inputs = dict(alert.get("inputs") or {})
+                ident = f"sweep:{key}"
+                if ident not in inputs:
+                    return emit({"result": "unchanged", "reason": "no-current-sweep-obligation"})
+                prior_inputs = dict(inputs)
+                inputs.pop(ident)
+                if inputs:
+                    updated = {**alert, "inputs": inputs, "rev": int(alert.get("rev") or 0) + 1,
+                               "updated_at": observed_at()}
+                    if isinstance(alert.get("evidence"), list):
+                        removed_refs = dropped_input_refs(prior_inputs, [ident], inputs)
+                        refs = [ref for ref in alert["evidence"] if ref not in removed_refs]
+                        if refs:
+                            updated["evidence"] = refs
+                        else:
+                            updated.pop("evidence", None)
+                    alerts["maintenance-returned"] = updated
+                else:
+                    alerts.pop("maintenance-returned", None)
+                write_state(path, doc)
+                return emit({"result": "settled", "input": ident, "batch": batch,
+                             "revision": doc.get("revision")})
             if args.fail:
                 ident = args.input
                 if args.through_host_revision is not None and not 0 <= args.through_host_revision <= int(doc.get("host_revision") or 0):
@@ -10731,8 +10787,10 @@ def maintenance_receipt(caller: dict[str, str], batch: str, through: int) -> dic
     prompt = node.get("last_prompt") or {}
     fingerprint = event.get("prompt_fingerprint") if event else None
     native_id = event.get("target_acp_session_id") if event else None
+    stream = node.get("stream_identity")
     if (event is None or event.get("sweep") is not None
             or not isinstance(native_id, str) or not native_id or native_id != node.get("acp_session_id")
+            or not isinstance(stream, dict) or stream.get("mismatch") is not False
             or not isinstance(fingerprint, str) or not fingerprint
             or not isinstance(prompt, dict) or prompt.get("fingerprint") != fingerprint):
         raise StateRefusal("batch-unverified", "no matching admitted maintenance batch and current node prompt")
@@ -12879,8 +12937,10 @@ def command_sweep(args: argparse.Namespace) -> int:
                               and isinstance(row.get("sweep"), dict)), None)
                 prompt = node_record.get("last_prompt") or {}
                 native_id = event.get("target_acp_session_id") if event else None
+                stream = node_record.get("stream_identity")
                 if (event is None or not isinstance(native_id, str) or not native_id
                         or native_id != node_record.get("acp_session_id")
+                        or not isinstance(stream, dict) or stream.get("mismatch") is not False
                         or not isinstance(event.get("prompt_fingerprint"), str)
                         or not isinstance(prompt, dict)
                         or prompt.get("fingerprint") != event.get("prompt_fingerprint")):
@@ -13210,7 +13270,11 @@ def build_parser() -> argparse.ArgumentParser:
     recovery.add_argument("--source", required=True)
     recovery.add_argument("--evidence")
     recovery.add_argument("--signal-cursor", type=int)
-    recovery.add_argument("--fail")
+    recovery_mode = recovery.add_mutually_exclusive_group()
+    recovery_mode.add_argument("--fail")
+    recovery_mode.add_argument("--settle-sweep", help="settle one current sweep obligation from its completed batch")
+    recovery.add_argument("--sweep-key")
+    recovery.add_argument("--holder")
     recovery.add_argument("--input")
     recovery.add_argument("--through-host-revision", type=int)
     recovery.add_argument("--rearm", action="store_true",

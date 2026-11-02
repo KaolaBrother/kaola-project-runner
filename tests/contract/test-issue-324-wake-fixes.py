@@ -258,7 +258,7 @@ class CarrierFailure(issue255.HolderNodeMode):
             self.assertEqual(self.returned(), {}, binding)
         self.assertEqual(self.node_count(), 0)
 
-    def test_broken_recipe_fails_once_and_repair_takes_the_later_range(self) -> None:
+    def test_broken_recipe_fails_once_and_recipe_edit_does_not_recover(self) -> None:
         self.prepare_recovery_host()
         broken = {"platform": "zcode", "session": "zcode-KT-sideagent", "state": "active", "mode": "node",
                   "recipe": {"runner": "/absent-runner", "argv": ["start", "--repo", str(self.repo),
@@ -284,19 +284,16 @@ class CarrierFailure(issue255.HolderNodeMode):
         self.assertEqual(self.staged_nodes(), [])
         self.assertEqual(list(self.returned()), ["batch:3"])
         self.assertEqual(self.node_count(), 0)
-        # The Host repairs the binding: the next boundary sends the later
-        # range to a fresh node. The failed range waits for the Host's request.
+        # A recipe edit alone cannot reconcile the failed attempt or rearm it.
         doc = self.doc()
         doc["state"]["sideagent"]["recipe"]["runner"] = str(self.runner)
         (self.repo / ".kaola" / "heartbeat-prompt.json").write_text(json.dumps(doc))
-        def sent() -> bool:
-            self.holder.turn["active"] = False  # an idle Host boundary
-            self.boundary()
-            return len(self.fake.prompts) == 1
-        self.wait_for(sent, "the repaired binding's batch")
-        self.assertEqual(self.holder.node["sent_through"], 7)
-        self.assertEqual(self.node_count(), 1)
-        self.holder._reclaim_node()
+        self.holder.turn["active"] = False
+        self.boundary()
+        time.sleep(0.3)
+        self.assertEqual(self.fake.prompts, [])
+        self.assertEqual(self.failures(), ["batch:3"])
+        self.assertEqual(self.node_count(), 0)
 
     def test_owed_recoveries_without_binding_are_recorded_without_a_wake(self) -> None:
         self.prepare_recovery_host()
@@ -372,6 +369,7 @@ class NodeRuntimeFallback(issue255.HolderNodeMode):
             self.fake.close()
         self.fake = issue255.FakeNode(sock, directory / "record.json")
         os.environ["FAKE_NODE_RECORD"] = str(directory / "record.json")
+        os.environ["FAKE_NODE_PLATFORM"] = platform
 
     def bind(self, platform: str, exclusions: list[str], revision: int = 4) -> None:
         runner = Path(self.tmp.name) / "skills" / f"{platform}-kaola-project-runner" / "scripts" / "runtime-tmux.sh"
@@ -385,10 +383,12 @@ class NodeRuntimeFallback(issue255.HolderNodeMode):
         doc = {"schema": "kaola-heartbeat-prompt/2", "host_revision": revision,
                "body": json.dumps({"view": "host", "attention": []}),
                "state": {"authorization": {"grants": worker_grants, "exclusions": exclusions},
-                         "sideagent": {"platform": platform, "session": self.SESSION, "state": "active",
+                         "sideagent": {"platform": platform, "session": self.SESSION,
+                                       "preset": f"{platform}/{'haiku' if platform == 'claude-code' else 'default'}", "state": "active",
                                        "mode": "node", "recipe": {"runner": str(runner), "argv": [
                                            "start", "--repo", str(self.repo), "--session", self.SESSION,
-                                           "--role", "sideagent", "--model", "bound-model"]}},
+                                           "--role", "sideagent", "--model", "bound-model", "--tier",
+                                           "haiku" if platform == "claude-code" else "default"]}},
                          "maintenance": {"handled_host_revision": 0},
                          "section_sources": {"project": {"writer": "host", "host_revision": revision}}}}
         (self.repo / ".kaola" / "heartbeat-prompt.json").write_text(json.dumps(doc))

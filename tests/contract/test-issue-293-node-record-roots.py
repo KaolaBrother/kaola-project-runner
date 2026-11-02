@@ -46,6 +46,14 @@ NODE_RUNNER = textwrap.dedent("""\
     #!/usr/bin/env python3
     import json, os, sys
     from pathlib import Path
+    if sys.argv[1] == "status":
+        record_path = Path(os.environ["FAKE_NODE_RECORD"])
+        if record_path.exists():
+            record = json.loads(record_path.read_text())
+            print(json.dumps({"record": record, "holder_instance_id": record["holder_instance_id"]}))
+        else:
+            print(json.dumps({"reason": "no-session"}))
+        sys.exit(0)
     counter = Path(os.environ["FAKE_NODE_COUNTER"])
     n = int(counter.read_text()) + 1 if counter.exists() else 1
     counter.write_text(str(n))
@@ -57,7 +65,8 @@ NODE_RUNNER = textwrap.dedent("""\
         sys.exit(1)
     holder = f"node-{n}"
     Path(os.environ["FAKE_NODE_RECORD"]).write_text(json.dumps({
-        "session_role": "sideagent", "repo": os.environ["FAKE_NODE_REPO"], "state": "ready",
+        "session_role": "sideagent", "platform": "zcode", "session": os.environ["FAKE_NODE_SESSION"],
+        "start_selection": {"tier": "default"}, "repo": os.environ["FAKE_NODE_REPO"], "state": "ready",
         "holder_instance_id": holder, "holder_pid": int(os.environ["FAKE_NODE_PID"]),
         "socket_path": os.environ["FAKE_NODE_SOCKET"],
         "dispatcher": json.loads(os.environ.get("KAOLA_ACP_DISPATCHER") or "null"),
@@ -195,7 +204,8 @@ class NodeRecordRoots(unittest.TestCase):
                      dispatcher: dict | None = None, register: bool = True) -> Path:
         directory = root / "zcode" / self.side_session / self.digest
         directory.mkdir(parents=True, exist_ok=True)
-        record = {"session_role": "sideagent", "repo": str(self.repo), "state": "ready",
+        record = {"session_role": "sideagent", "platform": "zcode", "session": self.side_session,
+                  "start_selection": {"tier": "default"}, "repo": str(self.repo), "state": "ready",
                   "holder_instance_id": holder,
                   "holder_pid": os.getpid() if pid is None else pid,
                   "socket_path": str(self.side_sock),
@@ -213,7 +223,7 @@ class NodeRecordRoots(unittest.TestCase):
                          "--role", "sideagent"]}
 
     def binding(self) -> dict:
-        return {"platform": "zcode", "session": self.side_session, "state": "active",
+        return {"platform": "zcode", "session": self.side_session, "preset": "zcode/default", "state": "active",
                 "mode": "node", "recipe": self.recipe()}
 
     def fingerprint(self, binding: dict) -> str:
@@ -221,7 +231,8 @@ class NodeRecordRoots(unittest.TestCase):
                           sort_keys=True)
 
     def write_node_state(self, host_revision: int = 0, handled: int = 0) -> None:
-        state = {"sideagent": self.binding(), "maintenance": {"handled_host_revision": handled}}
+        state = {"authorization": {"grants": [{"id": "zcode/default", "state": "granted", "count": 1}]},
+                 "sideagent": self.binding(), "maintenance": {"handled_host_revision": handled}}
         if host_revision:
             state["section_sources"] = {"project": {"writer": "host",
                                                     "host_revision": host_revision}}
@@ -276,7 +287,7 @@ class NodeRecordRoots(unittest.TestCase):
         self.one_start_delivers_the_batch(FIXED)
 
     def drive_start_refused(self, record_path: Path, pid: int) -> None:
-        os.environ.update(FAKE_NODE_REFUSED="1", FAKE_NODE_LIVE_PID=str(pid))
+        os.environ.update(FAKE_NODE_REFUSED="1", FAKE_NODE_LIVE_PID=str(pid), FAKE_NODE_RECORD=str(record_path))
         self.holder._start_node(self.binding(), self.fingerprint(self.binding()))
 
     def test_session_exists_adopts_this_carrier_dispatched_holder(self) -> None:
@@ -320,12 +331,11 @@ class NodeRecordRoots(unittest.TestCase):
         self.assertEqual(node.get("stop_unconfirmed"),
                          {"holder": "node-foreign", "platform": "zcode", "session": bound["session"]})
         self.assertNotEqual(node.get("phase"), "running")
-        self.assertNotIn("failed", node)
+        self.assertEqual(node["failed"]["code"], "status-existing")
         kinds = self.log_kinds()
-        self.assertIn("sideagent_node_start_refused_live", kinds)
-        self.assertNotIn("sideagent_node_start_failed", kinds)
-        # Once that holder is gone the late-confirm clears the stop and the
-        # next pending Host change starts a fresh node.
+        self.assertIn("sideagent_node_start_failed", kinds)
+        self.assertEqual(self.node_count(), 0)
+        # Death alone does not authorize replay of the unresolved attempt.
         record = json.loads(record_path.read_text())
         record["holder_pid"] = self.fake.dead_pid
         record_path.write_text(json.dumps(record))
@@ -340,13 +350,9 @@ class NodeRecordRoots(unittest.TestCase):
         path.write_text(json.dumps(doc))
         self.holder.turn["active"] = False
         self.boundary()
-        self.wait_for(lambda: self.node_count() >= 2
-                      and self.holder.node.get("phase") == "running",
-                      "a fresh node after the foreign holder died")
-        kinds = self.log_kinds()
-        self.assertIn("sideagent_node_stop_confirmed_late", kinds)
-        self.assertIn("sideagent_node_started", kinds)
-        self.assertNotIn("failed", self.holder.node)
+        time.sleep(0.3)
+        self.assertEqual(self.node_count(), 0)
+        self.assertNotEqual(self.holder.node.get("phase"), "running")
 
     def test_session_exists_unverified_keeps_the_failure_branch(self) -> None:
         root = self.legacy_root("tmpdir-unverified")

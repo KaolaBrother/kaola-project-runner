@@ -249,6 +249,7 @@ class StateProject(unittest.TestCase):
         carrier._lifecycle_state = lambda: self.doc()
         carrier._node_host_pending = lambda doc, **kwargs: through
         carrier._node_recovery_pending = lambda doc: None
+        carrier._node_business_owed = lambda doc: True  # fixture is an already admitted batch
         carrier._sideagent_relay_target = lambda: {"holder_instance_id": caller["holder_instance_id"],
                                                      "acp_session_id": record["acp_session_id"], "attention": None}
         carrier._sweep_overdue = lambda doc: False
@@ -2888,6 +2889,7 @@ class MaintenanceCheckpoint(StateProject):
         (directory / "record.json").write_text(json.dumps({"holder_instance_id": holder, "platform": "zcode", "session": self.SESSION,
                                                            "repo": str(self.repo), "session_role": "sideagent",
                                                            "acp_session_id": "native-" + holder,
+                                                           "stream_identity": {"mismatch": False},
                                                            "holder_pid": os.getppid(), "agent_pid": os.getpid(),
                                                            "agent_started": next(holder_module.start_epoch(started) for pid, _, _, started in holder_module.process_table() if pid == os.getpid()),
                                                            "agent_alive": True}), encoding="utf-8")
@@ -3171,6 +3173,15 @@ class MaintenanceCheckpoint(StateProject):
             self.assertEqual((code, out.get("reason")), (2, "batch-unverified"), (patch, out))
             self.assertEqual(self.file.read_bytes(), before)
         event_path.write_text(json.dumps(event) + "\n")
+        node_path = self.records / "zcode" / self.SESSION / digest / "record.json"
+        node = json.loads(node_path.read_text())
+        node_path.write_text(json.dumps({**node, "stream_identity": {"mismatch": True}}))
+        code, out = self.state("checkpoint", "--file", str(self.file), "--writer", "sideagent",
+                               "--source", "b-ordinary", "--batch", "b-ordinary",
+                               "--through-host-revision", str(through), "--entries", "[]", env=env)
+        self.assertEqual((code, out.get("reason")), (2, "batch-unverified"), out)
+        self.assertEqual(self.file.read_bytes(), before)
+        node_path.write_text(json.dumps(node))
         (directory / "record.json").unlink()
         code, out = self.state("checkpoint", "--file", str(self.file), "--writer", "sideagent",
                                "--source", "b-ordinary", "--batch", "b-ordinary",
@@ -3653,9 +3664,14 @@ FAKE_NODE_RUNNER = textwrap.dedent("""\
         sys.exit(1)
     Path(os.environ["FAKE_NODE_ARGV"]).write_text(json.dumps(sys.argv[1:]))
     holder = f"node-{n}"
+    argv = sys.argv[1:]
+    session = argv[argv.index("--session") + 1]
+    tier = argv[argv.index("--tier") + 1] if "--tier" in argv else "default"
     Path(os.environ["FAKE_NODE_RECORD"]).write_text(json.dumps({
-        "session_role": "sideagent", "platform": "zcode", "session": "zcode-KT-sideagent", "repo": os.environ["FAKE_NODE_REPO"], "state": "ready",
+        "session_role": "sideagent", "platform": os.environ.get("FAKE_NODE_PLATFORM", "zcode"), "session": session, "repo": os.environ["FAKE_NODE_REPO"], "state": "ready",
         "acp_session_id": f"native-node-{n}",
+        "stream_identity": {"mismatch": False},
+        "start_selection": {"tier": tier},
         "holder_instance_id": holder, "holder_pid": int(os.environ["FAKE_NODE_PID"]),
         "dispatcher": json.loads(os.environ.get("KAOLA_ACP_DISPATCHER") or "null"),
         "holder_features": ["heartbeat-state/2", "sideagent-relay/1", "sideagent-node/1"]}))
@@ -3715,7 +3731,8 @@ class FakeNode(FakeSideagent):
                                                    "residual_pids": []}).encode() + b"\n")
                     continue
                 fingerprint = f"sha256:{len(self.prompts) + 1}"
-                reply = ({"error": {"code": "prompt-refused"}} if self.refuse else
+                reply = (self.refuse if isinstance(self.refuse, dict) else
+                         {"error": {"code": "prompt-refused"}} if self.refuse else
                          {"outcome": "in_progress", "prompt_fingerprint": fingerprint})
                 if not self.refuse:
                     record = json.loads(self.record.read_text())
@@ -3748,7 +3765,7 @@ class HolderNodeMode(HolderFixture):
         self.runner.chmod(0o755)
         self.saved_env = {key: os.environ.get(key) for key in
                           ("FAKE_NODE_COUNTER", "FAKE_NODE_ARGV", "FAKE_NODE_RECORD", "FAKE_NODE_REPO",
-                           "FAKE_NODE_PID", "FAKE_NODE_DELAY", "FAKE_NODE_REFUSE_JSON", "FAKE_NODE_STATUS")}
+                           "FAKE_NODE_PID", "FAKE_NODE_DELAY", "FAKE_NODE_REFUSE_JSON", "FAKE_NODE_STATUS", "FAKE_NODE_PLATFORM")}
         os.environ.update(FAKE_NODE_COUNTER=str(root / "count"), FAKE_NODE_ARGV=str(root / "argv"),
                           FAKE_NODE_RECORD=str(self.side_dir / "record.json"),
                           FAKE_NODE_REPO=str(self.repo), FAKE_NODE_PID=str(os.getpid()))
@@ -3779,7 +3796,8 @@ class HolderNodeMode(HolderFixture):
         if attention is not None:
             self.attention, self.author = attention, author
         self.attention = getattr(self, "attention", [])
-        state = {"sideagent": {"platform": "zcode", "session": "zcode-KT-sideagent", "state": "active",
+        state = {"authorization": {"grants": [WORKER_GRANT]},
+                 "sideagent": {"platform": "zcode", "session": "zcode-KT-sideagent", "preset": "zcode/default", "state": "active",
                                "mode": "node", "recipe": {"runner": str(self.runner), "argv": argv}},
                  "maintenance": maintenance or {}}
         if self.rev:
@@ -4223,6 +4241,7 @@ class HolderNodeMode(HolderFixture):
             holder_module._RECORD = saved
 
     def test_ordinary_worker_returns_reach_the_host_and_start_no_node(self) -> None:
+        self.holder._sweep_due = lambda doc: None  # sweep has its own suite
         self.write_node_state()
         self.event("codex-KT-i1-a", "idle", 5)
         prompts = self.agent.prompts()
@@ -4276,6 +4295,19 @@ class HolderNodeMode(HolderFixture):
         self.assertIn("events.jsonl#", lifecycle["evidence"])
         self.assertIn("recover", lifecycle["next"])
 
+    def test_revoked_recorded_preset_cannot_start_an_alternative(self) -> None:
+        self.holder.session_role = "host"
+        self.host_change(4)
+        path = self.repo / ".kaola" / "heartbeat-prompt.json"
+        doc = json.loads(path.read_text())
+        doc["state"]["authorization"]["grants"] = [{"id": "devin/default", "state": "granted", "count": 1}]
+        path.write_text(json.dumps(doc))
+        self.boundary()
+        self.wait_for(lambda: self.holder.node.get("failed") is not None, "preset refusal")
+        self.assertEqual(self.holder.node["failed"]["code"], "preset-unavailable")
+        self.assertEqual(self.node_count(), 0)
+        self.assertEqual(self.holder._node_lifecycle()["reason"], "preset-unavailable")
+
     def test_node_lifecycle_exposes_unbound_bound_and_executing(self) -> None:
         self.holder.session_role = "host"
         self.assertEqual(self.holder.op_state()["sideagent_lifecycle"]["state"], "UNBOUND")
@@ -4308,6 +4340,8 @@ class HolderNodeMode(HolderFixture):
             self.host_change(4)
             self.boundary()
             self.wait_for(lambda: "sideagent_node_start_failed" in self.log_kinds(), "status failure")
+            self.wait_for(lambda: "sideagent_maintenance_failure_recorded" in self.log_kinds(),
+                          "failure obligation recorded before fixture cleanup")
             self.assertEqual(calls, ["sequence", "sequence"])
             self.assertEqual(self.node_count(), 0)
         finally:
@@ -4316,6 +4350,7 @@ class HolderNodeMode(HolderFixture):
             dispatch_module.run_runner = old_runner
 
     def test_a_verified_batch_wakes_the_host_only_for_changed_attention(self) -> None:
+        self.holder._sweep_due = lambda doc: None  # isolate attention from scheduled cleanup
         self.write_node_state()
         batch = self.first_node()
         argv = json.loads((Path(self.tmp.name) / "argv").read_text())
@@ -4406,10 +4441,13 @@ class HolderNodeMode(HolderFixture):
         self.finish_host_turn()
         self.boundary()
         self.wait_still(0.2)
-        self.assertEqual(self.node_count(), 2, "no restart storm")
+        events = [json.loads(line) for line in (Path(self.holder.args.record_dir) / "events.jsonl").read_text().splitlines()]
+        self.assertEqual(len([event for event in events if event.get("kind") == "sideagent_node_batch"
+                              and not event.get("sweep")]), 2, "no maintenance replay")
         self.assertEqual(self.holder.pending_worker_events, [])
 
     def test_a_partial_checkpoint_returns_its_batch_to_the_host_once(self) -> None:
+        self.holder._sweep_due = lambda doc: None  # isolate maintenance replay
         self.write_node_state()
         batch = self.first_node()
         self.checkpoint(batch, "node-1", through=4, verified=False)
@@ -4472,6 +4510,21 @@ class HolderNodeMode(HolderFixture):
         self.wait_for(lambda: len(self.fake.prompts) == 2, "same binding recovery batch")
         self.assertEqual(self.holder._lifecycle_state()["state"]["sideagent"], before)
         self.assertEqual(self.node_count(), 2)
+
+    def test_common_admission_receipt_retains_bounded_legacy_origin_branch(self) -> None:
+        self.write_node_state()
+        self.fake.refuse = {"error": {"code": "sideagent-foreign-session", "message": "token=secret",
+            "diagnostic": {"branches": ["record_match", "private-id"], "pending_count": 900}}}
+        self.host_change(4)
+        self.boundary()
+        self.wait_for(lambda: "worker_event_relay_failed" in self.log_kinds(), "admission failure")
+        rows = self.holder.events.read_since(0, None)
+        event = next(row for row in rows if row.get("kind") == "worker_event_relay_failed")
+        diagnostic = event["receipt"]["error"]["diagnostic"]
+        self.assertEqual(diagnostic["branches"], ["record_match"])
+        self.assertEqual(diagnostic["pending_count"], 100)
+        self.assertNotIn("secret", str(event))
+        self.assertNotIn("private-id", str(event))
 
     def test_one_recover_operation_rearms_the_recorded_binding(self) -> None:
         self.holder.session_role = "host"
@@ -5010,6 +5063,7 @@ class SideagentTaskRetire(StateProject):
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "record.json").write_text(json.dumps({"holder_instance_id": holder, "platform": "zcode", "session": self.SESSION,
                                                            "repo": str(self.repo), "session_role": "sideagent",
+                                                           "acp_session_id": "native-node", "stream_identity": {"mismatch": False},
                                                            "holder_pid": os.getppid(), "agent_pid": os.getpid(),
                                                            "agent_started": next(holder_module.start_epoch(started) for pid, _, _, started in holder_module.process_table() if pid == os.getpid()),
                                                            "agent_alive": True}), encoding="utf-8")

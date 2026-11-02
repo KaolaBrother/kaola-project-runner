@@ -8,7 +8,7 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 Seats: restart required
 
-- Record bounded Devin Sideagent origin rejection diagnostics without changing isolation (#455). The operator diff from v0.9.40 includes `scripts/kaola-acp-holder.py`.
+- Keep the bound Sideagent preset through recovery, reconcile the exact prior holder, and use one carrier lifecycle for maintenance and cleanup (#458). All agent roles use the same startup path; maintenance checkpoints retain native batch and stream provenance. The operator diff from v0.9.40 includes `scripts/kaola-acp-holder.py` and `scripts/kaola-dispatch.py`.
 
 ## 0.9.40 — 2026-11-01 (event-scoped carrier notification; unavailable-binding retention)
 

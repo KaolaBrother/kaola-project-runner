@@ -1,5 +1,5 @@
 {
-  "build": "77d61bb8bf25",
+  "build": "623604dc4f8b",
   "files": {
     ".generated-by-kaola-project-runner": "477e710fa4611357f602f8733fd51c0656510595149e514e1d4b164e2b85954f",
     "SKILL.md": "16c500471d627178b76c94117fbf6f20471101b2519f8a205c66f7cf17b5ca8d",
@@ -17,7 +17,7 @@
     "references/public-research.md": "86e2ad1cd11840fd58900cde429e9b45457f149b67fa91a32e5fe6429a58407c",
     "references/qa-evidence.md": "bf9c3beff60f4407d0bf951ce7a67da4450ac6cca96062a960cd009c38daae7a",
     "references/quota-packages.md": "d0c4c2affa3c62fa807c8c7dd92157de4cb63ff7eae9660cc3eee985af61e3be",
-    "references/sideagent-node.md": "beb51f805b76050d13c4e9c92da84571ec083ebc11ce6ee69bed372bc7c9a1d2",
+    "references/sideagent-node.md": "c3f3d1b65227b64cb279e8d8cc7816af6ddc026cfa1c8d7d144c7fc73f73e88c",
     "references/task-failure.md": "f60fe47ce2ce0ddd7d17594c4b57d8455342aa44d0cc3a9f4256129861307668",
     "references/worker-profiles.md": "daee82665fb9c35e75f7fbb5dd22f1dfe39a6d160bbe70b78748f99032e1b39f",
     "references/workflow-worktree.md": "77a18209a48fb3864e84c76d5b16ac251ba88c27ea87b622268b2763b8834c2a",
@@ -26,7 +26,7 @@
     "scripts/kaola-acp-paths.py": "27185867b6a08b94bc6f975450110115b91875c89b802077525da86897d750b0",
     "scripts/kaola-compact-recovery.py": "f34a58affc095f7b9d8e29958bf237639ffe2c66728db2377d0f74dda11675d1",
     "scripts/kaola-cwd-guard.py": "975be54b05f4aa8e08f18f1eb47da2c9999774639a7df092fe67365312e8c8af",
-    "scripts/kaola-dispatch.py": "3baf16e53f58db3941ea6921d998885f26402fd5bae3c106c9666ce52257a4be",
+    "scripts/kaola-dispatch.py": "264094c92b515a96e249c0cd324183b9f6c2209d9ad448ed865fd4944e38bf3f",
     "scripts/kaola-record-contract.py": "96f63d98b4b5fe92dfbb212ff22967ee401e2fb7b8bf0e130e099ec0dd1e370d",
     "scripts/kaola-recovery-routes.py": "18bd23741124c5440fc5b45d0abc75592191e78a13bd495c76747092c7bd78b6",
     "scripts/kaola-session-names.py": "772f2d729e61763851b78ab9d440c664df225bc4f08dc71f8ba0102ead411316"

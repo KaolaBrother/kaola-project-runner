@@ -1,5 +1,7 @@
 # Devin Sideagent session origin (#450)
 
+Historical evidence: the Sideagent-specific start and resume guards described below were superseded by #458. All roles use the ordinary start path; maintenance checkpoints still require a matching native stream and carrier provenance.
+
 The Runner record directory is `<root>/devin/<session>/<sha256(repo)[:16]>`.
 The digest describes the canonical repository path, so equal digests across
 seats in the same project are expected; the session-name component separates

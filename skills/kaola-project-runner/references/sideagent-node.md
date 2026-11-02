@@ -1,7 +1,6 @@
 # Sideagent nodes, results and Host continuity
 
-`S` is the `state` command of [lifecycle-state.md](lifecycle-state.md);
-`execute`/`collect` are in [dispatch-collect.md](dispatch-collect.md).
+`S` is the `state` command in [lifecycle-state.md](lifecycle-state.md).
 
 ## Implementation items
 
@@ -19,7 +18,7 @@ reconciled prior item stays reconciled.
 `output` with its `kind`: `file` (a path or `{"path": ...}`; checked
 present), `capture` (the reply), `remote` (a URL) or
 `description` (text); an explicit `{"kind":...}` wins; `gaps`:
-`reply-text-absent`, `capture-truncated`, `output-absent` (file only). A gap is evidence, not a transport failure. Read the full reply via `locator` before a verdict. A new return resets `acceptance` to `pending`, keeping `prior_acceptance`.
+`reply-text-absent`, `capture-truncated`, `output-absent` (file only). A gap is evidence. Read the full reply via `locator` before a verdict. A new return resets `acceptance` to `pending`, keeping `prior_acceptance`.
 
 ## Per-assignment dispositions
 
@@ -40,10 +39,10 @@ retirement input or tombstone.
 
 ## Node mode
 
-On `state init` and startup, a record listing `sideagent-node/1` binds node mode: Delegator `authorization.sideagent.preset` if eligible, else the first eligible by id. Skip `computer-use-only`. An existing binding stays across resume and does not raise `host_revision`. Otherwise `sideagent` stays unset; `state check` reports `sideagent-default-unbound` with `state ensure-sideagent`. The next boundary retries.
+On `state init` and startup, a record listing `sideagent-node/1` binds node mode: use Delegator `authorization.sideagent.preset` when configured; otherwise choose the first eligible Worker by id, skipping `computer-use-only`. An unavailable preset is reported, not replaced. An existing binding stays across resume without raising `host_revision`. Otherwise `sideagent` stays unset; `state check` reports `sideagent-default-unbound` with `state ensure-sideagent`. The next boundary retries.
 
-Bind `--section sideagent` with `"mode": "node"` and `"recipe": {"runner": "<absolute Runner>", "argv": ["start", "--repo", "<root>", "--session", "<bound>", "--role", "sideagent", ...]}` (checkout `kaola-tmux.sh` takes the platform first). No `--continue`/`--resume`. Optional absolute `state_tool` when `kaola-dispatch.py` is not beside the holder or sibling Skill. `runner`/`state_tool` are a pinned Skill root or accepted checkout, never a mutable dev checkout.
-Worker returns are not node inputs. A holder advertising `sideagent-node/1` selects Host business changes past the handled revision; `host-compact-maintenance/1` adds one pending recovery input after the Host turn. One fresh node per batch (no shell), one prompt (batch id, revision range, role limits: source pointers only; exact-stop a recorded reclaim), then the node's checkpoint. A turn end alone acknowledges nothing. A missing Runner, failed start or unadmitted batch moves forward to the next eligible Worker (`computer-use-only` skipped). A refused recipe or empty chain reaches both views and wakes the Host. An idle binding with nothing owed stays quiet. Retirement alone starts nothing and advances no checkpoint. A node whose input disappeared during startup is exact-stopped after the Host turn. An assigned batch keeps its range. Older bundles keep revision-only selection.
+Bind `--section sideagent` with `"mode": "node"` and `"recipe": {"runner": "<absolute Runner>", "argv": ["start", "--repo", "<root>", "--session", "<bound>", "--role", "sideagent", ...]}` (checkout `kaola-tmux.sh` takes the platform first). Optional absolute `state_tool` when `kaola-dispatch.py` is not beside the holder or sibling Skill. `runner`/`state_tool` are a pinned Skill root or accepted checkout, never a mutable dev checkout.
+Worker returns are not node inputs. A holder advertising `sideagent-node/1` selects Host business changes past the handled revision; `host-compact-maintenance/1` adds one pending recovery input after the Host turn. One fresh node per batch (no shell), one prompt (batch id, revision range, role limits: source pointers only; exact-stop a recorded reclaim), then the node's checkpoint. A turn end acknowledges nothing. A missing Runner, failed start or unadmitted batch preserves the selected preset and reports the failure; no alternative is selected. An idle binding stays quiet. Retirement alone starts nothing and advances no checkpoint. A node whose input disappeared during startup is exact-stopped after the Host turn. An assigned batch keeps its range.
 
 Every checkpoint requires its original admitted carrier batch, bound node, current prompt and sent through revision. Direct prompts and copied ids are not receipts. Write selected ordinary ids once; recovery-source task ids are not inputs. A recovery-only batch has none.
 
@@ -58,7 +57,7 @@ A `host:tasks/<id>@<rev>` the Host accepted done or cancelled retires in the bat
 
 For `recovery#N`, use only `input`, `checked`, `unavailable` and optional `applied`; never `retained`. Each scope is `checked` or `unavailable`, never both. See [duty-reconcile.md](duty-reconcile.md).
 
-After a verified batch the carrier wakes the Host once, at its next idle boundary, only when an attention item is a record this node wrote and the Host view's attention differs from what the Host last saw and from the batch start; otherwise it stays quiet. A partial or missing checkpoint, a `through` below the range, a refused batch, a failed start or a lost node reaches the Host with the unhandled range; the carrier exact-stops the node and resends only on a Host recovery request. A failed start or refused batch starts no further node until the binding changes. After `sideagent_node_stop_unconfirmed` no node starts while that holder still runs. A Host stop in any mode stops its own node, a start in flight included. A replaced node's late write is `binding-superseded`. The next owed input starts a node at a Host turn end or the existing idle tick. No new timer runs.
+After a verified batch the carrier wakes the Host once, at its next idle boundary, only when an attention item is a record this node wrote and the Host view's attention differs from what the Host last saw and from the batch start; otherwise it stays quiet. A partial or missing checkpoint, a `through` below the range, a refused batch, a failed start or a lost node reaches the Host with the unhandled range. Reconcile the original attempt and use `state ensure-sideagent --recover-failed` to rearm the same preset; use its reported arguments and current evidence. An authorized clear requires a current disable instruction, a confirmed stopped holder and preservation of pending duties. `sideagent_node_stop_unconfirmed` is not proof of death: no replacement or completed clear until its exact identity is reconciled. A Host stop in any mode stops its own node, a start in flight included. A replaced node's late write is `binding-superseded`. The next owed input starts a node at a Host turn end or the existing idle tick. No new timer.
 
 ## Completed Host compaction
 

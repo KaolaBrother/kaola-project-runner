@@ -204,7 +204,8 @@ class SweepTool(unittest.TestCase):
     def _write_record(self, directory: Path, record: dict) -> None:
         if record.get("session_role") == "sideagent":
             record = {**record, "platform": directory.parent.parent.name, "session": directory.parent.name,
-                      "acp_session_id": "native-node-1", "last_prompt": {"fingerprint": "fp-sweep"}}
+                      "acp_session_id": "native-node-1", "stream_identity": {"mismatch": False},
+                      "last_prompt": {"fingerprint": "fp-sweep"}}
             if self.file.exists():
                 doc = json.loads(self.file.read_text())
                 doc["state"]["sideagent"] = {"platform": record["platform"], "session": record["session"],
@@ -1099,7 +1100,8 @@ class SweepCarrier(issue255.HolderFixture):
 
     def write_node_state(self, maintenance: dict | None = None,
                          host_revision: int = 0) -> None:
-        state: dict = {"sideagent": {"platform": "zcode", "session": "zcode-KT-sideagent",
+        state: dict = {"authorization": {"grants": [issue255.WORKER_GRANT]},
+                       "sideagent": {"platform": "zcode", "session": "zcode-KT-sideagent", "preset": "zcode/default",
                                      "state": "active", "mode": "node",
                                      "recipe": {"runner": str(self.runner),
                                                 "argv": ["start", "--repo", str(self.repo),
@@ -1187,7 +1189,7 @@ class SweepCarrier(issue255.HolderFixture):
         proc = subprocess.run([sys.executable, str(SCRIPT), "sweep", "--apply", "--batch", batch,
                                "--repo", str(self.repo),
                                "--file", str(self.repo / ".kaola" / "heartbeat-prompt.json")],
-                              capture_output=True, text=True, env=self.node_env())
+                              capture_output=True, text=True, env=self.node_env(self.holder.node["holder"]))
         return json.loads(proc.stdout)
 
     def end_node_turn(self, outcome: str = "turn_completed", cursor: int = 90) -> dict:
@@ -1357,6 +1359,51 @@ class SweepCarrier(issue255.HolderFixture):
         self.assertEqual(maintenance["handled_host_revision"], 0)
         self.assertNotIn("acked_host_revision", maintenance)
         self.assertEqual(self.holder.node["sweep"]["phase"], "queued")
+
+    def test_failed_sweep_is_recovered_and_only_exact_settlement_clears_it(self) -> None:
+        self.write_sweep_state({"handled_host_revision": 0})
+        path = self.repo / ".kaola" / "heartbeat-prompt.json"
+        doc = self.holder._lifecycle_state()
+        doc["state"]["sideagent"].update(preset="zcode/default", source="fixture",
+                                          since="2026-10-22T00:00:00Z")
+        doc["state"]["authorization"] = {"grants": [{"id": "zcode/default", "state": "granted", "count": 1}]}
+        path.write_text(json.dumps(doc))
+        self.fake.refuse = True
+        self.drive(lambda: bool(self.sweep_events("sideagent_sweep_returned")), "unadmitted sweep")
+        self.wait_for(lambda: bool(self.sweep_events("sideagent_maintenance_failure_recorded")), "failure recorded")
+        self.wait_for(lambda: bool(self.sweep_events("sideagent_node_stopped")), "failed node stopped")
+        key = self.holder.node["sweep"]["key"] or "empty"
+        ident = f"sweep:{key}"
+        state = self.holder._lifecycle_state()["state"]
+        self.assertIn(ident, state["alerts"]["maintenance-returned"]["inputs"])
+        self.assertNotIn("last_sweep", state["maintenance"])
+        self.fake.refuse = False
+        self.holder.turn["active"] = False
+        env = {**os.environ, "KAOLA_ACP_RECORD_ROOT": str(self.records),
+               "KAOLA_ACP_DISPATCHER": json.dumps(self.holder.dispatcher_identity())}
+        code, out = issue255.run(["state", "ensure-sideagent", "--file", str(path), "--repo", str(self.repo),
+                                  "--recover-failed", "--evidence", "events#sweep-failure"], env)
+        self.assertEqual((code, out.get("result")), (0, "recovered"), out)
+        self.drive(lambda: len(self.fake.prompts) >= 2, "recovery maintenance batch")
+        batch = self.batch_of(1)
+        request = self.holder.node["recovery_input"]
+        node_env = self.node_env(self.holder.node["holder"])
+        code, out = issue255.run(["state", "checkpoint", "--file", str(path), "--writer", "sideagent",
+            "--source", batch, "--batch", batch, "--through-host-revision", "0",
+            "--recovery-seq", str(request["seq"]), "--entries",
+            json.dumps([issue255.MaintenanceCheckpoint.scoped_entry(request["seq"])])], node_env)
+        self.assertEqual(code, 0, out)
+        self.end_node_turn(cursor=91)
+        self.drive(lambda: len(self.fake.prompts) >= 3, "retry sweep batch")
+        sweep_batch = self.batch_of(2)
+        self.assertIn(ident, self.holder._lifecycle_state()["state"]["alerts"]["maintenance-returned"]["inputs"])
+        receipt = self.apply_as_node(sweep_batch)
+        self.assertIn(receipt["result"], ("nothing", "swept"), receipt)
+        self.end_node_turn(cursor=92)
+        self.drive(lambda: bool(self.sweep_events("sideagent_sweep_return_resolved")), "resolved sweep obligation")
+        inputs = ((self.holder._lifecycle_state()["state"].get("alerts") or {}).get("maintenance-returned") or {}).get("inputs") or {}
+        self.assertNotIn(ident, inputs)
+        self.assertEqual(self.holder._lifecycle_state()["state"]["maintenance"]["last_sweep"]["batch"], sweep_batch)
 
     def test_a_fully_vanished_plan_still_settles_verified(self) -> None:
         self.write_sweep_state({"handled_host_revision": 0})

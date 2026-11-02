@@ -6,7 +6,7 @@ The role is a closed catalog value, not a preset name. Owner decision
 so Terra is a selectable Worker again (research and computer-use). The skip
 still reads the role: a fixture or later preset that sets
 ``computer-use-only`` is omitted from automatic selection, including the
-Sideagent node chain.
+new Sideagent bindings. Recovery retains the recorded preset.
 """
 
 from __future__ import annotations
@@ -150,38 +150,34 @@ class ComputerUseRoles(unittest.TestCase):
         env["KAOLA_LAUNCH_BACKEND"] = "direct"
         return subprocess.run(argv, capture_output=True, text=True, timeout=60, env=env)
 
-    def test_dsh_turn_failure_skips_computer_use_only(self) -> None:
+    def default_rows(self, tool: Path = DISPATCH) -> list[dict]:
+        spec = importlib.util.spec_from_file_location("dispatch_issue_350", tool)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        doc = json.loads((self.repo / ".kaola" / "heartbeat-prompt.json").read_text())
+        rows, error = module.default_worker_rows(doc, self.repo)
+        self.assertIsNone(error)
+        return rows
+
+    def test_new_binding_skips_computer_use_only_without_a_fallback_chain(self) -> None:
         self.write_grant()
-        carrier = self.carrier()
-        moved = carrier._node_fallback(self.binding(), "dsh", "turn-refused:turn_failed")
-        self.assertIsNotNone(moved)
-        event = carrier.events[-1]
-        self.assertEqual(event["from"], "dsh")
-        self.assertEqual(event["reason"], "turn-refused:turn_failed")
-        self.assertEqual(event["chain"], DSH_CHAIN)
-        self.assertEqual(event["to"], "claude-code/haiku")
-        self.assertIn(TERRA, event["chain"])
-        self.assertNotIn("codex/terra", inspect.getsource(self.holder.Holder._node_chain))
-        self.assertIn(ROLE, inspect.getsource(self.holder.automatic_worker_barred))
+        presets = [row["id"] for row in self.default_rows()]
+        self.assertIn(TERRA, presets)
+        self.assertNotIn("codex/luna", presets)
+        self.assertFalse(hasattr(self.holder.Holder, "_node_fallback"))
 
     def test_absent_haiku_leads_with_terra(self) -> None:
         self.write_grant()
         self.availability(["claude-code/haiku"])
-        chain = self.carrier()._node_chain(self.binding(), ["dsh"])
-        presets = [row["preset"] for row in chain]
-        self.assertEqual(presets, [TERRA, "devin/default", "hermes/default", "hermes/max", "opencode/default", "zcode/default"])
+        presets = [row["id"] for row in self.default_rows()]
+        self.assertNotIn("claude-code/haiku", presets)
+        self.assertIn(TERRA, presets)
         self.assertEqual(presets[0], TERRA)
 
     def test_only_terra_takes_the_chain_when_other_workers_are_absent(self) -> None:
         self.write_grant()
         self.availability(OTHER_WORKERS)
-        carrier = self.carrier()
-        moved = carrier._node_fallback(self.binding(), "dsh", "turn-refused:turn_failed")
-        self.assertIsNotNone(moved)
-        event = carrier.events[-1]
-        self.assertFalse(event.get("exhausted", False))
-        self.assertEqual(event["chain"], [TERRA])
-        self.assertEqual(event["to"], TERRA)
+        self.assertEqual([row["id"] for row in self.default_rows()], [TERRA])
         projected = json.loads(self.project().stdout)
         workers = [row for row in projected["candidates"] if row["class"] == "Worker"]
         self.assertEqual([row["id"] for row in workers], [TERRA])
@@ -219,8 +215,7 @@ class ComputerUseRoles(unittest.TestCase):
         self.assertEqual(rows["futureplat/cu"]["roles"], [ROLE])
         self.assertEqual(rows["futureplat/terra"]["roles"], [])
         self.assertIn("futureplat/cu", rows)
-        chain = self.carrier(tool)._node_chain(self.binding(), ["dsh"])
-        presets = [row["preset"] for row in chain]
+        presets = [row["id"] for row in self.default_rows(tool)]
         self.assertEqual(presets, ["futureplat/default", "futureplat/terra"])
         self.assertNotIn("futureplat/cu", presets)
 
