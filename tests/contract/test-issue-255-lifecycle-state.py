@@ -5514,7 +5514,7 @@ class DefaultSideagentBind(StateProject):
         self.assertIsNone(self.doc()["state"]["sideagent"])
         self.problem(env=env)
 
-    def test_configured_preset_wins_and_an_ineligible_one_falls_through(self) -> None:
+    def test_configured_preset_wins_and_an_ineligible_one_does_not_fall_through(self) -> None:
         env = self.host_env()
         both = {"grants": [WORKER_GRANT, {"id": "devin/default", "state": "granted", "count": 1}]}
         code, out = self.init_with(env, both)
@@ -5533,8 +5533,10 @@ class DefaultSideagentBind(StateProject):
             {"authorization": {"sideagent": {"preset": "codex/luna"}}}), encoding="utf-8")
         code, out = self.init_with(env, both)
         self.assertEqual(code, 0, out)
-        self.assertEqual(self.doc()["state"]["sideagent"]["preset"], "devin/default")
-        self.assertEqual(self.doc()["state"]["sideagent"]["authorization_source"], "granted")
+        self.assertIsNone(self.doc()["state"]["sideagent"])
+        code, out = self.ensure(env)
+        self.assertEqual((code, out["result"]), (0, "unbound"), out)
+        self.assertIn("codex/luna", out["problem"]["detail"])
 
     def test_a_non_host_caller_cannot_bind_and_a_runner_repo_still_can(self) -> None:
         worker = self.host_env(role="worker", session="zcode-KT-worker")

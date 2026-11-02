@@ -10024,8 +10024,9 @@ def default_worker_rows(doc: dict[str, Any], repo: Path) -> tuple[list[dict[str,
     configured = configured_sideagent_preset(repo)
     if configured:
         chosen = [row for row in rows if row["id"] == configured]
-        if chosen:
-            return chosen, None
+        if not chosen:
+            return [], f"configured Sideagent preset {configured} is unavailable or not authorized"
+        return chosen, None
     return rows, None
 
 
