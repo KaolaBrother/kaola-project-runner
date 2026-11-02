@@ -1,0 +1,370 @@
+validate: scrubbed inherited env: KAOLA_ACP_CHILD_RECORD KAOLA_ACP_DISPATCHER KAOLA_ACP_HEARTBEAT_HOST KAOLA_ACP_HEARTBEAT_HOST_SOCKET KAOLA_LAUNCH_BACKEND KAOLA_ZCODE_ENTRY KAOLA_ZCODE_NODE
+validate: coverage: SUBSET RUN (9 of 176 suites selected; not full-inventory coverage)
+validate: selected: test-devin-regressions.py test-issue-255-lifecycle-state.py test-issue-293-node-record-roots.py test-issue-324-wake-fixes.py test-issue-336-node-turn-refusal.py test-issue-348-backstop-sweep.py test-issue-350-computer-use-roles.py test-issue-421-retire-recovery.py test-issue-244-dispatch.py
+validate: candidate: 307e643c (dirty) - execution context, not complete input identity
+render-skills: PASS (12 workers + kaola-project-runner + kaola-delegator + grok-bot host: 1 bridge skill, 2479 B, pinned at de444046a136, release pin gate not run; budgets OK)
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+validate-skill: PASS (1 Skill(s))
+..................................
+----------------------------------------------------------------------
+Ran 34 tests in 0.590s
+
+OK
+test_a_held_seat_still_meets_grant_count_and_shared_seat (__main__.DispatchEntry) ... ok
+test_a_prestarted_unprompted_named_seat_is_the_items_own_occupancy (__main__.DispatchEntry) ... ok
+test_admitted_assignment_keeps_its_index_at_an_occupied_grant (__main__.DispatchEntry) ... ok
+test_advertised_difference_stays_visible_without_blocking_send (__main__.DispatchEntry) ... ok
+test_applied_evidence_ignores_resolved_values (__main__.DispatchEntry) ... ok
+test_authorization_keys_resources_and_launch_edges (__main__.DispatchEntry) ... ok
+test_blocked_row_keeps_prior_binding (__main__.DispatchEntry) ... ok
+test_capability_overview_does_not_copy_the_catalog (__main__.DispatchEntry) ... ok
+test_changed_authorization_refuses_the_item_and_keeps_an_admitted_binding (__main__.DispatchEntry) ... ok
+test_collect_excerpt_reads_capture_event_stream (__main__.DispatchEntry) ... ok
+test_collect_excerpt_survives_more_than_forty_events_before_the_reply (__main__.DispatchEntry) ... ok
+test_collect_returns_one_finished_branch_and_leaves_the_other (__main__.DispatchEntry) ... ok
+test_collect_terminal_outcome_and_stopped_seat (__main__.DispatchEntry) ... ok
+test_dry_run_reconciles_kept_item_without_starting (__main__.DispatchEntry) ... ok
+test_elite_and_worker_rows_ignore_the_expert_keys (__main__.DispatchEntry) ... ok
+test_exact_tier_and_override_are_not_substituted (__main__.DispatchEntry) ... ok
+test_execute_omitted_live_lists_through_the_skills_root_runner (__main__.DispatchEntry) ... ok
+test_expert_expiry_is_withheld_and_execute_reports_the_reason (__main__.DispatchEntry) ... ok
+test_expert_lifetime_is_task_unless_the_grant_says_standing (__main__.DispatchEntry) ... ok
+test_first_publish_does_not_stamp_missing_before_the_executor (__main__.DispatchEntry)
+The index written before the executor must not invent reason missing. ... ok
+test_grant_state_cap_and_owner_precedence (__main__.DispatchEntry) ... ok
+test_heartbeat_envelope_feeds_project_and_execute (__main__.DispatchEntry) ... ok
+test_host_class_row_is_not_a_worker_seat (__main__.DispatchEntry) ... ok
+test_installed_layout_finds_sibling_platform_manifests (__main__.DispatchEntry) ... ok
+test_kept_item_with_absent_session_is_not_sent_again (__main__.DispatchEntry) ... ok
+test_later_plan_keeps_an_unresolved_index_row (__main__.DispatchEntry)
+Another plan must not drop a pending row from the same index. ... ok
+test_live_rows_use_status_selection_not_platform_class (__main__.DispatchEntry) ... ok
+test_mapped_dsh_worker_row_admits_authorized_elite (__main__.DispatchEntry) ... ok
+test_no_expert_is_exposed_without_its_own_grant (__main__.DispatchEntry) ... ok
+test_non_object_authorization_is_invalid_on_execute (__main__.DispatchEntry) ... ok
+test_omitted_row_follows_the_locked_disk_status (__main__.DispatchEntry)
+The lock decides an omitted row. The older baseline status does not. ... ok
+test_one_live_droid_uses_one_slot_of_the_shared_pool (__main__.DispatchEntry) ... ok
+test_only_an_exact_verified_unprompted_seat_is_held (__main__.DispatchEntry) ... ok
+test_partial_results_stay_visible (__main__.DispatchEntry) ... ok
+test_production_scope_calls_no_runner (__main__.DispatchEntry) ... ok
+test_provider_qualified_model_matches_and_a_different_id_does_not (__main__.DispatchEntry) ... ok
+test_recovery_does_not_replay_an_ambiguous_or_completed_send (__main__.DispatchEntry) ... ok
+test_seats_explicit_skills_root_governs_and_is_not_replaced_by_another (__main__.DispatchEntry) ... ok
+test_seats_missing_source_does_not_claim_zero_occupancy (__main__.DispatchEntry) ... ok
+test_seats_omitted_live_lists_through_a_non_executable_installed_runner (__main__.DispatchEntry) ... ok
+test_seats_omitted_live_without_an_installed_runner_stays_unknown (__main__.DispatchEntry) ... ok
+test_seats_resolve_direct_runner_started_preset_without_index_or_skills_root (__main__.DispatchEntry) ... ok
+test_seats_view_binds_identity_and_retains_grant_states (__main__.DispatchEntry) ... ok
+test_seats_view_without_the_new_keys_is_unchanged (__main__.DispatchEntry) ... ok
+test_send_holder_mismatch_is_unknown (__main__.DispatchEntry) ... ok
+test_shared_droid_pool_admits_two_items_and_refuses_a_third (__main__.DispatchEntry) ... ok
+test_shared_seat_blocks_the_pair_and_an_independent_item_runs (__main__.DispatchEntry) ... ok
+test_sideagent_role_reaches_start_argv (__main__.DispatchEntry) ... ok
+test_single_item_and_bounded_parallel_admission (__main__.DispatchEntry) ... ok
+test_skeleton_example_sets_shared_grant_count (__main__.DispatchEntry) ... ok
+test_snapshot_round_trips_one_nested_object (__main__.DispatchEntry) ... ok
+test_standing_grant_outlives_its_session_and_a_new_name_admits (__main__.DispatchEntry) ... ok
+test_stopped_session_name_is_not_absent (__main__.DispatchEntry) ... ok
+test_summary_does_not_advertise_denied_visual (__main__.DispatchEntry) ... ok
+test_summary_uses_present_grants_and_hides_ungranted_expert (__main__.DispatchEntry) ... ok
+test_timeout_and_unknown_mutation_are_not_failed_or_returned (__main__.DispatchEntry) ... ok
+test_turn_view_bounds_whole_view_and_accounts_for_every_entry (__main__.DispatchEntry) ... ok
+test_turn_view_compacts_large_bodies_without_losing_evidence (__main__.DispatchEntry) ... ok
+test_turn_view_compacts_pending_permission_and_status_error (__main__.DispatchEntry) ... ok
+test_turn_view_early_returns_keep_counts_and_unknown_ranges (__main__.DispatchEntry) ... ok
+test_turn_view_failure_entries_are_observations_beside_the_turn_verdict (__main__.DispatchEntry) ... ok
+test_turn_view_identity_conflict_clears_the_verdict_before_a_timeout (__main__.DispatchEntry) ... ok
+test_turn_view_item_repo_must_match_index_repo (__main__.DispatchEntry) ... ok
+test_turn_view_keeps_partial_permission_and_process_exit (__main__.DispatchEntry) ... ok
+test_turn_view_keeps_status_verdict_when_only_the_capture_read_fails (__main__.DispatchEntry) ... ok
+test_turn_view_metadata_and_recovered_or_foreign_signals_are_not_failures (__main__.DispatchEntry) ... ok
+test_turn_view_missing_capture_is_unknown_without_mutation (__main__.DispatchEntry) ... ok
+test_turn_view_never_substitutes_another_holder_or_turn (__main__.DispatchEntry) ... ok
+test_turn_view_reports_unknown_gaps_and_truncation (__main__.DispatchEntry) ... ok
+test_turn_view_retains_permission_and_failure_outside_excerpt (__main__.DispatchEntry) ... ok
+test_turn_view_system_error_uses_holder_terminal_and_keeps_raw_provenance (__main__.DispatchEntry) ... ok
+test_unknown_and_repair_rows_stay_when_another_plan_publishes (__main__.DispatchEntry)
+Unknown correlation and an open repair stay. Closed dispositions do not. ... ok
+test_unknown_availability_is_projected_and_not_advertised (__main__.DispatchEntry) ... ok
+test_unknown_selection_is_not_a_mismatch_and_does_not_block_send (__main__.DispatchEntry) ... ok
+test_worker_fan_out_is_separate_from_occupied_elite_and_expert_counts (__main__.DispatchEntry) ... ok
+test_write_overlap_is_a_conflict_and_pool_uses_default_permission (__main__.DispatchEntry) ... ok
+test_dispatch_guidance_preserves_authorization_and_unknown_selection (__main__.RenderedGuidance) ... ok
+test_entry_is_discoverable_and_sideagent_includes_light_work (__main__.RenderedGuidance) ... ok
+test_entry_prefers_spread_breadth_without_a_quota_and_states_b1 (__main__.RenderedGuidance) ... ok
+test_planned_dispatch_of_every_scope_routes_through_execute (__main__.RenderedGuidance) ... ok
+
+----------------------------------------------------------------------
+Ran 80 tests in 53.643s
+
+OK
+test_a_host_dispatcher_is_not_re_anchored (__main__.CarrierAnchor) ... ok
+test_a_worker_is_not_the_carrier_of_the_sessions_it_starts (__main__.CarrierAnchor) ... ok
+test_an_unbound_sideagent_falls_through_to_the_dispatcher_rows (__main__.CarrierAnchor) ... ok
+test_missing_host_is_a_named_failure_not_a_silent_unbound_start (__main__.CarrierAnchor) ... ok
+test_rebind_host_anchors_a_seat_to_the_live_host_running_it (__main__.CarrierAnchor) ... ok
+test_rebind_host_refuses_a_non_host_or_stale_caller (__main__.CarrierAnchor) ... ok
+test_sideagent_dispatch_notifies_its_bound_host (__main__.CarrierAnchor) ... ok
+test_a_recorded_hold_is_not_re_probed (__main__.ConsolidatedDispatch) ... ok
+test_a_second_execute_batch_keeps_the_first_in_flight_ref (__main__.ConsolidatedDispatch) ... ok
+test_collect_names_the_turn_locators_truncation_and_an_absent_output (__main__.ConsolidatedDispatch) ... ok
+test_implementation_sends_the_hosts_core_and_scope_and_links_the_task (__main__.ConsolidatedDispatch) ... ok
+test_mutation_stays_refused_outside_implementation_and_prompts_are_exact (__main__.ConsolidatedDispatch) ... ok
+test_only_a_declared_file_can_be_reported_absent (__main__.ConsolidatedDispatch) ... ok
+test_retire_reads_the_index_execute_and_collect_wrote (__main__.ConsolidatedDispatch) ... ok
+test_settled_dispositions_remove_current_links_without_index_write (__main__.ConsolidatedDispatch) ... ok
+test_settlement_during_collect_preserves_the_index (__main__.ConsolidatedDispatch) ... ok
+test_a_capable_host_init_binds_node_mode_without_a_business_revision (__main__.DefaultSideagentBind) ... ok
+test_a_hold_on_the_only_worker_is_visible (__main__.DefaultSideagentBind) ... ok
+test_a_missing_runner_names_the_platform_and_the_recovery_command (__main__.DefaultSideagentBind) ... ok
+test_a_non_host_caller_cannot_bind_and_a_runner_repo_still_can (__main__.DefaultSideagentBind) ... ok
+test_an_existing_binding_is_not_replaced (__main__.DefaultSideagentBind) ... ok
+test_check_names_the_gap_from_a_live_declaring_host (__main__.DefaultSideagentBind) ... ok
+test_configured_preset_wins_and_an_ineligible_one_does_not_fall_through (__main__.DefaultSideagentBind) ... ok
+test_init_without_a_declaring_carrier_stays_unbound (__main__.DefaultSideagentBind) ... ok
+test_no_eligible_preset_is_visible_and_not_silent (__main__.DefaultSideagentBind) ... ok
+test_startup_binds_and_the_first_business_write_starts_one_batch (__main__.DefaultSideagentNode) ... ok
+test_bound_sideagent_is_exempt_and_helpers_count (__main__.ExecuteSeats) ... ok
+test_bound_sideagent_never_takes_or_waits_for_a_shared_worker_seat (__main__.ExecuteSeats) ... ok
+test_a_batch_the_node_does_not_admit_is_returned_once_and_not_resent (__main__.HolderNodeMode) ... ok
+test_a_build_skew_refusal_is_not_a_permanent_latch (__main__.HolderNodeMode) ... ok
+test_a_checkpoint_short_of_its_batch_is_partial_and_reaches_the_host_once (__main__.HolderNodeMode) ... ok
+test_a_holder_known_not_to_be_the_host_never_starts_a_node (__main__.HolderNodeMode) ... ok
+test_a_missing_checkpoint_reaches_the_host_once (__main__.HolderNodeMode) ... ok
+test_a_node_start_in_flight_ends_with_the_stopping_carrier (__main__.HolderNodeMode) ... ok
+test_a_partial_checkpoint_names_its_missing_sources_to_the_host (__main__.HolderNodeMode)
+#310: the settled event, the Host wake, and the carrier alert name ... ok
+test_a_partial_checkpoint_returns_its_batch_to_the_host_once (__main__.HolderNodeMode) ... ok
+test_a_pinned_legacy_contract_keeps_revision_only_node_selection (__main__.HolderNodeMode) ... ok
+test_a_start_slower_than_the_stop_is_found_by_its_record (__main__.HolderNodeMode) ... ok
+test_a_stop_whose_caller_gave_up_still_ends_the_holder (__main__.HolderNodeMode) ... ok
+test_a_stopped_record_is_not_a_stopped_node_until_its_holder_is_gone (__main__.HolderNodeMode) ... ok
+test_a_stopping_carrier_ends_its_running_node_and_starts_none (__main__.HolderNodeMode) ... ok
+test_a_verified_batch_wakes_the_host_only_for_changed_attention (__main__.HolderNodeMode) ... ok
+test_admitted_ordinary_batch_checkpoints_and_carrier_settles (__main__.HolderNodeMode) ... ok
+test_an_unconfirmed_stop_blocks_a_competing_node (__main__.HolderNodeMode) ... ok
+test_codex_acp_reload_and_host_maintenance_remain_independent (__main__.HolderNodeMode) ... ok
+test_common_admission_receipt_retains_bounded_legacy_origin_branch (__main__.HolderNodeMode) ... ok
+test_failed_start_is_not_blindly_retried (__main__.HolderNodeMode) ... ok
+test_inquiry_request_recovers_recipe_without_business_write (__main__.HolderNodeMode) ... ok
+test_missing_record_for_unreachable_holder_does_not_release_slot (__main__.HolderNodeMode) ... ok
+test_node_and_ordinary_dispatch_use_the_same_status_start_sequence (__main__.HolderNodeMode) ... ok
+test_node_lifecycle_exposes_unbound_bound_and_executing (__main__.HolderNodeMode) ... ok
+test_one_host_turn_makes_one_batch_at_its_end (__main__.HolderNodeMode) ... ok
+test_one_recover_operation_rearms_the_recorded_binding (__main__.HolderNodeMode) ... ok
+test_ordinary_worker_returns_reach_the_host_and_start_no_node (__main__.HolderNodeMode) ... ok
+test_owed_business_recipe_failure_survives_carrier_memory_loss (__main__.HolderNodeMode) ... ok
+test_recipe_refusal_for_owed_recovery_is_visible_once_in_both_views (__main__.HolderNodeMode) ... ok
+test_recovery_only_batch_at_same_revision_coalesces_and_keeps_safe_boundary (__main__.HolderNodeMode) ... ok
+test_recovery_receipt_missing_in_checkpoint_is_partial_and_visible (__main__.HolderNodeMode) ... ok
+test_recovery_request_rearms_failed_attempt_without_editing_binding (__main__.HolderNodeMode) ... ok
+test_recovery_request_selects_the_failed_business_range_without_a_business_write (__main__.HolderNodeMode)
+#287: a failed business batch is not re-sent on its own; the Host's ... ok
+test_resume_recipe_uses_the_ordinary_start_path (__main__.HolderNodeMode) ... ok
+test_resume_scan_repairs_registration_window_and_pending_blocks_old_live_node (__main__.HolderNodeMode) ... ok
+test_retirement_during_an_assigned_batch_preserves_its_checkpoint (__main__.HolderNodeMode) ... ok
+test_retirement_mixed_with_current_work_still_sends_one_useful_batch (__main__.HolderNodeMode) ... ok
+test_retirement_only_starts_no_node_and_later_work_selects_the_full_range (__main__.HolderNodeMode) ... ok
+test_revoked_recorded_preset_cannot_start_an_alternative (__main__.HolderNodeMode) ... ok
+test_sent_recovery_checkpoint_keeps_later_signal_and_exact_reclaims_first_node (__main__.HolderNodeMode) ... ok
+test_startup_coalesces_new_useful_work_until_the_host_turn_ends (__main__.HolderNodeMode) ... ok
+test_startup_then_empty_exact_stops_only_the_owned_unassigned_node (__main__.HolderNodeMode) ... ok
+test_the_checkout_entrypoint_recipe_names_the_bound_platform_first (__main__.HolderNodeMode) ... ok
+test_the_hosts_own_attention_change_during_a_batch_stays_quiet (__main__.HolderNodeMode)
+Native QA: the Host settled a decision and retired an alert while ... ok
+test_unreadable_status_does_not_start_a_node (__main__.HolderNodeMode) ... ok
+test_worker_foreign_start_and_unknown_role_register_no_recovery (__main__.HolderNodeMode) ... ok
+test_a_full_queue_still_takes_the_turn_end_that_drains_it (__main__.HolderRelay) ... ok
+test_a_lost_turn_end_returns_the_relay_to_the_host_once (__main__.HolderRelay) ... ok
+test_a_sideagent_turn_end_names_its_holder_and_turn (__main__.HolderRelay) ... ok
+test_a_third_review_on_the_host_direct_path_wakes_the_host (__main__.HolderRelay) ... ok
+test_a_trickling_sideagent_cannot_hold_the_event_lock_past_the_deadline (__main__.HolderRelay) ... ok
+test_busy_sideagent_keeps_events_and_dead_sideagent_falls_back_to_host (__main__.HolderRelay) ... ok
+test_cancelled_maintenance_turn_returns_events_to_the_host (__main__.HolderRelay) ... ok
+test_direct_replacement_moves_open_relays_to_the_new_sideagent (__main__.HolderRelay) ... ok
+test_failed_maintenance_turn_returns_events_to_the_host (__main__.HolderRelay) ... ok
+test_only_the_turn_that_carried_a_relay_confirms_it (__main__.HolderRelay) ... ok
+test_rebind_moves_the_carrier_in_place_and_keeps_the_seat (__main__.HolderRelay) ... ok
+test_record_advertises_features_and_big_state_file_is_read (__main__.HolderRelay) ... ok
+test_routine_events_go_to_the_bound_sideagent_not_the_host (__main__.HolderRelay) ... ok
+test_without_a_binding_every_event_reaches_the_host (__main__.HolderRelay) ... ok
+test_a_live_holder_without_the_feature_refuses_the_preserve_intent (__main__.HostPreserveStop) ... ok
+test_preserve_keeps_the_complete_worker_tree_on_cooperative_stop (__main__.HostPreserveStop) ... ok
+test_stop_keeps_opened_seats_on_dead_cleanup_and_cooperative_stop (__main__.HostPreserveStop) ... ok
+test_replacement_host_takes_a_healthy_worker_in_place (__main__.HostReanchorLive) ... ok
+test_a_checkpoint_needs_the_nodes_own_identity_and_a_valid_range (__main__.MaintenanceCheckpoint) ... ok
+test_a_host_rewrite_during_the_batch_is_superseded_not_returned (__main__.MaintenanceCheckpoint)
+Native QA: the Host's next turn rewrote batch records while the ... ok
+test_absent_unproven_and_stale_input_removal_refuse_without_writes (__main__.MaintenanceCheckpoint) ... ok
+test_checkpoint_provenance_and_replay_matrix (__main__.MaintenanceCheckpoint) ... ok
+test_direct_forged_maintenance_batches_do_not_write (__main__.MaintenanceCheckpoint) ... ok
+test_holder_omits_a_covered_recovery_alert_even_when_the_row_remains (__main__.MaintenanceCheckpoint)
+The batch snapshot uses the same predicate when the alert row is still stored. ... ok
+test_host_retirement_preserves_an_earlier_sent_checkpoint_range (__main__.MaintenanceCheckpoint) ... ok
+test_malformed_recovery_migration_refuses_without_losing_duty (__main__.MaintenanceCheckpoint) ... ok
+test_native_receipt_mismatches_refuse_without_writes (__main__.MaintenanceCheckpoint) ... ok
+test_one_proven_returned_input_leaves_and_unrelated_inputs_stay (__main__.MaintenanceCheckpoint) ... ok
+test_partial_checkpoint_names_empty_recovery_sources (__main__.MaintenanceCheckpoint) ... ok
+test_partial_checkpoint_names_not_in_batch_and_unaccounted (__main__.MaintenanceCheckpoint) ... ok
+test_recovery_checkpoint_binds_sent_input_batch_and_holder_keeps_newer (__main__.MaintenanceCheckpoint) ... ok
+test_recovery_kind_requires_original_completed_session_bound_host_signal (__main__.MaintenanceCheckpoint) ... ok
+test_recovery_only_checkpoint_cannot_claim_the_unsent_business_range (__main__.MaintenanceCheckpoint) ... ok
+test_recovery_request_and_repeat_preserve_business_revision_and_migrate (__main__.MaintenanceCheckpoint) ... ok
+test_recovery_unavailable_sources_stay_visible_and_scoped_clear_keeps_other_alerts (__main__.MaintenanceCheckpoint) ... ok
+test_reused_native_id_on_later_direct_turn_is_refused (__main__.MaintenanceCheckpoint) ... ok
+test_sent_recovery_requires_matching_flag_and_omission_is_partial (__main__.MaintenanceCheckpoint) ... ok
+test_two_consecutive_nodes_account_for_their_fixed_inputs (__main__.MaintenanceCheckpoint) ... ok
+test_verified_checkpoint_clears_covered_returned_inputs_and_keeps_uncovered (__main__.MaintenanceCheckpoint)
+#310: a later verified checkpoint covers host_revision_through. ... ok
+test_verified_recovery_request_clears_its_input_even_above_the_range (__main__.MaintenanceCheckpoint)
+Satisfaction is the exact settled recovery sequence, not a later one. ... ok
+test_a_carrier_replaced_by_an_older_holder_reads_the_legacy_bound (__main__.Migration) ... ok
+test_a_migrated_task_with_a_known_seat_retires_only_once_it_is_shown_stopped (__main__.Migration) ... ok
+test_a_v1_binding_not_proven_live_stays_a_candidate (__main__.Migration) ... ok
+test_a_v1_file_after_an_earlier_migration_is_flagged_as_overwritten (__main__.Migration) ... ok
+test_a_v1_key_named_like_a_v2_field_does_not_take_effect (__main__.Migration) ... ok
+test_interrupted_migration_resumes_from_the_same_raw_evidence (__main__.Migration) ... ok
+test_legacy_bound_refuses_large_migration_until_a_capable_host_is_live (__main__.Migration) ... ok
+test_plan_then_write_preserves_duties_and_lists_unknowns (__main__.Migration) ... ok
+test_real_v1_shape_keeps_every_nested_field_or_lists_it (__main__.Migration) ... ok
+test_unreadable_legacy_body_is_left_unchanged (__main__.Migration) ... ok
+test_a_foreign_record_or_lost_spawn_line_protects_nothing (__main__.NestedWorkerTopology) ... ok
+test_a_sideagent_node_record_is_not_a_live_seat_and_a_worker_still_is (__main__.NestedWorkerTopology) ... ok
+test_a_worker_naming_this_sideagent_as_dispatcher_is_kept_without_a_spawn_line (__main__.NestedWorkerTopology) ... ok
+test_cooperative_stop_keeps_the_whole_worker_tree (__main__.NestedWorkerTopology) ... ok
+test_dead_holder_cleanup_keeps_the_whole_worker_tree (__main__.NestedWorkerTopology) ... ok
+test_a_missing_broker_degrades_only_under_auto (__main__.OutsideLaunchDegradation) ... ok
+test_an_explicit_backend_refusal_is_not_a_degradation (__main__.OutsideLaunchDegradation) ... ok
+test_an_unsupported_backend_under_auto_still_degrades (__main__.OutsideLaunchDegradation) ... ok
+test_job_state_unknown_under_auto_degrades_with_the_reason (__main__.OutsideLaunchDegradation) ... ok
+test_other_broker_refusals_under_auto_are_errors (__main__.OutsideLaunchDegradation) ... ok
+test_other_children_of_a_sideagent_are_still_swept (__main__.ProcessPreservation) ... ok
+test_sideagent_record_spares_runner_holder_groups (__main__.ProcessPreservation) ... ok
+test_delegator_timer_sentence_matches_the_tool (__main__.RenderedGuidance) ... ok
+test_host_owns_dispatch_and_the_sideagent_allocates_nothing (__main__.RenderedGuidance) ... ok
+test_lifecycle_reference_is_generated_linked_and_bounded (__main__.RenderedGuidance) ... ok
+test_node_reference_names_the_implemented_contract (__main__.RenderedGuidance) ... ok
+test_stop_and_drain_restart_forward_the_intent_only_when_given (__main__.RunnerPreserveFlag) ... ok
+test_a_conflict_is_retried_once_then_returned (__main__.SideagentTaskRetire) ... ok
+test_a_live_session_for_the_dispatch_row_is_returned (__main__.SideagentTaskRetire) ... ok
+test_a_pending_reference_blocks_and_a_settled_one_does_not (__main__.SideagentTaskRetire) ... ok
+test_a_second_conflict_is_returned_not_forced (__main__.SideagentTaskRetire) ... ok
+test_a_transcribed_task_is_returned (__main__.SideagentTaskRetire) ... ok
+test_a_verdict_that_is_not_final_is_returned (__main__.SideagentTaskRetire) ... ok
+test_an_accepted_task_without_a_retrievable_cite_is_returned (__main__.SideagentTaskRetire) ... ok
+test_node_retires_an_accepted_task_and_a_cancelled_one (__main__.SideagentTaskRetire) ... ok
+test_open_dispatch_is_returned_and_a_handoff_still_retires (__main__.SideagentTaskRetire) ... ok
+test_retire_stays_stable_across_repeated_batches (__main__.SideagentTaskRetire) ... ok
+test_the_node_prompt_names_the_retire_rule_and_returned_verb (__main__.SideagentTaskRetire) ... ok
+test_the_retire_result_and_index_keep_the_row_rebuildable (__main__.SideagentTaskRetire) ... ok
+test_the_returned_verb_validates_its_shape_and_never_settles_a_host_row (__main__.SideagentTaskRetire) ... ok
+test_wait_keep_open_and_open_references_are_returned (__main__.SideagentTaskRetire) ... ok
+test_a_known_holder_in_any_seat_shape_survives_a_handoff (__main__.StateTool) ... ok
+test_a_live_seat_can_be_handed_to_a_continuing_task_with_its_evidence (__main__.StateTool) ... ok
+test_a_repair_keeps_its_failure_evidence_for_the_next_decision (__main__.StateTool) ... ok
+test_a_repair_verdict_does_not_answer_the_next_review (__main__.StateTool) ... ok
+test_a_sideagent_settles_a_decision_only_as_transcribed_evidence (__main__.StateTool) ... ok
+test_a_stable_fault_id_recurs_but_a_stale_event_does_not (__main__.StateTool) ... ok
+test_a_v1_file_is_legacy_format_on_retire (__main__.StateTool) ... ok
+test_a_worker_caller_cannot_write_as_host (__main__.StateTool) ... ok
+test_alerts_coalesce_and_stay_after_acknowledgement (__main__.StateTool) ... ok
+test_binding_guards_late_writes_of_a_replaced_sideagent (__main__.StateTool) ... ok
+test_check_finds_untraced_and_unassociated_work (__main__.StateTool) ... ok
+test_concurrent_writers_never_lose_an_update (__main__.StateTool) ... ok
+test_delegator_view_reports_user_requirements_from_agents (__main__.StateTool) ... ok
+test_dispatch_reads_authorization_from_structured_state (__main__.StateTool) ... ok
+test_every_repeated_repair_result_is_new_attention (__main__.StateTool) ... ok
+test_future_schema_is_refused_unchanged (__main__.StateTool) ... ok
+test_host_view_marks_omitted_text_and_keeps_judgment_text_whole (__main__.StateTool) ... ok
+test_host_view_over_the_injection_bound_is_refused_not_truncated (__main__.StateTool) ... ok
+test_large_state_projects_a_bounded_host_view (__main__.StateTool) ... ok
+test_maintenance_attention_separates_unbound_change_and_recovery_input (__main__.StateTool) ... ok
+test_moving_past_review_without_a_verdict_keeps_the_host_asked (__main__.StateTool) ... ok
+test_record_updates_conflicts_and_role_rules (__main__.StateTool) ... ok
+test_repeated_cycles_keep_current_records_not_history (__main__.StateTool) ... ok
+test_retire_and_late_event_cannot_reopen (__main__.StateTool) ... ok
+test_retire_names_record_missing_and_evidence_required (__main__.StateTool) ... ok
+test_retirement_needs_dispatched_work_closed_and_stopped (__main__.StateTool) ... ok
+test_scoped_requirement_headings_are_all_reported (__main__.StateTool) ... ok
+test_section_sources_and_resolved_unknowns_are_kept (__main__.StateTool) ... ok
+test_sections_need_revision_and_host_ownership (__main__.StateTool) ... ok
+test_snapshot_does_not_overwrite_structured_state (__main__.StateTool) ... ok
+test_timer_readback_stays_the_entry_and_can_be_unavailable (__main__.StateTool) ... ok
+test_timer_template_check_is_exact (__main__.StateTool) ... ok
+test_wake_fingerprint_follows_what_a_host_judgment_asks (__main__.StateTool) ... ok
+
+----------------------------------------------------------------------
+Ran 187 tests in 168.914s
+
+OK
+........
+----------------------------------------------------------------------
+Ran 8 tests in 3.192s
+
+OK
+.........
+----------------------------------------------------------------------
+Ran 9 tests in 5.906s
+
+OK
+..................................
+----------------------------------------------------------------------
+Ran 34 tests in 109.313s
+
+OK
+............
+----------------------------------------------------------------------
+Ran 12 tests in 20.443s
+
+OK
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 0.634s
+
+OK
+...................................................
+----------------------------------------------------------------------
+Ran 51 tests in 17.570s
+
+OK
+kaola-grok-bot-verify: PASS /Users/ylpromax5/Workspace/kaola-project-runner-dev/.kw/worktrees/issue-458/hosts/grok-bot (1 bridge skill, 2479 B, stage pinned, manifest, guide; no canonical content; generated state)
+validate: elapsed render-check                                 0.378 s
+validate: elapsed validate-skill.antigravity-kaola-project-runner 0.039 s
+validate: elapsed validate-skill.claude-code-kaola-project-runner 0.039 s
+validate: elapsed validate-skill.codex-kaola-project-runner    0.039 s
+validate: elapsed validate-skill.cursor-cli-kaola-project-runner 0.039 s
+validate: elapsed validate-skill.devin-kaola-project-runner    0.041 s
+validate: elapsed validate-skill.droid-kaola-project-runner    0.042 s
+validate: elapsed validate-skill.dsh-kaola-project-runner      0.044 s
+validate: elapsed validate-skill.grok-kaola-project-runner     0.040 s
+validate: elapsed validate-skill.hermes-kaola-project-runner   0.039 s
+validate: elapsed validate-skill.kaola-project-runner          0.039 s
+validate: elapsed validate-skill.kimi-cli-kaola-project-runner 0.041 s
+validate: elapsed validate-skill.opencode-kaola-project-runner 0.042 s
+validate: elapsed validate-skill.zcode-kaola-project-runner    0.043 s
+validate: elapsed validate-skill.kaola-delegator               0.040 s
+validate: elapsed test-devin-regressions.py                    0.666 s
+validate: elapsed test-issue-244-dispatch.py                   53.724 s
+validate: elapsed test-issue-293-node-record-roots.py          3.314 s
+validate: elapsed test-issue-324-wake-fixes.py                 6.063 s
+validate: elapsed test-issue-255-lifecycle-state.py            169.206 s
+validate: elapsed test-issue-348-backstop-sweep.py             109.420 s
+validate: elapsed test-issue-336-node-turn-refusal.py          20.565 s
+validate: elapsed test-issue-350-computer-use-roles.py         0.695 s
+validate: elapsed test-issue-421-retire-recovery.py            17.635 s
+validate: elapsed grok-bot-verify                              0.193 s
+{"killed_group_members": [], "matched_pids": [], "pgid_identity_unverified": [], "residual_pids": [], "results": [], "root": "/tmp/kaola-val.TSUu5s", "swept_groups": []}
+validate: total wall: 213.599 s
