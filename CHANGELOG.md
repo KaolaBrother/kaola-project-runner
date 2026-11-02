@@ -6,9 +6,13 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+## 0.9.41 — 2026-11-02 (simplest Sideagent bind/maintain redo)
+
 Seats: restart required
 
-- Keep the bound Sideagent preset through recovery, reconcile the exact prior holder, and use one carrier lifecycle for maintenance and cleanup (#458). All agent roles use the same startup path; maintenance checkpoints retain native batch and stream provenance. The operator diff from v0.9.40 includes `scripts/kaola-acp-holder.py` and `scripts/kaola-dispatch.py`.
+The operator diff includes `scripts/kaola-acp-holder.py`, `scripts/kaola-acp-paths.py`, `scripts/kaola-dispatch.py` and `scripts/kaola-record-contract.py`. `scripts/kaola-acp.py` also changed (#458); it is outside the operator path list. Worker wrapper pins already set stay in their manifests (Codex `2.5.0`, Claude bridge `6c20f28`, ZCode `80aa4e2c`). Empty `acp_wrapper_pin` stays intentional for antigravity, cursor-cli, devin, droid, dsh, grok, hermes, kimi-cli and opencode (native ACP or no public adapter). The Grok Bot bridge is pinned by the following pin commit to this release content commit.
+
+- Keep the bound Sideagent preset through recovery, reconcile the exact prior holder, and use one carrier lifecycle for maintenance and cleanup (#458). All agent roles use the same startup path; maintenance checkpoints retain native batch and stream provenance. **Seats: restart required** (`scripts/kaola-acp-holder.py`, `scripts/kaola-acp-paths.py`, `scripts/kaola-dispatch.py` and `scripts/kaola-record-contract.py` are in the operator diff).
 
 ## 0.9.40 — 2026-11-01 (event-scoped carrier notification; unavailable-binding retention)
 
