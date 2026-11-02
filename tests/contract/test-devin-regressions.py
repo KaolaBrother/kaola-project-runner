@@ -438,6 +438,11 @@ class DevinSideagentOriginTests(unittest.TestCase):
                     connection.spawn("devin acp", directory, {"DEVIN_SESSIONS_DIR": "/foreign"})
             self.assertEqual(seen["DEVIN_SESSIONS_DIR"], str(Path(directory) / "devin-sessions"))
 
+    def test_unique_new_id_without_updates(self):
+        h = self.holder(streamed=None)
+        self.assertEqual(h.initialize_agent()["acp_session_id"], "fresh")
+        self.assertEqual(h.delivered, [])
+
     def test_fresh_new_binds_and_replays_matching_updates(self):
         h = self.holder()
         result = h.initialize_agent()
@@ -462,7 +467,12 @@ class DevinSideagentOriginTests(unittest.TestCase):
                 result = h.initialize_agent()
                 self.assertEqual(result["error"]["code"], "sideagent-foreign-session")
                 self.assertIn(branch, result["error"]["diagnostic"]["branches"])
-                self.assertEqual(h.event_rows[-1]["kind"], "sideagent_origin_rejected")
+                self.assertEqual(h.event_rows[-1], {"kind": "sideagent_origin_rejected", **result["error"]["diagnostic"]})
+                self.assertEqual(result["error"]["diagnostic"]["identity"], {
+                    "new_matches_inventory": branch == "inventory_match",
+                    "new_matches_record": False,
+                    "all_pending_match_new": branch != "startup_stream_mismatch",
+                })
                 self.assertNotIn("foreign", str(h.event_rows[-1]))
                 self.assertEqual(h.delivered, [])
         h = self.holder(streamed=("fresh", "fresh"))
@@ -470,8 +480,27 @@ class DevinSideagentOriginTests(unittest.TestCase):
         self.assertEqual(len(h.delivered), 2)
 
 
+    def test_invalid_inventory_refuses_before_new(self):
         h = self.holder(listed=(42,), streamed=None)
         self.assertEqual(h.initialize_agent()["error"]["code"], "sideagent-origin-unverifiable")
+        self.assertEqual(h.delivered, [])
+
+    def test_incomplete_paginated_inventory_refuses_before_new(self):
+        h = self.holder(streamed=None)
+        original = h.agent.wait_response
+        calls = []
+        def response(request, timeout):
+            if request == "session/list":
+                calls.append(request)
+                if len(calls) == 1:
+                    return {"result": {"sessions": [{"sessionId": "old"}], "nextCursor": "next"}}
+                return None
+            return original(request, timeout)
+        h.agent.wait_response = response
+        result = h.initialize_agent()
+        self.assertEqual(result["error"]["code"], "sideagent-origin-unverifiable")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(h.agent.method, "session/list")
         self.assertEqual(h.delivered, [])
 
     def test_other_seat_record_id_is_refused(self):
@@ -481,6 +510,7 @@ class DevinSideagentOriginTests(unittest.TestCase):
         result = h.initialize_agent()
         self.assertEqual(result["error"]["code"], "sideagent-foreign-session")
         self.assertIn("record_match", result["error"]["diagnostic"]["branches"])
+        self.assertTrue(result["error"]["diagnostic"]["identity"]["new_matches_record"])
         self.assertEqual(h.delivered, [])
 
     def test_recording_sideagent_role_cannot_adopt_loaded_session(self):
