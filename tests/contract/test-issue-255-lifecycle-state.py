@@ -3618,6 +3618,17 @@ FAKE_NODE_RUNNER = textwrap.dedent("""\
     #!/usr/bin/env python3
     import json, os, sys, time
     from pathlib import Path
+    if sys.argv[1] == "status":
+        if os.environ.get("FAKE_NODE_STATUS"):
+            print(os.environ["FAKE_NODE_STATUS"])
+            sys.exit(0)
+        path = Path(os.environ["FAKE_NODE_RECORD"])
+        record = json.loads(path.read_text()) if path.exists() else {}
+        if record.get("state") == "ready":
+            print(json.dumps(record))
+        else:
+            print(json.dumps({"error": {"code": "no-session"}}))
+        sys.exit(0)
     counter = Path(os.environ["FAKE_NODE_COUNTER"])
     n = int(counter.read_text()) + 1 if counter.exists() else 1
     counter.write_text(str(n))
@@ -3722,7 +3733,7 @@ class HolderNodeMode(HolderFixture):
         self.runner.chmod(0o755)
         self.saved_env = {key: os.environ.get(key) for key in
                           ("FAKE_NODE_COUNTER", "FAKE_NODE_ARGV", "FAKE_NODE_RECORD", "FAKE_NODE_REPO",
-                           "FAKE_NODE_PID", "FAKE_NODE_DELAY", "FAKE_NODE_REFUSE_JSON")}
+                           "FAKE_NODE_PID", "FAKE_NODE_DELAY", "FAKE_NODE_REFUSE_JSON", "FAKE_NODE_STATUS")}
         os.environ.update(FAKE_NODE_COUNTER=str(root / "count"), FAKE_NODE_ARGV=str(root / "argv"),
                           FAKE_NODE_RECORD=str(self.side_dir / "record.json"),
                           FAKE_NODE_REPO=str(self.repo), FAKE_NODE_PID=str(os.getpid()))
@@ -4223,6 +4234,47 @@ class HolderNodeMode(HolderFixture):
         self.wait_still(0.2)
         self.assertEqual(len(self.fake.prompts), 1, "the same Host revision is sent once")
         self.assertEqual(self.node_count(), 1)
+
+    def test_unreadable_status_does_not_start_a_node(self) -> None:
+        os.environ["FAKE_NODE_STATUS"] = "not-json"
+        self.write_node_state()
+        self.host_change(4)
+        self.boundary()
+        self.wait_for(lambda: "sideagent_node_start_failed" in self.log_kinds(), "status failure")
+        self.assertEqual(self.node_count(), 0)
+        self.assertEqual(self.fake.prompts, [])
+        self.assertEqual(self.holder.node["failed"]["code"], "status-unreadable")
+
+    def test_node_and_ordinary_dispatch_use_the_same_status_start_sequence(self) -> None:
+        calls = []
+        helper = holder_module.acp_paths.status_then_start
+        old_dispatch = dispatch_module.RECORD.acp_paths.status_then_start
+        old_runner = dispatch_module.run_runner
+        def traced(*args):
+            calls.append("sequence")
+            return helper(*args)
+        holder_module.acp_paths.status_then_start = traced
+        dispatch_module.RECORD.acp_paths.status_then_start = traced
+        dispatch_module.run_runner = lambda *_: (None, None, "timeout")
+        try:
+            runner = Path(self.tmp.name) / "skills" / "zcode-kaola-project-runner" / "scripts" / "runtime-tmux.sh"
+            runner.parent.mkdir(parents=True)
+            runner.touch()
+            item = {"item_id": "worker", "preset": "zcode/default", "session": "worker",
+                    "prompt": "test", "_platform": "zcode"}
+            result = dispatch_module.execute_one(item, str(self.repo), runner.parents[2], None)
+            self.assertEqual(result["reason"], "status-timeout")
+            os.environ["FAKE_NODE_STATUS"] = "not-json"
+            self.write_node_state()
+            self.host_change(4)
+            self.boundary()
+            self.wait_for(lambda: "sideagent_node_start_failed" in self.log_kinds(), "status failure")
+            self.assertEqual(calls, ["sequence", "sequence"])
+            self.assertEqual(self.node_count(), 0)
+        finally:
+            holder_module.acp_paths.status_then_start = helper
+            dispatch_module.RECORD.acp_paths.status_then_start = old_dispatch
+            dispatch_module.run_runner = old_runner
 
     def test_a_verified_batch_wakes_the_host_only_for_changed_attention(self) -> None:
         self.write_node_state()

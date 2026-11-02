@@ -7842,21 +7842,59 @@ class Holder:
         # directly; the all-roots enumeration (`ps`, 3 s) refused a fresh
         # dsh node with record-root-mismatch whenever `ps` failed or timed out.
         env["KAOLA_ACP_RECORD_ROOT"] = str(self.record_dir.parent.parent.parent)
-        receipt: Any = None
-        code: Any = None
-        try:
-            run = subprocess.run([recipe["runner"], *recipe["argv"]], cwd=self.args.repo, env=env,
-                                 stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                                 timeout=NODE_START_TIMEOUT)
-            code = run.returncode
-            for line in reversed(run.stdout.splitlines()):
-                try:
-                    receipt = json.loads(line)
-                    break
-                except ValueError:
-                    continue
-        except (OSError, subprocess.SubprocessError) as exc:
-            receipt = {"error": {"code": "node-start-error", "message": str(exc)}}
+        def run_runner(argv):
+            try:
+                run = subprocess.run([recipe["runner"], *argv], cwd=self.args.repo, env=env,
+                                     stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                                     timeout=NODE_START_TIMEOUT)
+                for line in reversed(run.stdout.splitlines()):
+                    try:
+                        value = json.loads(line)
+                        if isinstance(value, dict):
+                            return run.returncode, value, ""
+                    except ValueError:
+                        continue
+                return run.returncode, None, "unreadable"
+            except (OSError, subprocess.SubprocessError) as exc:
+                return None, None, str(exc)
+
+        def reconcile_status(code, receipt, note):
+            if code is None or not isinstance(receipt, dict):
+                return {"reason": "status-unreadable", "detail": note}
+            error = receipt.get("error")
+            if ((isinstance(error, dict) and error.get("code") == "no-session")
+                    or receipt.get("reason") == "no-session"):
+                return None
+            return {"reason": "status-existing", "receipt": receipt}
+
+        argv = recipe["argv"]
+        start_index = argv.index("start")
+        status_argv = [*argv[:start_index], "status", "--repo", self.args.repo,
+                       "--session", binding["session"]]
+        started, result = acp_paths.status_then_start(
+            lambda: run_runner(status_argv), reconcile_status, lambda: run_runner(argv))
+        if not started:
+            with self.worker_events_lock:
+                record = self._own_live_node(binding)
+                seen = result.get("receipt") or {}
+                if (result["reason"] == "status-existing" and record.get("state") == "ready"
+                        and seen.get("holder_instance_id") == record.get("holder_instance_id")):
+                    holder = record["holder_instance_id"]
+                    self.node.update(phase="running", holder=holder, batch=None, fingerprint=None)
+                    self.node.setdefault("holders", []).append(holder)
+                    self.events.append({"kind": "sideagent_node_adopted", "holder": holder,
+                                        "session": binding["session"]})
+                else:
+                    self.node.update(phase="stopped", failed={"binding": fingerprint,
+                                                               "code": result["reason"]})
+                    self.events.append({"kind": "sideagent_node_start_failed", "session": binding["session"],
+                                        "receipt": result})
+                    self._node_to_host(binding, f"sideagent status requires reconciliation: {result['reason']}")
+            self._kick_worker_events()
+            return
+        code, receipt, note = result
+        if receipt is None:
+            receipt = {"error": {"code": "node-start-error", "message": note}}
         holder = receipt.get("holder_instance_id") if isinstance(receipt, dict) else None
         ok = (code == 0 and isinstance(holder, str) and holder
               and (receipt.get("result") not in ("refused", "failed")))

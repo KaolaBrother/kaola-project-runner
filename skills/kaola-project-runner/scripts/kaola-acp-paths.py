@@ -24,6 +24,20 @@ class RecordRootUnsafe(RuntimeError):
     """A write target cannot safely hold private session data."""
 
 
+def status_then_start(read_status, decide, start):
+    """Run a start only when the caller's status reconciliation permits it.
+
+    ``decide`` returns None to start, or a result that must be returned to
+    the caller without starting. Both ordinary dispatch and the Host carrier
+    use this sequence; their assignment and batch accounting remain separate.
+    """
+    status = read_status()
+    result = decide(*status)
+    if result is not None:
+        return False, result
+    return True, start()
+
+
 def check_record_root(root: Path) -> None:
     """Read-only check; legacy discovery never calls this write-target guard."""
     try:

@@ -4390,24 +4390,31 @@ def execute_one(item: dict[str, Any], repo: str, skills_root: Path,
     if not script.is_file():
         base.update(status="not-run", reason="runner-missing")
         return finish({key: value for key, value in base.items() if value is not None})
-    code, receipt, note = run_runner(script, launch_argv(item, repo, "status"))
-    base["evidence"]["status"] = evidence(receipt, code, note)
-    unread = receipt_unreadable(code, receipt, note)
-    if unread:
-        base.update(status="unknown", reason="status-" + unread)
-        return finish(base)
-    if not session_absent(receipt):
-        return finish(recover_or_send(item, repo, script, base, receipt, prior))
-    if assignment_identity(prior, item, repo) and prior.get("status") in ("in-flight", "returned"):
-        base.update(status=prior["status"], reason="session-gone")
-        return finish(base)
-    if assignment_identity(prior, item, repo) and prior.get("status") == "unknown":
-        base.update(status="unknown", reason="reconciliation-needed")
-        return finish(base)
-    if isinstance(item.get("expected_holder_instance_id"), str) and item["expected_holder_instance_id"]:
-        base.update(status="not-run", reason="expected-holder-absent")
-        return finish(base)
-    code, receipt, note = run_runner(script, launch_argv(item, repo, "start"))
+    def reconcile_status(code, receipt, note):
+        base["evidence"]["status"] = evidence(receipt, code, note)
+        unread = receipt_unreadable(code, receipt, note)
+        if unread:
+            base.update(status="unknown", reason="status-" + unread)
+            return finish(base)
+        if not session_absent(receipt):
+            return finish(recover_or_send(item, repo, script, base, receipt, prior))
+        if assignment_identity(prior, item, repo) and prior.get("status") in ("in-flight", "returned"):
+            base.update(status=prior["status"], reason="session-gone")
+            return finish(base)
+        if assignment_identity(prior, item, repo) and prior.get("status") == "unknown":
+            base.update(status="unknown", reason="reconciliation-needed")
+            return finish(base)
+        if isinstance(item.get("expected_holder_instance_id"), str) and item["expected_holder_instance_id"]:
+            base.update(status="not-run", reason="expected-holder-absent")
+            return finish(base)
+        return None
+
+    started, result = RECORD.acp_paths.status_then_start(
+        lambda: run_runner(script, launch_argv(item, repo, "status")), reconcile_status,
+        lambda: run_runner(script, launch_argv(item, repo, "start")))
+    if not started:
+        return result
+    code, receipt, note = result
     base["evidence"]["start"] = evidence(receipt, code, note)
     unread = receipt_unreadable(code, receipt, note)
     if unread:
