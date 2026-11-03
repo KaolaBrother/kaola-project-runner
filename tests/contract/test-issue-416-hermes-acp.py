@@ -425,12 +425,14 @@ class StaticPins(unittest.TestCase):
     def test_manifest_unmeasured_fields_stay_honest(self) -> None:
         values = manifest_values()
         # Quit text was not measured live. Versions and quirks are the MacBook
-        # measurement; the Mac Mini leg stays inside the version condition.
+        # measurement; the fleet alignment and the native-update quirk stay
+        # inside the version condition.
         self.assertIn("unmeasured", values["quit_text"])
         self.assertNotIn("unmeasured", values["acp_quirks"])
         self.assertTrue(values["acp_verified_versions"].startswith(
-            "cli=0.22.5;agent=hermes-agent/0.22.5;protocol=1"))
-        self.assertIn("mini-unmeasured", values["acp_verified_versions"])
+            "cli=0.22.6;agent=hermes-agent/0.22.6;protocol=1"))
+        self.assertIn("native-config-update-unmapped", values["acp_verified_versions"])
+        self.assertIn("config_option_update", values["acp_quirks"])
         self.assertIn("prompt-in-progress", values["acp_quirks"])
         self.assertIn("-32603", values["acp_quirks"])
         self.assertNotIn("ask/accept_edits/dont_ask", values["acp_quirks"])
