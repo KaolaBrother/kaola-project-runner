@@ -140,3 +140,6 @@ measurement is MacBook.
 - `session/list` and `session/fork` were not exercised; their advertised
   capabilities are unchanged.
 - `native_steering` stays `unknown`; no steer measurement was added.
+- The probes created throwaway gateway sessions (`local-…`) in the default
+  `HERMES_HOME`; no holder, seat or record row was created, and the sessions
+  were not deleted.
