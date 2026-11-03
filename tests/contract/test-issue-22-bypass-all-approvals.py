@@ -282,8 +282,8 @@ class Issue22CodexPermissionMappings(unittest.TestCase):
             'acp_command: "npx --yes --package @agentclientprotocol/codex-acp@2.5.0 codex-acp"',
             self.manifest,
         )
-        self.assertIn('acp_requested_cli: "0.165.0"', self.manifest)
-        self.assertIn("cli=0.165.0;adapter=2.5.0;protocol=1", self.manifest)
+        self.assertIn('acp_requested_cli: "0.166.0"', self.manifest)
+        self.assertIn("cli=0.166.0;adapter=2.5.0;protocol=1", self.manifest)
         self.assertNotIn("@openai/codex@", self.manifest)
         self.assertNotIn("default_transport", self.manifest)
 
