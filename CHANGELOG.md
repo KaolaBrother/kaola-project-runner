@@ -6,6 +6,22 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- Adopt Droid `@factory/cli` 1.2.0 as the verified ACP CLI (protocol 1). Live
+  probe of the native `droid exec --output-format acp` surface on an isolated
+  1.2.0 install (fleet binary untouched): `initialize`, `session/new`
+  configOptions (`autonomy_level` default `auto-high`, 69-model catalog,
+  `reasoning_effort`), exact `model`/`reasoning_effort` applies, a real turn on
+  `auto`, `claude-opus-5-5` at `high`, and `deepseek-v4.1-flash-1017` at `max`
+  (the prior 0.249.0 feature-flag entry, absent on 0.241.1, is now a public
+  catalog id and live-verified), `session/resume` across a respawn, `session/list`,
+  and the newly advertised `session/close`/`session/fork`/`auth.logout`/
+  `mcpCapabilities` — a strict superset of 0.241.1. Effort options are
+  per-model (`auto` narrows to `[none]`), matching the no-effort-pin default.
+  Mid-turn steer and `session/cancel` were not re-run (out of KPM #1054 scope;
+  the `session/prompt` shape is unchanged). **Seats: restart not required**
+  (only the verified-version record changes; no runtime-read field changes
+  behavior) (KPM #1054).
+
 ## 0.9.41 — 2026-11-02 (simplest Sideagent bind/maintain redo)
 
 Seats: restart required
