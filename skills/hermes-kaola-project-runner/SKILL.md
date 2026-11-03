@@ -47,7 +47,7 @@ SESSION="<exact-name>"   # under Project Runner: <platform>-<CODE>-i<ISSUE>-<pur
 A `start` with no `--text` or `--stdin` only brings the seat up (`ready`, no turn). That receipt is not a dispatch. Pass the task as `--text` or `--stdin` (`--no-wait` admits the turn and does not wait for it to end). `ready` is a dispatch only with `brief_delivered` true, that turn's `turn_request_id`, and its `prompt_fingerprint`. A later `send` is another turn; do not send the same brief again.
 
 The controlling Agent owns model selection for each `start`. This Skill declares its per-run
-presets — `--tier default` (**DeepSeek V4.1 Flash 1017**: `deepseek/deepseek-flash`, effort=high (no ACP effort option)) and `--tier max` (**DeepSeek V4.1 Flash 1017**: `deepseek/deepseek-flash`, effort=max (no ACP effort option)) — and `default` applies whenever nothing more specific was chosen. Pass
+presets — `--tier default` (**DeepSeek V4.1 Flash 1017**: `deepseek/deepseek-flash`, effort=high (native reasoning_effort exists on 0.22.6; the adapter does not surface it)) and `--tier max` (**DeepSeek V4.1 Flash 1017**: `deepseek/deepseek-flash`, effort=max (native reasoning_effort exists on 0.22.6; the adapter does not surface it)) — and `default` applies whenever nothing more specific was chosen. Pass
 another `--tier` when the human or an existing authorization — an explicit Worker grant included —
 names that preset; never infer one from code size, failures, elapsed time, or your own assessment.
 An undeclared name is refused (`tier-not-declared`), never resolved to `default`.
@@ -59,7 +59,7 @@ already encodes effort or Fast (such as a `-fast` variant), pass it as-is; the R
 invent extra effort or Fast configuration for it.
 
 Fast is OFF by default. Pass `--fast on` only on an explicit user request for Fast; this platform's
-Fast support: no native Fast toggle and no Fast config option on the ACP surface (MacBook 0.22.5; effort not applied). Fast and tier are independent selections. When a native fast model
+Fast support: no native Fast toggle and no Fast config option on the ACP surface (MacBook 0.22.6; 0.22.6 has a native reasoning_effort option but the adapter does not surface it). Fast and tier are independent selections. When a native fast model
 ID is what the user explicitly selected, it counts as the explicit Fast selection — report the
 conflict honestly if it is also passed with `--fast off`.
 
@@ -114,7 +114,7 @@ or editor replacement. Settle a pending permission `request_id` with
 `permit [--request-id ID] --option OPTION_ID` (an option the request offers); omitting `--option`
 answers `cancelled`, which denies. Read the resulting output before choosing another action.
 
-Permission default: The adapter launches `hermes --yolo acp` (never `--accept-hooks`; the caller's `HERMES_YOLO_MODE`/`HERMES_ACCEPT_HOOKS` are not passed through). `start` sets mode `dont_ask`. MacBook 0.22.5 auto-approved a normal edit and still asked for `id_ed25519`, settled by `permit` `allow_once`..
+Permission default: The adapter launches `hermes --yolo acp` (never `--accept-hooks`; the caller's `HERMES_YOLO_MODE`/`HERMES_ACCEPT_HOOKS` are not passed through). `start` sets mode `dont_ask`. MacBook 0.22.5 (the live permission measurement) auto-approved a normal edit and still asked for `id_ed25519`, settled by `permit` `allow_once`; the 0.22.6 edit-approval diff changes only the displayed title..
 
 When the Agent decides the exact session is finished, end only that owned session:
 

@@ -6,6 +6,12 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+Seats: restart required
+
+`platforms/hermes.yaml` is in the operator diff. A running Hermes seat keeps the previous platform text and verified-version record until it restarts.
+
+- **Hermes Agent 0.22.6 verified (#1053).** `acp_verified_versions` is `cli=0.22.6;agent=hermes-agent/0.22.6;protocol=1;condition=macbook-20261103-native-config-update-unmapped` from a live MacBook run of the in-repo `kaola-hermes-acp.py` against v0.22.6 (commit `f0d94882e8`): `initialize` keeps protocol 1 and the 0.22.5 shape, `session/set_model`/`set_mode` still return `{}`, `session/load` still omits `sessionId` and reads back `deepseek:deepseek-flash` / `dont_ask`, a prompt ended `end_turn`, and a cancelled turn ended `cancelled`. 0.22.6 adds native `configOptions` (`edit_approval_policy`, `model`, `reasoning_effort`) and a `config_option_update` notification; the adapter replaces the reply list with `model`/`mode` but forwards the update unchanged, so a holder `session_meta.configOptions` mirror can carry the native ids (model stays readable; mode appears as `edit_approval_policy`). That is the named condition — an editor-view follow-up, not an execution blocker. `reasoning_effort` exists natively but the adapter does not surface it. MacBook, Mini and Studio are on 0.22.6; Mini and Studio were verified by version/commit/stamp and `hermes acp --check`, not a live ACP session. **Seats: restart required** (`platforms/hermes.yaml` is in the operator diff).
+
 ## 0.9.41 — 2026-11-02 (simplest Sideagent bind/maintain redo)
 
 Seats: restart required
