@@ -6,6 +6,24 @@ test is `git diff OLD NEW -- scripts/kaola-acp-holder.py scripts/kaola-zcode-acp
 
 ## Unreleased
 
+- Adopt Codex CLI `0.166.0` as the verified ACP child CLI with adapter
+  `@agentclientprotocol/codex-acp` `2.5.0` (protocol 1), closing the
+  MacBook/Mini `0.165.0` vs Studio `0.166.0` drift upward (KPM #1052). Live
+  proof on an isolated `0.166.0` install (fleet binary untouched, actual child
+  process ancestry captured): `initialize` + `session/new` (protocol 1,
+  `agentInfo` 2.5.0), exact `mode`/`model`/`reasoning_effort`/`fast-mode`
+  applies, an execute-tool turn with `end_turn`, `read-only` permission
+  `allow_once` settlement, `workspace-write` without a permission, busy
+  `_session/steering` `steer_injected` consumed by the same turn, native-ID
+  `resume` across a fresh holder, compaction `in_progress`→`completed` with
+  `compact_reload_delivered`, a killed app-server surfacing JSON-RPC `1001` as
+  `turn_failed`, and exact stops with zero residual PIDs. `0.166.0` is outside
+  the adapter's declared `@openai/codex: ^0.165.0` dependency range; the
+  launched child is `CODEX_PATH`-selected, not the nested package, and this
+  pair is now live-verified. `configOptions` also advertise
+  `collaboration_mode` (`default`/`plan`), which the Runner does not drive.
+  Seats: restart not required (verified-version record only).
+
 ## 0.9.41 — 2026-11-02 (simplest Sideagent bind/maintain redo)
 
 Seats: restart required

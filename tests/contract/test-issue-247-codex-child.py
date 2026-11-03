@@ -54,11 +54,11 @@ class CodexChildPathTests(unittest.TestCase):
         )
         self.assertNotIn("@openai/codex@", self.manifest["acp_command"])
         self.assertEqual(self.manifest["acp_wrapper_pin"], "2.5.0")
-        self.assertEqual(self.manifest["acp_requested_cli"], "0.165.0")
+        self.assertEqual(self.manifest["acp_requested_cli"], "0.166.0")
         versions = dict(part.split("=", 1)
                         for part in self.manifest["acp_verified_versions"].split(";"))
         self.assertEqual(versions["adapter"], "2.5.0")
-        self.assertEqual(versions["cli"], "0.165.0")
+        self.assertEqual(versions["cli"], "0.166.0")
         self.assertNotIn("requested_cli", versions)
 
     def test_absolute_codex_path_is_kept_and_path_is_not_consulted(self) -> None:
